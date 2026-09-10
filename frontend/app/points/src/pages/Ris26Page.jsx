@@ -12,6 +12,13 @@ const JAR_BOTTOM_RADIUS = 0.98;
 const JAR_BODY_RADIUS = 1.3;
 const JAR_MOUTH_RADIUS = 0.84;
 const JAR_BOTTOM_Y = -2.02;
+const HIDDEN_METRICS_STORAGE_KEY = 'pronos-ris26-hidden-metrics';
+const DEFAULT_HIDDEN_METRICS = {
+  mean: false,
+  total: false,
+  range: false,
+  leader: false,
+};
 const EMPTY_STATS = {
   event: { title: 'RIS 26', question: QUESTION },
   stats: { total: 0, mean: null, min: null, max: null, updatedAt: null },
@@ -65,6 +72,30 @@ function storeSubmission(guess) {
     }));
   } catch {
     // Storage is best effort; the server cookie still remembers the device.
+  }
+}
+
+function readHiddenMetrics() {
+  if (typeof window === 'undefined') return DEFAULT_HIDDEN_METRICS;
+  try {
+    const raw = window.localStorage.getItem(HIDDEN_METRICS_STORAGE_KEY);
+    if (!raw) return DEFAULT_HIDDEN_METRICS;
+    const parsed = JSON.parse(raw);
+    return {
+      ...DEFAULT_HIDDEN_METRICS,
+      ...(parsed && typeof parsed === 'object' ? parsed : {}),
+    };
+  } catch {
+    return DEFAULT_HIDDEN_METRICS;
+  }
+}
+
+function storeHiddenMetrics(next) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(HIDDEN_METRICS_STORAGE_KEY, JSON.stringify(next));
+  } catch {
+    // Screen controls are best effort; the live stats keep polling either way.
   }
 }
 
@@ -428,11 +459,18 @@ function PriceBarChart({ rows, total }) {
   );
 }
 
-function Metric({ label, value, hint }) {
+function Metric({ label, value, hint, hidden = false, onToggle }) {
   return (
-    <div className="ris26-metric">
-      <span>{label}</span>
-      <strong>{value}</strong>
+    <div className={`ris26-metric ${hidden ? 'is-hidden' : ''}`}>
+      <div className="ris26-metric-top">
+        <span>{label}</span>
+        {onToggle && (
+          <button type="button" onClick={onToggle}>
+            {hidden ? 'Mostrar' : 'Ocultar'}
+          </button>
+        )}
+      </div>
+      <strong>{hidden ? 'Oculto' : value}</strong>
       {hint && <small>{hint}</small>}
     </div>
   );
@@ -506,25 +544,76 @@ function GuessForm({ onSubmitted }) {
   );
 }
 
-function PhoneResults({ stats, rows, submittedGuess, onChangeAnswer }) {
+function PhoneThanks() {
   return (
-    <div className="ris26-phone-results">
+    <div className="ris26-phone-results ris26-phone-thanks">
       <div className="ris26-submitted">
-        <span>Tu respuesta entró</span>
-        <strong>{fmt(submittedGuess)}</strong>
+        <span>RIS 26 · Demo en vivo</span>
+        <h1>Gracias por tu respuesta</h1>
       </div>
-      <div className="ris26-phone-question">{QUESTION}</div>
-      <div className="ris26-phone-stats">
-        <Metric label="Promedio" value={fmt(stats.mean, 1)} />
-        <Metric label="Participantes" value={fmt(stats.total)} />
-      </div>
-      <PriceBoard rows={rows} total={stats.total} />
-      <button className="ris26-secondary-button" type="button" onClick={onChangeAnswer}>
-        Cambiar mi respuesta
-      </button>
       <a className="ris26-pronos-link" href="/points/">
-        Ve a Pronos
+        Visitar Pronos
       </a>
+    </div>
+  );
+}
+
+function RevealResultsDialog({
+  open,
+  mode,
+  unlocked,
+  password,
+  error,
+  busy,
+  onClose,
+  onPasswordChange,
+  onSubmitPassword,
+}) {
+  if (!open) return null;
+  const isReveal = mode === 'reveal';
+
+  return (
+    <div className="ris26-modal-backdrop" role="presentation">
+      <div
+        className="ris26-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ris26-reveal-title"
+      >
+        <button className="ris26-modal-close" type="button" onClick={onClose}>
+          Cerrar
+        </button>
+        {unlocked && isReveal ? (
+          <>
+            <span className="ris26-modal-kicker">Resultado final</span>
+            <h2 id="ris26-reveal-title">Hay {fmt(BALL_COUNT)} pelotas</h2>
+            <p>La cantidad real de pelotas de ping-pong en el frasco es {fmt(BALL_COUNT)}.</p>
+          </>
+        ) : (
+          <form onSubmit={onSubmitPassword}>
+            <span className="ris26-modal-kicker">Modo operador</span>
+            <h2 id="ris26-reveal-title">
+              {isReveal ? 'Contraseña para revelar' : 'Contraseña de operador'}
+            </h2>
+            <p>
+              {isReveal
+                ? 'La pantalla pide contraseña antes de mostrar el resultado real.'
+                : 'La pantalla pide contraseña antes de cambiar valores visibles.'}
+            </p>
+            <input
+              type="password"
+              value={password}
+              onChange={event => onPasswordChange(event.target.value)}
+              placeholder="Contraseña"
+              autoFocus
+            />
+            {error && <div className="ris26-form-error">{error}</div>}
+            <button type="submit" disabled={busy}>
+              {busy ? 'Validando...' : isReveal ? 'Reveal results' : 'Desbloquear controles'}
+            </button>
+          </form>
+        )}
+      </div>
     </div>
   );
 }
@@ -532,6 +621,14 @@ function PhoneResults({ stats, rows, submittedGuess, onChangeAnswer }) {
 export default function Ris26Page() {
   const { payload, status, setPayload } = useRis26Stats();
   const [submittedGuess, setSubmittedGuess] = useState(() => readStoredSubmission()?.guess || null);
+  const [hiddenMetrics, setHiddenMetrics] = useState(() => readHiddenMetrics());
+  const [revealOpen, setRevealOpen] = useState(false);
+  const [operatorMode, setOperatorMode] = useState('reveal');
+  const [operatorUnlocked, setOperatorUnlocked] = useState(false);
+  const [operatorPassword, setOperatorPassword] = useState('');
+  const [operatorError, setOperatorError] = useState('');
+  const [operatorBusy, setOperatorBusy] = useState(false);
+  const [pendingMetricKey, setPendingMetricKey] = useState(null);
   const participate = isParticipantPath();
   const stats = payload.stats || EMPTY_STATS.stats;
   const rows = useMemo(
@@ -544,6 +641,21 @@ export default function Ris26Page() {
   useEffect(() => {
     document.title = 'RIS 26 | Pronos';
   }, []);
+
+  useEffect(() => {
+    if (participate) return undefined;
+    if (typeof window === 'undefined') return;
+    let cancelled = false;
+    fetch('/api/demo-access', { credentials: 'include', cache: 'no-store' })
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => {
+        if (!cancelled && data?.ok) setOperatorUnlocked(true);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [participate]);
 
   useEffect(() => {
     if (!payload.ownGuess?.guess || submittedGuess) return;
@@ -570,22 +682,89 @@ export default function Ris26Page() {
     }
   }
 
+  function toggleMetric(metricKey) {
+    setHiddenMetrics(current => {
+      const next = {
+        ...current,
+        [metricKey]: !current[metricKey],
+      };
+      storeHiddenMetrics(next);
+      return next;
+    });
+  }
+
+  function requestMetricToggle(metricKey) {
+    if (operatorUnlocked) {
+      toggleMetric(metricKey);
+      return;
+    }
+    setPendingMetricKey(metricKey);
+    setOperatorMode('metrics');
+    setOperatorError('');
+    setRevealOpen(true);
+  }
+
+  function requestReveal() {
+    setPendingMetricKey(null);
+    setOperatorMode('reveal');
+    setOperatorError('');
+    setRevealOpen(true);
+  }
+
+  function closeOperatorDialog() {
+    setRevealOpen(false);
+    setPendingMetricKey(null);
+    setOperatorPassword('');
+    setOperatorError('');
+  }
+
+  async function unlockAndReveal(event) {
+    event.preventDefault();
+    setOperatorBusy(true);
+    setOperatorError('');
+    try {
+      const res = await fetch('/api/demo-access', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: operatorPassword }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error || 'Contraseña incorrecta');
+      }
+      setOperatorUnlocked(true);
+      setOperatorPassword('');
+      if (operatorMode === 'metrics' && pendingMetricKey) {
+        toggleMetric(pendingMetricKey);
+        setPendingMetricKey(null);
+        setRevealOpen(false);
+      }
+    } catch (e) {
+      setOperatorError(e?.message || 'No se pudo validar la contraseña.');
+    } finally {
+      setOperatorBusy(false);
+    }
+  }
+
   if (participate) {
     return (
       <main className="ris26-page ris26-page-phone">
         {!submittedGuess ? (
           <GuessForm onSubmitted={refreshAfterSubmit} />
         ) : (
-          <PhoneResults
-            stats={stats}
-            rows={rows}
-            submittedGuess={submittedGuess}
-            onChangeAnswer={() => setSubmittedGuess(null)}
-          />
+          <PhoneThanks />
         )}
       </main>
     );
   }
+
+  const screenMetrics = [
+    { key: 'mean', label: 'Promedio', value: fmt(stats.mean, 1), hint: 'respuesta media' },
+    { key: 'total', label: 'Participantes', value: fmt(stats.total), hint: 'en vivo' },
+    { key: 'range', label: 'Rango', value: stats.total ? `${fmt(stats.min)}–${fmt(stats.max)}` : '—', hint: 'mínimo a máximo' },
+    { key: 'leader', label: 'Precio líder', value: topRow ? `${topRow.label} · ${fmt(topRow.pct, 1)}%` : '—', hint: 'según la multitud' },
+  ];
 
   return (
     <main className="ris26-page ris26-page-screen">
@@ -625,10 +804,21 @@ export default function Ris26Page() {
           </div>
           <PriceBarChart rows={rows} total={stats.total} />
           <div className="ris26-stats-panel ris26-stats-strip">
-            <Metric label="Promedio" value={fmt(stats.mean, 1)} hint="respuesta media" />
-            <Metric label="Participantes" value={fmt(stats.total)} hint="en vivo" />
-            <Metric label="Rango" value={stats.total ? `${fmt(stats.min)}–${fmt(stats.max)}` : '—'} hint="mínimo a máximo" />
-            <Metric label="Precio líder" value={topRow ? `${topRow.label} · ${fmt(topRow.pct, 1)}%` : '—'} hint="según la multitud" />
+            {screenMetrics.map(metric => (
+              <Metric
+                hidden={hiddenMetrics[metric.key]}
+                hint={metric.hint}
+                key={metric.key}
+                label={metric.label}
+                onToggle={() => requestMetricToggle(metric.key)}
+                value={metric.value}
+              />
+            ))}
+          </div>
+          <div className="ris26-operator-actions">
+            <button className="ris26-reveal-button" type="button" onClick={requestReveal}>
+              Reveal results
+            </button>
           </div>
           <div className="ris26-explainer">
             <strong>Cómo se mueve Pronos</strong>
@@ -640,6 +830,17 @@ export default function Ris26Page() {
           </div>
         </div>
       </section>
+      <RevealResultsDialog
+        busy={operatorBusy}
+        error={operatorError}
+        mode={operatorMode}
+        onClose={closeOperatorDialog}
+        onPasswordChange={setOperatorPassword}
+        onSubmitPassword={unlockAndReveal}
+        open={revealOpen}
+        password={operatorPassword}
+        unlocked={operatorUnlocked}
+      />
     </main>
   );
 }
