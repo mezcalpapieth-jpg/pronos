@@ -114,6 +114,21 @@ test('parallel carousel charts draw leg histories without adopting a child ident
   assert.match(carousel, /remapHistoryByParent\(priceResults, priceHistoryRequest\)/);
 });
 
+test('carousel uses localized market titles and outcome labels', () => {
+  assert.match(carousel, /import \{ localizedOutcomeLabels, localizedTitle, useLang, useT \} from '@app\/lib\/i18n\.js'/);
+  assert.match(carousel, /const lang = useLang\(\)/);
+  assert.match(carousel, /const localizedOutcomes = localizedOutcomeLabels\(\{ \.\.\.m, outcomes: rawOutcomes \}, lang\)/);
+  assert.match(carousel, /const marketTitle = localizedTitle\(m, lang\) \|\| m\.question \|\| ''/);
+  assert.match(carousel, /\{marketTitle\}/);
+  assert.match(carousel, /leadingOutcomeForMarket\(m, t\('points\.activity\.tied'\), mOutcomes\)/);
+  assert.match(carousel, /outcomeEntriesForMarket\(m, 4, mOutcomes\)/);
+  assert.match(carousel, /chartEntriesForMarket\(m, mOutcomes\)/);
+  assert.match(carousel, /function localizeTradeTapeItems\(items, market, displayOutcomes, lang\)/);
+  assert.match(carousel, /const mTapeItems = localizeTradeTapeItems\(tradeTape\[marketIdKey\(m\.id\)\] \|\| \[\], m, mOutcomes, lang\)/);
+  assert.match(carousel, /items=\{mTapeItems\}/);
+  assert.doesNotMatch(carousel, />\s*\{m\.question\}\s*<\/h3>/);
+});
+
 test('carousel charts use a 24h time window with the shared hard-step line', () => {
   assert.match(carousel, /const CHART_HISTORY_HOURS = 24/);
   assert.match(carousel, /fetchPriceHistory\(group\.ids, \{ hours: CHART_HISTORY_HOURS/);

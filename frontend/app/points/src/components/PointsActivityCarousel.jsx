@@ -32,7 +32,7 @@ import { useNavigate } from 'react-router-dom';
 import Sparkline from '@app/components/Sparkline.jsx';
 import MultiSparkline from '@app/components/MultiSparkline.jsx';
 import { useIsMobile } from '@app/lib/useIsMobile.js';
-import { useT } from '@app/lib/i18n.js';
+import { localizedOutcomeLabels, localizedTitle, useLang, useT } from '@app/lib/i18n.js';
 import { ActivityCarouselSkeleton } from './PointsSkeleton.jsx';
 import PointsActivityTape from './PointsActivityTape.jsx';
 import { fetchCryptoHistory, fetchPriceHistory, fetchTradeActivity, fetchTradeTape } from '../lib/pointsApi.js';
@@ -407,16 +407,19 @@ function chartSeriesForOutcome(m, entry, rawSeries) {
   return points;
 }
 
-function outcomeEntriesForMarket(m, limit = 4) {
-  const outcomes = Array.isArray(m?.outcomes) ? m.outcomes : ['Sí', 'No'];
+function outcomeEntriesForMarket(m, limit = 4, displayOutcomes = null) {
+  const rawOutcomes = Array.isArray(m?.outcomes) ? m.outcomes : ['Sí', 'No'];
+  const outcomes = Array.isArray(displayOutcomes) && displayOutcomes.length === rawOutcomes.length
+    ? displayOutcomes
+    : rawOutcomes;
   const prices = Array.isArray(m?.prices) ? m.prices : [];
-  const legIds = Array.isArray(m?.legIds) && m.legIds.length === outcomes.length
+  const legIds = Array.isArray(m?.legIds) && m.legIds.length === rawOutcomes.length
     ? m.legIds
     : null;
-  const legStatuses = Array.isArray(m?.legStatuses) && m.legStatuses.length === outcomes.length
+  const legStatuses = Array.isArray(m?.legStatuses) && m.legStatuses.length === rawOutcomes.length
     ? m.legStatuses
     : null;
-  const legOutcomes = Array.isArray(m?.legOutcomes) && m.legOutcomes.length === outcomes.length
+  const legOutcomes = Array.isArray(m?.legOutcomes) && m.legOutcomes.length === rawOutcomes.length
     ? m.legOutcomes
     : null;
   const entries = outcomes.map((label, index) => ({
@@ -446,16 +449,16 @@ function outcomeEntriesForMarket(m, limit = 4) {
     .slice(0, limit);
 }
 
-function chartEntriesForMarket(m) {
-  const outcomes = Array.isArray(m?.outcomes) ? m.outcomes : ['Sí', 'No'];
-  if (m?.ammMode !== 'parallel' && outcomes.length <= 2) {
-    return outcomeEntriesForMarket(m, 1);
+function chartEntriesForMarket(m, displayOutcomes = null) {
+  const rawOutcomes = Array.isArray(m?.outcomes) ? m.outcomes : ['Sí', 'No'];
+  if (m?.ammMode !== 'parallel' && rawOutcomes.length <= 2) {
+    return outcomeEntriesForMarket(m, 1, displayOutcomes);
   }
-  return outcomeEntriesForMarket(m, CHART_OUTCOME_LIMIT);
+  return outcomeEntriesForMarket(m, CHART_OUTCOME_LIMIT, displayOutcomes);
 }
 
-function leadingOutcomeForMarket(m, tiedLabel = 'Empatado') {
-  const entries = outcomeEntriesForMarket(m, Number.POSITIVE_INFINITY)
+function leadingOutcomeForMarket(m, tiedLabel = 'Empatado', displayOutcomes = null) {
+  const entries = outcomeEntriesForMarket(m, Number.POSITIVE_INFINITY, displayOutcomes)
     .filter(entry => Number.isFinite(entry.price));
   if (entries.length === 0) return {
     label: tiedLabel,
@@ -469,6 +472,69 @@ function leadingOutcomeForMarket(m, tiedLabel = 'Empatado') {
     pct: topPct,
     tied: tiedCount > 1,
   };
+}
+
+function localizedBinarySideLabel(label, lang) {
+  const text = String(label || '').trim();
+  if (lang === 'en') {
+    if (/^s[ií]$/i.test(text)) return 'Yes';
+    if (/^no$/i.test(text)) return 'No';
+    if (/^sube$/i.test(text)) return 'UP';
+    if (/^baja$/i.test(text)) return 'DOWN';
+  }
+  if (lang === 'es') {
+    if (/^yes$/i.test(text)) return 'Sí';
+    if (/^no$/i.test(text)) return 'No';
+    if (/^up$/i.test(text)) return 'SUBE';
+    if (/^down$/i.test(text)) return 'BAJA';
+  }
+  return text;
+}
+
+function localizedTradeTapeOutcomeLabel(item, market, displayOutcomes, lang) {
+  if (!item) return '';
+  if (market?.ammMode === 'parallel' && Array.isArray(market.legIds)) {
+    const legIndex = market.legIds.findIndex(id => marketIdKey(id) === marketIdKey(item.marketId));
+    if (legIndex >= 0) return displayOutcomes[legIndex] || item.outcomeLabel || '';
+  }
+  const outcomeIndex = Number(item.outcomeIndex);
+  if (Number.isInteger(outcomeIndex) && outcomeIndex >= 0) {
+    return displayOutcomes[outcomeIndex] || item.outcomeLabel || '';
+  }
+  return item.outcomeLabel || '';
+}
+
+function localizeTradeTapeItems(items, market, displayOutcomes, lang) {
+  if (!Array.isArray(items) || !items.length) return [];
+  return items.map(item => {
+    const outcomeLabel = localizedTradeTapeOutcomeLabel(item, market, displayOutcomes, lang);
+    const outcomeSideLabel = localizedBinarySideLabel(item.outcomeSideLabel, lang);
+    const outcomeDisplayLabel = market?.ammMode === 'parallel' && outcomeSideLabel
+      ? `${outcomeLabel || item.outcomeLabel} · ${outcomeSideLabel}`
+      : outcomeLabel || localizedBinarySideLabel(item.outcomeDisplayLabel, lang);
+    const fills = Array.isArray(item.fills)
+      ? item.fills.map(fill => {
+          const fillOutcomeLabel = localizedTradeTapeOutcomeLabel(fill, market, displayOutcomes, lang);
+          const fillSideLabel = localizedBinarySideLabel(fill.outcomeSideLabel, lang);
+          const fillDisplayLabel = market?.ammMode === 'parallel' && fillSideLabel
+            ? `${fillOutcomeLabel || fill.outcomeLabel} · ${fillSideLabel}`
+            : fillOutcomeLabel || localizedBinarySideLabel(fill.outcomeDisplayLabel, lang);
+          return {
+            ...fill,
+            outcomeLabel: fillOutcomeLabel || fill.outcomeLabel,
+            outcomeSideLabel: fillSideLabel || fill.outcomeSideLabel,
+            outcomeDisplayLabel: fillDisplayLabel || fill.outcomeDisplayLabel,
+          };
+        })
+      : item.fills;
+    return {
+      ...item,
+      outcomeLabel: outcomeLabel || item.outcomeLabel,
+      outcomeSideLabel: outcomeSideLabel || item.outcomeSideLabel,
+      outcomeDisplayLabel: outcomeDisplayLabel || item.outcomeDisplayLabel,
+      fills,
+    };
+  });
 }
 
 function bucketsForWindow(buckets, hours, nowSeconds) {
@@ -523,6 +589,7 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const t = useT();
+  const lang = useLang();
 
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -963,18 +1030,22 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
         }}>
           {slides.map((m, i) => {
             const isActive = i === index;
-            const mOutcomes = Array.isArray(m.outcomes) ? m.outcomes : ['Sí', 'No'];
+            const rawOutcomes = Array.isArray(m.outcomes) ? m.outcomes : ['Sí', 'No'];
+            const localizedOutcomes = localizedOutcomeLabels({ ...m, outcomes: rawOutcomes }, lang);
+            const mOutcomes = localizedOutcomes.length === rawOutcomes.length ? localizedOutcomes : rawOutcomes;
+            const marketTitle = localizedTitle(m, lang) || m.question || '';
             const mPrices = Array.isArray(m.prices) ? m.prices : [];
             const isParallel = m.ammMode === 'parallel';
             const isMultiChart = isParallel || mOutcomes.length > 2;
             const mOutcomeSeries = seriesForSlide(m, history);
             const mSeries = Array.isArray(mOutcomeSeries?.[0]) ? mOutcomeSeries[0] : [];
-            const mLeader = isMultiChart ? leadingOutcomeForMarket(m, t('points.activity.tied')) : null;
+            const mLeader = isMultiChart ? leadingOutcomeForMarket(m, t('points.activity.tied'), mOutcomes) : null;
             const mLeadPct = isMultiChart ? mLeader.pct : Math.round((mPrices[0] ?? 0.5) * 100);
             const mDelta = mSeries.length >= 2 ? mSeries[mSeries.length - 1].p - mSeries[0].p : 0;
             const mDeltaColor = mDelta > 0.05 ? BUY_COLOR : mDelta < -0.05 ? SELL_COLOR : 'var(--text-muted)';
-            const mOutcomeEntries = outcomeEntriesForMarket(m);
-            const mChartEntries = chartEntriesForMarket(m);
+            const mOutcomeEntries = outcomeEntriesForMarket(m, 4, mOutcomes);
+            const mChartEntries = chartEntriesForMarket(m, mOutcomes);
+            const mTapeItems = localizeTradeTapeItems(tradeTape[marketIdKey(m.id)] || [], m, mOutcomes, lang);
             // The axis spans the window we fetched, not whatever the
             // snapshots happen to cover — otherwise one leg's stale point
             // stretches the axis and squashes the rest into the edge.
@@ -1066,7 +1137,7 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                         cursor: 'pointer',
                       }}
                     >
-                      {m.question}
+                      {marketTitle}
                     </h3>
 
                     {/* Chart. Binary markets show outcome 0 price history.
@@ -1271,7 +1342,7 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                         compact
                         showShares={false}
                         maxRows={TAPE_ROWS}
-                        items={tradeTape[marketIdKey(m.id)] || []}
+                        items={mTapeItems}
                         emptyTitle={m._pinned ? t('points.activity.noBuys') : t('points.activity.noRecent')}
                         emptySub={m._pinned ? t('points.activity.noBuysSub') : t('points.activity.noRecentSub')}
                       />
