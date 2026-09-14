@@ -34,6 +34,68 @@ function stripQuestionMarks(value) {
     .trim();
 }
 
+const ES_MONTHS_EN = new Map([
+  ['enero', 'January'],
+  ['febrero', 'February'],
+  ['marzo', 'March'],
+  ['abril', 'April'],
+  ['mayo', 'May'],
+  ['junio', 'June'],
+  ['julio', 'July'],
+  ['agosto', 'August'],
+  ['septiembre', 'September'],
+  ['setiembre', 'September'],
+  ['octubre', 'October'],
+  ['noviembre', 'November'],
+  ['diciembre', 'December'],
+]);
+
+function translateSpanishDatePhrase(value) {
+  const text = cleanString(value);
+  if (!text) return '';
+
+  let match = text.match(/^(\d{1,2})\s+de\s+([a-záéíóúñ]+)(?:\s+de\s+(\d{4}))?$/i);
+  if (match) {
+    const month = ES_MONTHS_EN.get(match[2].toLowerCase()) || match[2];
+    return `${month} ${Number(match[1])}${match[3] ? `, ${match[3]}` : ''}`;
+  }
+
+  match = text.match(/^([a-záéíóúñ]+)(?:\s+de)?\s+(\d{4})$/i);
+  if (match) {
+    const month = ES_MONTHS_EN.get(match[1].toLowerCase()) || match[1];
+    return `${month} ${match[2]}`;
+  }
+
+  return text.replace(
+    /\b(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\b/gi,
+    token => ES_MONTHS_EN.get(token.toLowerCase()) || token,
+  );
+}
+
+function translateSpanishPlacePhrase(value) {
+  const text = cleanString(value);
+  if (/^(la\s+)?ciudad de méxico$/i.test(text)) return 'Mexico City';
+  if (/^cdmx$/i.test(text)) return 'Mexico City';
+  if (/^méxico$/i.test(text)) return 'Mexico';
+  return text;
+}
+
+function translateSpanishAmountPhrase(value) {
+  return cleanString(value)
+    .replace(/\b(\d+(?:[.,]\d+)?)\s+mil\b/gi, (_, amount) => `${amount.replace(',', '.')}K`)
+    .replace(/\bmillones\b/gi, 'million')
+    .replace(/\bmillón\b/gi, 'million');
+}
+
+function translateSpanishRolePhrase(value) {
+  const text = cleanString(value);
+  let match = text.match(/^president[ea]\s+de\s+(.+)$/i);
+  if (match) return `president of ${match[1]}`;
+  match = text.match(/^primer[ao]?\s+ministro[ao]?\s+de\s+(.+)$/i);
+  if (match) return `prime minister of ${match[1]}`;
+  return text;
+}
+
 const ES_TO_EN_LABELS = new Map([
   ['Sí', 'Yes'],
   ['Si', 'Yes'],
@@ -205,11 +267,26 @@ function translateByPattern(question, sourceData = {}, spec = {}) {
   match = text.match(/^Cuántas salidas del AICM se retrasarán más de\s+(\d+)\s+minutos el\s+(.+)$/i);
   if (match) return `How many AICM departures will be delayed by more than ${match[1]} minutes on ${match[2]}?`;
 
+  match = text.match(/^Se activará (?:la|una) alerta sísmica en (.+?) durante (?:el mes de )?(.+)$/i);
+  if (match) return `Will the seismic alert be activated in ${translateSpanishPlacePhrase(match[1])} during ${translateSpanishDatePhrase(match[2])}?`;
+
+  match = text.match(/^Registrará (.+?) un sismo de magnitud ([0-9.]+) o mayor durante (.+)$/i);
+  if (match) return `Will ${translateSpanishPlacePhrase(match[1])} record an earthquake of magnitude ${match[2]} or higher during ${translateSpanishDatePhrase(match[3])}?`;
+
+  match = text.match(/^(.+?):\s*¿?\s*sube o baja a las (.+)$/i);
+  if (match) return `${match[1]}: higher or lower at ${match[2]}?`;
+
   match = text.match(/^(.+?) cerrará por encima de \$([^ ]+) USD el (.+)$/i);
   if (match) return `Will ${match[1]} close above $${match[2]} USD on ${match[3]}?`;
 
   match = text.match(/^\$(.+?) cerrará arriba de \$([^ ]+) de market cap el (.+)$/i);
   if (match) return `Will $${match[1]} close above $${match[2]} market cap on ${match[3]}?`;
+
+  match = text.match(/^(.+?) cerrará el año arriba de (.+?) dólares$/i);
+  if (match) return `Will ${match[1]} close the year above ${translateSpanishAmountPhrase(match[2])} dollars?`;
+
+  match = text.match(/^(.+?) superará los? (.+?) dólares antes de que acabe el trimestre$/i);
+  if (match) return `Will ${match[1]} pass ${translateSpanishAmountPhrase(match[2])} dollars before the end of the quarter?`;
 
   match = text.match(/^USD\/MXN cierre del viernes > \$([^ ]+)$/i);
   if (match) return `USD/MXN Friday close > $${match[1]}`;
@@ -227,10 +304,10 @@ function translateByPattern(question, sourceData = {}, spec = {}) {
   if (match) return `Who will have the #1 song in Mexico this Friday (${match[1]})?`;
 
   match = text.match(/^La presidenta mencionará "(.+)" en la mañanera del (.+)$/i);
-  if (match) return `Will the president mention "${match[1]}" in the morning press conference on ${match[2]}?`;
+  if (match) return `Will the president of Mexico mention "${match[1]}" in the morning press conference on ${translateSpanishDatePhrase(match[2])}?`;
 
   match = text.match(/^La presidenta dirá "(.+)" (\d+) o más veces en la mañanera del (.+)$/i);
-  if (match) return `Will the president say "${match[1]}" ${match[2]} or more times in the morning press conference on ${match[3]}?`;
+  if (match) return `Will the president of Mexico say "${match[1]}" ${match[2]} or more times in the morning press conference on ${translateSpanishDatePhrase(match[3])}?`;
 
   match = text.match(/^Contra quién pelea (.+?) a continuación$/i);
   if (match) return `Who will ${match[1]} fight next?`;
@@ -251,13 +328,25 @@ function translateByPattern(question, sourceData = {}, spec = {}) {
   if (match) return `Will ${match[1]} be delayed from its ${match[2]} release?`;
 
   match = text.match(/^La Fed sube la tasa en la reunión del (.+)$/i);
-  if (match) return `Will the Fed raise rates at the ${match[1]} meeting?`;
+  if (match) return `Will the Fed raise rates at the ${translateSpanishDatePhrase(match[1])} meeting?`;
 
   match = text.match(/^(.+?) supera \$2,000MDD de taquilla mundial antes de septiembre$/i);
   if (match) return `Will ${match[1]} pass $2B at the worldwide box office before September?`;
 
   match = text.match(/^(.+?) renuncia como presidente de FIFA antes de (.+)$/i);
-  if (match) return `Will ${match[1]} resign as FIFA president before ${match[2]}?`;
+  if (match) return `Will ${match[1]} resign as FIFA president before ${translateSpanishDatePhrase(match[2])}?`;
+
+  match = text.match(/^(.+?) renuncia como (.+?) antes de (.+)$/i);
+  if (match) return `Will ${match[1]} resign as ${translateSpanishRolePhrase(match[2])} before ${translateSpanishDatePhrase(match[3])}?`;
+
+  match = text.match(/^(.+?) deja (?:el|la) (.+?) antes de (.+)$/i);
+  if (match) return `Will ${match[1]} leave ${translateSpanishRolePhrase(match[2])} before ${translateSpanishDatePhrase(match[3])}?`;
+
+  match = text.match(/^Quién gana las elecciones (?:presidenciales )?(?:de|en) (.+)$/i);
+  if (match) return `Who wins the presidential election in ${translateSpanishDatePhrase(match[1])}?`;
+
+  match = text.match(/^(.+?) gana(?:rá)? las elecciones (?:presidenciales )?(?:de|en) (.+)$/i);
+  if (match) return `Will ${match[1]} win the presidential election in ${translateSpanishDatePhrase(match[2])}?`;
 
   match = text.match(/^Quién será anunciado como (.+)$/i);
   if (match) return `Who will be announced as ${match[1]}?`;

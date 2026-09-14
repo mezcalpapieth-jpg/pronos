@@ -15,9 +15,15 @@ test('retrofit endpoint backfills bilingual market translations', () => {
   assert.match(source, /attachMarketTranslations/);
   assert.match(source, /function backfillPendingMarketTranslations/);
   assert.match(source, /source_data->'translations'/);
-  assert.match(source, /status IN \('pending', 'approved'\)/);
+  assert.match(source, /p\.status = 'pending'/);
+  assert.match(source, /p\.end_time IS NULL OR p\.end_time > NOW\(\)/);
+  assert.match(source, /p\.status = 'approved'/);
+  assert.match(source, /m\.status = 'active'/);
+  assert.match(source, /m\.parent_id IS NULL/);
+  assert.match(source, /m\.archived_at IS NULL/);
   assert.match(source, /translationCandidates/);
   assert.match(source, /translationsBackfilled/);
   assert.match(source, /patchCounts = \{ resolverType: 0, sport: 0, league: 0, outcomeImages: 0, translations: 0 \}/);
+  assert.match(source, /patchCounts\.translations = translations\.updatedCount/);
+  assert.doesNotMatch(source, /record\(row\.approved_market_id,\s*'translations'\)/);
 });
-

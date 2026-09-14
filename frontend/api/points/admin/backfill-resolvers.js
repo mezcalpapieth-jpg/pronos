@@ -96,17 +96,33 @@ function translatedSourceDataForPending(row) {
 async function backfillPendingMarketTranslations({ dryRun = false } = {}) {
   const rows = await sql`
     SELECT id, status, approved_market_id, question, outcomes, source_data, sport, league
-    FROM points_pending_markets
-    WHERE status IN ('pending', 'approved')
-      AND (
-        source_data IS NULL
-        OR source_data->'translations' IS NULL
-        OR source_data->'translations'->'es' IS NULL
-        OR source_data->'translations'->'en' IS NULL
-        OR NULLIF(source_data->'translations'->'es'->>'question', '') IS NULL
-        OR NULLIF(source_data->'translations'->'en'->>'question', '') IS NULL
+    FROM points_pending_markets p
+    WHERE (
+        (
+          p.status = 'pending'
+          AND (p.end_time IS NULL OR p.end_time > NOW())
+        )
+        OR (
+          p.status = 'approved'
+          AND EXISTS (
+            SELECT 1
+            FROM points_markets m
+            WHERE m.id = p.approved_market_id
+              AND m.status = 'active'
+              AND m.parent_id IS NULL
+              AND m.archived_at IS NULL
+          )
+        )
       )
-    ORDER BY id ASC
+      AND (
+        p.source_data IS NULL
+        OR p.source_data->'translations' IS NULL
+        OR p.source_data->'translations'->'es' IS NULL
+        OR p.source_data->'translations'->'en' IS NULL
+        OR NULLIF(p.source_data->'translations'->'es'->>'question', '') IS NULL
+        OR NULLIF(p.source_data->'translations'->'en'->>'question', '') IS NULL
+      )
+    ORDER BY p.id ASC
     LIMIT 2000
   `;
 
@@ -131,7 +147,23 @@ async function backfillPendingMarketTranslations({ dryRun = false } = {}) {
       UPDATE points_pending_markets
       SET source_data = ${JSON.stringify(sourceData)}::jsonb
       WHERE id = ${row.id}
-        AND status IN ('pending', 'approved')
+        AND (
+          (
+            status = 'pending'
+            AND (end_time IS NULL OR end_time > NOW())
+          )
+          OR (
+            status = 'approved'
+            AND EXISTS (
+              SELECT 1
+              FROM points_markets m
+              WHERE m.id = points_pending_markets.approved_market_id
+                AND m.status = 'active'
+                AND m.parent_id IS NULL
+                AND m.archived_at IS NULL
+            )
+          )
+        )
         AND (
           source_data IS NULL
           OR source_data->'translations' IS NULL
@@ -360,7 +392,10 @@ export default async function handler(req, res) {
     const translations = await backfillPendingMarketTranslations({ dryRun: false });
     patchCounts.translations = translations.updatedCount;
     for (const row of translations.updated) {
-      if (row.approved_market_id) record(row.approved_market_id, 'translations');
+      if (row.approved_market_id) {
+        if (!patchedMarkets.has(row.approved_market_id)) patchedMarkets.set(row.approved_market_id, new Set());
+        patchedMarkets.get(row.approved_market_id).add('translations');
+      }
     }
 
     // ── Force-rebuild pass (F1 + LMB + golf + MLB) ──────────────────
