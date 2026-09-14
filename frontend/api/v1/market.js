@@ -47,6 +47,7 @@ async function readMarketRows(sql, id) {
       m.mode, m.amm_mode, m.parent_id, m.leg_label, m.featured,
       m.tournament_featured, m.source, m.source_event_id, m.final_score,
       m.resolver_type, m.resolver_config, m.start_time, m.sport, m.league,
+      pm.source_data AS pending_source_data,
       (SELECT COALESCE(SUM(ABS(t.collateral)), 0)
          FROM points_trades t
         WHERE t.market_id = m.id
@@ -77,6 +78,13 @@ async function readMarketRows(sql, id) {
         ORDER BY t.created_at DESC, t.id DESC
         LIMIT 1) AS display_trade_is_book
       FROM points_markets m
+      LEFT JOIN LATERAL (
+        SELECT p.source_data
+          FROM points_pending_markets p
+         WHERE p.approved_market_id = m.id
+         ORDER BY p.reviewed_at DESC NULLS LAST, p.id DESC
+         LIMIT 1
+      ) pm ON true
      WHERE m.id = ${id}
        AND COALESCE(m.mode, 'points') = 'points'
        AND m.archived_at IS NULL
@@ -93,6 +101,7 @@ async function readChildRows(sql, id) {
       m.mode, m.amm_mode, m.parent_id, m.leg_label, m.featured,
       m.tournament_featured, m.source, m.source_event_id, m.final_score,
       m.resolver_type, m.resolver_config, m.start_time, m.sport, m.league,
+      pm.source_data AS pending_source_data,
       (SELECT COALESCE(SUM(ABS(t.collateral)), 0)
          FROM points_trades t
         WHERE t.market_id = m.id
@@ -123,6 +132,13 @@ async function readChildRows(sql, id) {
         ORDER BY t.created_at DESC, t.id DESC
         LIMIT 1) AS display_trade_is_book
       FROM points_markets m
+      LEFT JOIN LATERAL (
+        SELECT p.source_data
+          FROM points_pending_markets p
+         WHERE p.approved_market_id = m.id
+         ORDER BY p.reviewed_at DESC NULLS LAST, p.id DESC
+         LIMIT 1
+      ) pm ON true
      WHERE m.parent_id = ${id}
        AND COALESCE(m.mode, 'points') = 'points'
        AND m.archived_at IS NULL

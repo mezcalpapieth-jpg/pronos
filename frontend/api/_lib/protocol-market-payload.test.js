@@ -42,9 +42,13 @@ test('buildProtocolMarketPayload merges approved points metadata into on-chain m
   });
 
   assert.equal(market.mode, 'onchain');
+  assert.equal(market.title, '¿Quién gana Marlon Vera vs Sean OMalley?');
+  assert.equal(market.title_en, 'Who wins Marlon Vera vs Sean OMalley?');
   assert.equal(market.sport, 'combate');
   assert.equal(market.league, 'ufc');
   assert.deepEqual(market.prices, [0.58, 0.42]);
+  assert.deepEqual(market.outcomes_en, ['Marlon Vera', 'Sean OMalley']);
+  assert.deepEqual(market.options_en, [{ label: 'Marlon Vera' }, { label: 'Sean OMalley' }]);
   assert.deepEqual(market.outcomeImages, ['vera.png', 'omalley.png']);
   assert.deepEqual(market.geoTags, ['latam']);
   assert.deepEqual(market.outcomeCountryLabels, ['Ecuador', null]);

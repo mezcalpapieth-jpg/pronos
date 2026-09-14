@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import BetModal from './BetModal.jsx';
-import { useT } from '../lib/i18n.js';
+import { localizedOutcomeLabels, localizedTitle, useLang, useT } from '../lib/i18n.js';
 import {
   accentForOutcome,
   formatCardDate,
@@ -15,18 +15,22 @@ import { marketInterestPayload, teamInterestPayload, trackInterest } from '../li
 
 export default function MarketCard({ market, onOpenLogin }) {
   const t = useT();
+  const lang = useLang();
   const navigate = useNavigate();
   const [drawerIndex, setDrawerIndex] = useState(null);
 
-  const outcomes = Array.isArray(market.outcomes) && market.outcomes.length > 0
+  const rawOutcomes = Array.isArray(market.outcomes) && market.outcomes.length > 0
     ? market.outcomes
     : ['Sí', 'No'];
+  const localizedOutcomes = localizedOutcomeLabels({ ...market, outcomes: rawOutcomes }, lang);
+  const outcomes = localizedOutcomes.length === rawOutcomes.length ? localizedOutcomes : rawOutcomes;
+  const marketTitle = localizedTitle(market, lang) || market.question || '';
   const outcomeImages = Array.isArray(market.outcomeImages)
-    && market.outcomeImages.length === outcomes.length
+    && market.outcomeImages.length === rawOutcomes.length
     ? market.outcomeImages
     : null;
   const outcomeCountryLabels = Array.isArray(market.outcomeCountryLabels)
-    && market.outcomeCountryLabels.length === outcomes.length
+    && market.outcomeCountryLabels.length === rawOutcomes.length
     ? market.outcomeCountryLabels
     : null;
   const hasAnyLogo = outcomeImages?.some(Boolean) || false;
@@ -143,7 +147,7 @@ export default function MarketCard({ market, onOpenLogin }) {
       </div>
 
       <div className="mock-card-body">
-        <p className="mock-card-title">{market.question}</p>
+        <p className="mock-card-title">{marketTitle}</p>
 
         <div
           style={{
@@ -171,7 +175,7 @@ export default function MarketCard({ market, onOpenLogin }) {
             const accent = accentForOutcome(index, outcomes.length);
             const logo = outcomeImages?.[index] || null;
             const countryLabel = outcomeCountryLabels?.[index] || null;
-            const teamProfile = findTeamByName(market.sport, label);
+            const teamProfile = findTeamByName(market.sport, rawOutcomes[index] || label);
 
             return (
               <div
@@ -329,7 +333,7 @@ export default function MarketCard({ market, onOpenLogin }) {
           outcomePct={Math.round(priceForOutcome(market, drawerIndex) * 100)}
           outcomeIndex={drawerIndex}
           marketId={market.id}
-          marketTitle={market.question}
+          marketTitle={marketTitle}
           market={market}
           onOpenLogin={onOpenLogin}
         />

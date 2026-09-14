@@ -15,6 +15,7 @@ import { cachedJson, createApiTimer, setCacheHeaders } from '../_lib/api-perform
 import { PRONOS_TREASURY_USERNAME } from '../_lib/points-limit-orders.js';
 import { binaryPricesWithBookTrade } from '../_lib/points-display-prices.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
+import { publicMarketTranslationFields } from '../_lib/market-translations.js';
 
 // Lazy neon client init — defer until the first request so a missing
 // DATABASE_URL at module-load time surfaces as a structured JSON error
@@ -160,7 +161,7 @@ export default async function handler(req, res) {
     const tournamentOnly = !category && featuredParam === 'tournament';
     const featuredOnly = !category && !tournamentOnly && featuredParam !== 'all';
     const cacheKey = [
-      'points:markets:v8',
+      'points:markets:v9',
       status,
       category || 'all',
       modeFilter || 'all-modes',
@@ -274,6 +275,11 @@ export default async function handler(req, res) {
             outcomes,
             source_data: sourceData,
           });
+          const translationFields = publicMarketTranslationFields({
+            question: r.question,
+            outcomes,
+            sourceData,
+          });
 
           const outcomeImages = parseJsonb(r.outcome_images, null);
           // `featured` is the admin flame. Home fetches featured=all so it
@@ -323,6 +329,7 @@ export default async function handler(req, res) {
             return applySeriesGateToMarket({
               id: r.id,
               ammMode: 'parallel',
+              ...translationFields,
               question: r.question,
               category: r.category,
               imageUrl: r.image_url || null,
@@ -400,6 +407,7 @@ export default async function handler(req, res) {
           return applySeriesGateToMarket({
             id: r.id,
             ammMode: 'unified',
+            ...translationFields,
             question: r.question,
             category: r.category,
             imageUrl: r.image_url || null,

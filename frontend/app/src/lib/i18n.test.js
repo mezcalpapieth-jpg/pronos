@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { translate } from './i18n.js';
+import { localizedOutcomeLabels, localizedTitle, translate } from './i18n.js';
 
 test('points crypto hub copy translates between Spanish and English', () => {
   assert.equal(translate('points.crypto.kicker.past', 'es'), 'Cerrado');
@@ -45,4 +45,32 @@ test('legal page titles include app name in Spanish and English', () => {
   assert.equal(translate('legal.terms.title', 'en'), 'Pronos Terms of Service');
   assert.equal(translate('legal.language.es', 'en'), 'Español');
   assert.equal(translate('legal.language.en', 'es'), 'English');
+});
+
+test('localizedTitle falls back to question for compact API markets', () => {
+  assert.equal(
+    localizedTitle({
+      question: '¿Quién gana México vs Brasil?',
+      title_en: 'Who wins Mexico vs Brazil?',
+    }, 'en'),
+    'Who wins Mexico vs Brazil?',
+  );
+  assert.equal(
+    localizedTitle({ question: 'San Francisco 49ers @ Los Angeles Rams' }, 'en'),
+    'San Francisco 49ers @ Los Angeles Rams',
+  );
+});
+
+test('localizedOutcomeLabels supports compact translated outcomes', () => {
+  assert.deepEqual(
+    localizedOutcomeLabels({
+      outcomes: ['Sí', 'No', 'Empate', 'Otro'],
+      outcomes_en: ['Yes', 'No', 'Draw', 'Other'],
+    }, 'en'),
+    ['Yes', 'No', 'Draw', 'Other'],
+  );
+  assert.deepEqual(
+    localizedOutcomeLabels({ outcomes: ['Sí', 'No', 'Empate'] }, 'en'),
+    ['Yes', 'No', 'Draw'],
+  );
 });

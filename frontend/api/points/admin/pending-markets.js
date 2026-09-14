@@ -28,6 +28,7 @@ import { syncMananeraPhraseFromQuestion } from '../../_lib/mananera-market-sync.
 import { syncApiPriceFromQuestion } from '../../_lib/api-price-market-sync.js';
 import { syncWeatherDateFromMarket } from '../../_lib/weather-market-sync.js';
 import { validateBeforeMonthDeadline } from '../../_lib/manual-deadline-sanity.js';
+import { attachMarketTranslations } from '../../_lib/market-translations.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 const readSql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
@@ -38,6 +39,20 @@ const MAX_PENDING_OUTCOMES = 64;
 const PARALLEL_LEG_MIN_BINARY_RESERVE = Number.isFinite(Number(process.env.POINTS_PARALLEL_LEG_MIN_BINARY_RESERVE))
   ? Math.max(100, Number(process.env.POINTS_PARALLEL_LEG_MIN_BINARY_RESERVE))
   : 1000;
+
+function withFreshMarketTranslations({ question, outcomes, sourceData, sport, league, force = false }) {
+  const base = parseJsonb(sourceData, {});
+  const nextSourceData = force
+    ? Object.fromEntries(Object.entries(base).filter(([key]) => key !== 'translations'))
+    : base;
+  return attachMarketTranslations({
+    question,
+    outcomes,
+    source_data: nextSourceData,
+    sport,
+    league,
+  }).source_data;
+}
 
 function parseJsonb(v, fb) {
   if (Array.isArray(v)) return v;
@@ -598,7 +613,7 @@ export async function approveOne(pid, reviewer, note, opts = {}) {
     });
     const reopenedFromCanceledMarketId = Number(r.approved_market_id || 0);
     const sourceDataBase = syncedWeather.sourceData || syncedApiPrice.sourceData || syncedMananera.sourceData || {};
-    const sourceData = Number.isInteger(reopenedFromCanceledMarketId) && reopenedFromCanceledMarketId > 0
+    const sourceDataForApproval = Number.isInteger(reopenedFromCanceledMarketId) && reopenedFromCanceledMarketId > 0
       ? {
           ...sourceDataBase,
           reopenedFromCanceledMarketId: sourceDataBase.reopenedFromCanceledMarketId || reopenedFromCanceledMarketId,
@@ -606,6 +621,13 @@ export async function approveOne(pid, reviewer, note, opts = {}) {
           reopenedFromSourceEventId: sourceDataBase.reopenedFromSourceEventId || r.source_event_id || null,
         }
       : sourceDataBase;
+    const sourceData = withFreshMarketTranslations({
+      question: r.question,
+      outcomes,
+      sourceData: sourceDataForApproval,
+      sport: r.sport,
+      league: r.league,
+    });
     const resolverConfig = syncedWeather.resolverConfig || null;
     const deadlineCheck = validateBeforeMonthDeadline({
       question: r.question,
@@ -1037,7 +1059,15 @@ async function editPending(pid, reviewer, patch = {}, note = null) {
       sourceData: syncedApiPrice.sourceData || syncedMananera.sourceData || previousSourceData,
     });
     const resolverConfig = syncedWeather.resolverConfig || null;
-    const sourceData = syncedWeather.sourceData || syncedApiPrice.sourceData || syncedMananera.sourceData || previousSourceData;
+    const syncedSourceData = syncedWeather.sourceData || syncedApiPrice.sourceData || syncedMananera.sourceData || previousSourceData;
+    const sourceData = withFreshMarketTranslations({
+      question,
+      outcomes: normalizedOutcomes,
+      sourceData: syncedSourceData,
+      sport: r.sport,
+      league: r.league,
+      force: has('question') || has('outcomes'),
+    });
     const deadlineCheck = validateBeforeMonthDeadline({
       question,
       endTime: nextEndIso,

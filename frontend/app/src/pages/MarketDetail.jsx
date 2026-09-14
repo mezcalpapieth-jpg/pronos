@@ -42,6 +42,7 @@ import {
   findChampionsLeagueFinalMarket,
 } from '../lib/championsLeague.js';
 import { marketInterestPayload, trackInterest } from '../lib/interest.js';
+import { localizedOutcomeLabels, localizedTitle, useLang } from '../lib/i18n.js';
 
 const CHAIN_ID = Number(import.meta.env.VITE_ONCHAIN_CHAIN_ID || 42161);
 
@@ -364,6 +365,7 @@ export default function MarketDetail({ onOpenLogin }) {
   const preselectedOutcome = searchParams.get('outcome');
   const { authenticated } = usePointsAuth();
   const isMobile = useIsMobile();
+  const lang = useLang();
 
   const [market, setMarket] = useState(null);
   const [historyByOutcome, setHistoryByOutcome] = useState(null);
@@ -449,13 +451,14 @@ export default function MarketDetail({ onOpenLogin }) {
     if (market.status !== 'active') return; // skip on resolved
     if (!authenticated) { onOpenLogin?.(); return; }
     const prices = market.prices || pricesFromReserves(market.reserves || []);
+    const labels = localizedOutcomeLabels(market, lang);
     setBet({
       market,
-      outcome: market.outcomes[i],
+      outcome: labels[i] || market.outcomes[i],
       outcomeIndex: i,
       outcomePct: Math.round((prices[i] || 0) * 100),
     });
-  }, [market, preselectedOutcome, authenticated, onOpenLogin]);
+  }, [market, preselectedOutcome, authenticated, onOpenLogin, lang]);
 
   useEffect(() => {
     setDepthOutcomeIndex(0);
@@ -498,13 +501,16 @@ export default function MarketDetail({ onOpenLogin }) {
   }
 
   // ── Derived state ─────────────────────────────────────────────────────────
-  const outcomes = Array.isArray(market.outcomes) ? market.outcomes : [];
+  const rawOutcomes = Array.isArray(market.outcomes) ? market.outcomes : [];
+  const localizedOutcomes = localizedOutcomeLabels({ ...market, outcomes: rawOutcomes }, lang);
+  const outcomes = localizedOutcomes.length === rawOutcomes.length ? localizedOutcomes : rawOutcomes;
+  const marketTitle = localizedTitle(market, lang) || market.question || '';
   const outcomeImages = Array.isArray(market.outcomeImages)
-    && market.outcomeImages.length === outcomes.length
+    && market.outcomeImages.length === rawOutcomes.length
     ? market.outcomeImages
     : null;
   const outcomeCountryLabels = Array.isArray(market.outcomeCountryLabels)
-    && market.outcomeCountryLabels.length === outcomes.length
+    && market.outcomeCountryLabels.length === rawOutcomes.length
     ? market.outcomeCountryLabels
     : null;
   const livePrices = Array.isArray(market.prices) && market.prices.length === outcomes.length
@@ -517,7 +523,7 @@ export default function MarketDetail({ onOpenLogin }) {
     ? championsFinalOptions.map(option => option.outcomeIndex)
     : outcomes.map((_, i) => i);
   const displayOutcomes = Array.isArray(championsFinalOptions) && championsFinalOptions.length >= 2
-    ? championsFinalOptions.map(option => option.label)
+    ? championsFinalOptions.map(option => outcomes[option.outcomeIndex] || option.label)
     : outcomes;
   const displayPrices = Array.isArray(championsFinalOptions) && championsFinalOptions.length >= 2
     ? championsFinalOptions.map(option => option.price)
@@ -603,7 +609,7 @@ export default function MarketDetail({ onOpenLogin }) {
             </span>
           )}
           <span style={{ flex: 1 }} />
-          <ShareButton marketId={market.id} app="mvp" question={market.question} />
+          <ShareButton marketId={market.id} app="mvp" question={marketTitle} />
         </div>
 
         <h1 style={{
@@ -613,7 +619,7 @@ export default function MarketDetail({ onOpenLogin }) {
           color: 'var(--text-primary)',
           marginBottom: seriesSubtitle ? 8 : (isResolved && market.finalScore ? 12 : 22),
         }}>
-          {market.question}
+          {marketTitle}
         </h1>
 
         {seriesSubtitle && (

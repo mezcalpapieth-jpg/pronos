@@ -8,12 +8,13 @@ test('runAllGenerators attaches suggested pricing to generated specs before upse
   assert.match(source, /attachDefaultSuggestedPricing/);
   assert.match(source, /tryAttachPolymarketPricing/);
   assert.match(source, /attachMarketContextBlocks/);
+  assert.match(source, /attachMarketTranslations/);
   assert.match(source, /attachGeneratorPricing/);
   assert.match(source, /export async function prepareGeneratedSpecs/);
   assert.match(source, /PRICING_CONCURRENCY/);
   assert.match(source, /await tryAttachPolymarketPricing\(specs\[index\]\)/);
   assert.match(source, /attachDefaultSuggestedPricing\(polymarketPriced\)/);
-  assert.match(source, /return pricedSpecs\.map\(spec => attachMarketContextBlocks\(spec\)\)/);
+  assert.match(source, /return pricedSpecs\.map\(spec => attachMarketTranslations\(attachMarketContextBlocks\(spec\)\)\)/);
   assert.match(source, /const contextualSpecs = await prepareGeneratedSpecs\(specs\)/);
 });
 

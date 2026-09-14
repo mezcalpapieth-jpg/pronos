@@ -12,7 +12,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { quoteBuy, executeBuy, publicErrorMessage } from '../lib/pointsApi.js';
-import { useLang, useT } from '@app/lib/i18n.js';
+import { localizedOutcomeLabels, localizedTitle, useLang, useT } from '@app/lib/i18n.js';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { emitPointsRefresh } from '../lib/pointsLiveRefresh.js';
 
@@ -105,6 +105,9 @@ export default function PointsBuyModal({
   }, [open, numAmount, belowMinimum, market?.id, outcomeIndex]);
 
   if (!open || !market) return null;
+  const marketTitle = localizedTitle(market, lang) || market.question || '';
+  const translatedOutcomeLabels = localizedOutcomeLabels(market, lang);
+  const displayOutcomeLabel = outcomeLabel || translatedOutcomeLabels[outcomeIndex] || market.outcomes?.[outcomeIndex] || '';
 
   async function handleConfirm() {
     if (submitting || !quote) return;
@@ -188,7 +191,7 @@ export default function PointsBuyModal({
               {t('points.buy.title')}
             </div>
             <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: accent, letterSpacing: '0.02em' }}>
-              {outcomeLabel?.toUpperCase()}
+              {displayOutcomeLabel.toUpperCase()}
             </div>
           </div>
           <button
@@ -207,7 +210,7 @@ export default function PointsBuyModal({
         </div>
 
         <p style={{ color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.5, marginBottom: 18 }}>
-          {market.question}
+          {marketTitle}
         </p>
 
         {/* Balance + amount */}

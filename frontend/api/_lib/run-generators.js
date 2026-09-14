@@ -56,6 +56,7 @@ import { deriveMarketTags }             from './category-tags.js';
 import { attachDefaultSuggestedPricing } from './market-pricing.js';
 import { tryAttachPolymarketPricing }    from './polymarket-pricing.js';
 import { attachMarketContextBlocks }      from './market-context-blocks.js';
+import { attachMarketTranslations }       from './market-translations.js';
 
 const MARKET_ICON = null;
 const PRICING_CONCURRENCY = 4;
@@ -116,7 +117,7 @@ async function attachGeneratorPricing(specs, { concurrency = PRICING_CONCURRENCY
 
 export async function prepareGeneratedSpecs(specs) {
   const pricedSpecs = await attachGeneratorPricing(specs);
-  return pricedSpecs.map(spec => attachMarketContextBlocks(spec));
+  return pricedSpecs.map(spec => attachMarketTranslations(attachMarketContextBlocks(spec)));
 }
 
 export async function runAllGenerators() {

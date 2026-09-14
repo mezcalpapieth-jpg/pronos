@@ -20,7 +20,7 @@
  */
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useT } from '@app/lib/i18n.js';
+import { localizedOutcomeLabels, localizedTitle, useLang, useT } from '@app/lib/i18n.js';
 import { findTeamByName, teamProfilePath } from '@app/lib/teamProfiles.js';
 import { marketInterestPayload, teamInterestPayload, trackInterest } from '@app/lib/interest.js';
 import { soccerMatchTypeLabel } from '@app/lib/soccerMarketType.js';
@@ -142,20 +142,24 @@ function MarketThumbnail({ market }) {
 export default function PointsMarketCard({ market, userPosition }) {
   const navigate = useNavigate();
   const t = useT();
-  const outcomes = Array.isArray(market.outcomes) ? market.outcomes : ['Sí', 'No'];
-  const prices = Array.isArray(market.prices) && market.prices.length === outcomes.length
+  const lang = useLang();
+  const rawOutcomes = Array.isArray(market.outcomes) ? market.outcomes : ['Sí', 'No'];
+  const localizedOutcomes = localizedOutcomeLabels({ ...market, outcomes: rawOutcomes }, lang);
+  const outcomes = localizedOutcomes.length === rawOutcomes.length ? localizedOutcomes : rawOutcomes;
+  const marketTitle = localizedTitle(market, lang) || market.question || '';
+  const prices = Array.isArray(market.prices) && market.prices.length === rawOutcomes.length
     ? market.prices
-    : outcomes.map((_, i) => (i === 0 ? 0.5 : 1 / outcomes.length));
+    : rawOutcomes.map((_, i) => (i === 0 ? 0.5 : 1 / rawOutcomes.length));
   // Optional per-outcome image (team crest / player portrait) coming
   // from the generator pipeline. Sparse array: indices without a logo
   // hold null (e.g. draw on a 3-way soccer market). Non-sports markets
   // leave the whole field null.
   const outcomeImages = Array.isArray(market.outcomeImages)
-    && market.outcomeImages.length === outcomes.length
+    && market.outcomeImages.length === rawOutcomes.length
     ? market.outcomeImages
     : null;
   const outcomeCountryLabels = Array.isArray(market.outcomeCountryLabels)
-    && market.outcomeCountryLabels.length === outcomes.length
+    && market.outcomeCountryLabels.length === rawOutcomes.length
     ? market.outcomeCountryLabels
     : null;
   const hasAnyLogo = outcomeImages?.some(Boolean) || false;
@@ -174,15 +178,15 @@ export default function PointsMarketCard({ market, userPosition }) {
   // the right leg directly. If legIds is missing (older response /
   // schema mismatch) fall back to navigating into the detail page.
   const parallelLegs = market.ammMode === 'parallel' && Array.isArray(market.legIds)
-    && market.legIds.length === outcomes.length
+    && market.legIds.length === rawOutcomes.length
     ? market.legIds
     : null;
   const legStatuses = market.ammMode === 'parallel' && Array.isArray(market.legStatuses)
-    && market.legStatuses.length === outcomes.length
+    && market.legStatuses.length === rawOutcomes.length
     ? market.legStatuses
     : null;
   const legOutcomes = market.ammMode === 'parallel' && Array.isArray(market.legOutcomes)
-    && market.legOutcomes.length === outcomes.length
+    && market.legOutcomes.length === rawOutcomes.length
     ? market.legOutcomes
     : null;
   const canOpenDrawer = !isResolved
@@ -269,6 +273,7 @@ export default function PointsMarketCard({ market, userPosition }) {
   const outcomeRows = outcomes.map((label, i) => ({
     index: i,
     label,
+    rawLabel: rawOutcomes[i] || label,
     price: prices[i],
     logo: outcomeImages?.[i] || null,
     countryLabel: outcomeCountryLabels?.[i] || null,
@@ -381,7 +386,7 @@ export default function PointsMarketCard({ market, userPosition }) {
         }}>
           <MarketThumbnail market={market} />
           <div style={{ minWidth: 0, flex: 1 }}>
-            <p className="mock-card-title" style={{ margin: 0 }}>{market.question}</p>
+            <p className="mock-card-title" style={{ margin: 0 }}>{marketTitle}</p>
             {market.seriesMeta?.subtitle && (
               <div style={{
                 marginTop: 6,
@@ -428,7 +433,7 @@ export default function PointsMarketCard({ market, userPosition }) {
           }}
         >
           {visibleOutcomeRows.map((row) => {
-            const { index: i, label, price: livePrice, logo, countryLabel } = row;
+            const { index: i, label, rawLabel, price: livePrice, logo, countryLabel } = row;
             const accent = accentFor(i);
             // Resolved markets collapse to a binary 100 / 0 display so
             // the card matches what the detail page already does — no
@@ -440,7 +445,7 @@ export default function PointsMarketCard({ market, userPosition }) {
               : null;
             const pct = Math.round((resolvedPrice ?? livePrice) * 100);
             const gain = previewGain(livePrice);
-            const teamProfile = findTeamByName(market.sport, label);
+            const teamProfile = findTeamByName(market.sport, rawLabel);
             const rowOnClick = (e) => {
               // Stop the click from reaching the card's outer
               // navigate handler so we can open the drawer in place.
@@ -609,14 +614,16 @@ export default function PointsMarketCard({ market, userPosition }) {
             ? {
                 ...market,
                 id: parallelLegs[drawerIndex],
+                question: marketTitle,
+                title: marketTitle,
                 ammMode: 'unified',
-                outcomes: ['Sí', 'No'],
+                outcomes: [lang === 'en' ? 'Yes' : 'Sí', 'No'],
                 outcomeImages: null,
                 // Display fields stay in sync with the chosen leg's
                 // YES price so the modal's quote ticker isn't off.
                 prices: [market.prices?.[drawerIndex] ?? 0.5, 1 - (market.prices?.[drawerIndex] ?? 0.5)],
               }
-            : market}
+            : { ...market, question: marketTitle, title: marketTitle }}
           outcomeIndex={parallelLegs ? 0 : drawerIndex}
           outcomeLabel={outcomes[drawerIndex]}
           onClose={() => setDrawerIndex(null)}

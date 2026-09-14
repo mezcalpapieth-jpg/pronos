@@ -6757,14 +6757,23 @@ function PendingMarketsTable({ onQueueChange }) {
         alert('No hay mercados que necesiten retrofit. Todo al día.');
         return;
       }
-      if (!confirm(`Retrofit: ${n} mercados activos recibirán resolver + sport/league + logos donde falten. Continuar?`)) {
+      const translationN = preview.translationCandidates || 0;
+      const translationBreakdown = preview.translationCandidateBreakdown || {};
+      const translationLine = translationN > 0
+        ? `\nTraducciones: ${translationN} (${translationBreakdown.approved || 0} aprobados · ${translationBreakdown.pending || 0} pendientes)`
+        : '';
+      if (!confirm(`Retrofit: ${n} registros recibirán resolver + sport/league + logos + traducciones donde falten.${translationLine}\nContinuar?`)) {
         return;
       }
       const r = await adminBackfillResolvers({ dry: false });
       const breakdown = Object.entries(r.patchCounts || r.byResolverType || {})
         .map(([k, v]) => `${k}: ${v}`)
         .join(' · ');
-      alert(`✓ ${r.updatedCount} mercados actualizados.\n${breakdown}`);
+      const translations = r.translationsBackfilled || {};
+      const translationsLine = translations.updatedCount
+        ? `\nTraducciones: ${translations.updatedCount} (${translations.approvedCount || 0} aprobados · ${translations.pendingCount || 0} pendientes)`
+        : '';
+      alert(`✓ ${r.updatedMarketsCount ?? r.updatedCount} mercados actualizados.\n${breakdown}${translationsLine}`);
     } catch (e) {
       alert(`Retrofit falló: ${e.code || e.message}`);
     } finally {
@@ -7047,12 +7056,12 @@ function PendingMarketsTable({ onQueueChange }) {
         )}
 
         {/* Retrofit resolvers — one-shot migration for markets
-            approved before the auto-resolver code landed. Dry-runs
-            first to show the candidate count, then applies on confirm. */}
+            approved before the auto-resolver code landed. Also fills
+            bilingual market copy on pending/approved generated rows. */}
         <button
           onClick={backfillResolvers}
           disabled={bulkBusy}
-          title="Copia resolver_type + resolver_config + sport/league + logos hacia points_markets donde falten"
+          title="Copia resolver_type + resolver_config + sport/league + logos y traducciones donde falten"
           style={{
             padding: '6px 14px',
             borderRadius: 16,

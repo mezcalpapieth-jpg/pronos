@@ -22,6 +22,7 @@ import { PRONOS_TREASURY_USERNAME } from '../_lib/points-limit-orders.js';
 import { binaryPricesWithBookTrade } from '../_lib/points-display-prices.js';
 import { readSession } from '../_lib/session.js';
 import { isAdminUsername } from '../_lib/points-admin.js';
+import { publicMarketTranslationFields } from '../_lib/market-translations.js';
 import { BANXICO_FIX_RESOLUTION_CRITERIA } from '../_lib/banxico.js';
 import { FRANKFURTER_RESOLUTION_CRITERIA, FRANKFURTER_SOURCE } from '../_lib/frankfurter.js';
 import { COINGECKO_TOKEN_MCAP_SOURCE } from '../_lib/solana-token-mcap.js';
@@ -471,6 +472,11 @@ export default async function handler(req, res) {
         outcomes,
         source_data: sourceData,
       });
+      const translationFields = publicMarketTranslationFields({
+        question: r.question,
+        outcomes,
+        sourceData,
+      });
 
       // Expose resolver metadata in a minimal shape — just the type +
       // source name from the config, nothing auth-related. Frontend
@@ -694,6 +700,7 @@ export default async function handler(req, res) {
         const marketPayload = applySeriesDetailGateToMarket({
             id: r.id,
             ammMode: 'parallel',
+            ...translationFields,
             question: r.question,
             category: r.category,
             imageUrl: r.image_url || null,
@@ -751,6 +758,7 @@ export default async function handler(req, res) {
       const marketPayload = applySeriesDetailGateToMarket({
           id: r.id,
           ammMode: 'unified',
+          ...translationFields,
           question: r.question,
           category: r.category,
           imageUrl: r.image_url || null,

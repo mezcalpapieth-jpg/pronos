@@ -17,7 +17,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePointsAuth } from '../lib/pointsAuth.js';
-import { useT, useLang } from '../lib/i18n.js';
+import { localizedOutcomeLabels, localizedTitle, useT, useLang } from '../lib/i18n.js';
 
 const TIME_PERIODS = ['1D', '1W', '1M', 'ALL'];
 const AUTO_INTERVAL_MS = 7000;
@@ -148,13 +148,14 @@ const DEMO_MARKETS = [
 // like the legacy gamma client did. Reading the right shape matters
 // because hmcNormalize([]) crashes on seriesArr[0].length, which is
 // what triggers the Sentry "Algo salió mal" boundary in production.
-function apiRowToHeroMarket(m) {
-  const labels = Array.isArray(m.outcomes) ? m.outcomes : [];
+function apiRowToHeroMarket(m, lang = 'es') {
+  const rawLabels = Array.isArray(m.outcomes) ? m.outcomes : [];
+  const labels = localizedOutcomeLabels(m, lang);
   const prices = Array.isArray(m.prices)   ? m.prices   : [];
   const outcomes = labels.map((label, i) => {
     const probability = Number(prices[i]);
     const pct = Math.round(Math.max(1, Math.min(99,
-      (Number.isFinite(probability) ? probability : 1 / Math.max(1, labels.length)) * 100,
+      (Number.isFinite(probability) ? probability : 1 / Math.max(1, rawLabels.length || labels.length)) * 100,
     )));
     // No historical series available, so fake a small drift from an
     // arbitrary starting point near the current pct so the line still
@@ -179,7 +180,7 @@ function apiRowToHeroMarket(m) {
     id: `api-${m.id}`,
     realId: m.id,
     cat: `${m.icon || '📈'} ${(m.category || 'general').toUpperCase()}`,
-    question: m.question,
+    question: localizedTitle(m, lang) || m.question,
     volume: volumeLabel,
     outcomes,
   };
@@ -223,12 +224,12 @@ export default function Hero({ onOpenLogin }) {
           if (!ENABLE_DEMO_MARKETS) return;
           return;
         }
-        const mapped = rows.slice(0, 5).map(apiRowToHeroMarket).filter(Boolean);
+        const mapped = rows.slice(0, 5).map(row => apiRowToHeroMarket(row, lang)).filter(Boolean);
         if (mapped.length > 0) setMarkets(mapped);
       } catch { /* keep demos */ }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [lang]);
 
   // Pre-compute per-market histories for all 4 periods. Built off a
   // stable seed (market id + period) so the chart is deterministic.

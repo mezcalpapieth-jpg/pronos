@@ -1,9 +1,6 @@
 // ─── I18N ────────────────────────────────────────────────────────────────────
-// Tiny dictionary-based translation layer for the Pronos UI chrome.
-// Market titles themselves are NOT translated — they come from Polymarket
-// (English) or the hardcoded MARKETS file (Spanish) and stay in their source
-// language. This module only handles the surrounding UI: nav, buttons, banners,
-// modal copy, etc.
+// Tiny dictionary-based translation layer for the Pronos UI chrome and the
+// language-aware market text fields emitted by our APIs.
 //
 // Usage:
 //   import { useT, setLang } from '../lib/i18n.js';
@@ -80,7 +77,7 @@ export function localizedTitle(market, lang) {
   if (!market) return '';
   if (lang === 'en' && market.title_en) return market.title_en;
   if (lang === 'es' && market.title_es) return market.title_es;
-  return market.title || '';
+  return market.title || market.question || '';
 }
 
 // Common option labels that should auto-translate even when no explicit
@@ -88,6 +85,40 @@ export function localizedTitle(market, lang) {
 // failed or wasn't cached yet).
 const LABEL_EN_TO_ES = { 'Yes': 'Sí', 'yes': 'sí', 'Draw': 'Empate', 'Other': 'Otro' };
 const LABEL_ES_TO_EN = { 'Sí': 'Yes', 'sí': 'yes', 'Empate': 'Draw', 'Otro': 'Other' };
+
+function optionLabel(option) {
+  if (option == null) return '';
+  if (typeof option === 'string' || typeof option === 'number') return String(option);
+  return String(option.label || option.name || option.title || option.value || '');
+}
+
+function localizedFallbackLabel(label, lang) {
+  const fallback = lang === 'es' ? LABEL_EN_TO_ES : lang === 'en' ? LABEL_ES_TO_EN : null;
+  if (!fallback) return label;
+  return fallback[label] ?? label;
+}
+
+function labelsFrom(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map(optionLabel);
+}
+
+/**
+ * Pick language-aware outcome labels for market payloads that use the compact
+ * `outcomes` shape instead of legacy `{ options: [{ label }] }` objects.
+ */
+export function localizedOutcomeLabels(market, lang) {
+  const base = labelsFrom(market?.outcomes);
+  if (!base.length) return [];
+  const alt = lang === 'en' ? (market.outcomes_en || market.options_en)
+            : lang === 'es' ? (market.outcomes_es || market.options_es)
+            : null;
+  const altLabels = labelsFrom(alt);
+  if (altLabels.length === base.length) {
+    return altLabels.map((label, i) => label || localizedFallbackLabel(base[i], lang));
+  }
+  return base.map(label => localizedFallbackLabel(label, lang));
+}
 
 /**
  * Pick the language-appropriate options array. Merges localized labels onto
@@ -103,15 +134,13 @@ export function localizedOptions(market, lang) {
   if (Array.isArray(alt)) {
     return market.options.map((opt, i) => ({
       ...opt,
-      label: alt[i]?.label ?? opt.label,
+      label: optionLabel(alt[i]) || opt.label,
     }));
   }
   // Fallback: auto-translate common labels when no explicit alt exists
-  const fallback = lang === 'es' ? LABEL_EN_TO_ES : lang === 'en' ? LABEL_ES_TO_EN : null;
-  if (!fallback) return market.options;
   return market.options.map(opt => ({
     ...opt,
-    label: fallback[opt.label] ?? opt.label,
+    label: localizedFallbackLabel(opt.label, lang),
   }));
 }
 

@@ -29,7 +29,7 @@ import {
   redeemWinnings,
 } from '../lib/pointsApi.js';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
-import { useLang, useT } from '@app/lib/i18n.js';
+import { localizedOutcomeLabels, localizedTitle, useLang, useT } from '@app/lib/i18n.js';
 import { buildSellPreview, normalizeSellShares } from '../lib/sellPreview.js';
 import {
   formatSeriesGameLabel,
@@ -1036,7 +1036,10 @@ function UnifiedOutcomeList({
 // Leg images are passed in display order. The parent stores one image
 // per original outcome; the caller sorts those alongside the legs.
 function ParallelLegList({ market, legs, outcomeImages, outcomeCountryLabels, onBuyClick, onParlayAdd, selectionMode = 'single' }) {
+  const lang = useLang();
   const isCombinadaMode = selectionMode === 'combo';
+  const yesLabel = lang === 'en' ? 'Yes' : 'Sí';
+  const noLabel = 'No';
   return (
     <ScrollableList count={legs.length}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -1049,8 +1052,8 @@ function ParallelLegList({ market, legs, outcomeImages, outcomeCountryLabels, on
           const countryLabel = outcomeCountryLabels?.[i] || null;
           const isLegTradable = parallelLegIsTradable(leg, market);
           const closedLabel = leg.status === 'resolved'
-            ? (Number(leg.outcome) === 0 ? 'Sí · 100%' : 'No · 0%')
-            : 'Cerrado';
+            ? (Number(leg.outcome) === 0 ? `${yesLabel} · 100%` : `${noLabel} · 0%`)
+            : (lang === 'en' ? 'Closed' : 'Cerrado');
           // Carry the leg's own gating fields through — handleBuyClick
           // checks status/seriesLocked on whatever target it gets, so a
           // synthetic leg market missing them reads as "not active" and
@@ -1120,22 +1123,22 @@ function ParallelLegList({ market, legs, outcomeImages, outcomeCountryLabels, on
                   {!isCombinadaMode && (
                     <>
                       <button
-                        onClick={() => onBuyClick(legMarket, 0, `${leg.label} — Sí`)}
+                        onClick={() => onBuyClick(legMarket, 0, `${leg.label} — ${yesLabel}`)}
                         type="button"
                         style={legButtonStyle('var(--yes)', 'rgba(22,163,74,0.15)', 'rgba(22,163,74,0.4)')}
                         onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
                         onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
                       >
-                        Sí <span style={legPriceStyle}>{Math.round(yesPrice * 100)}¢</span>
+                        {yesLabel} <span style={legPriceStyle}>{Math.round(yesPrice * 100)}¢</span>
                       </button>
                       <button
-                        onClick={() => onBuyClick(legMarket, 1, `${leg.label} — No`)}
+                        onClick={() => onBuyClick(legMarket, 1, `${leg.label} — ${noLabel}`)}
                         type="button"
                         style={legButtonStyle('var(--danger)', 'rgba(255,59,59,0.12)', 'rgba(255,59,59,0.4)')}
                         onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
                         onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
                       >
-                        No <span style={legPriceStyle}>{Math.round(noPrice * 100)}¢</span>
+                        {noLabel} <span style={legPriceStyle}>{Math.round(noPrice * 100)}¢</span>
                       </button>
                     </>
                   )}
@@ -1146,24 +1149,24 @@ function ParallelLegList({ market, legs, outcomeImages, outcomeCountryLabels, on
                         onClick={() => onParlayAdd?.({
                           market: legMarket,
                           outcomeIndex: 0,
-                          outcomeLabel: `${leg.label} — Sí`,
+                          outcomeLabel: `${leg.label} — ${yesLabel}`,
                           price: yesPrice,
                         })}
                         style={parlayAddButtonStyle}
                       >
-                        + Sí
+                        + {yesLabel}
                       </button>
                       <button
                         type="button"
                         onClick={() => onParlayAdd?.({
                           market: legMarket,
                           outcomeIndex: 1,
-                          outcomeLabel: `${leg.label} — No`,
+                          outcomeLabel: `${leg.label} — ${noLabel}`,
                           price: noPrice,
                         })}
                         style={parlayAddButtonStyle}
                       >
-                        + No
+                        + {noLabel}
                       </button>
                     </>
                   )}
@@ -2891,7 +2894,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
   function handleAddParlayLeg({ market: targetMarket, outcomeIndex, outcomeLabel, price }) {
     const nextLeg = buildParlayLeg({
       market: targetMarket,
-      fallbackQuestion: market?.question,
+      fallbackQuestion: localizedTitle(market, lang) || market?.question,
       outcomeIndex,
       outcomeLabel,
       price,
@@ -3151,12 +3154,18 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
     );
   }
 
-  const outcomes = Array.isArray(market.outcomes) ? market.outcomes : ['Sí', 'No'];
-  const prices = Array.isArray(market.prices) && market.prices.length === outcomes.length
+  const rawOutcomes = Array.isArray(market.outcomes) ? market.outcomes : ['Sí', 'No'];
+  const localizedOutcomes = localizedOutcomeLabels({ ...market, outcomes: rawOutcomes }, lang);
+  const outcomes = localizedOutcomes.length === rawOutcomes.length ? localizedOutcomes : rawOutcomes;
+  const marketTitle = localizedTitle(market, lang) || market.question || '';
+  const prices = Array.isArray(market.prices) && market.prices.length === rawOutcomes.length
     ? market.prices
-    : outcomes.map((_, i) => (i === 0 ? 0.5 : 1 / outcomes.length));
+    : rawOutcomes.map((_, i) => (i === 0 ? 0.5 : 1 / rawOutcomes.length));
   const parallelDisplayLegs = market.ammMode === 'parallel' && Array.isArray(market.legs)
-    ? sortParallelDisplayLegs(market.legs)
+    ? sortParallelDisplayLegs(market.legs).map((leg) => ({
+        ...leg,
+        label: outcomes[leg.outcomeIndex] || leg.label,
+      }))
     : null;
   const championsFinalOptions = market.ammMode !== 'parallel' && findChampionsLeagueFinalMarket([market])
     ? finalMarketOptions(market)
@@ -3294,6 +3303,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
   const modeCopy = lang === 'en'
     ? { individual: 'Individual', combinada: 'Combo slip', otherMarkets: 'Other markets' }
     : { individual: 'Individual', combinada: 'Combinada', otherMarkets: 'Otros mercados' };
+  const displayMarket = { ...market, question: marketTitle, title: marketTitle };
 
   const tradePanel = (
     <div style={{
@@ -3391,7 +3401,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
           )}
           {market.ammMode === 'parallel' && Array.isArray(market.legs)
             ? <ParallelLegList
-                market={market}
+                market={displayMarket}
                 legs={parallelDisplayLegs || market.legs}
                 outcomeImages={displayOutcomeImages}
                 outcomeCountryLabels={displayOutcomeCountryLabels}
@@ -3405,7 +3415,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
                 outcomeImages={displayOutcomeImages}
                 outcomeCountryLabels={displayOutcomeCountryLabels}
                 outcomeIndices={displayOutcomeIndices}
-                market={market}
+                market={displayMarket}
                 onBuyClick={handleBuyClick}
                 onParlayAdd={handleAddParlayLeg}
                 selectionMode={tradeMode}
@@ -3563,7 +3573,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
                   {t('points.testMarket.badge')}
                 </span>
               )}
-              <ShareButton marketId={market.id} app="points" question={market.question} />
+              <ShareButton marketId={market.id} app="points" question={marketTitle} />
             </div>
 
             <div style={{
@@ -3581,7 +3591,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
                   color: 'var(--text-primary)',
                   margin: 0,
                 }}>
-                  {market.question}
+                  {marketTitle}
                 </h1>
 
                 {seriesSubtitle && (
@@ -3877,7 +3887,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
             />
 
             <OrderBookPanel
-              market={market}
+              market={displayMarket}
               displayOutcomes={displayOutcomes}
               displayOutcomeIndices={displayOutcomeIndices}
               displayOutcomeImages={displayOutcomeImages}
@@ -4141,7 +4151,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
                   // for parallel, raw outcome label for unified) since
                   // it already knows whether this sits on a leg or the
                   // parent directly.
-                  const label = p.outcomeLabel || outcomes[oi] || `Opción ${oi + 1}`;
+                  const label = outcomes[oi] || p.outcomeLabel || `Opción ${oi + 1}`;
                   const shares = Number(p.shares) || 0;
                   // Use the backend-computed currentPrice so parallel
                   // leg positions get the leg's YES/NO price rather than
@@ -4161,7 +4171,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
                   const buyTarget = p.parentMarketId
                     ? {
                         id: p.marketId,
-                        question: `${market.question} — ${label}`,
+                        question: `${marketTitle} — ${label}`,
                         status: positionLeg?.status ?? market.status,
                         seriesLocked: positionLeg?.seriesLocked ?? market.seriesLocked,
                       }

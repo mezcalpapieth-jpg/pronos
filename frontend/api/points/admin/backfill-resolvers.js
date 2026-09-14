@@ -9,6 +9,7 @@
  *   - resolver_type / resolver_config  (original purpose)
  *   - sport / league                   (per-type page classifiers)
  *   - outcome_images                   (team crests, driver portraits)
+ *   - source_data.translations         (Spanish / English market copy)
  *
  * Each field is COALESCE-patched only when the existing column is
  * NULL, so running this twice is safe and we never clobber a value
@@ -27,6 +28,7 @@ import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../../_lib/cors.js';
 import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { requirePointsAdmin } from '../../_lib/points-admin.js';
+import { attachMarketTranslations } from '../../_lib/market-translations.js';
 
 import { generateSoccerMarkets }        from '../../_lib/market-gen/soccer.js';
 import { generateEspnSoccerMarkets }    from '../../_lib/market-gen/espn-soccer.js';
@@ -71,6 +73,85 @@ const GENERATORS = [
   generateLivMarkets, generateUfcMarkets, generateBoxingMarkets,
   generateNextOpponentMarkets, generateF1SeasonMarkets,
 ];
+
+function parseJsonb(value, fallback) {
+  if (Array.isArray(value)) return value;
+  if (value && typeof value === 'object') return value;
+  if (typeof value !== 'string') return fallback;
+  try { return JSON.parse(value); } catch { return fallback; }
+}
+
+function translatedSourceDataForPending(row) {
+  const outcomes = parseJsonb(row.outcomes, []);
+  const sourceData = parseJsonb(row.source_data, {});
+  return attachMarketTranslations({
+    question: row.question,
+    outcomes,
+    source_data: sourceData,
+    sport: row.sport || null,
+    league: row.league || null,
+  }).source_data;
+}
+
+async function backfillPendingMarketTranslations({ dryRun = false } = {}) {
+  const rows = await sql`
+    SELECT id, status, approved_market_id, question, outcomes, source_data, sport, league
+    FROM points_pending_markets
+    WHERE status IN ('pending', 'approved')
+      AND (
+        source_data IS NULL
+        OR source_data->'translations' IS NULL
+        OR source_data->'translations'->'es' IS NULL
+        OR source_data->'translations'->'en' IS NULL
+        OR NULLIF(source_data->'translations'->'es'->>'question', '') IS NULL
+        OR NULLIF(source_data->'translations'->'en'->>'question', '') IS NULL
+      )
+    ORDER BY id ASC
+    LIMIT 2000
+  `;
+
+  if (dryRun) {
+    return {
+      candidateCount: rows.length,
+      pendingCount: rows.filter(row => row.status === 'pending').length,
+      approvedCount: rows.filter(row => row.status === 'approved').length,
+      candidates: rows.slice(0, 50).map(row => ({
+        pendingId: row.id,
+        marketId: row.approved_market_id || null,
+        status: row.status,
+        question: row.question,
+      })),
+    };
+  }
+
+  const updated = [];
+  for (const row of rows) {
+    const sourceData = translatedSourceDataForPending(row);
+    const result = await sql`
+      UPDATE points_pending_markets
+      SET source_data = ${JSON.stringify(sourceData)}::jsonb
+      WHERE id = ${row.id}
+        AND status IN ('pending', 'approved')
+        AND (
+          source_data IS NULL
+          OR source_data->'translations' IS NULL
+          OR source_data->'translations'->'es' IS NULL
+          OR source_data->'translations'->'en' IS NULL
+          OR NULLIF(source_data->'translations'->'es'->>'question', '') IS NULL
+          OR NULLIF(source_data->'translations'->'en'->>'question', '') IS NULL
+        )
+      RETURNING id, status, approved_market_id
+    `;
+    if (result.length > 0) updated.push(result[0]);
+  }
+
+  return {
+    updatedCount: updated.length,
+    pendingCount: updated.filter(row => row.status === 'pending').length,
+    approvedCount: updated.filter(row => row.status === 'approved').length,
+    updated,
+  };
+}
 
 async function collectSpecs() {
   const out = [];
@@ -180,16 +261,23 @@ export default async function handler(req, res) {
             OR m.icon = '⛳'
           )
       `;
+      const translations = await backfillPendingMarketTranslations({ dryRun: true });
       const forceRebuildCount = (f1Count?.n || 0) + (lmbCount?.n || 0) + (golfCount?.n || 0);
       return res.status(200).json({
         dryRun: true,
-        candidateCount: rows.length + forceRebuildCount,
+        candidateCount: rows.length + forceRebuildCount + translations.candidateCount,
         specCandidateCount: rows.length,
         forceRebuildCandidates: {
           f1:   f1Count?.n   || 0,
           lmb:  lmbCount?.n  || 0,
           golf: golfCount?.n || 0,
         },
+        translationCandidates: translations.candidateCount,
+        translationCandidateBreakdown: {
+          pending: translations.pendingCount,
+          approved: translations.approvedCount,
+        },
+        translationSamples: translations.candidates,
         candidates: rows.slice(0, 50),
         specsTotal: specs.length,
       });
@@ -200,7 +288,7 @@ export default async function handler(req, res) {
     // rows that genuinely need the value AND we can count accurately
     // which fields flipped.
     const patchedMarkets = new Map(); // marketId → Set(patches)
-    const patchCounts = { resolverType: 0, sport: 0, league: 0, outcomeImages: 0 };
+    const patchCounts = { resolverType: 0, sport: 0, league: 0, outcomeImages: 0, translations: 0 };
 
     function record(marketId, field) {
       if (!patchedMarkets.has(marketId)) patchedMarkets.set(marketId, new Set());
@@ -267,6 +355,12 @@ export default async function handler(req, res) {
         `;
         for (const row of r) record(row.id, 'outcomeImages');
       }
+    }
+
+    const translations = await backfillPendingMarketTranslations({ dryRun: false });
+    patchCounts.translations = translations.updatedCount;
+    for (const row of translations.updated) {
+      if (row.approved_market_id) record(row.approved_market_id, 'translations');
     }
 
     // ── Force-rebuild pass (F1 + LMB + golf + MLB) ──────────────────
@@ -522,7 +616,13 @@ export default async function handler(req, res) {
     return res.status(200).json({
       ok: true,
       updatedCount: updated.length,
+      updatedMarketsCount: updated.length,
       patchCounts,
+      translationsBackfilled: {
+        updatedCount: translations.updatedCount,
+        pendingCount: translations.pendingCount,
+        approvedCount: translations.approvedCount,
+      },
       f1ImagesFound,
       lmbImagesFound,
       golfImagesFound,

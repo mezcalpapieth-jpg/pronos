@@ -1,4 +1,5 @@
 import { binaryPrices, multiPrices } from './amm-math.js';
+import { publicMarketTranslationFields } from './market-translations.js';
 import { binaryPricesWithBookTrade } from './points-display-prices.js';
 
 export function parseJsonb(value, fallback) {
@@ -71,9 +72,16 @@ export function serializePublicMarket(row) {
   const outcomes = parseJsonb(row.outcomes, ['Si', 'No']).map(String);
   const reserves = parseJsonb(row.reserves, []).map(Number);
   const prices = pricesFromReserves(reserves, outcomes.length, row).map(value => roundNumber(value, 6));
+  const sourceData = parseJsonb(row.pending_source_data || row.source_data, {});
+  const translationFields = publicMarketTranslationFields({
+    question: row.question,
+    outcomes,
+    sourceData,
+  });
   return {
     id: Number(row.id),
     marketId: String(row.id),
+    ...translationFields,
     question: row.question,
     category: row.category || null,
     imageUrl: row.image_url || null,
