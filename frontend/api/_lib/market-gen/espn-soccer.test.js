@@ -153,6 +153,34 @@ test('Conference League uses a longer fixture lookahead than the default soccer 
   );
 });
 
+test('ESPN soccer fetches daily scoreboards instead of one broad range', async () => {
+  const originalFetch = globalThis.fetch;
+  const requestedUrls = [];
+  globalThis.fetch = async (url) => {
+    const requestedUrl = String(url);
+    requestedUrls.push(requestedUrl);
+    return {
+      ok: true,
+      json: async () => ({
+        events: requestedUrl.includes('dates=20260918')
+          ? [espnEvent({ id: '401915586', homeName: 'Roma', awayName: 'Celta Vigo' })]
+          : [],
+      }),
+    };
+  };
+
+  try {
+    const events = await _internal.fetchLeagueEvents('uefa.europa', '20260917-20260918');
+    assert.deepEqual(events.map(event => event.id), ['401915586']);
+    assert.deepEqual(
+      requestedUrls.map(url => url.match(/dates=([^&]+)/)?.[1]),
+      ['20260917', '20260918'],
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('ESPN soccer events with placeholder team names are skipped', () => {
   const config = _internal.ESPN_SOCCER_LEAGUES.find(c => c.league === 'club-friendlies');
 

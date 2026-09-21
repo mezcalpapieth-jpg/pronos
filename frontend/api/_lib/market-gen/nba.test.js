@@ -75,7 +75,7 @@ test('NBA generator keeps US evening games after UTC rolls to the next day', asy
   const originalFetch = globalThis.fetch;
   const OriginalDate = globalThis.Date;
   const fixedNow = new OriginalDate('2026-05-16T00:30:00.000Z');
-  let requestedUrl = '';
+  const requestedUrls = [];
 
   globalThis.Date = class extends OriginalDate {
     constructor(...args) {
@@ -89,11 +89,12 @@ test('NBA generator keeps US evening games after UTC rolls to the next day', asy
   };
 
   globalThis.fetch = async (url) => {
-    requestedUrl = String(url);
+    const requestedUrl = String(url);
+    requestedUrls.push(requestedUrl);
     return {
       ok: true,
       json: async () => ({
-        events: requestedUrl.includes('dates=20260515-20260528')
+        events: requestedUrl.includes('dates=20260515')
           ? [
               nbaEvent({
                 id: 'late-us-evening',
@@ -117,7 +118,9 @@ test('NBA generator keeps US evening games after UTC rolls to the next day', asy
 
   try {
     const specs = await generateNbaMarkets();
-    assert.match(requestedUrl, /dates=20260515-20260528/);
+    assert.ok(requestedUrls.some(url => /dates=20260515/.test(url)));
+    assert.ok(requestedUrls.some(url => /dates=20260528/.test(url)));
+    assert.equal(requestedUrls.some(url => /dates=\d{8}-\d{8}/.test(url)), false);
     assert.deepEqual(specs.map(s => s.source_event_id), ['late-us-evening']);
   } finally {
     globalThis.fetch = originalFetch;

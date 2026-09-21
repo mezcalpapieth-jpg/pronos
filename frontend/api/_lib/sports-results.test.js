@@ -66,9 +66,41 @@ test('readEspnEvent falls back to per-event summary when date-window scoreboard 
     assert.equal(result.awayScore, 90);
     assert.equal(result.homeTeam, 'Thunder');
     assert.equal(result.awayTeam, 'Lakers');
-    assert.equal(urls.length, 2);
+    assert.equal(urls.length, 3);
     assert.match(urls[0], /scoreboard/);
-    assert.match(urls[1], /summary\?event=401871326/);
+    assert.match(urls[1], /scoreboard/);
+    assert.match(urls[2], /summary\?event=401871326/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('readEspnEvent falls back to summary when ESPN rejects the date-window scoreboard', async () => {
+  const originalFetch = globalThis.fetch;
+  const urls = [];
+  globalThis.fetch = async (url) => {
+    urls.push(String(url));
+    if (String(url).includes('/scoreboard?dates=20260512-20260514')) {
+      return jsonResponse({ code: 400, message: 'Failed to get events endpoint.' }, false, 400);
+    }
+    if (String(url).includes('/scoreboard?dates=20260513')) return jsonResponse({ events: [] });
+    if (String(url).includes('/summary?event=401871326')) return jsonResponse(finalSummary);
+    throw new Error(`unexpected url ${url}`);
+  };
+
+  try {
+    const result = await readEspnEvent({
+      leaguePath: 'soccer/uefa.europa',
+      eventId: '401871326',
+      dateYmd: '2026-05-13',
+    });
+
+    assert.equal(result.completed, true);
+    assert.equal(result.winner, 'home');
+    assert.equal(urls.length, 3);
+    assert.match(urls[0], /dates=20260512-20260514/);
+    assert.match(urls[1], /dates=20260513/);
+    assert.match(urls[2], /summary\?event=401871326/);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -123,6 +155,60 @@ test('readEspnEvent can resolve soccer finals by team names when no ESPN event i
     assert.equal(result.awayTeam, 'Aston Villa');
     assert.equal(urls.length, 1);
     assert.match(urls[0], /soccer\/uefa\.europa\/scoreboard/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('readEspnEvent tries single-day scoreboard after ESPN rejects a range lookup', async () => {
+  const originalFetch = globalThis.fetch;
+  const urls = [];
+  globalThis.fetch = async (url) => {
+    urls.push(String(url));
+    if (String(url).includes('/scoreboard?dates=20260519-20260521')) {
+      return jsonResponse({ code: 400, message: 'Failed to get events endpoint.' }, false, 400);
+    }
+    if (String(url).includes('/scoreboard?dates=20260520')) {
+      return jsonResponse({
+        events: [{
+          id: '401862911',
+          competitions: [{
+            status: { type: { state: 'post', completed: true } },
+            competitors: [
+              {
+                homeAway: 'home',
+                score: '1',
+                winner: false,
+                team: { displayName: 'Omonia Nicosia', shortDisplayName: 'Omonia Nicosia' },
+              },
+              {
+                homeAway: 'away',
+                score: '2',
+                winner: true,
+                team: { displayName: 'Celta Vigo', shortDisplayName: 'Celta Vigo' },
+              },
+            ],
+          }],
+        }],
+      });
+    }
+    throw new Error(`unexpected url ${url}`);
+  };
+
+  try {
+    const result = await readEspnEvent({
+      leaguePath: 'soccer/uefa.europa',
+      eventId: null,
+      dateYmd: '2026-05-20',
+      homeName: 'Omonia Nicosia',
+      awayName: 'Celta Vigo',
+    });
+
+    assert.equal(result.completed, true);
+    assert.equal(result.winner, 'away');
+    assert.equal(urls.length, 2);
+    assert.match(urls[0], /dates=20260519-20260521/);
+    assert.match(urls[1], /dates=20260520/);
   } finally {
     globalThis.fetch = originalFetch;
   }

@@ -56,12 +56,12 @@ function nflEvent({
 test('NFL generator emits preseason ESPN binary markets', async () => {
   const now = new Date('2026-09-08T12:00:00Z');
   const kickoff = new Date(now.getTime() + 6 * 24 * 3600_000).toISOString();
-  let capturedUrl = '';
+  const capturedUrls = [];
 
   const specs = await generateNflMarkets({
     now,
     fetchImpl: async (url) => {
-      capturedUrl = String(url);
+      capturedUrls.push(String(url));
       return {
         ok: true,
         json: async () => ({
@@ -80,7 +80,9 @@ test('NFL generator emits preseason ESPN binary markets', async () => {
     },
   });
 
-  assert.match(capturedUrl, /dates=20260908-20260915/);
+  assert.ok(capturedUrls.some(url => /dates=20260908/.test(url)));
+  assert.ok(capturedUrls.some(url => /dates=20260915/.test(url)));
+  assert.equal(capturedUrls.some(url => /dates=\d{8}-\d{8}/.test(url)), false);
   assert.equal(specs.length, 1);
   assert.equal(specs[0].source, 'espn-nfl');
   assert.equal(specs[0].sport, 'nfl');

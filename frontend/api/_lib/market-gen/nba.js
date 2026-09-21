@@ -7,6 +7,7 @@
  */
 
 import { extractEspnSeriesMeta } from '../series-markets.js';
+import { fetchEspnScoreboardData, formatEspnDateCompact } from './espn-scoreboard.js';
 
 const BASE = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard';
 const BASE_HORIZON_DAYS = 3;
@@ -14,8 +15,7 @@ const SERIES_HORIZON_DAYS = 12;
 const SCOREBOARD_LOOKBACK_DAYS = 1;
 
 function formatDateCompact(d) {
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}`;
+  return formatEspnDateCompact(d);
 }
 
 export async function generateNbaMarkets() {
@@ -24,17 +24,14 @@ export async function generateNbaMarkets() {
   const scoreboardStart = new Date(now.getTime() - SCOREBOARD_LOOKBACK_DAYS * 86_400_000);
   const horizon = new Date(now.getTime() + SERIES_HORIZON_DAYS * 86_400_000);
   const range = `${formatDateCompact(scoreboardStart)}-${formatDateCompact(horizon)}`;
-  const url = `${BASE}?dates=${range}&limit=500`;
 
-  let data;
-  try {
-    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    data = await res.json();
-  } catch (e) {
-    console.error('[market-gen/nba] scoreboard fetch failed', { message: e?.message });
-    return [];
-  }
+  const data = await fetchEspnScoreboardData({
+    baseUrl: BASE,
+    dateRange: range,
+    preferDaily: true,
+    logPrefix: '[market-gen/nba] scoreboard fetch failed',
+  });
+  if (!data) return [];
 
   const events = Array.isArray(data?.events) ? data.events : [];
   const specs = [];

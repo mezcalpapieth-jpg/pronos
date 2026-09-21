@@ -35,6 +35,23 @@ function ymdToDateRange(ymd) {
   return `${fmt(start)}-${fmt(end)}`;
 }
 
+function ymdToCompact(ymd) {
+  if (!ymd) return null;
+  const [y, m, d] = String(ymd).split('-').map(Number);
+  if (!y || !m || !d) return null;
+  return `${String(y).padStart(4, '0')}${String(m).padStart(2, '0')}${String(d).padStart(2, '0')}`;
+}
+
+function espnScoreboardQueries(dateYmd) {
+  const queries = [];
+  const dateRange = ymdToDateRange(dateYmd);
+  const singleDate = ymdToCompact(dateYmd);
+  if (dateRange) queries.push(`?dates=${dateRange}&limit=500`);
+  if (singleDate && singleDate !== dateRange) queries.push(`?dates=${singleDate}&limit=500`);
+  if (!queries.length) queries.push('?limit=500');
+  return queries;
+}
+
 function normalizeEspnEvent(ev) {
   const comp = Array.isArray(ev?.competitions) ? ev.competitions[0] : null;
   const status = ev?.status || comp?.status || null;
@@ -210,35 +227,46 @@ export async function readEspnEvent({ leaguePath, eventId, dateYmd, homeName, aw
   if (!leaguePath || (!eventId && !(homeName && awayName))) {
     throw new Error('espn: missing leaguePath/event lookup');
   }
-  const dateRange = ymdToDateRange(dateYmd);
-  const q = dateRange ? `?dates=${dateRange}&limit=500` : `?limit=500`;
-  const url = `${ESPN_BASE}/${leaguePath}/scoreboard${q}`;
-  const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
-  if (!res.ok) throw new Error(`espn: HTTP ${res.status}`);
-  const data = await res.json();
-  const events = Array.isArray(data?.events) ? data.events : [];
-  const ev = eventId
-    ? events.find(e => String(e.id) === String(eventId))
-    : events.find(e => eventMatchesTeams(e, homeName, awayName));
-  if (!ev) {
-    if (!eventId) return { completed: false, winner: null, notFound: true };
-    // Event not in the date-window scoreboard. In playoff series the
-    // same teams can play several times in one week, and a stale/bad
-    // dateYmd on the market row should not strand the resolver if the
-    // stable ESPN eventId is still correct. Fall back to ESPN's
-    // per-event summary endpoint, keyed only by eventId.
-    const summaryUrl = `${ESPN_BASE}/${leaguePath}/summary?event=${encodeURIComponent(eventId)}`;
-    const summaryRes = await fetch(summaryUrl, { headers: { 'Accept': 'application/json' } });
-    if (!summaryRes.ok) throw new Error(`espn-summary: HTTP ${summaryRes.status}`);
-    const summary = await summaryRes.json();
-    if (summary?.header?.id && String(summary.header.id) === String(eventId)) {
-      return { ...normalizeEspnEventForMarket(summary.header, homeName, awayName), dateWindowMiss: true };
+  let lastScoreboardError = null;
+  let sawScoreboard = false;
+  for (const q of espnScoreboardQueries(dateYmd)) {
+    const url = `${ESPN_BASE}/${leaguePath}/scoreboard${q}`;
+    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    if (!res.ok) {
+      lastScoreboardError = new Error(`espn: HTTP ${res.status}`);
+      continue;
     }
-    // Still not found — either not started yet, removed from ESPN, or
-    // the stored eventId is wrong. Treat as "not done", retry next tick.
+    sawScoreboard = true;
+    const data = await res.json();
+    const events = Array.isArray(data?.events) ? data.events : [];
+    const ev = eventId
+      ? events.find(e => String(e.id) === String(eventId))
+      : events.find(e => eventMatchesTeams(e, homeName, awayName));
+    if (ev) return normalizeEspnEventForMarket(ev, homeName, awayName);
+    if (!eventId) return { completed: false, winner: null, notFound: true };
+  }
+
+  if (!eventId) {
+    if (!sawScoreboard && lastScoreboardError) throw lastScoreboardError;
     return { completed: false, winner: null, notFound: true };
   }
-  return normalizeEspnEventForMarket(ev, homeName, awayName);
+
+  // Event not in the date-window scoreboard, or ESPN rejected the
+  // multi-day scoreboard request for this league. The stable per-event
+  // summary endpoint often still works and avoids stranding valid rows.
+  const summaryUrl = `${ESPN_BASE}/${leaguePath}/summary?event=${encodeURIComponent(eventId)}`;
+  const summaryRes = await fetch(summaryUrl, { headers: { 'Accept': 'application/json' } });
+  if (!summaryRes.ok) {
+    if (!sawScoreboard && lastScoreboardError) throw lastScoreboardError;
+    throw new Error(`espn-summary: HTTP ${summaryRes.status}`);
+  }
+  const summary = await summaryRes.json();
+  if (summary?.header?.id && String(summary.header.id) === String(eventId)) {
+    return { ...normalizeEspnEventForMarket(summary.header, homeName, awayName), dateWindowMiss: true };
+  }
+  // Still not found — either not started yet, removed from ESPN, or
+  // the stored eventId is wrong. Treat as "not done", retry next tick.
+  return { completed: false, winner: null, notFound: true };
 }
 
 // ─── football-data.org match ───────────────────────────────────────────

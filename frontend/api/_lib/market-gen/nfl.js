@@ -7,12 +7,13 @@
  * settle them once ESPN marks the event completed.
  */
 
+import { fetchEspnScoreboardData, formatEspnDateCompact } from './espn-scoreboard.js';
+
 const BASE = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard';
 const HORIZON_DAYS = 7;
 
 function formatDateCompact(d) {
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}`;
+  return formatEspnDateCompact(d);
 }
 
 function seasonLabel(event, rootSeason) {
@@ -34,17 +35,15 @@ export async function generateNflMarkets({
   const current = now instanceof Date ? now : new Date(now);
   const horizon = new Date(current.getTime() + HORIZON_DAYS * 86_400_000);
   const range = `${formatDateCompact(current)}-${formatDateCompact(horizon)}`;
-  const url = `${BASE}?dates=${range}&limit=500`;
 
-  let data;
-  try {
-    const res = await fetchImpl(url, { headers: { Accept: 'application/json' } });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    data = await res.json();
-  } catch (e) {
-    console.error('[market-gen/nfl] scoreboard fetch failed', { message: e?.message });
-    return [];
-  }
+  const data = await fetchEspnScoreboardData({
+    baseUrl: BASE,
+    dateRange: range,
+    fetchImpl,
+    preferDaily: true,
+    logPrefix: '[market-gen/nfl] scoreboard fetch failed',
+  });
+  if (!data) return [];
 
   const events = Array.isArray(data?.events) ? data.events : [];
   const specs = [];

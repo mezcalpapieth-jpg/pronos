@@ -24,6 +24,8 @@
  * produce a winner.
  */
 
+import { fetchEspnScoreboardData, formatEspnDateCompact } from './espn-scoreboard.js';
+
 const BASE = 'https://site.api.espn.com/apis/site/v2/sports/soccer';
 const HORIZON_DAYS = 14;
 const SUMMER_BREAK_MONTHS_UTC = new Set([5, 6, 7]); // June, July, August
@@ -138,8 +140,7 @@ const ESPN_SOCCER_LEAGUES = [
 ];
 
 function formatDateCompact(d) {
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}`;
+  return formatEspnDateCompact(d);
 }
 
 function dateRangeForConfig(config, now = new Date()) {
@@ -150,18 +151,14 @@ function dateRangeForConfig(config, now = new Date()) {
 }
 
 async function fetchLeagueEvents(leagueCode, dateRange) {
-  const url = `${BASE}/${leagueCode}/scoreboard?dates=${dateRange}&limit=500`;
-  try {
-    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    return Array.isArray(data?.events) ? data.events : [];
-  } catch (e) {
-    console.error('[market-gen/espn-soccer] scoreboard fetch failed', {
-      league: leagueCode, message: e?.message,
-    });
-    return [];
-  }
+  const data = await fetchEspnScoreboardData({
+    baseUrl: `${BASE}/${leagueCode}/scoreboard`,
+    dateRange,
+    preferDaily: true,
+    logPrefix: '[market-gen/espn-soccer] scoreboard fetch failed',
+    logContext: { league: leagueCode },
+  });
+  return Array.isArray(data?.events) ? data.events : [];
 }
 
 function eventTeamNames(ev) {
@@ -295,6 +292,7 @@ export const _internal = {
   eventTeamNames,
   eventToSpec,
   dateRangeForConfig,
+  fetchLeagueEvents,
   formatDateCompact,
   isPlaceholderTeamName,
   isSummerBreakDate,

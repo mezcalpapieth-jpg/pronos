@@ -7,6 +7,14 @@ import {
   readEspnLiveScore,
 } from './espn-live-score.js';
 
+function jsonResponse(body, ok = true, status = 200) {
+  return {
+    ok,
+    status,
+    json: async () => body,
+  };
+}
+
 test('normalizeEspnLiveScore returns basketball period scores and current clock', () => {
   const live = normalizeEspnLiveScore({
     leaguePath: 'basketball/nba',
@@ -231,6 +239,51 @@ test('readEspnLiveScore can find a soccer event by teams when no event id is sto
   assert.equal(live.statusLabel, "75'");
   assert.equal(live.home.score, 1);
   assert.equal(live.away.score, 2);
+});
+
+test('readEspnLiveScore falls back to summary when ESPN rejects the date-window scoreboard', async (t) => {
+  const originalFetch = globalThis.fetch;
+  const urls = [];
+  t.after(() => { globalThis.fetch = originalFetch; });
+
+  globalThis.fetch = async (url) => {
+    urls.push(String(url));
+    if (String(url).includes('/scoreboard?dates=20260519-20260521')) {
+      return jsonResponse({ code: 400, message: 'Failed to get events endpoint.' }, false, 400);
+    }
+    if (String(url).includes('/scoreboard?dates=20260520')) return jsonResponse({ events: [] });
+    if (String(url).includes('/summary?event=401862911')) {
+      return jsonResponse({
+        header: {
+          id: '401862911',
+          date: '2026-05-20T19:00Z',
+          status: { type: { state: 'post', completed: true, shortDetail: 'FT' } },
+          competitions: [{
+            competitors: [
+              { homeAway: 'home', score: '1', team: { shortDisplayName: 'Freiburg' } },
+              { homeAway: 'away', score: '2', team: { shortDisplayName: 'Aston Villa' } },
+            ],
+          }],
+        },
+      });
+    }
+    throw new Error(`unexpected url ${url}`);
+  };
+
+  const live = await readEspnLiveScore({
+    leaguePath: 'soccer/uefa.europa',
+    eventId: '401862911',
+    dateYmd: '2026-05-20',
+  });
+
+  assert.equal(live.eventId, '401862911');
+  assert.equal(live.completed, true);
+  assert.equal(live.home.score, 1);
+  assert.equal(live.away.score, 2);
+  assert.equal(urls.length, 3);
+  assert.match(urls[0], /dates=20260519-20260521/);
+  assert.match(urls[1], /dates=20260520/);
+  assert.match(urls[2], /summary\?event=401862911/);
 });
 
 test('readEspnLiveScore matches display names when ESPN short names are abbreviated', async (t) => {

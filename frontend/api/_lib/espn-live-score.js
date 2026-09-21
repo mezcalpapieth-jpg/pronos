@@ -21,6 +21,23 @@ function ymdToDateRange(ymd) {
   return `${fmt(start)}-${fmt(end)}`;
 }
 
+function ymdToCompact(ymd) {
+  if (!ymd) return null;
+  const [y, m, d] = String(ymd).split('-').map(Number);
+  if (!y || !m || !d) return null;
+  return `${String(y).padStart(4, '0')}${String(m).padStart(2, '0')}${String(d).padStart(2, '0')}`;
+}
+
+function espnScoreboardQueries(dateYmd) {
+  const queries = [];
+  const dateRange = ymdToDateRange(dateYmd);
+  const singleDate = ymdToCompact(dateYmd);
+  if (dateRange) queries.push(`?dates=${dateRange}&limit=500`);
+  if (singleDate && singleDate !== dateRange) queries.push(`?dates=${singleDate}&limit=500`);
+  if (!queries.length) queries.push('?limit=500');
+  return queries;
+}
+
 function parseJsonb(value, fallback) {
   if (Array.isArray(value)) return value;
   if (value && typeof value === 'object') return value;
@@ -249,22 +266,35 @@ export async function readEspnLiveScore({ leaguePath, eventId, dateYmd, homeName
   if (!leaguePath || (!eventId && !(homeName && awayName))) {
     throw new Error('espn-live-score: missing leaguePath/event lookup');
   }
-  const dateRange = ymdToDateRange(dateYmd);
-  const q = dateRange ? `?dates=${dateRange}&limit=500` : '?limit=500';
-  const scoreboardUrl = `${ESPN_BASE}/${leaguePath}/scoreboard${q}`;
-  const res = await fetch(scoreboardUrl, { headers: { Accept: 'application/json' } });
-  if (!res.ok) throw new Error(`espn-live-score: HTTP ${res.status}`);
-  const data = await res.json();
-  const events = Array.isArray(data?.events) ? data.events : [];
-  const event = eventId
-    ? events.find(e => String(e.id) === String(eventId))
-    : events.find(e => eventMatchesTeams(e, homeName, awayName));
-  if (event) return normalizeEspnLiveScore({ leaguePath, event });
-  if (!eventId) return null;
+  let lastScoreboardError = null;
+  let sawScoreboard = false;
+  for (const q of espnScoreboardQueries(dateYmd)) {
+    const scoreboardUrl = `${ESPN_BASE}/${leaguePath}/scoreboard${q}`;
+    const res = await fetch(scoreboardUrl, { headers: { Accept: 'application/json' } });
+    if (!res.ok) {
+      lastScoreboardError = new Error(`espn-live-score: HTTP ${res.status}`);
+      continue;
+    }
+    sawScoreboard = true;
+    const data = await res.json();
+    const events = Array.isArray(data?.events) ? data.events : [];
+    const event = eventId
+      ? events.find(e => String(e.id) === String(eventId))
+      : events.find(e => eventMatchesTeams(e, homeName, awayName));
+    if (event) return normalizeEspnLiveScore({ leaguePath, event });
+    if (!eventId) return null;
+  }
+  if (!eventId) {
+    if (!sawScoreboard && lastScoreboardError) throw lastScoreboardError;
+    return null;
+  }
 
   const summaryUrl = `${ESPN_BASE}/${leaguePath}/summary?event=${encodeURIComponent(eventId)}`;
   const summaryRes = await fetch(summaryUrl, { headers: { Accept: 'application/json' } });
-  if (!summaryRes.ok) throw new Error(`espn-live-score-summary: HTTP ${summaryRes.status}`);
+  if (!summaryRes.ok) {
+    if (!sawScoreboard && lastScoreboardError) throw lastScoreboardError;
+    throw new Error(`espn-live-score-summary: HTTP ${summaryRes.status}`);
+  }
   const summary = await summaryRes.json();
   const summaryEvent = summary?.header?.id && String(summary.header.id) === String(eventId)
     ? summary.header
