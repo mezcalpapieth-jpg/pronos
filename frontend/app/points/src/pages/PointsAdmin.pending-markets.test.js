@@ -327,6 +327,13 @@ test('Points admin can cancel active and por resolver markets', () => {
 test('Points admin stats shows signup sheet and per-user distribution detail', () => {
   assert.match(source, /AdminUserSignupPanel/);
   assert.match(source, /Usuarios registrados/);
+  assert.match(source, /ADMIN_USER_SIGNUP_PAGE_SIZE = 50/);
+  assert.match(source, /userLimit/);
+  assert.match(source, /userOffset/);
+  assert.match(source, /userSearch/);
+  assert.match(source, /Buscar usuario, email o teléfono/);
+  assert.match(source, /Anterior/);
+  assert.match(source, /Siguiente/);
   assert.match(source, /row\.email/);
   assert.match(source, /row\.phoneNumber/);
   assert.match(source, /Sin teléfono/);

@@ -6143,10 +6143,47 @@ const riskEvidenceMetaStyle = {
 function StatsPanel() {
   const { user } = usePointsAuth();
   const [stats, setStats] = useState(null);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [statsError, setStatsError] = useState(null);
+  const [signupSearchInput, setSignupSearchInput] = useState('');
+  const [signupSearch, setSignupSearch] = useState('');
+  const [signupOffset, setSignupOffset] = useState(0);
   useEffect(() => {
-    getJson('/api/points/admin/stats').then(setStats).catch(() => setStats(null));
-  }, []);
-  if (!stats) return <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Cargando…</p>;
+    let cancelled = false;
+    const q = new URLSearchParams();
+    q.set('userLimit', String(ADMIN_USER_SIGNUP_PAGE_SIZE));
+    q.set('userOffset', String(signupOffset));
+    if (signupSearch) q.set('userSearch', signupSearch);
+    setStatsLoading(true);
+    getJson(`/api/points/admin/stats?${q.toString()}`)
+      .then(data => {
+        if (cancelled) return;
+        setStats(data);
+        setStatsError(null);
+      })
+      .catch(error => {
+        if (cancelled) return;
+        setStatsError(error);
+      })
+      .finally(() => {
+        if (!cancelled) setStatsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [signupOffset, signupSearch]);
+  const submitSignupSearch = (event) => {
+    event.preventDefault();
+    setSignupOffset(0);
+    setSignupSearch(signupSearchInput.trim());
+  };
+  const clearSignupSearch = () => {
+    setSignupSearchInput('');
+    setSignupSearch('');
+    setSignupOffset(0);
+  };
+  if (!stats && statsLoading) return <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Cargando…</p>;
+  if (!stats) return <p style={{ color: 'var(--danger)', fontFamily: 'var(--font-mono)' }}>{statsError?.message || 'No se pudieron cargar las estadísticas.'}</p>;
   return (
     <div>
       {/* "Signed in as @username" banner — Fran asked for the username
@@ -6189,7 +6226,17 @@ function StatsPanel() {
         <StatCard label="Mercados (activos / total)" value={`${stats.markets.active} / ${stats.markets.total}`} />
       </div>
 
-      <AdminUserSignupPanel users={stats.userSignups} totalUsers={stats.users} />
+      <AdminUserSignupPanel
+        users={stats.userSignups}
+        totalUsers={stats.users}
+        pagination={stats.userSignupsPagination}
+        searchValue={signupSearchInput}
+        onSearchChange={setSignupSearchInput}
+        onSearchSubmit={submitSignupSearch}
+        onClearSearch={clearSignupSearch}
+        onPageOffset={setSignupOffset}
+        loading={statsLoading}
+      />
       <AdminDistributionsPanel distributions={stats.recentDistributions} />
 
       <AdminPublicityPanel publicity={stats.publicity} />
@@ -6627,8 +6674,32 @@ function adminActionLabel(row) {
   return labels[row.action] || row.action || 'Distribución';
 }
 
-function AdminUserSignupPanel({ users, totalUsers }) {
+const ADMIN_USER_SIGNUP_PAGE_SIZE = 50;
+
+function AdminUserSignupPanel({
+  users,
+  totalUsers,
+  pagination,
+  searchValue,
+  onSearchChange,
+  onSearchSubmit,
+  onClearSearch,
+  onPageOffset,
+  loading = false,
+}) {
   const rows = Array.isArray(users) ? users : [];
+  const limit = Math.max(1, Number(pagination?.limit || ADMIN_USER_SIGNUP_PAGE_SIZE));
+  const offset = Math.max(0, Number(pagination?.offset || 0));
+  const filteredTotal = Math.max(0, Number(pagination?.total ?? rows.length));
+  const currentPage = Math.floor(offset / limit) + 1;
+  const totalPages = Math.max(1, Math.ceil(filteredTotal / limit));
+  const firstRow = filteredTotal > 0 ? offset + 1 : 0;
+  const lastRow = filteredTotal > 0 ? Math.min(offset + rows.length, filteredTotal) : 0;
+  const activeSearch = String(pagination?.search || '').trim();
+  const hasPrev = Boolean(pagination?.hasPrev) && offset > 0;
+  const hasNext = Boolean(pagination?.hasNext);
+  const goPrev = () => onPageOffset?.(Math.max(0, offset - limit));
+  const goNext = () => onPageOffset?.(offset + limit);
   return (
     <section style={adminPanelStyle}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
@@ -6640,11 +6711,37 @@ function AdminUserSignupPanel({ users, totalUsers }) {
           letterSpacing: '0.08em',
           textTransform: 'uppercase',
         }}>
-          {adminNumber(totalUsers)} total · últimos {rows.length}
+          {adminNumber(totalUsers)} total · {activeSearch ? `${adminNumber(filteredTotal)} encontrados` : `${adminNumber(filteredTotal)} listados`}
         </div>
       </div>
+      <form onSubmit={onSearchSubmit} style={{
+        display: 'grid',
+        gridTemplateColumns: 'minmax(220px, 1fr) auto auto',
+        gap: 10,
+        alignItems: 'center',
+        marginBottom: 14,
+      }}>
+        <input
+          value={searchValue}
+          onChange={(e) => onSearchChange?.(e.target.value)}
+          placeholder="Buscar usuario, email o teléfono"
+          style={{ ...inputStyle, height: 38, fontFamily: 'var(--font-mono)' }}
+        />
+        <button type="submit" className="btn-ghost" disabled={loading} style={{ padding: '9px 12px', fontSize: 11 }}>
+          {loading ? '...' : 'Buscar'}
+        </button>
+        <button
+          type="button"
+          className="btn-ghost"
+          onClick={onClearSearch}
+          disabled={loading || (!activeSearch && !searchValue)}
+          style={{ padding: '9px 12px', fontSize: 11 }}
+        >
+          Limpiar
+        </button>
+      </form>
       {rows.length === 0 ? (
-        <p style={adminEmptyStyle}>Aún no hay usuarios registrados.</p>
+        <p style={adminEmptyStyle}>{activeSearch ? 'No hay usuarios para esa búsqueda.' : 'Aún no hay usuarios registrados.'}</p>
       ) : (
         <div style={{ overflowX: 'auto' }}>
           <div style={{
@@ -6754,6 +6851,29 @@ function AdminUserSignupPanel({ users, totalUsers }) {
           </div>
         </div>
       )}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 12,
+        marginTop: 14,
+        color: 'var(--text-muted)',
+        fontFamily: 'var(--font-mono)',
+        fontSize: 11,
+      }}>
+        <span>
+          {loading ? 'Actualizando...' : `Mostrando ${adminNumber(firstRow)}-${adminNumber(lastRow)} de ${adminNumber(filteredTotal)}`}
+        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button type="button" className="btn-ghost" onClick={goPrev} disabled={loading || !hasPrev} style={{ padding: '8px 10px', fontSize: 10 }}>
+            Anterior
+          </button>
+          <span>Página {adminNumber(currentPage)} / {adminNumber(totalPages)}</span>
+          <button type="button" className="btn-ghost" onClick={goNext} disabled={loading || !hasNext} style={{ padding: '8px 10px', fontSize: 10 }}>
+            Siguiente
+          </button>
+        </div>
+      </div>
     </section>
   );
 }

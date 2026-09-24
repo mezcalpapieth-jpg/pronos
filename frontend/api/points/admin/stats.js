@@ -18,6 +18,28 @@ import { PRONOS_TREASURY_USERNAME } from '../../_lib/points-limit-orders.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
+const USER_SIGNUP_PAGE_SIZE = 50;
+
+function queryRows(result) {
+  if (Array.isArray(result)) return result;
+  return Array.isArray(result?.rows) ? result.rows : [];
+}
+
+function readPositiveInt(value, fallback, { min = 1, max = 100 } = {}) {
+  const n = parseInt(value, 10);
+  if (!Number.isInteger(n)) return fallback;
+  return Math.max(min, Math.min(max, n));
+}
+
+function readNonNegativeInt(value, fallback = 0) {
+  const n = parseInt(value, 10);
+  if (!Number.isInteger(n)) return fallback;
+  return Math.max(0, Math.min(1_000_000, n));
+}
+
+function cleanSignupSearch(value) {
+  return String(value || '').trim().slice(0, 100);
+}
 
 export default async function handler(req, res) {
   const timer = createApiTimer(res, 'points/admin/stats', { logThresholdMs: 250 });
@@ -29,8 +51,22 @@ export default async function handler(req, res) {
   if (!admin) return;
 
   try {
+    const signupLimit = readPositiveInt(req.query?.userLimit, USER_SIGNUP_PAGE_SIZE, {
+      min: 1,
+      max: USER_SIGNUP_PAGE_SIZE,
+    });
+    const signupOffset = readNonNegativeInt(req.query?.userOffset, 0);
+    const signupSearch = cleanSignupSearch(req.query?.userSearch);
+    const signupSearchPattern = signupSearch ? `%${signupSearch}%` : null;
+    const cacheKey = [
+      'points:admin:stats:v7',
+      `users:${signupLimit}`,
+      `offset:${signupOffset}`,
+      `search:${signupSearch.toLowerCase()}`,
+    ].join(':');
+
     setCacheHeaders(res, { scope: 'private', maxAge: 20, staleWhileRevalidate: 60 });
-    const { value: payload, hit } = await cachedJson('points:admin:stats:v6', 20_000, async () => {
+    const { value: payload, hit } = await cachedJson(cacheKey, 20_000, async () => {
     await timer.time('schema_points', () => ensurePointsSchema(schemaSql));
     await timer.time('schema_interest', () => ensureInterestSchema(schemaSql));
 
@@ -46,7 +82,8 @@ export default async function handler(req, res) {
       publicityRows,
       activityRows,
       distributionUserRows,
-      signupRows,
+      signupCountRowsRaw,
+      signupRowsRaw,
     ] = await timer.time('db_admin_stats', () => Promise.all([
       sql`SELECT COUNT(*)::int AS c FROM points_users`,
       sql`SELECT COALESCE(SUM(balance), 0) AS total FROM points_balances`,
@@ -316,7 +353,20 @@ export default async function handler(req, res) {
         FROM ranked
         ORDER BY kind ASC, ABS(total) DESC, last_at DESC, username ASC
       `,
-      sql`
+      sql.query(`
+        SELECT COUNT(*)::int AS count
+        FROM points_users u
+        WHERE u.username IS NOT NULL
+          AND (
+            $1::text IS NULL
+            OR u.username ILIKE $1
+            OR ('@' || u.username) ILIKE $1
+            OR COALESCE(u.email, '') ILIKE $1
+            OR COALESCE(u.phone_number, '') ILIKE $1
+            OR COALESCE(u.display_name, '') ILIKE $1
+          )
+      `, [signupSearchPattern]),
+      sql.query(`
         WITH recent_users AS (
           SELECT
             u.username,
@@ -327,8 +377,17 @@ export default async function handler(req, res) {
             u.created_at
           FROM points_users u
           WHERE u.username IS NOT NULL
+            AND (
+              $1::text IS NULL
+              OR u.username ILIKE $1
+              OR ('@' || u.username) ILIKE $1
+              OR COALESCE(u.email, '') ILIKE $1
+              OR COALESCE(u.phone_number, '') ILIKE $1
+              OR COALESCE(u.display_name, '') ILIKE $1
+            )
           ORDER BY u.created_at DESC NULLS LAST, u.username ASC
-          LIMIT 200
+          LIMIT $2
+          OFFSET $3
         ),
         trade_counts AS (
           SELECT
@@ -373,8 +432,11 @@ export default async function handler(req, res) {
         LEFT JOIN signup_bonus sb
           ON LOWER(sb.username) = LOWER(ru.username)
         ORDER BY COALESCE(ru.created_at, sb.bonus_at) DESC NULLS LAST, ru.username ASC
-      `,
+      `, [signupSearchPattern, signupLimit, signupOffset]),
     ]));
+    const signupCountRows = queryRows(signupCountRowsRaw);
+    const signupRows = queryRows(signupRowsRaw);
+    const signupTotal = Number(signupCountRows[0]?.count || 0);
 
     return {
       users: userRows[0].c,
@@ -410,6 +472,14 @@ export default async function handler(req, res) {
         lastTradeAt: r.last_trade_at,
         signupBonusAt: r.bonus_at,
       })),
+      userSignupsPagination: {
+        total: signupTotal,
+        limit: signupLimit,
+        offset: signupOffset,
+        search: signupSearch,
+        hasPrev: signupOffset > 0,
+        hasNext: signupOffset + signupRows.length < signupTotal,
+      },
       interest: {
         windows: INTEREST_WINDOWS,
         teams: teamInterestRows.map(formatInterestRow),

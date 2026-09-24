@@ -19,6 +19,14 @@ test('admin stats includes invested volume, site time, publicity links, and per-
   assert.match(statsSource, /display_name/);
   assert.match(statsSource, /profile_image_url/);
   assert.match(statsSource, /phone_number/);
+  assert.match(statsSource, /USER_SIGNUP_PAGE_SIZE = 50/);
+  assert.match(statsSource, /req\.query\?\.userSearch/);
+  assert.match(statsSource, /req\.query\?\.userOffset/);
+  assert.match(statsSource, /points:admin:stats:v7/);
+  assert.match(statsSource, /SELECT COUNT\(\*\)::int AS count\s*FROM points_users u/);
+  assert.match(statsSource, /\('@' \|\| u\.username\) ILIKE \$1/);
+  assert.match(statsSource, /LIMIT \$2\s*OFFSET \$3/);
+  assert.doesNotMatch(statsSource, /LIMIT 200/);
   assert.match(statsSource, /volume:\s*\{/);
   assert.match(statsSource, /siteTime:\s*\{/);
   assert.match(statsSource, /publicity:\s*\{/);
@@ -32,6 +40,8 @@ test('admin stats includes invested volume, site time, publicity links, and per-
   assert.match(statsSource, /displayName:\s*r\.display_name/);
   assert.match(statsSource, /profileImageUrl:\s*r\.profile_image_url/);
   assert.match(statsSource, /phoneNumber:\s*r\.phone_number \|\| null/);
+  assert.match(statsSource, /userSignupsPagination:\s*\{/);
+  assert.match(statsSource, /hasNext: signupOffset \+ signupRows\.length < signupTotal/);
   assert.doesNotMatch(statsSource, /rn <= CASE WHEN kind = 'referral_bonus'/);
 });
 
