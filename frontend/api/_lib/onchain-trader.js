@@ -405,6 +405,149 @@ export function requireWalletAddress(row) {
   return addr;
 }
 
+export function protocolChainConfig() {
+  return {
+    chainId: chainId(),
+    collateralAddress: process.env.ONCHAIN_COLLATERAL_ADDRESS || null,
+    collateralDecimals: COLLATERAL_DECIMALS,
+    collateralSymbol: process.env.ONCHAIN_COLLATERAL_SYMBOL || 'MXNB',
+  };
+}
+
+function requireEvmAddress(value, label) {
+  if (!ethers.utils.isAddress(String(value || ''))) {
+    const err = new Error(`invalid_${label}`);
+    err.status = 400;
+    err.detail = `${label} must be an EVM address`;
+    throw err;
+  }
+  return ethers.utils.getAddress(value);
+}
+
+function transactionRequest({ to, data, type, gasLimit, metadata = {} }) {
+  return {
+    type,
+    chainId: chainId(),
+    to: ethers.utils.getAddress(to),
+    data,
+    value: '0',
+    gasLimit: gasLimit ? gasLimit.toString() : null,
+    ...metadata,
+  };
+}
+
+export function buildProtocolApprovalTransaction({ spender, amount = 'max' } = {}) {
+  const collateralAddr = process.env.ONCHAIN_COLLATERAL_ADDRESS;
+  if (!collateralAddr) {
+    const err = new Error('collateral_not_configured');
+    err.status = 503;
+    err.detail = 'set ONCHAIN_COLLATERAL_ADDRESS';
+    throw err;
+  }
+  const spenderAddr = requireEvmAddress(spender, 'spender');
+  const units = amount === 'max' ? MAX_UINT256 : parseCollateralUnits(amount);
+  const data = new ethers.utils.Interface(ERC20_ABI)
+    .encodeFunctionData('approve', [spenderAddr, units]);
+  return transactionRequest({
+    to: collateralAddr,
+    data,
+    type: 'erc20_approval',
+    gasLimit: ethers.BigNumber.from(100_000),
+    metadata: {
+      tokenAddress: ethers.utils.getAddress(collateralAddr),
+      spender: spenderAddr,
+      amount: amount === 'max' ? 'max' : formatCollateral(units),
+      amountRaw: units.toString(),
+    },
+  });
+}
+
+export function buildProtocolBuyTransaction({
+  market, outcomeIndex, collateral, minSharesOut = 0,
+}) {
+  if (!market?.chain_address) throw new Error('market missing chain_address');
+  const ammAddr = requireEvmAddress(market.chain_address, 'market_address');
+  const collateralUnits = parseCollateralUnits(collateral);
+  const minSharesUnits = minSharesOut != null
+    ? parseCollateralUnits(minSharesOut)
+    : ethers.constants.Zero;
+  return transactionRequest({
+    to: ammAddr,
+    data: encodeBuyWithMinOut(market, outcomeIndex, collateralUnits, minSharesUnits),
+    type: 'market_buy',
+    gasLimit: ethers.BigNumber.from(600_000),
+    metadata: {
+      outcomeIndex: Number(outcomeIndex),
+      collateral: formatCollateral(collateralUnits),
+      collateralRaw: collateralUnits.toString(),
+      minSharesOut: formatCollateral(minSharesUnits),
+      minSharesOutRaw: minSharesUnits.toString(),
+    },
+  });
+}
+
+export function buildProtocolSellTransaction({
+  market, outcomeIndex, shares, minCollateralOut = 0,
+}) {
+  if (!market?.chain_address) throw new Error('market missing chain_address');
+  const ammAddr = requireEvmAddress(market.chain_address, 'market_address');
+  const sharesUnits = parseCollateralUnits(shares);
+  const minCollateralUnits = minCollateralOut != null
+    ? parseCollateralUnits(minCollateralOut)
+    : ethers.constants.Zero;
+  return transactionRequest({
+    to: ammAddr,
+    data: encodeSellWithMinOut(market, outcomeIndex, sharesUnits, minCollateralUnits),
+    type: 'market_sell',
+    gasLimit: ethers.BigNumber.from(600_000),
+    metadata: {
+      outcomeIndex: Number(outcomeIndex),
+      shares: formatCollateral(sharesUnits),
+      sharesRaw: sharesUnits.toString(),
+      minCollateralOut: formatCollateral(minCollateralUnits),
+      minCollateralOutRaw: minCollateralUnits.toString(),
+    },
+  });
+}
+
+export function buildProtocolRedeemTransaction({ market, amount }) {
+  if (!market?.chain_address) throw new Error('market missing chain_address');
+  const ammAddr = requireEvmAddress(market.chain_address, 'market_address');
+  const units = parseCollateralUnits(amount);
+  return transactionRequest({
+    to: ammAddr,
+    data: encodeRedeem(units),
+    type: 'market_redeem',
+    gasLimit: ethers.BigNumber.from(400_000),
+    metadata: {
+      amount: formatCollateral(units),
+      amountRaw: units.toString(),
+    },
+  });
+}
+
+export async function readProtocolCollateralAllowance({ ownerAddr, spenderAddr }) {
+  requireReadReady();
+  const collateralAddr = process.env.ONCHAIN_COLLATERAL_ADDRESS;
+  if (!collateralAddr) {
+    const err = new Error('collateral_not_configured');
+    err.status = 503;
+    err.detail = 'set ONCHAIN_COLLATERAL_ADDRESS';
+    throw err;
+  }
+  const owner = requireEvmAddress(ownerAddr, 'owner');
+  const spender = requireEvmAddress(spenderAddr, 'spender');
+  const c = new ethers.Contract(collateralAddr, ERC20_ABI, provider());
+  const allowance = await c.allowance(owner, spender);
+  return {
+    owner,
+    spender,
+    tokenAddress: ethers.utils.getAddress(collateralAddr),
+    allowance: formatCollateral(allowance),
+    allowanceRaw: allowance.toString(),
+  };
+}
+
 async function readAmmPrices(amm, market, outcomeIndex) {
   if (isBinary(market)) {
     const values = await Promise.all([amm.priceYes(), amm.priceNo()]);
