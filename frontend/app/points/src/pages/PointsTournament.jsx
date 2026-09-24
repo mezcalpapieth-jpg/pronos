@@ -880,6 +880,132 @@ function RewardList({ lang, rules }) {
   );
 }
 
+function signedMxnp(value) {
+  const n = Number(value || 0);
+  return `${n >= 0 ? '+' : ''}${fmt(n)} MXNP`;
+}
+
+function scoreTone(value) {
+  const n = Number(value || 0);
+  if (n === 0) return 'var(--text-primary)';
+  return n > 0 ? 'var(--green)' : 'var(--danger)';
+}
+
+function PersonalScoreBreakdown({ row, rules, loading, lang = 'es' }) {
+  const requiredMarkets = Number(rules?.qualifyingMarkets || DEFAULT_RULES.qualifyingMarkets);
+  const qualifyingMarkets = Number(row?.qualifyingMarkets || 0);
+  const neededMarkets = Math.max(0, requiredMarkets - qualifyingMarkets);
+  const scoreRows = lang === 'en' ? [
+    ['Market PnL', row?.marketPnl],
+    ['Conviction', row?.convictionBonus],
+    ['Liquidity', row?.liquidityReward],
+    ['Combos', row?.parlayPnl],
+    ['Inactivity', -Number(row?.inactivityPenalty || 0)],
+  ] : [
+    ['PnL mercados', row?.marketPnl],
+    ['Convicción', row?.convictionBonus],
+    ['Liquidez', row?.liquidityReward],
+    ['Combinadas', row?.parlayPnl],
+    ['Inactividad', -Number(row?.inactivityPenalty || 0)],
+  ];
+
+  return (
+    <TournamentCard style={{ marginBottom: 18 }}>
+      <SectionLabel>{lang === 'en' ? 'Your score' : 'Tu score'}</SectionLabel>
+      {loading ? (
+        <LeaderboardSkeleton rows={3} />
+      ) : !row ? (
+        <p style={emptyText}>
+          {lang === 'en'
+            ? 'No score yet. Enter a tournament market to start tracking your breakdown.'
+            : 'Aún no hay score. Entra a un mercado del torneo para empezar a ver el desglose.'}
+        </p>
+      ) : (
+        <div style={{ display: 'grid', gap: 14 }}>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'minmax(0, 1fr) minmax(120px, auto)',
+            gap: 12,
+            alignItems: 'end',
+          }}>
+            <div>
+              <div style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 10, marginBottom: 5 }}>
+                {row.rank ? (lang === 'en' ? `Rank #${row.rank}` : `Lugar #${row.rank}`) : (lang === 'en' ? 'No rank yet' : 'Sin lugar todavía')}
+              </div>
+              <strong style={{
+                display: 'block',
+                color: scoreTone(row.score),
+                fontFamily: 'var(--font-display)',
+                fontSize: 'clamp(26px, 3.1vw, 40px)',
+                lineHeight: 1,
+                textTransform: 'uppercase',
+              }}>
+                {signedMxnp(row.score)}
+              </strong>
+            </div>
+            <div style={{ textAlign: 'right', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 11, lineHeight: 1.5 }}>
+              {row.qualified
+                ? (lang === 'en' ? 'Qualified' : 'Calificado')
+                : (lang === 'en' ? `${neededMarkets} markets left` : `Faltan ${neededMarkets} mercados`)}
+              <span style={{ display: 'block', color: 'var(--text-secondary)' }}>
+                {qualifyingMarkets}/{requiredMarkets}
+              </span>
+            </div>
+          </div>
+
+          <div style={{
+            height: 7,
+            borderRadius: 999,
+            background: 'var(--surface2)',
+            border: '1px solid var(--border)',
+            overflow: 'hidden',
+          }}>
+            <div style={{
+              width: `${Math.min(100, Math.max(0, (qualifyingMarkets / Math.max(1, requiredMarkets)) * 100))}%`,
+              height: '100%',
+              background: row.qualified ? 'var(--green)' : 'var(--orange)',
+            }} />
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(135px, 1fr))', gap: 9 }}>
+            {scoreRows.map(([label, value]) => (
+              <div key={label} style={{
+                border: '1px solid var(--border)',
+                borderRadius: 8,
+                padding: '10px 11px',
+                background: 'var(--surface2)',
+                minWidth: 0,
+              }}>
+                <div style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 5 }}>
+                  {label}
+                </div>
+                <strong style={{ color: scoreTone(value), fontFamily: 'var(--font-body)', fontSize: 14 }}>
+                  {signedMxnp(value)}
+                </strong>
+              </div>
+            ))}
+          </div>
+
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+            gap: 10,
+            color: 'var(--text-muted)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10,
+            lineHeight: 1.45,
+          }}>
+            <span>{lang === 'en' ? 'Active days' : 'Días activos'}: {fmtInteger(row.activeDays || 0)}</span>
+            <span>{lang === 'en' ? 'Inactive days' : 'Días inactivos'}: {fmtInteger(row.inactiveDays || 0)}</span>
+            <span>{lang === 'en' ? 'Conviction markets' : 'Mercados convicción'}: {fmtInteger(row.convictionMarkets || 0)}</span>
+            <span>{lang === 'en' ? 'Combo slips' : 'Combinadas'}: {fmtInteger(row.parlayTickets || 0)}</span>
+          </div>
+        </div>
+      )}
+    </TournamentCard>
+  );
+}
+
 export default function PointsTournament() {
   const lang = useLang();
   const { user } = usePointsAuth();
@@ -1052,6 +1178,15 @@ export default function PointsTournament() {
           cycle={winnersCycle}
           rows={winnersCycle.top}
           currentUsername={user?.username}
+          lang={lang}
+        />
+      )}
+
+      {user?.username && (
+        <PersonalScoreBreakdown
+          row={me}
+          rules={rules}
+          loading={leaderboard === null}
           lang={lang}
         />
       )}

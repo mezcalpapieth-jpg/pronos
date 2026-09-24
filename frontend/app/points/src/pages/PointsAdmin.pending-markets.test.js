@@ -183,6 +183,17 @@ test('Points admin has an October launch readiness checklist', () => {
   assert.match(apiSource, /export async function adminFetchPointsHealth/);
 });
 
+test('Points admin launch tab includes a proactive resolution watchlist', () => {
+  assert.match(source, /ResolutionWatchlist/);
+  assert.match(source, /buildResolutionWatchlist/);
+  assert.match(source, /diagnostic\.manual/);
+  assert.match(source, /diagnostic\.missingResolver/);
+  assert.match(source, /diagnostic\.waitingWindow/);
+  assert.match(source, /Manual ops before close/);
+  assert.match(source, /Missing resolver/);
+  assert.match(source, /Correr Retrofit o editar resolver antes del cierre/);
+});
+
 test('Points markets filter surfaces por resolver count while inside Mercados', () => {
   assert.match(source, /pendingResolveCount=\{adminTaskCounts\.markets\}/);
   assert.match(source, /function MarketsTable\(\{ onQueueChange, pendingResolveCount = 0 \}\)/);

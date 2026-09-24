@@ -32,6 +32,15 @@ test('tournament page shows current leaderboard, past leaderboards, countdown an
   assert.match(pageSource, /displayCycle\?\.label/);
   assert.match(pageSource, /nextTournamentMarketDropIso\(new Date\(nowMs\), displayCycle\?\.startsAt \|\| displayCycle\?\.startedAt\)/);
   assert.match(apiSource, /configuredWindow:\s*data\.window \|\| null/);
+  assert.match(pageSource, /PersonalScoreBreakdown/);
+  assert.match(pageSource, /Your score/);
+  assert.match(pageSource, /Tu score/);
+  assert.match(pageSource, /row\?\.marketPnl/);
+  assert.match(pageSource, /row\?\.convictionBonus/);
+  assert.match(pageSource, /row\?\.liquidityReward/);
+  assert.match(pageSource, /row\?\.parlayPnl/);
+  assert.match(pageSource, /row\?\.inactivityPenalty/);
+  assert.match(pageSource, /row\?\.qualifyingMarkets/);
   assert.match(pageSource, /200 MXNP agregados al inicio/);
   assert.match(pageSource, /50 MXNP por persona referida, máximo 10 referidos/);
   assert.match(pageSource, /premios aprobados de Instagram, TikTok, X y campañas/);

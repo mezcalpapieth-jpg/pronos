@@ -684,6 +684,152 @@ function LaunchMetric({ label, value, sub, tone = 'neutral' }) {
   );
 }
 
+function launchDateLabel(value) {
+  if (!value) return 'sin fecha';
+  const ms = new Date(value).getTime();
+  if (!Number.isFinite(ms)) return 'sin fecha';
+  return new Date(value).toLocaleString('es-MX', {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function resolutionWatchLabel(item) {
+  const now = Date.now();
+  const endMs = new Date(item?.endTime || '').getTime();
+  if (!Number.isFinite(endMs)) return 'sin cierre';
+  const diffMinutes = Math.round((endMs - now) / 60000);
+  if (diffMinutes <= 0) return `cerró hace ${Math.abs(diffMinutes)}m`;
+  if (diffMinutes < 60) return `cierra en ${diffMinutes}m`;
+  const diffHours = Math.round(diffMinutes / 60);
+  if (diffHours < 48) return `cierra en ${diffHours}h`;
+  return launchDateLabel(item.endTime);
+}
+
+function resolutionWatchTone(item) {
+  if (item?.kind === 'missing') return 'blocked';
+  const endMs = new Date(item?.endTime || '').getTime();
+  if (!Number.isFinite(endMs)) return 'review';
+  if (endMs <= Date.now()) return 'blocked';
+  if (endMs <= Date.now() + 48 * 60 * 60 * 1000) return 'review';
+  return 'ready';
+}
+
+function buildResolutionWatchlist(diagnostic) {
+  if (!diagnostic) return [];
+  const manual = (diagnostic.manual || []).map(item => ({
+    ...item,
+    kind: 'manual',
+    label: 'Manual review',
+    action: 'Tener owner listo para confirmar resultado.',
+  }));
+  const missing = (diagnostic.missingResolver || []).map(item => ({
+    ...item,
+    kind: 'missing',
+    label: 'Missing resolver',
+    action: 'Correr Retrofit o editar resolver antes del cierre.',
+  }));
+  const dueSoon = (diagnostic.waitingWindow || [])
+    .filter(item => {
+      const endMs = new Date(item.endTime || '').getTime();
+      return Number.isFinite(endMs) && endMs <= Date.now() + 48 * 60 * 60 * 1000;
+    })
+    .map(item => ({
+      ...item,
+      kind: 'soon',
+      label: item.resolverType || 'Auto resolver',
+      action: 'Verificar que fuente y eventId estén completos.',
+    }));
+
+  return [...missing, ...manual, ...dueSoon]
+    .sort((a, b) => {
+      const severity = { missing: 0, manual: 1, soon: 2 };
+      const severityDiff = (severity[a.kind] ?? 9) - (severity[b.kind] ?? 9);
+      if (severityDiff !== 0) return severityDiff;
+      return new Date(a.endTime || 8640000000000000).getTime() - new Date(b.endTime || 8640000000000000).getTime();
+    })
+    .slice(0, 8);
+}
+
+function ResolutionWatchlist({ diagnostic }) {
+  const items = buildResolutionWatchlist(diagnostic);
+  return (
+    <section style={{
+      background: 'var(--surface1)',
+      border: '1px solid var(--border)',
+      borderRadius: 12,
+      padding: 20,
+      marginBottom: 18,
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'baseline', marginBottom: 12 }}>
+        <div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--text-muted)', marginBottom: 8 }}>
+            RESOLUTION WATCHLIST
+          </div>
+          <h3 style={{ margin: 0, color: 'var(--text-primary)', fontFamily: 'var(--font-display)', fontSize: 22 }}>
+            Manual ops before close
+          </h3>
+        </div>
+        <span style={{ color: items.length ? '#f59e0b' : 'var(--green)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+          {items.length ? `${items.length} revisar` : 'sin alertas'}
+        </span>
+      </div>
+
+      {!diagnostic ? (
+        <p style={{ margin: 0, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+          Carga diagnóstico para ver mercados manuales, sin resolver y cierres próximos.
+        </p>
+      ) : items.length === 0 ? (
+        <p style={{ margin: 0, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+          No hay mercados manuales, sin resolver o cierres próximos en la muestra del diagnóstico.
+        </p>
+      ) : (
+        <div style={{ display: 'grid', gap: 10 }}>
+          {items.map(item => {
+            const tone = readinessTone(resolutionWatchTone(item));
+            return (
+              <div key={`${item.kind}-${item.id}`} style={{
+                display: 'grid',
+                gridTemplateColumns: 'minmax(0, 1fr) auto',
+                gap: 12,
+                alignItems: 'start',
+                padding: 12,
+                borderRadius: 8,
+                border: `1px solid ${tone.border}`,
+                background: tone.background,
+              }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 5 }}>
+                    <strong style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-body)', fontSize: 14 }}>
+                      #{item.id} · {item.question || 'Sin pregunta'}
+                    </strong>
+                    <span style={{ color: tone.color, fontFamily: 'var(--font-mono)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                      {item.label}
+                    </span>
+                  </div>
+                  <p style={{ margin: 0, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 10, lineHeight: 1.45 }}>
+                    {resolutionWatchLabel(item)} · {item.resolverSource || item.resolverType || 'manual'} · {item.action}
+                  </p>
+                  {item.warning && (
+                    <p style={{ margin: '5px 0 0', color: '#f59e0b', fontFamily: 'var(--font-mono)', fontSize: 10, lineHeight: 1.45 }}>
+                      {item.warning}
+                    </p>
+                  )}
+                </div>
+                <span style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: 10, whiteSpace: 'nowrap' }}>
+                  {launchDateLabel(item.endTime)}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function buildLaunchChecklist(report, taskCounts) {
   const health = report?.health;
   const cycles = report?.cycles;
@@ -945,6 +1091,8 @@ function LaunchReadinessPanel({ taskCounts }) {
           </p>
         )}
       </section>
+
+      <ResolutionWatchlist diagnostic={report?.diagnostic} />
 
       <section style={{
         background: 'var(--surface1)',
