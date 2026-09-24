@@ -15,9 +15,12 @@ const DEFAULT_RULES = {
   maxSharesPerMarket: 6000,
   qualifyingMarkets: 10,
   inactivityPenalty: 50,
-  holdReward: {
-    weeklyRate: 0.25,
-    maxWeeks: 4,
+  convictionMultiplier: {
+    bonusRate: 0.5,
+    maxMultiplier: 1.5,
+    maxEntryPrice: 0.85,
+    netPnlCapRate: 0.5,
+    minMarketEntryMxnp: 100,
   },
   liquidityReward: {
     weeklyRate: 0.20,
@@ -283,7 +286,7 @@ function LeaderboardRow({ row, currentUsername, rules, compact = false, lang = '
   const isMe = row.username === currentUsername;
   const score = Number(row.score ?? row.cycleDelta ?? row.finalPnl ?? 0);
   const pnl = Number(row.marketPnl ?? 0);
-  const holdBonus = Number(row.holdBonus ?? 0);
+  const holdBonus = Number(row.convictionBonus ?? row.holdBonus ?? 0);
   const liquidityReward = Number(row.liquidityReward ?? 0);
   const parlayPnl = Number(row.parlayPnl ?? 0);
   const penalty = Number(row.inactivityPenalty ?? 0);
@@ -335,7 +338,7 @@ function LeaderboardRow({ row, currentUsername, rules, compact = false, lang = '
           PnL {pnl >= 0 ? '+' : ''}{fmt(pnl)}
           {holdBonus > 0 && (
             <span style={{ display: 'block', color: 'var(--green)', marginTop: 4 }}>
-              +{fmt(holdBonus)} hold
+              +{fmt(holdBonus)} {lang === 'en' ? 'conviction' : 'convicción'}
             </span>
           )}
           {liquidityReward > 0 && (
@@ -573,14 +576,14 @@ function WinnerPodium({ cycle, rows, currentUsername, lang = 'es' }) {
 function RuleList({ lang, rules }) {
   const r = rules || DEFAULT_RULES;
   const items = lang === 'en' ? [
-    `Ranking score is market PnL plus per-lot hold rewards, liquidity rewards, and realized combo-slip PnL, minus ${fmtInteger(r.inactivityPenalty)} MXNP for each inactive day.`,
+    `Ranking score is market PnL plus conviction multiplier rewards, liquidity rewards, and realized combo-slip PnL, minus ${fmtInteger(r.inactivityPenalty)} MXNP for each inactive day.`,
     `Bonuses fund your account, but signup, streak, social, and referral rewards do not directly add to the score.`,
     `You qualify with ${fmtInteger(r.qualifyingMarkets)} entries in distinct markets. Each entry has a ${fmtInteger(r.minEntryMxnp)} MXNP minimum.`,
     `Each user can hold up to ${fmtInteger(r.maxSharesPerMarket)} shares per market.`,
     'New tournament markets go live every day at 9:00 AM Mexico City time.',
     'Ties break by fewer inactive days, more distinct liquidated markets, then older registration.',
   ] : [
-    `El puntaje es PnL de mercados más recompensas por holding por lote, recompensas por dar liquidez y PnL de combinadas liquidadas, menos ${fmtInteger(r.inactivityPenalty)} MXNP por cada día inactivo.`,
+    `El puntaje es PnL de mercados más recompensas del multiplicador de convicción, recompensas por dar liquidez y PnL de combinadas liquidadas, menos ${fmtInteger(r.inactivityPenalty)} MXNP por cada día inactivo.`,
     'Los bonos fondean tu cuenta, pero registro, racha, redes y referidos no suman directo al puntaje.',
     `Calificas con ${fmtInteger(r.qualifyingMarkets)} entradas en mercados distintos. Cada entrada tiene mínimo de ${fmtInteger(r.minEntryMxnp)} MXNP.`,
     `Cada usuario puede tener hasta ${fmtInteger(r.maxSharesPerMarket)} acciones por mercado.`,
@@ -617,8 +620,10 @@ function RuleList({ lang, rules }) {
 
 function NewFeatureList({ lang, rules }) {
   const r = rules || DEFAULT_RULES;
-  const holdRate = fmtInteger(Number(r.holdReward?.weeklyRate || DEFAULT_RULES.holdReward.weeklyRate) * 100);
-  const holdWeeks = fmtInteger(r.holdReward?.maxWeeks || DEFAULT_RULES.holdReward.maxWeeks);
+  const conviction = r.convictionMultiplier || DEFAULT_RULES.convictionMultiplier;
+  const maxEntryPrice = Number(conviction.maxEntryPrice || DEFAULT_RULES.convictionMultiplier.maxEntryPrice).toFixed(2);
+  const maxMultiplier = Number(conviction.maxMultiplier || DEFAULT_RULES.convictionMultiplier.maxMultiplier).toFixed(1);
+  const capRate = fmtInteger(Number(conviction.netPnlCapRate || DEFAULT_RULES.convictionMultiplier.netPnlCapRate) * 100);
   const liquidityRate = fmtInteger(Number(r.liquidityReward?.weeklyRate || DEFAULT_RULES.liquidityReward.weeklyRate) * 100);
   const liquidityDailyCap = fmtInteger(r.liquidityReward?.maxDailyPerUser || DEFAULT_RULES.liquidityReward.maxDailyPerUser);
   const parlayMin = fmtInteger(r.parlay?.minLegs || DEFAULT_RULES.parlay.minLegs);
@@ -627,8 +632,8 @@ function NewFeatureList({ lang, rules }) {
   const parlayPayoutCap = fmtInteger(r.parlay?.maxPayoutMxnp || DEFAULT_RULES.parlay.maxPayoutMxnp);
   const rows = lang === 'en' ? [
     [
-      'Per-lot holding',
-      `Each buy lot has its own clock: it earns ${holdRate}% of eligible exposure per completed week while still open, capped at ${holdWeeks} weeks. Sells and redeems remove eligible lots.`,
+      'Conviction multiplier',
+      `Winning lots bought at ${maxEntryPrice} or below and held until resolution can earn up to ${maxMultiplier}x on their profit. The bonus is capped at ${capRate}% of your net PnL in that market.`,
     ],
     [
       'Combinadas',
@@ -636,12 +641,12 @@ function NewFeatureList({ lang, rules }) {
     ],
     [
       'Liquidity rewards',
-      `Limit orders near the live price can earn liquidity rewards at ${liquidityRate}% per week, prorated daily and capped at ${liquidityDailyCap} MXNP per user per day. If a buy order fills, that filled lot starts its own hold clock.`,
+      `Limit orders near the live price can earn liquidity rewards at ${liquidityRate}% per week, prorated daily and capped at ${liquidityDailyCap} MXNP per user per day. If a buy order fills, that filled lot can count for conviction if it wins and stays held through resolution.`,
     ],
   ] : [
     [
-      'Holding por lote',
-      `Cada compra tiene su propio reloj: suma ${holdRate}% de la exposición elegible por semana completa mientras siga abierta, máximo ${holdWeeks} semanas. Ventas y cobros quitan lotes elegibles.`,
+      'Multiplicador de convicción',
+      `Los lotes ganadores comprados a ${maxEntryPrice} o menos y mantenidos hasta la resolución pueden sumar hasta ${maxMultiplier}x sobre su ganancia. El bono se limita a ${capRate}% de tu PnL neto en ese mercado.`,
     ],
     [
       'Combinadas',
@@ -649,7 +654,7 @@ function NewFeatureList({ lang, rules }) {
     ],
     [
       'Recompensa por dar liquidez',
-      `Las órdenes límite cerca del precio actual pueden ganar recompensa por dar liquidez de ${liquidityRate}% semanal, prorrateada diario y con tope de ${liquidityDailyCap} MXNP por usuario al día. Si una orden de compra se ejecuta, ese lote empieza su propio reloj de holding.`,
+      `Las órdenes límite cerca del precio actual pueden ganar recompensa por dar liquidez de ${liquidityRate}% semanal, prorrateada diario y con tope de ${liquidityDailyCap} MXNP por usuario al día. Si una orden de compra se ejecuta, ese lote puede contar para convicción si gana y se mantiene hasta la resolución.`,
     ],
   ];
   return (
@@ -691,7 +696,7 @@ function TournamentFaq({ lang, rules }) {
     ],
     [
       'Do bonuses count toward winning?',
-      'Wallet bonuses give you MXNP to play with, but they do not directly add to score. Hold rewards, liquidity rewards, and settled combo-slip PnL do count because they are tournament mechanics.',
+      'Wallet bonuses give you MXNP to play with, but they do not directly add to score. Conviction multiplier rewards, liquidity rewards, and settled combo-slip PnL do count because they are tournament mechanics.',
     ],
     [
       'Where do I create combo slips?',
@@ -708,7 +713,7 @@ function TournamentFaq({ lang, rules }) {
     ],
     [
       '¿Los bonos cuentan para ganar el torneo?',
-      'Los bonos de wallet te dan MXNP para jugar, pero no suman directo al puntaje. La recompensa por holding, las recompensas por dar liquidez y el PnL de combinadas liquidadas sí cuentan porque son mecánicas del torneo.',
+      'Los bonos de wallet te dan MXNP para jugar, pero no suman directo al puntaje. El multiplicador de convicción, las recompensas por dar liquidez y el PnL de combinadas liquidadas sí cuentan porque son mecánicas del torneo.',
     ],
     [
       '¿Dónde creo combinadas?',

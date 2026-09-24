@@ -58,6 +58,7 @@ test('points cycle cutoff snapshot freezes leaderboard without rolling over', ()
   assert.match(adminSource, /handleGetStandingsSnapshot/);
   assert.match(adminSource, /readCycleSnapshotRows/);
   assert.match(adminSource, /buildTournamentLeaderboardRows/);
+  assert.match(adminSource, /includeConvictionBreakdown: true/);
   assert.match(adminSource, /snapshotActiveCycleAtCutoff/);
   assert.match(adminSource, /cutoffSnapshotTaken/);
   assert.match(adminSource, /snapshot_count/);

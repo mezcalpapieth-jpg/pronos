@@ -270,6 +270,7 @@ async function handleGetStandingsSnapshot(req, res) {
       limit,
       now: new Date(),
       window,
+      includeConvictionBreakdown: true,
     });
     return {
       ok: true,

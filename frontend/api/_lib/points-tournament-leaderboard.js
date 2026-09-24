@@ -1,8 +1,11 @@
 import { binaryPrices, multiPrices } from './amm-math.js';
 import {
+  TOURNAMENT_CONVICTION_BONUS_RATE,
+  TOURNAMENT_CONVICTION_MAX_ENTRY_PRICE,
+  TOURNAMENT_CONVICTION_MAX_MULTIPLIER,
+  TOURNAMENT_CONVICTION_MIN_MARKET_ENTRY_MXNP,
+  TOURNAMENT_CONVICTION_NET_PNL_CAP_RATE,
   TOURNAMENT_INACTIVITY_PENALTY,
-  TOURNAMENT_HOLD_REWARD_MAX_WEEKS,
-  TOURNAMENT_HOLD_REWARD_WEEKLY_RATE,
   TOURNAMENT_MIN_ENTRY_MXNP,
   TOURNAMENT_OPERATION_CLOSE_ISO,
   TOURNAMENT_QUALIFYING_MARKETS,
@@ -89,6 +92,12 @@ function buildNeutralLeaderboardRows(users, limit) {
     marketPnl: 0,
     currentPositionValue: 0,
     holdBonus: 0,
+    convictionBonus: 0,
+    convictionBonusGross: 0,
+    convictionBonusCapApplied: 0,
+    convictionEligibleProfit: 0,
+    convictionMarkets: 0,
+    convictionLots: 0,
     liquidityReward: 0,
     parlayPnl: 0,
     parlayTickets: 0,
@@ -174,50 +183,98 @@ function buildPenalty({ user, activity, now, window }) {
   };
 }
 
-const HOLD_REWARD_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
-const HOLD_LOT_EPSILON = 0.000001;
+const CONVICTION_LOT_EPSILON = 0.000001;
 
-export function tournamentHoldRewardForCostBasis(costBasis, firstBuyAt, { now = new Date(), window = null } = {}) {
-  const principal = numeric(costBasis);
-  const boughtAt = firstBuyAt ? new Date(firstBuyAt) : null;
-  const current = now instanceof Date ? now : new Date(now);
-  const windowStart = new Date(window?.startsAt || TOURNAMENT_START_ISO);
-  const cutoff = new Date(window?.rankingCutoffAt || TOURNAMENT_RANKING_CUTOFF_ISO);
+function dateMs(value) {
+  if (!value) return null;
+  const parsed = value instanceof Date ? value : new Date(value);
+  const ms = parsed.getTime();
+  return Number.isFinite(ms) ? ms : null;
+}
 
-  if (
-    principal <= 0
-    || !boughtAt
-    || !Number.isFinite(boughtAt.getTime())
-    || !Number.isFinite(current.getTime())
-    || !Number.isFinite(windowStart.getTime())
-    || !Number.isFinite(cutoff.getTime())
-  ) {
-    return { weeks: 0, bonus: 0 };
+function convictionUserMarketKey(username, marketKey) {
+  return `${username}:${marketKey}`;
+}
+
+function convictionMarketKey(row) {
+  return row.exposure_group_id || row.market_id;
+}
+
+function convictionBucketKey(row) {
+  return `${row.market_id}:${row.outcome_index}`;
+}
+
+function tradeEntryPrice(row, shares) {
+  const directPrice = numeric(row.price_at_trade);
+  if (directPrice > 0) return directPrice;
+  const collateral = Math.max(0, Math.abs(numeric(row.collateral)));
+  return shares > CONVICTION_LOT_EPSILON ? collateral / shares : 0;
+}
+
+function marketOpenAtForRow(row, window) {
+  return row.market_start_time
+    || row.start_time
+    || window?.startsAt
+    || TOURNAMENT_START_ISO;
+}
+
+function marketCloseAtForRow(row, window) {
+  return row.market_end_time
+    || row.end_time
+    || window?.operationCloseAt
+    || window?.rankingCutoffAt
+    || TOURNAMENT_RANKING_CUTOFF_ISO;
+}
+
+function rowMarketStatus(row) {
+  return String(row.market_status ?? row.status ?? '').toLowerCase();
+}
+
+function rowMarketOutcome(row) {
+  const outcome = Number(row.market_outcome ?? row.outcome);
+  return Number.isInteger(outcome) ? outcome : null;
+}
+
+function isTouchMarketRow(row) {
+  const sourceData = parseJson(row.pending_source_data ?? row.source_data, {});
+  const resolverConfig = parseJson(row.resolver_config, {});
+  const kinds = [
+    sourceData.kind,
+    sourceData.marketKind,
+    sourceData.marketStyle,
+    resolverConfig.kind,
+    resolverConfig.shape,
+  ].map(value => String(value || '').toLowerCase());
+
+  return dbBool(sourceData.touchMarket)
+    || dbBool(sourceData.isTouchMarket)
+    || dbBool(resolverConfig.touchMarket)
+    || kinds.some(value => value === 'touch' || value.includes('_touch') || value.includes('touch_'));
+}
+
+export function tournamentConvictionMultiplierForLot(boughtAt, marketOpenAt, marketCloseAt) {
+  const boughtMs = dateMs(boughtAt);
+  const openMs = dateMs(marketOpenAt);
+  const closeMs = dateMs(marketCloseAt);
+  if (boughtMs == null || openMs == null || closeMs == null || closeMs <= openMs) {
+    return { heldRatio: 0, multiplier: 1 };
   }
 
-  const effectiveStart = boughtAt > windowStart ? boughtAt : windowStart;
-  const rewardEnd = current < cutoff ? current : cutoff;
-  if (rewardEnd <= effectiveStart) return { weeks: 0, bonus: 0 };
-
-  const completedWeeks = Math.floor((rewardEnd.getTime() - effectiveStart.getTime()) / HOLD_REWARD_WEEK_MS);
-  const weeks = Math.min(TOURNAMENT_HOLD_REWARD_MAX_WEEKS, Math.max(0, completedWeeks));
-  return {
-    weeks,
-    bonus: principal * TOURNAMENT_HOLD_REWARD_WEEKLY_RATE * weeks,
-  };
+  const effectiveBuyMs = Math.min(Math.max(boughtMs, openMs), closeMs);
+  const heldRatio = Math.max(0, Math.min(1, (closeMs - effectiveBuyMs) / (closeMs - openMs)));
+  const multiplier = Math.min(
+    TOURNAMENT_CONVICTION_MAX_MULTIPLIER,
+    1 + TOURNAMENT_CONVICTION_BONUS_RATE * heldRatio,
+  );
+  return { heldRatio, multiplier };
 }
 
-function holdLotTotalCost(lots = []) {
-  return lots.reduce((sum, lot) => sum + Math.max(0, numeric(lot.costBasis)), 0);
-}
-
-function consumeHoldLots(lots = [], sharesToRemove) {
+function consumeConvictionLots(lots = [], sharesToRemove) {
   let remaining = Math.max(0, Math.abs(numeric(sharesToRemove)));
-  while (remaining > HOLD_LOT_EPSILON && lots.length > 0) {
+  while (remaining > CONVICTION_LOT_EPSILON && lots.length > 0) {
     const lot = lots[0];
     const shares = Math.max(0, numeric(lot.shares));
-    const costBasis = Math.max(0, numeric(lot.costBasis));
-    if (shares <= HOLD_LOT_EPSILON || costBasis <= HOLD_LOT_EPSILON) {
+    if (shares <= CONVICTION_LOT_EPSILON) {
       lots.shift();
       continue;
     }
@@ -225,39 +282,14 @@ function consumeHoldLots(lots = [], sharesToRemove) {
     const consumedShares = Math.min(shares, remaining);
     const consumedRatio = consumedShares / shares;
     lot.shares = Math.max(0, shares - consumedShares);
-    lot.costBasis = Math.max(0, costBasis - (costBasis * consumedRatio));
+    lot.costBasis = Math.max(0, numeric(lot.costBasis) * (1 - consumedRatio));
     remaining = Math.max(0, remaining - consumedShares);
 
-    if (lot.shares <= HOLD_LOT_EPSILON || lot.costBasis <= HOLD_LOT_EPSILON) {
+    if (lot.shares <= CONVICTION_LOT_EPSILON) {
       lots.shift();
     }
   }
   return lots;
-}
-
-function subtractHedgeCostFromHoldLots(lots = [], hedgeCost) {
-  let remaining = Math.max(0, numeric(hedgeCost));
-  const eligible = lots.map(lot => ({ ...lot }));
-  for (let i = eligible.length - 1; i >= 0 && remaining > HOLD_LOT_EPSILON; i -= 1) {
-    const lot = eligible[i];
-    const costBasis = Math.max(0, numeric(lot.costBasis));
-    if (costBasis <= HOLD_LOT_EPSILON) continue;
-
-    const consumedCost = Math.min(costBasis, remaining);
-    const consumedRatio = consumedCost / costBasis;
-    lot.costBasis = Math.max(0, costBasis - consumedCost);
-    lot.shares = Math.max(0, numeric(lot.shares) * (1 - consumedRatio));
-    remaining = Math.max(0, remaining - consumedCost);
-  }
-  return eligible.filter(lot => (
-    numeric(lot.costBasis) > HOLD_LOT_EPSILON
-    && numeric(lot.shares) > HOLD_LOT_EPSILON
-    && lot.boughtAt
-  ));
-}
-
-function holdBucketKey(row) {
-  return `${row.market_id}:${row.outcome_index}`;
 }
 
 function compareTradeRows(a, b) {
@@ -269,7 +301,44 @@ function compareTradeRows(a, b) {
   return numeric(a.id) - numeric(b.id);
 }
 
-export function buildHoldBonusByUser(tradeRows, { now, window }) {
+function emptyConvictionStats() {
+  return {
+    convictionMarkets: 0,
+    convictionLots: 0,
+    convictionBonusGross: 0,
+    convictionBonusCapApplied: 0,
+    convictionEligibleProfit: 0,
+  };
+}
+
+function addConvictionStats(statsByUser, username, patch) {
+  const current = statsByUser.get(username) || emptyConvictionStats();
+  for (const [key, value] of Object.entries(patch)) {
+    current[key] = numeric(current[key]) + numeric(value);
+  }
+  statsByUser.set(username, current);
+}
+
+function roundConvictionRatio(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.round(n * 10000) / 10000 : 1;
+}
+
+function publicConvictionBreakdown(rows = []) {
+  return rows.map(row => ({
+    marketId: row.marketId,
+    bonus: roundTournamentAmount(row.bonus),
+    grossBonus: roundTournamentAmount(row.grossBonus),
+    capApplied: roundTournamentAmount(row.capApplied),
+    netMarketPnl: roundTournamentAmount(row.netMarketPnl),
+    eligibleLots: Number(row.eligibleLots || 0),
+    eligibleShares: roundTournamentAmount(row.eligibleShares),
+    eligibleProfit: roundTournamentAmount(row.eligibleProfit),
+    averageMultiplier: roundConvictionRatio(row.averageMultiplier),
+  }));
+}
+
+export function buildConvictionBonusByUser(tradeRows, pnlByUserMarket = new Map(), { window = null } = {}) {
   const groups = new Map();
 
   for (const row of [...(Array.isArray(tradeRows) ? tradeRows : [])].sort(compareTradeRows)) {
@@ -279,51 +348,144 @@ export function buildHoldBonusByUser(tradeRows, { now, window }) {
     const marketId = Number(row.market_id);
     const outcomeIndex = Number(row.outcome_index);
     const shares = Math.max(0, Math.abs(numeric(row.shares)));
-    if (!username || !Number.isInteger(marketId) || !Number.isInteger(outcomeIndex) || shares <= HOLD_LOT_EPSILON) continue;
+    if (!username || !Number.isInteger(marketId) || !Number.isInteger(outcomeIndex) || shares <= CONVICTION_LOT_EPSILON) continue;
 
-    const key = `${username}:${row.exposure_group_id || row.market_id}`;
-    const group = groups.get(key) || { username, buckets: new Map() };
-    const bucketKey = holdBucketKey(row);
+    const marketKey = convictionMarketKey(row);
+    const key = convictionUserMarketKey(username, marketKey);
+    const group = groups.get(key) || {
+      username,
+      marketKey,
+      buckets: new Map(),
+      grossBuyCollateral: 0,
+      excludedTouchMarket: false,
+    };
+    group.excludedTouchMarket = group.excludedTouchMarket || isTouchMarketRow(row);
+
+    const bucketKey = convictionBucketKey(row);
     const lots = group.buckets.get(bucketKey) || [];
     if (side === 'buy') {
       const costBasis = Math.max(0, Math.abs(numeric(row.collateral)));
-      if (costBasis > HOLD_LOT_EPSILON && row.created_at) {
+      const priceAtTrade = tradeEntryPrice(row, shares);
+      group.grossBuyCollateral += costBasis;
+      if (
+        costBasis > CONVICTION_LOT_EPSILON
+        && priceAtTrade > 0
+        && row.created_at
+      ) {
         lots.push({
           username,
+          marketId,
+          marketKey,
+          outcomeIndex,
           shares,
           costBasis,
+          priceAtTrade,
+          eligibleEntryPrice: priceAtTrade <= TOURNAMENT_CONVICTION_MAX_ENTRY_PRICE,
           boughtAt: row.created_at,
+          marketOpenAt: marketOpenAtForRow(row, window),
+          marketCloseAt: marketCloseAtForRow(row, window),
+          marketResolvedAt: row.market_resolved_at ?? row.resolved_at ?? null,
+          marketStatus: rowMarketStatus(row),
+          marketOutcome: rowMarketOutcome(row),
         });
       }
-    } else if (side === 'sell' || side === 'redeem') {
-      consumeHoldLots(lots, shares);
+    } else if (side === 'sell') {
+      const resolvedMs = dateMs(row.market_resolved_at ?? row.resolved_at);
+      const tradeMs = dateMs(row.created_at);
+      if (resolvedMs == null || tradeMs == null || tradeMs <= resolvedMs) {
+        consumeConvictionLots(lots, shares);
+      }
     }
     group.buckets.set(bucketKey, lots);
     groups.set(key, group);
   }
 
-  const byUser = new Map();
+  const bonusByUser = new Map();
+  const statsByUser = new Map();
+  const marketBreakdownByUser = new Map();
+
   for (const group of groups.values()) {
-    const sorted = [...group.buckets.values()]
-      .map(lots => ({
-        lots,
-        costBasis: holdLotTotalCost(lots),
-      }))
-      .filter(bucket => bucket.costBasis > HOLD_LOT_EPSILON)
-      .sort((a, b) => b.costBasis - a.costBasis);
-    const primary = sorted[0];
-    if (!primary) continue;
-    const hedgeCost = sorted.slice(1).reduce((sum, item) => sum + item.costBasis, 0);
-    const eligibleLots = subtractHedgeCostFromHoldLots(primary.lots, hedgeCost);
-    for (const lot of eligibleLots) {
-      const { bonus } = tournamentHoldRewardForCostBasis(lot.costBasis, lot.boughtAt, { now, window });
-      if (bonus > 0) {
-        byUser.set(group.username, (byUser.get(group.username) || 0) + bonus);
+    if (group.excludedTouchMarket) continue;
+    if (group.grossBuyCollateral + CONVICTION_LOT_EPSILON < TOURNAMENT_CONVICTION_MIN_MARKET_ENTRY_MXNP) continue;
+
+    const netMarketPnl = numeric(pnlByUserMarket.get(convictionUserMarketKey(group.username, group.marketKey)));
+    if (netMarketPnl <= CONVICTION_LOT_EPSILON) continue;
+
+    let grossBonus = 0;
+    let eligibleLots = 0;
+    let eligibleShares = 0;
+    let eligibleProfit = 0;
+    let multiplierShareWeight = 0;
+
+    for (const lots of group.buckets.values()) {
+      for (const lot of lots) {
+        const shares = Math.max(0, numeric(lot.shares));
+        const priceAtTrade = numeric(lot.priceAtTrade);
+        if (
+          shares <= CONVICTION_LOT_EPSILON
+          || lot.marketStatus !== 'resolved'
+          || lot.marketOutcome == null
+          || Number(lot.outcomeIndex) !== Number(lot.marketOutcome)
+          || !lot.eligibleEntryPrice
+          || priceAtTrade <= 0
+          || priceAtTrade > TOURNAMENT_CONVICTION_MAX_ENTRY_PRICE
+        ) {
+          continue;
+        }
+
+        const { multiplier } = tournamentConvictionMultiplierForLot(
+          lot.boughtAt,
+          lot.marketOpenAt,
+          lot.marketCloseAt,
+        );
+        const lotProfit = shares * Math.max(0, 1 - priceAtTrade);
+        const lotBonus = lotProfit * Math.max(0, multiplier - 1);
+        if (lotBonus <= CONVICTION_LOT_EPSILON) continue;
+        grossBonus += lotBonus;
+        eligibleLots += 1;
+        eligibleShares += shares;
+        eligibleProfit += lotProfit;
+        multiplierShareWeight += multiplier * shares;
       }
     }
+
+    if (grossBonus <= CONVICTION_LOT_EPSILON) continue;
+
+    const pnlCap = netMarketPnl * TOURNAMENT_CONVICTION_NET_PNL_CAP_RATE;
+    const bonus = Math.min(grossBonus, pnlCap);
+    if (bonus <= CONVICTION_LOT_EPSILON) continue;
+
+    bonusByUser.set(group.username, (bonusByUser.get(group.username) || 0) + bonus);
+    addConvictionStats(statsByUser, group.username, {
+      convictionMarkets: 1,
+      convictionLots: eligibleLots,
+      convictionBonusGross: grossBonus,
+      convictionBonusCapApplied: Math.max(0, grossBonus - bonus),
+      convictionEligibleProfit: eligibleProfit,
+    });
+
+    const breakdown = marketBreakdownByUser.get(group.username) || [];
+    breakdown.push({
+      marketId: Number(group.marketKey) || group.marketKey,
+      bonus,
+      grossBonus,
+      capApplied: Math.max(0, grossBonus - bonus),
+      netMarketPnl,
+      eligibleLots,
+      eligibleShares,
+      eligibleProfit,
+      averageMultiplier: eligibleShares > CONVICTION_LOT_EPSILON
+        ? multiplierShareWeight / eligibleShares
+        : 1,
+    });
+    marketBreakdownByUser.set(group.username, breakdown);
   }
 
-  return byUser;
+  return { bonusByUser, statsByUser, marketBreakdownByUser };
+}
+
+export function buildHoldBonusByUser(tradeRows, options = {}) {
+  return buildConvictionBonusByUser(tradeRows, options.pnlByUserMarket || new Map(), options).bonusByUser;
 }
 
 async function readParlayScoreRows(db, startIso, cutoffIso) {
@@ -366,7 +528,10 @@ async function readLiquidityRewardRows(db, startIso, cutoffIso) {
   }
 }
 
-export async function buildTournamentLeaderboardRows(db, { limit = 500, now = new Date(), window = null } = {}) {
+export async function buildTournamentLeaderboardRows(
+  db,
+  { limit = 500, now = new Date(), window = null, includeConvictionBreakdown = false } = {},
+) {
   const users = await queryRows(db, `
     SELECT u.username, u.created_at, u.profile_image_url, COALESCE(b.balance, 0) AS balance
     FROM points_users u
@@ -421,12 +586,19 @@ export async function buildTournamentLeaderboardRows(db, { limit = 500, now = ne
 
   const holdTradeRows = await queryRows(db, `
     SELECT t.id, t.username, t.market_id, t.outcome_index, t.side,
-           t.shares, t.collateral, t.created_at,
+           t.shares, t.collateral, t.price_at_trade, t.created_at,
+           m.status AS market_status, m.outcome AS market_outcome,
+           COALESCE(m.start_time, parent.start_time) AS market_start_time,
+           COALESCE(m.end_time, parent.end_time) AS market_end_time,
+           COALESCE(m.resolved_at, parent.resolved_at) AS market_resolved_at,
+           COALESCE(m.resolver_config, parent.resolver_config) AS resolver_config,
+           pm.source_data AS pending_source_data,
            COALESCE(m.parent_id, m.id) AS exposure_group_id,
            COALESCE(m.tournament_featured, parent.tournament_featured, false) AS tournament_featured
     FROM points_trades t
     JOIN points_markets m ON m.id = t.market_id
     LEFT JOIN points_markets parent ON parent.id = m.parent_id
+    LEFT JOIN points_pending_markets pm ON pm.approved_market_id = COALESCE(m.parent_id, m.id)
     WHERE t.created_at >= $1
       AND t.created_at <= $2
       AND t.side IN ('buy', 'sell', 'redeem')
@@ -435,13 +607,21 @@ export async function buildTournamentLeaderboardRows(db, { limit = 500, now = ne
 
   const activityByUser = new Map(activityRows.map(row => [row.username, row]));
   const pnlByUser = new Map();
+  const pnlByUserMarket = new Map();
   const valueByUser = new Map();
-  const holdBonusByUser = buildHoldBonusByUser(holdTradeRows, { now, window: scoringWindow });
   for (const row of positionRows) {
     const { currentValue, pnl } = positionValue(row);
     pnlByUser.set(row.username, (pnlByUser.get(row.username) || 0) + pnl);
+    const marketKey = convictionMarketKey(row);
+    const userMarketKey = convictionUserMarketKey(row.username, marketKey);
+    pnlByUserMarket.set(userMarketKey, (pnlByUserMarket.get(userMarketKey) || 0) + pnl);
     valueByUser.set(row.username, (valueByUser.get(row.username) || 0) + currentValue);
   }
+  const {
+    bonusByUser: holdBonusByUser,
+    statsByUser: convictionStatsByUser,
+    marketBreakdownByUser: convictionBreakdownByUser,
+  } = buildConvictionBonusByUser(holdTradeRows, pnlByUserMarket, { window: scoringWindow });
 
   const parlayRows = await readParlayScoreRows(db, startIso, cutoffIso);
   const parlayByUser = new Map(parlayRows.map(row => [row.username, row]));
@@ -453,6 +633,10 @@ export async function buildTournamentLeaderboardRows(db, { limit = 500, now = ne
     const marketPnl = pnlByUser.get(user.username) || 0;
     const currentPositionValue = valueByUser.get(user.username) || 0;
     const holdBonus = holdBonusByUser.get(user.username) || 0;
+    const convictionStats = convictionStatsByUser.get(user.username) || emptyConvictionStats();
+    const convictionBreakdown = includeConvictionBreakdown
+      ? publicConvictionBreakdown(convictionBreakdownByUser.get(user.username) || [])
+      : null;
     const parlay = parlayByUser.get(user.username) || {};
     const parlayPnl = numeric(parlay.parlay_pnl);
     const liquidityReward = numeric(liquidityByUser.get(user.username)?.liquidity_reward);
@@ -469,6 +653,13 @@ export async function buildTournamentLeaderboardRows(db, { limit = 500, now = ne
       marketPnl: roundTournamentAmount(marketPnl),
       currentPositionValue: roundTournamentAmount(currentPositionValue),
       holdBonus: roundTournamentAmount(holdBonus),
+      convictionBonus: roundTournamentAmount(holdBonus),
+      convictionBonusGross: roundTournamentAmount(convictionStats.convictionBonusGross),
+      convictionBonusCapApplied: roundTournamentAmount(convictionStats.convictionBonusCapApplied),
+      convictionEligibleProfit: roundTournamentAmount(convictionStats.convictionEligibleProfit),
+      convictionMarkets: Number(convictionStats.convictionMarkets || 0),
+      convictionLots: Number(convictionStats.convictionLots || 0),
+      ...(includeConvictionBreakdown ? { convictionBreakdown } : {}),
       liquidityReward: roundTournamentAmount(liquidityReward),
       parlayPnl: roundTournamentAmount(parlayPnl),
       parlayTickets: Number(parlay.parlay_tickets || 0),

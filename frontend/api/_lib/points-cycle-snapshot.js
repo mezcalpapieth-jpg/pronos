@@ -32,6 +32,12 @@ function snapshotRow(row) {
     marketPnl: roundTournamentAmount(row.market_pnl ?? row.final_pnl ?? 0),
     currentPositionValue: roundTournamentAmount(row.current_position_value ?? 0),
     holdBonus: roundTournamentAmount(row.hold_bonus ?? 0),
+    convictionBonus: roundTournamentAmount(row.hold_bonus ?? 0),
+    convictionBonusGross: roundTournamentAmount(row.conviction_bonus_gross ?? row.hold_bonus ?? 0),
+    convictionBonusCapApplied: roundTournamentAmount(row.conviction_bonus_cap_applied ?? 0),
+    convictionEligibleProfit: roundTournamentAmount(row.conviction_eligible_profit ?? 0),
+    convictionMarkets: Number(row.conviction_markets || 0),
+    convictionLots: Number(row.conviction_lots || 0),
     liquidityReward: roundTournamentAmount(row.liquidity_reward ?? 0),
     parlayPnl: roundTournamentAmount(row.parlay_pnl ?? 0),
     parlayTickets: Number(row.parlay_tickets || 0),
@@ -74,6 +80,8 @@ export async function readCycleSnapshotRows(db, { cycleId, limit = DEFAULT_CYCLE
     SELECT s.username, u.profile_image_url, s.final_balance, s.final_pnl, s.rank,
            s.tournament_score, s.market_pnl, s.current_position_value,
            s.hold_bonus, s.liquidity_reward, s.parlay_pnl, s.parlay_tickets, s.parlay_wins,
+           s.conviction_bonus_gross, s.conviction_bonus_cap_applied,
+           s.conviction_eligible_profit, s.conviction_markets, s.conviction_lots,
            s.inactivity_penalty, s.inactive_days, s.active_days,
            s.qualifying_markets, s.qualified
     FROM points_cycle_snapshots s
@@ -111,10 +119,12 @@ export async function snapshotCycleLeaderboard(
          cycle_id, username, final_balance, final_pnl, rank,
          tournament_score, market_pnl, current_position_value,
          hold_bonus, liquidity_reward, parlay_pnl, parlay_tickets, parlay_wins,
+         conviction_bonus_gross, conviction_bonus_cap_applied,
+         conviction_eligible_profit, conviction_markets, conviction_lots,
          inactivity_penalty, inactive_days, active_days,
          qualifying_markets, qualified
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
        ON CONFLICT (cycle_id, username) DO NOTHING`,
       [
         activeCycle.id,
@@ -130,6 +140,11 @@ export async function snapshotCycleLeaderboard(
         numeric(row.parlayPnl),
         Number(row.parlayTickets || 0),
         Number(row.parlayWins || 0),
+        numeric(row.convictionBonusGross),
+        numeric(row.convictionBonusCapApplied),
+        numeric(row.convictionEligibleProfit),
+        Number(row.convictionMarkets || 0),
+        Number(row.convictionLots || 0),
         numeric(row.inactivityPenalty),
         Number(row.inactiveDays || 0),
         Number(row.activeDays || 0),

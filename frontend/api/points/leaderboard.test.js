@@ -13,6 +13,7 @@ test('points leaderboard returns wallet and PnL rankings separately', () => {
   assert.match(source, /pnlMe/);
   assert.match(source, /tournamentTop/);
   assert.match(source, /holdBonus/);
+  assert.match(source, /convictionBonus/);
   assert.match(source, /liquidityReward/);
   assert.match(source, /parlayPnl/);
 });
@@ -35,7 +36,8 @@ test('points tournament leaderboard scores against the active cycle window', () 
   assert.match(tournamentSource, /readLiquidityRewardRows/);
   assert.match(tournamentSource, /kind = 'limit_maker_reward'/);
   assert.match(tournamentSource, /marketPnl \+ holdBonus \+ liquidityReward \+ parlayPnl/);
-  assert.match(source, /points:leaderboard:ranked:v7/);
+  assert.match(tournamentSource, /buildConvictionBonusByUser/);
+  assert.match(source, /points:leaderboard:ranked:v8/);
   assert.match(source, /profileImageUrl:\s*null/);
   assert.match(tournamentSource, /u\.profile_image_url/);
   assert.match(tournamentSource, /profileImageUrl:\s*user\.profile_image_url \|\| null/);

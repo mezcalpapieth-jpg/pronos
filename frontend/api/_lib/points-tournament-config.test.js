@@ -5,8 +5,11 @@ import {
   NEXT_TOURNAMENT_RANKING_CUTOFF_ISO,
   NEXT_TOURNAMENT_START_ISO,
   TOURNAMENT_CYCLE_LABEL,
-  TOURNAMENT_HOLD_REWARD_MAX_WEEKS,
-  TOURNAMENT_HOLD_REWARD_WEEKLY_RATE,
+  TOURNAMENT_CONVICTION_BONUS_RATE,
+  TOURNAMENT_CONVICTION_MAX_ENTRY_PRICE,
+  TOURNAMENT_CONVICTION_MAX_MULTIPLIER,
+  TOURNAMENT_CONVICTION_MIN_MARKET_ENTRY_MXNP,
+  TOURNAMENT_CONVICTION_NET_PNL_CAP_RATE,
   TOURNAMENT_LIQUIDITY_REWARD_MAX_DAILY_PER_USER,
   TOURNAMENT_LIQUIDITY_REWARD_WEEKLY_RATE,
   TOURNAMENT_OPERATION_CLOSE_ISO,
@@ -29,11 +32,22 @@ test('points tournament requires ten qualifying markets', () => {
   assert.equal(tournamentRulesPayload().qualifyingMarkets, 10);
 });
 
-test('points tournament exposes hold reward and parlay rules', () => {
+test('points tournament exposes conviction multiplier and parlay rules', () => {
   const rules = tournamentRulesPayload();
-  assert.equal(TOURNAMENT_HOLD_REWARD_WEEKLY_RATE, 0.25);
-  assert.equal(TOURNAMENT_HOLD_REWARD_MAX_WEEKS, 4);
-  assert.deepEqual(rules.holdReward, { weeklyRate: 0.25, maxWeeks: 4 });
+  assert.equal(TOURNAMENT_CONVICTION_BONUS_RATE, 0.5);
+  assert.equal(TOURNAMENT_CONVICTION_MAX_MULTIPLIER, 1.5);
+  assert.equal(TOURNAMENT_CONVICTION_MAX_ENTRY_PRICE, 0.85);
+  assert.equal(TOURNAMENT_CONVICTION_NET_PNL_CAP_RATE, 0.5);
+  assert.equal(TOURNAMENT_CONVICTION_MIN_MARKET_ENTRY_MXNP, 100);
+  assert.deepEqual(rules.convictionMultiplier, {
+    bonusRate: 0.5,
+    maxMultiplier: 1.5,
+    maxEntryPrice: 0.85,
+    netPnlCapRate: 0.5,
+    minMarketEntryMxnp: 100,
+    requiresResolvedWinner: true,
+    excludesTouchMarkets: true,
+  });
   assert.equal(TOURNAMENT_LIQUIDITY_REWARD_WEEKLY_RATE, 0.20);
   assert.equal(TOURNAMENT_LIQUIDITY_REWARD_MAX_DAILY_PER_USER, 100);
   assert.deepEqual(rules.liquidityReward, { weeklyRate: 0.20, maxDailyPerUser: 100 });
