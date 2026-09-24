@@ -618,6 +618,68 @@ function RuleList({ lang, rules }) {
   );
 }
 
+function ScoreFormulaPanel({ lang, rules }) {
+  const r = rules || DEFAULT_RULES;
+  const conviction = r.convictionMultiplier || DEFAULT_RULES.convictionMultiplier;
+  const maxEntryPrice = Number(conviction.maxEntryPrice || DEFAULT_RULES.convictionMultiplier.maxEntryPrice).toFixed(2);
+  const capRate = fmtInteger(Number(conviction.netPnlCapRate || DEFAULT_RULES.convictionMultiplier.netPnlCapRate) * 100);
+  const inactivityPenalty = fmtInteger(r.inactivityPenalty);
+  const rows = lang === 'en' ? [
+    ['Market PnL', 'Realized market performance is the base of your score. Signup, streak, social, and referral bonuses only fund your wallet.'],
+    ['Conviction', `Winning tournament lots bought at ${maxEntryPrice} or less and held through resolution add a capped bonus. The bonus cannot exceed ${capRate}% of your net PnL in that market.`],
+    ['Liquidity', 'Maker rewards count when your qualifying limit orders stay near the live price and follow the tournament reward caps.'],
+    ['Combos', 'Only settled combo-slip PnL counts, so open slips do not move the leaderboard until they resolve.'],
+    ['Inactivity', `${inactivityPenalty} MXNP is subtracted for each inactive day in the cycle.`],
+  ] : [
+    ['PnL de mercados', 'El desempeño realizado en mercados es la base del puntaje. Los bonos de registro, racha, redes y referidos solo fondean tu wallet.'],
+    ['Convicción', `Los lotes ganadores comprados a ${maxEntryPrice} o menos y mantenidos hasta la resolución suman un bono con tope. El bono no puede pasar de ${capRate}% de tu PnL neto en ese mercado.`],
+    ['Liquidez', 'Las recompensas maker cuentan cuando tus órdenes límite califican cerca del precio vivo y respetan los topes del torneo.'],
+    ['Combinadas', 'Solo cuenta el PnL de combinadas liquidadas; las combinadas abiertas no mueven el leaderboard hasta resolverse.'],
+    ['Inactividad', `Se restan ${inactivityPenalty} MXNP por cada día inactivo del ciclo.`],
+  ];
+  return (
+    <div style={{
+      marginTop: 20,
+      paddingTop: 18,
+      borderTop: '1px solid var(--border)',
+      display: 'grid',
+      gap: 12,
+    }}>
+      <SectionLabel>{lang === 'en' ? 'Score formula' : 'Cómo se calcula'}</SectionLabel>
+      <p style={{
+        margin: 0,
+        padding: '10px 0 10px 12px',
+        borderLeft: '2px solid var(--orange)',
+        color: 'var(--text-primary)',
+        fontFamily: 'var(--font-mono)',
+        fontSize: 12,
+        lineHeight: 1.55,
+      }}>
+        {lang === 'en'
+          ? 'Score = market PnL + conviction + liquidity + settled combos - inactivity'
+          : 'Puntaje = PnL de mercados + convicción + liquidez + combinadas liquidadas - inactividad'}
+      </p>
+      <div style={{ display: 'grid', gap: 10 }}>
+        {rows.map(([label, text]) => (
+          <div key={label} style={{
+            display: 'grid',
+            gridTemplateColumns: 'minmax(90px, 0.42fr) minmax(0, 1fr)',
+            gap: 12,
+            alignItems: 'baseline',
+          }}>
+            <strong style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-body)', fontSize: 13 }}>
+              {label}
+            </strong>
+            <span style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-body)', fontSize: 13, lineHeight: 1.5 }}>
+              {text}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function NewFeatureList({ lang, rules }) {
   const r = rules || DEFAULT_RULES;
   const conviction = r.convictionMultiplier || DEFAULT_RULES.convictionMultiplier;
@@ -900,8 +962,8 @@ export default function PointsTournament() {
           margin: '14px 0 0',
         }}>
           {lang === 'en'
-            ? 'Everyone starts from the same base. The leaderboard rewards market performance, staying in tournament positions, and settled combo slips, with a small inactivity penalty.'
-            : 'Todos arrancan desde la misma base. El leaderboard premia desempeño en mercados, mantenerse en posiciones del torneo y combinadas liquidadas, con una penalización pequeña de inactividad.'}
+            ? 'Everyone starts from the same base. The leaderboard rewards market PnL, conviction on winning positions held through resolution, liquidity making, and settled combo slips, with a small inactivity penalty.'
+            : 'Todos arrancan desde la misma base. El leaderboard premia PnL de mercados, convicción en posiciones ganadoras mantenidas hasta resolución, liquidez maker y combinadas liquidadas, con una penalización pequeña de inactividad.'}
         </p>
       </section>
 
@@ -973,6 +1035,7 @@ export default function PointsTournament() {
         <TournamentCard>
           <SectionLabel>{lang === 'en' ? 'Rules' : 'Reglas'}</SectionLabel>
           <RuleList lang={lang} rules={rules} />
+          <ScoreFormulaPanel lang={lang} rules={rules} />
           <NewFeatureList lang={lang} rules={rules} />
           <TournamentFaq lang={lang} rules={rules} />
         </TournamentCard>

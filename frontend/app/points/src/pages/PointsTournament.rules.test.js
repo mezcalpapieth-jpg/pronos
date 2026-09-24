@@ -7,8 +7,12 @@ const source = await readFile(new URL('./PointsTournament.jsx', import.meta.url)
 test('tournament rules place new tournament features below the base rules', () => {
   assert.match(source, /Nuevos features/);
   assert.match(source, /New features/);
-  assert.match(source, /Each buy lot has its own clock/);
-  assert.match(source, /Cada compra tiene su propio reloj/);
+  assert.match(source, /Score formula/);
+  assert.match(source, /Cómo se calcula/);
+  assert.match(source, /Score = market PnL \+ conviction \+ liquidity \+ settled combos - inactivity/);
+  assert.match(source, /Puntaje = PnL de mercados \+ convicción \+ liquidez \+ combinadas liquidadas - inactividad/);
+  assert.match(source, /Winning tournament lots bought at/);
+  assert.match(source, /Los lotes ganadores comprados a/);
   assert.match(source, /Create them from the Combinada button/);
   assert.match(source, /Se arman desde el botón Combinada/);
   assert.match(source, /recompensa por dar liquidez/);
@@ -22,9 +26,11 @@ test('tournament rules place new tournament features below the base rules', () =
   assert.match(source, /tope de pago de/);
 
   const rulesIndex = source.indexOf('<RuleList lang={lang} rules={rules} />');
+  const formulaIndex = source.indexOf('<ScoreFormulaPanel lang={lang} rules={rules} />');
   const featuresIndex = source.indexOf('<NewFeatureList lang={lang} rules={rules} />');
   const faqIndex = source.indexOf('<TournamentFaq lang={lang} rules={rules} />');
   assert.ok(rulesIndex > 0);
-  assert.ok(featuresIndex > rulesIndex);
+  assert.ok(formulaIndex > rulesIndex);
+  assert.ok(featuresIndex > formulaIndex);
   assert.ok(faqIndex > featuresIndex);
 });

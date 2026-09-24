@@ -163,6 +163,16 @@ test('Points admin can download tournament standings as a PNG snapshot', () => {
   assert.match(source, /image\/svg\+xml/);
 });
 
+test('Points admin can export conviction multiplier audit CSV', () => {
+  assert.match(source, /CONVICTION_AUDIT_ROW_LIMIT = 5000/);
+  assert.match(source, /buildConvictionAuditCsv/);
+  assert.match(source, /convictionBreakdown/);
+  assert.match(source, /conviction_bonus_gross_mxnp/);
+  assert.match(source, /market_net_pnl_mxnp/);
+  assert.match(source, /text\/csv;charset=utf-8/);
+  assert.match(source, /Descargar convicción CSV/);
+});
+
 test('Points markets filter surfaces por resolver count while inside Mercados', () => {
   assert.match(source, /pendingResolveCount=\{adminTaskCounts\.markets\}/);
   assert.match(source, /function MarketsTable\(\{ onQueueChange, pendingResolveCount = 0 \}\)/);

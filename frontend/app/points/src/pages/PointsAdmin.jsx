@@ -579,6 +579,7 @@ export default function PointsAdmin({ isAdmin }) {
 // resets balances, and opens a fresh configured window.
 const STANDINGS_SNAPSHOT_WIDTH = 1200;
 const STANDINGS_SNAPSHOT_ROW_LIMIT = 24;
+const CONVICTION_AUDIT_ROW_LIMIT = 5000;
 
 function snapshotRows(rows) {
   return Array.isArray(rows) ? rows.slice(0, STANDINGS_SNAPSHOT_ROW_LIMIT) : [];
@@ -610,6 +611,85 @@ function snapshotFileName(cycle, extension) {
   const cycleId = cycle?.id ? `ciclo-${cycle.id}` : 'ciclo-actual';
   const date = new Date().toISOString().slice(0, 10);
   return `pronos-standings-${cycleId}-${date}.${extension}`;
+}
+
+function convictionAuditFileName(cycle) {
+  const cycleId = cycle?.id ? `ciclo-${cycle.id}` : 'ciclo-actual';
+  const date = new Date().toISOString().slice(0, 10);
+  return `pronos-conviccion-${cycleId}-${date}.csv`;
+}
+
+function csvCell(value) {
+  if (value === null || value === undefined) return '';
+  const text = String(value);
+  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function csvNumber(value, digits = 2) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n.toFixed(digits) : '';
+}
+
+function buildConvictionAuditCsv({ cycle, rows = [], source = 'unknown' } = {}) {
+  const headers = [
+    'cycle_id',
+    'cycle_label',
+    'source',
+    'rank',
+    'username',
+    'score_mxnp',
+    'market_pnl_mxnp',
+    'conviction_bonus_mxnp',
+    'conviction_bonus_gross_mxnp',
+    'conviction_bonus_cap_applied_mxnp',
+    'conviction_eligible_profit_mxnp',
+    'conviction_markets',
+    'conviction_lots',
+    'market_id',
+    'market_bonus_mxnp',
+    'market_gross_bonus_mxnp',
+    'market_cap_applied_mxnp',
+    'market_net_pnl_mxnp',
+    'eligible_lots',
+    'eligible_shares',
+    'eligible_profit_mxnp',
+    'average_multiplier',
+  ];
+  const lines = [headers.map(csvCell).join(',')];
+
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const breakdown = Array.isArray(row.convictionBreakdown) && row.convictionBreakdown.length > 0
+      ? row.convictionBreakdown
+      : [null];
+    for (const market of breakdown) {
+      lines.push([
+        cycle?.id || '',
+        cycle?.label || '',
+        source,
+        row.rank || '',
+        row.username || '',
+        csvNumber(row.score),
+        csvNumber(row.marketPnl),
+        csvNumber(row.convictionBonus ?? row.holdBonus),
+        csvNumber(row.convictionBonusGross),
+        csvNumber(row.convictionBonusCapApplied),
+        csvNumber(row.convictionEligibleProfit),
+        Number(row.convictionMarkets || 0),
+        Number(row.convictionLots || 0),
+        market?.marketId || '',
+        csvNumber(market?.bonus),
+        csvNumber(market?.grossBonus),
+        csvNumber(market?.capApplied),
+        csvNumber(market?.netMarketPnl),
+        market?.eligibleLots ?? '',
+        csvNumber(market?.eligibleShares),
+        csvNumber(market?.eligibleProfit),
+        csvNumber(market?.averageMultiplier, 4),
+      ].map(csvCell).join(','));
+    }
+  }
+
+  return `${lines.join('\n')}\n`;
 }
 
 function buildTournamentStandingsSvg({ cycle, rows = [], generatedAt = new Date() } = {}) {
@@ -733,6 +813,7 @@ function CyclesPanel() {
   const [data, setData] = useState(null);
   const [working, setWorking] = useState(false);
   const [downloadBusy, setDownloadBusy] = useState(false);
+  const [convictionAuditBusy, setConvictionAuditBusy] = useState(false);
   const [msg, setMsg] = useState(null);
   const [err, setErr] = useState(null);
 
@@ -877,6 +958,34 @@ function CyclesPanel() {
     }
   }
 
+  async function downloadConvictionAudit() {
+    setConvictionAuditBusy(true);
+    setMsg(null);
+    setErr(null);
+    try {
+      const snapshot = await adminFetchCycleStandingsSnapshot({
+        cycleId: current?.id,
+        limit: CONVICTION_AUDIT_ROW_LIMIT,
+      });
+      const rows = Array.isArray(snapshot?.rows) ? snapshot.rows : [];
+      const cycle = snapshot?.cycle || current;
+      const csv = buildConvictionAuditCsv({
+        cycle,
+        rows,
+        source: snapshot?.source || 'unknown',
+      });
+      downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), convictionAuditFileName(cycle));
+      const detail = snapshot?.source === 'live_leaderboard'
+        ? 'con detalle por mercado'
+        : 'con agregados del snapshot';
+      setMsg(`✓ Auditoría de convicción descargada (${rows.length} usuarios, ${detail}).`);
+    } catch (e) {
+      setErr(`${e.code || e.message}${e.detail ? ' · ' + e.detail : ''}`);
+    } finally {
+      setConvictionAuditBusy(false);
+    }
+  }
+
   if (!data && !err) {
     return <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', padding: 20 }}>Cargando ciclos…</div>;
   }
@@ -884,6 +993,7 @@ function CyclesPanel() {
   const current = data?.current;
   const closed = data?.closed || [];
   const paused = data?.paused !== false;
+  const busy = working || downloadBusy || convictionAuditBusy;
 
   return (
     <div>
@@ -931,7 +1041,7 @@ function CyclesPanel() {
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
               <button
                 onClick={snapshotCutoff}
-                disabled={working || downloadBusy}
+                disabled={busy}
                 style={{
                   padding: '10px 18px',
                   background: current.cutoffSnapshotTaken ? 'rgba(16,185,129,0.12)' : 'transparent',
@@ -943,14 +1053,14 @@ function CyclesPanel() {
                   fontWeight: 700,
                   letterSpacing: '0.06em',
                   textTransform: 'uppercase',
-                  cursor: working ? 'not-allowed' : 'pointer',
+                  cursor: busy ? 'not-allowed' : 'pointer',
                 }}
               >
                 {working ? 'Trabajando…' : current.cutoffSnapshotTaken ? 'Foto 11:59 lista' : 'Tomar foto 11:59'}
               </button>
               <button
                 onClick={downloadStandingsSnapshot}
-                disabled={working || downloadBusy}
+                disabled={busy}
                 style={{
                   padding: '10px 18px',
                   background: 'transparent',
@@ -962,14 +1072,33 @@ function CyclesPanel() {
                   fontWeight: 700,
                   letterSpacing: '0.06em',
                   textTransform: 'uppercase',
-                  cursor: working || downloadBusy ? 'not-allowed' : 'pointer',
+                  cursor: busy ? 'not-allowed' : 'pointer',
                 }}
               >
                 {downloadBusy ? 'Preparando…' : 'Descargar standings PNG'}
               </button>
               <button
+                onClick={downloadConvictionAudit}
+                disabled={busy}
+                style={{
+                  padding: '10px 18px',
+                  background: 'transparent',
+                  color: '#cbd5e1',
+                  border: '1px solid rgba(203,213,225,0.35)',
+                  borderRadius: 8,
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  letterSpacing: '0.06em',
+                  textTransform: 'uppercase',
+                  cursor: busy ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {convictionAuditBusy ? 'Preparando…' : 'Descargar convicción CSV'}
+              </button>
+              <button
                 onClick={rollover}
-                disabled={working || downloadBusy}
+                disabled={busy}
                 style={{
                   padding: '10px 18px',
                   background: current.pastDeadline || paused ? 'var(--green)' : 'var(--surface2)',
@@ -981,7 +1110,7 @@ function CyclesPanel() {
                   fontWeight: 700,
                   letterSpacing: '0.06em',
                   textTransform: 'uppercase',
-                  cursor: working || downloadBusy ? 'not-allowed' : 'pointer',
+                  cursor: busy ? 'not-allowed' : 'pointer',
                 }}
               >
                 {working ? 'Trabajando…' : paused ? '▶ Reanudar con ciclo nuevo' : '▶ Cerrar ciclo y abrir siguiente'}
@@ -989,7 +1118,7 @@ function CyclesPanel() {
               {!paused && (
                 <button
                   onClick={pauseCycles}
-                  disabled={working || downloadBusy}
+                  disabled={busy}
                   style={{
                     padding: '10px 18px',
                     background: 'transparent',
@@ -1001,7 +1130,7 @@ function CyclesPanel() {
                     fontWeight: 700,
                     letterSpacing: '0.06em',
                     textTransform: 'uppercase',
-                    cursor: working || downloadBusy ? 'not-allowed' : 'pointer',
+                    cursor: busy ? 'not-allowed' : 'pointer',
                   }}
                 >
                   Pausar ciclos
@@ -1009,7 +1138,7 @@ function CyclesPanel() {
               )}
               <button
                 onClick={applyPreCycleCarryover}
-                disabled={working || downloadBusy}
+                disabled={busy}
                 style={{
                   padding: '10px 18px',
                   background: 'transparent',
@@ -1021,7 +1150,7 @@ function CyclesPanel() {
                   fontWeight: 700,
                   letterSpacing: '0.06em',
                   textTransform: 'uppercase',
-                  cursor: working || downloadBusy ? 'not-allowed' : 'pointer',
+                  cursor: busy ? 'not-allowed' : 'pointer',
                 }}
               >
                 Aplicar bonos preciclo
