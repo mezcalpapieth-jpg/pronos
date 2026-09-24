@@ -555,6 +555,14 @@ const STRINGS = {
   'points.hero.cashPrizes':   { es: 'PREMIOS EN EFECTIVO',   en: 'CASH PRIZES' },
 
   'points.home.loadError':    { es: 'No pudimos cargar los mercados. Intenta otra vez.', en: 'Could not load markets. Try again.' },
+  'points.home.tournamentCountdown.startsEyebrow': { es: 'El torneo empieza en', en: 'Tournament starts in' },
+  'points.home.tournamentCountdown.closesEyebrow': { es: 'El torneo cierra en', en: 'Tournament closes in' },
+  'points.home.tournamentCountdown.title': { es: 'Torneo octubre 2026', en: 'October 2026 tournament' },
+  'points.home.tournamentCountdown.days': { es: 'días', en: 'days' },
+  'points.home.tournamentCountdown.hours': { es: 'hrs', en: 'hrs' },
+  'points.home.tournamentCountdown.minutes': { es: 'min', en: 'min' },
+  'points.home.tournamentCountdown.seconds': { es: 'seg', en: 'sec' },
+  'points.home.tournamentCountdown.cta': { es: 'Ver torneo', en: 'Open tournament' },
 
   // Admin
   'points.admin.filter.all':       { es: 'Todos',          en: 'All' },

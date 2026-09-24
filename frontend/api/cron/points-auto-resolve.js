@@ -45,6 +45,7 @@ import { readFinnhubQuote } from '../_lib/stockprice.js';
 import { banxicoFechaToYmd, banxicoFixTargetDateYmd, readBanxicoLatest } from '../_lib/banxico.js';
 import { FRANKFURTER_SOURCE, frankfurterTargetDateYmd, readFrankfurterRate } from '../_lib/frankfurter.js';
 import { readCreAverageFor } from '../_lib/fuel.js';
+import { deferUntilResolveAt, priceBucketIndexFor } from '../_lib/price-buckets.js';
 import {
   COINGECKO_TOKEN_MCAP_SOURCE,
   resolveSolanaTokenMcapOutcome,
@@ -1904,50 +1905,90 @@ export async function runAutoResolve({ dry = false } = {}) {
               };
             }
           } else {
-            if (!cfg.feedAddress || !cfg.op || cfg.threshold == null || cfg.yesOutcome == null) {
-              throw new Error('invalid chainlink_price config');
-            }
-            const closesAt = cfg.closesAt || m.end_time;
-            let price;
-            let roundUpdatedAt = null;
-            if (closesAt) {
+            const isPriceBucket = cfg.shape === 'price-bucket';
+            if (isPriceBucket) {
+              if (!cfg.feedAddress || !Array.isArray(cfg.buckets)) {
+                throw new Error('invalid chainlink_price price-bucket config');
+              }
+              deferUntilResolveAt(cfg.resolveAt);
+              const closesAt = cfg.closesAt || cfg.resolveAt || m.end_time;
+              if (!closesAt) throw new Error('price-bucket: missing closesAt');
               const round = await readChainlinkRoundAtOrBefore({
                 feedAddress: cfg.feedAddress,
                 chainId: cfg.chainId,
                 timestamp: closesAt,
               });
-              price = round.price;
-              roundUpdatedAt = Number.isFinite(Number(round.updatedAt))
+              winningIdx = priceBucketIndexFor(round.price, cfg.buckets);
+              if (winningIdx < 0) {
+                throw new Error(`price ${round.price} did not fit any bucket`);
+              }
+              const roundUpdatedAt = Number.isFinite(Number(round.updatedAt))
                 ? new Date(Number(round.updatedAt) * 1000).toISOString()
                 : null;
+              resolverInfo = {
+                priceAtResolve: round.price,
+                source: cfg.symbol || 'chainlink',
+                shape: cfg.shape,
+                bucketLabel: cfg.buckets[winningIdx]?.label || null,
+                roundUpdatedAt,
+              };
               resolverConfigPatch = {
                 closePrice: round.price,
                 resolvedRoundId: round.roundId?.toString?.() || String(round.roundId),
                 resolvedRoundUpdatedAt: roundUpdatedAt,
+                resolvedBucketIndex: winningIdx,
               };
             } else {
-              price = await readChainlinkPrice({
-                feedAddress: cfg.feedAddress,
-                chainId: cfg.chainId,
-              });
+              if (!cfg.feedAddress || !cfg.op || cfg.threshold == null || cfg.yesOutcome == null) {
+                throw new Error('invalid chainlink_price config');
+              }
+              const closesAt = cfg.closesAt || m.end_time;
+              let price;
+              let roundUpdatedAt = null;
+              if (closesAt) {
+                const round = await readChainlinkRoundAtOrBefore({
+                  feedAddress: cfg.feedAddress,
+                  chainId: cfg.chainId,
+                  timestamp: closesAt,
+                });
+                price = round.price;
+                roundUpdatedAt = Number.isFinite(Number(round.updatedAt))
+                  ? new Date(Number(round.updatedAt) * 1000).toISOString()
+                  : null;
+                resolverConfigPatch = {
+                  closePrice: round.price,
+                  resolvedRoundId: round.roundId?.toString?.() || String(round.roundId),
+                  resolvedRoundUpdatedAt: roundUpdatedAt,
+                };
+              } else {
+                price = await readChainlinkPrice({
+                  feedAddress: cfg.feedAddress,
+                  chainId: cfg.chainId,
+                });
+              }
+              const yes = comparePrice(price, cfg.op, Number(cfg.threshold));
+              const yesIdx = Number(cfg.yesOutcome);
+              winningIdx = yes ? yesIdx : (1 - yesIdx);
+              resolverInfo = {
+                priceAtResolve: price,
+                op: cfg.op,
+                threshold: cfg.threshold,
+                source: cfg.symbol || 'chainlink',
+                roundUpdatedAt,
+              };
             }
-            const yes = comparePrice(price, cfg.op, Number(cfg.threshold));
-            const yesIdx = Number(cfg.yesOutcome);
-            winningIdx = yes ? yesIdx : (1 - yesIdx);
-            resolverInfo = {
-              priceAtResolve: price,
-              op: cfg.op,
-              threshold: cfg.threshold,
-              source: cfg.symbol || 'chainlink',
-              roundUpdatedAt,
-            };
           }
         } else if (resolverType === 'api_price') {
           // api_price is a family — dispatch on cfg.source to pick the
           // right reader. Each reader returns a scalar price in the
           // same currency as cfg.threshold.
-          if (!cfg.source || !cfg.op || cfg.threshold == null || cfg.yesOutcome == null) {
+          const isPriceBucket = cfg.shape === 'price-bucket';
+          if (!cfg.source || (!isPriceBucket && (!cfg.op || cfg.threshold == null || cfg.yesOutcome == null))) {
             throw new Error(`invalid api_price config (source=${cfg.source})`);
+          }
+          if (isPriceBucket) {
+            if (!Array.isArray(cfg.buckets)) throw new Error('invalid api_price price-bucket config');
+            deferUntilResolveAt(cfg.resolveAt);
           }
           let price;
           let readerInfo;
@@ -2029,16 +2070,33 @@ export async function runAutoResolve({ dry = false } = {}) {
           } else {
             throw new Error(`unsupported api_price source: ${cfg.source}`);
           }
-          const yes = comparePrice(price, cfg.op, Number(cfg.threshold));
-          const yesIdx = Number(cfg.yesOutcome);
-          winningIdx = yes ? yesIdx : (1 - yesIdx);
-          resolverInfo = {
-            priceAtResolve: price,
-            source: cfg.source,
-            op: cfg.op,
-            threshold: cfg.threshold,
-            ...readerInfo,
-          };
+          if (isPriceBucket) {
+            winningIdx = priceBucketIndexFor(price, cfg.buckets);
+            if (winningIdx < 0) throw new Error(`price ${price} did not fit any bucket`);
+            resolverInfo = {
+              priceAtResolve: price,
+              source: cfg.source,
+              shape: cfg.shape,
+              bucketLabel: cfg.buckets[winningIdx]?.label || null,
+              ...readerInfo,
+            };
+            resolverConfigPatch = {
+              ...(resolverConfigPatch || {}),
+              closePrice: price,
+              resolvedBucketIndex: winningIdx,
+            };
+          } else {
+            const yes = comparePrice(price, cfg.op, Number(cfg.threshold));
+            const yesIdx = Number(cfg.yesOutcome);
+            winningIdx = yes ? yesIdx : (1 - yesIdx);
+            resolverInfo = {
+              priceAtResolve: price,
+              source: cfg.source,
+              op: cfg.op,
+              threshold: cfg.threshold,
+              ...readerInfo,
+            };
+          }
         } else if (resolverType === 'weather_api') {
           if (!cfg.lat || !cfg.lng || !cfg.forecastDateYmd || !Array.isArray(cfg.buckets)) {
             throw new Error('invalid weather_api config');

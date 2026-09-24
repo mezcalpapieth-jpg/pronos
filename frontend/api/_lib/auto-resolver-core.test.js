@@ -175,6 +175,54 @@ test('auto resolver core settles Banxico FIX only when the target date is publis
   assert.equal(decision.finalScore, 'banxico-fix · 16.98');
 });
 
+test('auto resolver core settles Banxico price buckets with upper-boundary ties', async (t) => {
+  const originalFetch = globalThis.fetch;
+  const originalToken = process.env.BANXICO_API_TOKEN;
+  process.env.BANXICO_API_TOKEN = 'test-banxico-token';
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+    if (originalToken == null) delete process.env.BANXICO_API_TOKEN;
+    else process.env.BANXICO_API_TOKEN = originalToken;
+  });
+
+  globalThis.fetch = async (url, options) => {
+    assert.match(String(url), /series\/SF43718\/datos\/oportuno/);
+    assert.equal(options.headers['Bmx-Token'], 'test-banxico-token');
+    return jsonResponse({
+      bmx: {
+        series: [{
+          titulo: 'Tipo de Cambio FIX',
+          datos: [{ fecha: '30/10/2026', dato: '17.2500' }],
+        }],
+      },
+    });
+  };
+
+  const decision = await resolveAutoResolverCandidate({
+    resolver_type: 'api_price',
+    resolver_config: {
+      source: 'banxico-fix',
+      shape: 'price-bucket',
+      seriesId: 'SF43718',
+      resolveDateYmd: '2026-10-30',
+      resolveAt: '2026-01-01T00:00:00.000Z',
+      buckets: [
+        { label: '< $17.25', max: 17.25 },
+        { label: '$17.25 a $17.50', min: 17.25, max: 17.5 },
+        { label: '$17.50 o más', min: 17.5 },
+      ],
+    },
+    end_time: '2026-10-30T17:59:00.000Z',
+    outcomes: ['< $17.25', '$17.25 a $17.50', '$17.50 o más'],
+  });
+
+  assert.equal(decision.winningIdx, 1);
+  assert.equal(decision.resolverInfo.priceAtResolve, 17.25);
+  assert.equal(decision.resolverInfo.bucketLabel, '$17.25 a $17.50');
+  assert.equal(decision.resolverConfigPatch.resolvedBucketIndex, 1);
+  assert.equal(decision.finalScore, 'banxico-fix · 17.25');
+});
+
 test('auto resolver core settles Frankfurter FX pairs by target date', async (t) => {
   const originalFetch = globalThis.fetch;
   t.after(() => {

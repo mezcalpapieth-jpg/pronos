@@ -17,9 +17,10 @@
  * provides .category-bar, .markets-grid, .section-header, etc.
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   createParlay,
+  fetchCurrentCycle,
   fetchMarkets,
   fetchPositions,
   publicErrorMessage,
@@ -62,6 +63,32 @@ function shouldShowOnHome(market, featuredTeamKeys) {
   return Boolean(market?.featured || market?.trending || marketMatchesFeaturedTeam(market, featuredTeamKeys));
 }
 
+function countdownTargetForCycle(cycle) {
+  if (!cycle) return null;
+  const status = String(cycle.status || '').toLowerCase();
+  const iso = status === 'scheduled'
+    ? cycle.startsAt || cycle.startedAt
+    : status === 'active'
+      ? cycle.operationCloseAt || cycle.endsAt
+      : cycle.endsAt || cycle.rankingCutoffAt;
+  const targetMs = new Date(iso || '').getTime();
+  if (!Number.isFinite(targetMs)) return null;
+  return {
+    iso,
+    mode: status === 'scheduled' ? 'start' : 'close',
+    seconds: Math.max(0, Math.floor((targetMs - Date.now()) / 1000)),
+  };
+}
+
+function countdownParts(totalSeconds) {
+  const safe = Math.max(0, Number(totalSeconds) || 0);
+  const days = Math.floor(safe / 86400);
+  const hours = Math.floor((safe % 86400) / 3600);
+  const minutes = Math.floor((safe % 3600) / 60);
+  const seconds = Math.floor(safe % 60);
+  return { days, hours, minutes, seconds };
+}
+
 export default function PointsHome({ onOpenLogin }) {
   const { authenticated, refresh } = usePointsAuth();
   const t = useT();
@@ -90,6 +117,8 @@ export default function PointsHome({ onOpenLogin }) {
     message: null,
     quote: null,
   });
+  const [cycle, setCycle] = useState(null);
+  const [tick, setTick] = useState(0);
   const featuredTeamKeys = useFeaturedTeamKeys();
   // Search value comes from the nav input (mirrored to ?q=<text>). Living
   // in the URL keeps deep-links work and lets the nav share state without
@@ -146,6 +175,23 @@ export default function PointsHome({ onOpenLogin }) {
   }, [authenticated]);
 
   useEffect(() => {
+    let cancelled = false;
+    fetchCurrentCycle()
+      .then(nextCycle => {
+        if (!cancelled) setCycle(nextCycle);
+      })
+      .catch(() => {
+        if (!cancelled) setCycle(null);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    const id = window.setInterval(() => setTick(value => value + 1), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  useEffect(() => {
     if (trendingView !== 'map' || sharedMapLoaded) return;
     let cancelled = false;
     Promise.allSettled([
@@ -197,6 +243,16 @@ export default function PointsHome({ onOpenLogin }) {
       ? sharedMapMarkets.filter(m => shouldShowOnHome(m, featuredTeamKeys))
       : carouselMarkets
   ), [sharedMapLoaded, sharedMapMarkets, carouselMarkets, featuredTeamKeys]);
+
+  const cycleCountdown = useMemo(() => {
+    void tick;
+    const target = countdownTargetForCycle(cycle);
+    if (!target) return null;
+    return {
+      ...target,
+      parts: countdownParts(target.seconds),
+    };
+  }, [cycle, tick]);
 
   function handleAddParlayLeg({ market: targetMarket, outcomeIndex, outcomeLabel, price }) {
     const nextLeg = buildParlayLeg({
@@ -298,6 +354,101 @@ export default function PointsHome({ onOpenLogin }) {
         loading
           ? <ActivityCarouselSkeleton isMobile={isMobile} />
           : <PointsActivityCarousel markets={carouselMarkets} count={7} />
+      )}
+
+      {cycleCountdown && (
+        <section style={{
+          padding: isMobile ? '18px 16px 0' : '24px 48px 0',
+          maxWidth: 1280,
+          margin: '0 auto',
+        }}>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: isMobile ? '1fr' : 'minmax(220px, 1fr) auto auto',
+            alignItems: 'center',
+            gap: isMobile ? 14 : 20,
+            padding: isMobile ? '16px' : '16px 18px',
+            border: '1px solid var(--border)',
+            borderRadius: 8,
+            background: 'var(--surface1)',
+          }}>
+            <div>
+              <div style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                letterSpacing: '0.12em',
+                textTransform: 'uppercase',
+                color: 'var(--green)',
+                marginBottom: 6,
+              }}>
+                {cycleCountdown.mode === 'start'
+                  ? t('points.home.tournamentCountdown.startsEyebrow')
+                  : t('points.home.tournamentCountdown.closesEyebrow')}
+              </div>
+              <div style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: isMobile ? 20 : 24,
+                lineHeight: 1.05,
+                color: 'var(--text-primary)',
+              }}>
+                {cycle?.label || t('points.home.tournamentCountdown.title')}
+              </div>
+            </div>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(4, minmax(54px, 1fr))',
+              gap: 8,
+              minWidth: isMobile ? 0 : 296,
+            }}>
+              {[
+                [cycleCountdown.parts.days, t('points.home.tournamentCountdown.days')],
+                [cycleCountdown.parts.hours, t('points.home.tournamentCountdown.hours')],
+                [cycleCountdown.parts.minutes, t('points.home.tournamentCountdown.minutes')],
+                [cycleCountdown.parts.seconds, t('points.home.tournamentCountdown.seconds')],
+              ].map(([value, label]) => (
+                <div key={label} style={{
+                  minHeight: 56,
+                  display: 'grid',
+                  placeItems: 'center',
+                  border: '1px solid var(--border)',
+                  borderRadius: 6,
+                  background: 'var(--surface0)',
+                  padding: '8px 4px',
+                }}>
+                  <div style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 20,
+                    color: 'var(--text-primary)',
+                    lineHeight: 1,
+                  }}>
+                    {String(value).padStart(2, '0')}
+                  </div>
+                  <div style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 9,
+                    color: 'var(--text-muted)',
+                    textTransform: 'uppercase',
+                    marginTop: 5,
+                  }}>
+                    {label}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <Link
+              to="/torneo"
+              className="filter-btn active"
+              style={{
+                justifySelf: isMobile ? 'stretch' : 'end',
+                textAlign: 'center',
+                textDecoration: 'none',
+                padding: '10px 14px',
+              }}
+            >
+              {t('points.home.tournamentCountdown.cta')}
+            </Link>
+          </div>
+        </section>
       )}
 
       {/* ── Markets grid ──────────────────────────────────── */}

@@ -32,6 +32,8 @@ const DEFAULT_RPCS = {
   421614: 'https://sepolia-rollup.arbitrum.io/rpc',
   // Ethereum mainnet fallback.
   1: 'https://eth.llamarpc.com',
+  // BNB Chain — useful for commodity feeds that are not on Arbitrum.
+  56: 'https://bsc-dataseed.binance.org',
 };
 
 function rpcFor(chainId) {

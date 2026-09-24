@@ -60,13 +60,13 @@ test('current points tournament closes at 11:59pm Mexico City on August 26', () 
   assert.equal(tournamentRulesActive(new Date('2026-08-27T05:59:00.000Z')), false);
 });
 
-test('September points tournament starts at 9am Mexico City and lasts through September', () => {
-  assert.equal(NEXT_TOURNAMENT_START_ISO, '2026-09-01T15:00:00.000Z');
-  assert.equal(NEXT_TOURNAMENT_OPERATION_CLOSE_ISO, '2026-10-01T05:59:00.000Z');
-  assert.equal(NEXT_TOURNAMENT_RANKING_CUTOFF_ISO, '2026-10-01T05:59:00.000Z');
-  assert.equal(configuredCycleEndIso('2026-09-01T15:00:00.000Z'), NEXT_TOURNAMENT_OPERATION_CLOSE_ISO);
+test('October points tournament starts at midnight Mexico City and lasts through October', () => {
+  assert.equal(NEXT_TOURNAMENT_START_ISO, '2026-10-01T06:00:00.000Z');
+  assert.equal(NEXT_TOURNAMENT_OPERATION_CLOSE_ISO, '2026-11-01T05:59:00.000Z');
+  assert.equal(NEXT_TOURNAMENT_RANKING_CUTOFF_ISO, '2026-11-01T05:59:00.000Z');
+  assert.equal(configuredCycleEndIso('2026-10-01T06:00:00.000Z'), NEXT_TOURNAMENT_OPERATION_CLOSE_ISO);
 
-  const window = getTournamentWindow(new Date('2026-08-30T18:00:00.000Z'));
+  const window = getTournamentWindow(new Date('2026-09-24T18:00:00.000Z'));
   assert.equal(window.status, 'scheduled');
   assert.equal(window.startsAt, NEXT_TOURNAMENT_START_ISO);
 });

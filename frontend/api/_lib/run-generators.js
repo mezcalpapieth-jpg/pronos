@@ -52,6 +52,7 @@ import { generateUfcMarkets }           from './market-gen/ufc.js';
 import { generateBoxingMarkets }        from './market-gen/boxing.js';
 import { generateNextOpponentMarkets }  from './market-gen/next-opponent.js';
 import { generateF1SeasonMarkets }      from './market-gen/f1-season.js';
+import { generateOctoberTournament2026Markets } from './market-gen/october-tournament-2026.js';
 import { deriveMarketTags }             from './category-tags.js';
 import { attachDefaultSuggestedPricing } from './market-pricing.js';
 import { tryAttachPolymarketPricing }    from './polymarket-pricing.js';
@@ -94,6 +95,7 @@ export const GENERATORS = [
   { name: 'boxing',         run: generateBoxingMarkets         },
   { name: 'next-opponent',  run: generateNextOpponentMarkets   },
   { name: 'f1-season',      run: generateF1SeasonMarkets       },
+  { name: 'october-tournament-2026', run: generateOctoberTournament2026Markets },
 ];
 
 async function attachGeneratorPricing(specs, { concurrency = PRICING_CONCURRENCY } = {}) {
