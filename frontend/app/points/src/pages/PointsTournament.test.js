@@ -32,6 +32,14 @@ test('tournament page shows current leaderboard, past leaderboards, countdown an
   assert.match(pageSource, /displayCycle\?\.label/);
   assert.match(pageSource, /nextTournamentMarketDropIso\(new Date\(nowMs\), displayCycle\?\.startsAt \|\| displayCycle\?\.startedAt\)/);
   assert.match(apiSource, /configuredWindow:\s*data\.window \|\| null/);
+  assert.match(pageSource, /fetchLeaderboard\(\)\.catch\(error => \(\{/);
+  assert.match(pageSource, /currentCycleSnapshot/);
+  assert.match(pageSource, /snapshotTop/);
+  assert.match(pageSource, /visibleTop/);
+  assert.match(pageSource, /latestCompletedCycle/);
+  assert.match(pageSource, /leaderboardLoading = leaderboard === null && snapshotTop\.length === 0/);
+  assert.match(pageSource, /Mostrando el snapshot final congelado/);
+  assert.match(pageSource, /cycleDateValue = cycle\?\.closedAt \|\| cycle\?\.endsAt/);
   assert.match(pageSource, /PersonalScoreBreakdown/);
   assert.match(pageSource, /Your score/);
   assert.match(pageSource, /Tu score/);
@@ -55,7 +63,7 @@ test('tournament page shows current leaderboard, past leaderboards, countdown an
   assert.match(pageSource, /Ganadores/);
   assert.match(pageSource, /Top 5 final/);
   assert.match(pageSource, /LEADERBOARD_DISPLAY_LIMIT = 20/);
-  assert.match(pageSource, /top\.slice\(0, LEADERBOARD_DISPLAY_LIMIT\)/);
+  assert.match(pageSource, /visibleTop\.slice\(0, LEADERBOARD_DISPLAY_LIMIT\)/);
   assert.match(pageSource, /¿Qué significa PnL\?/);
   assert.match(pageSource, /PnL significa ganancia o pérdida/);
   assert.match(pageSource, /What does PnL mean\?/);

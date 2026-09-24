@@ -85,7 +85,22 @@ test('public cycle history exposes enough rows for expanded tournament leaderboa
   assert.match(historySource, /top-20 snapshot/);
   assert.match(historySource, /CYCLE_HISTORY_LEADERBOARD_LIMIT = 20/);
   assert.match(historySource, /rank <= \$\{CYCLE_HISTORY_LEADERBOARD_LIMIT\}/);
-  assert.match(historySource, /points:cycles:history:v4/);
+  assert.match(historySource, /points:cycles:history:v5/);
+  assert.match(historySource, /EXISTS \(\s*SELECT 1\s*FROM points_cycle_snapshots s\s*WHERE s\.cycle_id = c\.id/);
+  assert.match(historySource, /COALESCE\(closed_at, ends_at, started_at\) DESC/);
+  assert.match(historySource, /s\.hold_bonus, s\.liquidity_reward, s\.parlay_pnl/);
+  assert.match(historySource, /s\.conviction_bonus_gross, s\.conviction_bonus_cap_applied/);
+  assert.match(historySource, /convictionBonus:\s*Number\(s\.hold_bonus/);
+  assert.match(historySource, /liquidityReward:\s*Number\(s\.liquidity_reward/);
+  assert.match(historySource, /parlayPnl:\s*Number\(s\.parlay_pnl/);
   assert.match(historySource, /u\.profile_image_url/);
   assert.match(historySource, /profileImageUrl:\s*s\.profile_image_url \|\| null/);
+});
+
+test('points schema probe includes conviction snapshot columns used by public leaderboard', () => {
+  assert.match(schemaSource, /points_cycle_snapshot_conviction_bonus_gross/);
+  assert.match(schemaSource, /points_cycle_snapshot_conviction_bonus_cap_applied/);
+  assert.match(schemaSource, /points_cycle_snapshot_conviction_eligible_profit/);
+  assert.match(schemaSource, /points_cycle_snapshot_conviction_markets/);
+  assert.match(schemaSource, /points_cycle_snapshot_conviction_lots/);
 });

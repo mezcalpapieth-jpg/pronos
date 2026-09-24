@@ -91,6 +91,18 @@ function rankPnlLeaderboardRows(rows = []) {
   return active;
 }
 
+async function readActiveCycleLeaderboardCacheKey(db) {
+  const rows = await db.query(`
+    SELECT id
+    FROM points_cycles
+    WHERE status = 'active'
+    ORDER BY ends_at DESC
+    LIMIT 1
+  `);
+  const id = rows?.[0]?.id;
+  return id ? `cycle:${id}` : 'no-active-cycle';
+}
+
 export default async function handler(req, res) {
   const timer = createApiTimer(res, 'points/leaderboard');
   const cors = applyCors(req, res, { methods: 'GET, OPTIONS', credentials: true });
@@ -100,8 +112,10 @@ export default async function handler(req, res) {
   try {
     setCacheHeaders(res, { scope: 'private', maxAge: 15, staleWhileRevalidate: 60 });
 
-    const { value: ranked, hit } = await cachedJson('points:leaderboard:ranked:v8', 15_000, async () => {
-      await timer.time('schema', () => ensurePointsSchema(schemaSql));
+    await timer.time('schema', () => ensurePointsSchema(schemaSql));
+    const leaderboardCycleKey = await timer.time('db_cycle_key', () => readActiveCycleLeaderboardCacheKey(schemaSql));
+
+    const { value: ranked, hit } = await cachedJson(`points:leaderboard:ranked:v9:${leaderboardCycleKey}`, 15_000, async () => {
       return await timer.time('db_leaderboard', async () => {
         const frozen = await readFrozenLeaderboardRowsForActiveCutoff(sql, { limit: 5000 });
         if (frozen?.rows?.length) return frozen.rows;

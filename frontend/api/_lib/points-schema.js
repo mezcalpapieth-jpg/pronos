@@ -154,6 +154,36 @@ const POINTS_SCHEMA_READY_PROBE = `
       SELECT 1 FROM information_schema.columns
       WHERE table_schema = 'public'
         AND table_name = 'points_cycle_snapshots'
+        AND column_name = 'conviction_bonus_gross'
+    ) AS points_cycle_snapshot_conviction_bonus_gross,
+    EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'points_cycle_snapshots'
+        AND column_name = 'conviction_bonus_cap_applied'
+    ) AS points_cycle_snapshot_conviction_bonus_cap_applied,
+    EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'points_cycle_snapshots'
+        AND column_name = 'conviction_eligible_profit'
+    ) AS points_cycle_snapshot_conviction_eligible_profit,
+    EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'points_cycle_snapshots'
+        AND column_name = 'conviction_markets'
+    ) AS points_cycle_snapshot_conviction_markets,
+    EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'points_cycle_snapshots'
+        AND column_name = 'conviction_lots'
+    ) AS points_cycle_snapshot_conviction_lots,
+    EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'points_cycle_snapshots'
         AND column_name = 'liquidity_reward'
     ) AS points_cycle_snapshot_liquidity_reward,
     EXISTS (

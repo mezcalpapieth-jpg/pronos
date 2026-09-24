@@ -448,8 +448,9 @@ function WinnerPodium({ cycle, rows, currentUsername, lang = 'es' }) {
     2: 104,
     3: 92,
   };
-  const cycleDate = cycle?.closedAt
-    ? new Date(cycle.closedAt).toLocaleDateString(lang === 'en' ? 'en-US' : 'es-MX')
+  const cycleDateValue = cycle?.closedAt || cycle?.endsAt;
+  const cycleDate = cycleDateValue
+    ? new Date(cycleDateValue).toLocaleDateString(lang === 'en' ? 'en-US' : 'es-MX')
     : null;
 
   return (
@@ -1019,7 +1020,10 @@ export default function PointsTournament() {
     let cancelled = false;
     Promise.all([
       fetchCurrentCycle().catch(() => null),
-      fetchLeaderboard().catch(() => null),
+      fetchLeaderboard().catch(error => ({
+        top: [],
+        error: error?.code || error?.message || 'leaderboard_failed',
+      })),
       fetchCycleHistory(8).catch(() => []),
     ]).then(([cycleData, leaderboardData, historyData]) => {
       if (cancelled) return;
@@ -1067,20 +1071,33 @@ export default function PointsTournament() {
     return formatCountdown(seconds, lang);
   }, [showMarketDropTimer, nextMarketDropIso, lang, tick]);
 
-  const top = Array.isArray(leaderboard?.top) ? leaderboard.top : [];
-  const leaderboardRows = top.slice(0, LEADERBOARD_DISPLAY_LIMIT);
   const cycles = Array.isArray(history) ? history : [];
   const status = cycle?.status || 'scheduled';
+  const currentCycleSnapshot = cycle?.id
+    ? cycles.find(row => Number(row?.id) === Number(cycle.id) && Array.isArray(row?.top) && row.top.length > 0)
+    : null;
+  const snapshotTop = Array.isArray(currentCycleSnapshot?.top) ? currentCycleSnapshot.top : [];
+  const top = Array.isArray(leaderboard?.top) ? leaderboard.top : [];
+  const visibleTop = top.length > 0 ? top : snapshotTop;
+  const leaderboardRows = visibleTop.slice(0, LEADERBOARD_DISPLAY_LIMIT);
+  const leaderboardLoading = leaderboard === null && snapshotTop.length === 0;
+  const leaderboardFailed = Boolean(leaderboard?.error);
   const me = leaderboard?.me || null;
-  const qualifiedCount = top.filter(row => row.qualified).length;
+  const qualifiedCount = visibleTop.filter(row => row.qualified).length;
   const latestHistoryCycle = cycles.find(row => Array.isArray(row?.top) && row.top.length > 0);
-  const winnersCycle = status === 'closed' && leaderboardRows.length > 0
+  const latestCompletedCycle = latestHistoryCycle && (!cycle?.id || Number(latestHistoryCycle.id) !== Number(cycle.id))
+    ? latestHistoryCycle
+    : null;
+  const liveClosedCycle = status === 'closed' && leaderboardRows.length > 0
     ? {
         label: cycle?.label,
         closedAt: cycle?.closedAt || cycle?.endsAt,
         top: leaderboardRows,
       }
-    : (status === 'active' || status === 'closing') ? null : latestHistoryCycle;
+    : null;
+  const winnersCycle = currentCycleSnapshot
+    || liveClosedCycle
+    || latestCompletedCycle;
   const prizeRows = Array.isArray(rules.prizes) && rules.prizes.length > 0
     ? rules.prizes
     : DEFAULT_RULES.prizes;
@@ -1207,12 +1224,19 @@ export default function PointsTournament() {
 
         <TournamentCard>
           <SectionLabel>{lang === 'en' ? 'Current leaderboard' : 'Leaderboard actual'}</SectionLabel>
-          {leaderboard === null ? (
+          {leaderboardLoading ? (
             <LeaderboardSkeleton rows={8} />
-          ) : top.length === 0 ? (
+          ) : visibleTop.length === 0 ? (
             <p style={emptyText}>{lang === 'en' ? 'No participants yet.' : 'Aún no hay participantes.'}</p>
           ) : (
             <div ref={leaderboardRef}>
+              {leaderboardFailed && snapshotTop.length > 0 && (
+                <p style={{ ...emptyText, margin: '0 0 12px' }}>
+                  {lang === 'en'
+                    ? 'Showing the frozen final snapshot while the live leaderboard refreshes.'
+                    : 'Mostrando el snapshot final congelado mientras se actualiza el leaderboard en vivo.'}
+                </p>
+              )}
               {leaderboardRows.map(row => (
                 <LeaderboardRow key={row.username} row={row} currentUsername={user?.username} rules={rules} compact={isMobile} lang={lang} />
               ))}
@@ -1253,7 +1277,7 @@ export default function PointsTournament() {
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, minmax(0, 1fr))', gap: 12 }}>
             <Metric
               label={lang === 'en' ? 'Participants' : 'Participantes'}
-              value={fmtInteger(leaderboard?.totalParticipants || 0)}
+              value={fmtInteger(leaderboard?.totalParticipants || visibleTop.length || 0)}
               sub={lang === 'en' ? 'with account balance' : 'con balance registrado'}
             />
             <Metric
@@ -1294,9 +1318,9 @@ export default function PointsTournament() {
                   <strong style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-body)', fontSize: 15 }}>
                     {cycleRow.label || `Ciclo #${cycleRow.id}`}
                   </strong>
-                  {cycleRow.closedAt && (
+                  {(cycleRow.closedAt || cycleRow.endsAt) && (
                     <span style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
-                      {new Date(cycleRow.closedAt).toLocaleDateString(lang === 'en' ? 'en-US' : 'es-MX')}
+                      {new Date(cycleRow.closedAt || cycleRow.endsAt).toLocaleDateString(lang === 'en' ? 'en-US' : 'es-MX')}
                     </span>
                   )}
                 </div>

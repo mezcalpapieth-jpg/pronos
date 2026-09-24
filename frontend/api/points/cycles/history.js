@@ -1,8 +1,9 @@
 /**
  * GET /api/points/cycles/history?limit=10
  *
- * Returns closed cycles with their top-20 snapshot. Drives a "winners of
- * past cycles" strip on the home page and inside the admin panel.
+ * Returns closed cycles, plus active cycles that already have a frozen cutoff
+ * snapshot, with their top-20 snapshot. Drives a "winners of past cycles"
+ * strip on the home page and inside the admin panel.
  *
  * Response:
  *   {
@@ -36,13 +37,18 @@ export default async function handler(req, res) {
     const limit = Number.isInteger(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 50) : 10;
     setCacheHeaders(res, { scope: 'public', maxAge: 30, sMaxage: 60, staleWhileRevalidate: 300 });
 
-    const { value: payload, hit } = await cachedJson(`points:cycles:history:v4:${limit}`, 60_000, async () => {
+    const { value: payload, hit } = await cachedJson(`points:cycles:history:v5:${limit}`, 60_000, async () => {
       await timer.time('schema', () => ensurePointsSchema(schemaSql));
       const cycles = await timer.time('db_cycles', () => sql`
         SELECT id, label, started_at, ends_at, closed_at
-        FROM points_cycles
+        FROM points_cycles c
         WHERE status = 'closed'
-        ORDER BY closed_at DESC
+           OR EXISTS (
+             SELECT 1
+             FROM points_cycle_snapshots s
+             WHERE s.cycle_id = c.id
+           )
+        ORDER BY COALESCE(closed_at, ends_at, started_at) DESC, id DESC
         LIMIT ${limit}
       `);
 
@@ -54,6 +60,9 @@ export default async function handler(req, res) {
       const snaps = await timer.time('db_snapshots', () => sql`
         SELECT s.cycle_id, s.username, u.profile_image_url, s.final_balance, s.final_pnl, s.rank,
                s.tournament_score, s.market_pnl, s.current_position_value,
+               s.hold_bonus, s.liquidity_reward, s.parlay_pnl, s.parlay_tickets, s.parlay_wins,
+               s.conviction_bonus_gross, s.conviction_bonus_cap_applied,
+               s.conviction_eligible_profit, s.conviction_markets, s.conviction_lots,
                s.inactivity_penalty, s.inactive_days, s.active_days,
                s.qualifying_markets, s.qualified
         FROM points_cycle_snapshots s
@@ -76,6 +85,17 @@ export default async function handler(req, res) {
           cycleDelta: Number(s.tournament_score ?? s.final_pnl ?? 0),
           marketPnl: Number(s.market_pnl ?? s.final_pnl ?? 0),
           currentPositionValue: Number(s.current_position_value ?? 0),
+          holdBonus: Number(s.hold_bonus ?? 0),
+          convictionBonus: Number(s.hold_bonus ?? 0),
+          convictionBonusGross: Number(s.conviction_bonus_gross ?? s.hold_bonus ?? 0),
+          convictionBonusCapApplied: Number(s.conviction_bonus_cap_applied ?? 0),
+          convictionEligibleProfit: Number(s.conviction_eligible_profit ?? 0),
+          convictionMarkets: Number(s.conviction_markets ?? 0),
+          convictionLots: Number(s.conviction_lots ?? 0),
+          liquidityReward: Number(s.liquidity_reward ?? 0),
+          parlayPnl: Number(s.parlay_pnl ?? 0),
+          parlayTickets: Number(s.parlay_tickets ?? 0),
+          parlayWins: Number(s.parlay_wins ?? 0),
           inactivityPenalty: Number(s.inactivity_penalty ?? 0),
           inactiveDays: Number(s.inactive_days ?? 0),
           activeDays: Number(s.active_days ?? 0),
