@@ -1024,7 +1024,11 @@ export async function adminUpdateRiskReview({ username, status, reason }) {
 // ─── Cycles (2-week leaderboard windows) ────────────────────────────────────
 export async function fetchCurrentCycle() {
   const data = await getJson('/api/points/cycles/current');
-  return data?.cycle || null;
+  if (!data?.cycle) return null;
+  return {
+    ...data.cycle,
+    configuredWindow: data.window || null,
+  };
 }
 
 export async function fetchCycleHistory(limit = 10) {
@@ -1034,6 +1038,10 @@ export async function fetchCycleHistory(limit = 10) {
 
 export async function adminListCycles() {
   return getJson('/api/points/admin/cycles');
+}
+
+export async function adminFetchPointsHealth() {
+  return getJson('/api/points/health');
 }
 
 export async function adminFetchCycleStandingsSnapshot({ cycleId, limit = 100 } = {}) {

@@ -6,6 +6,7 @@ const pageSource = await readFile(new URL('./PointsTournament.jsx', import.meta.
 const appSource = await readFile(new URL('../App.jsx', import.meta.url), 'utf8');
 const navSource = await readFile(new URL('../components/PointsNav.jsx', import.meta.url), 'utf8');
 const i18nSource = await readFile(new URL('../../../src/lib/i18n.js', import.meta.url), 'utf8');
+const apiSource = await readFile(new URL('../lib/pointsApi.js', import.meta.url), 'utf8');
 
 test('points app exposes a Torneo Pronos page between portfolio and earn', () => {
   assert.match(appSource, /PointsTournament/);
@@ -26,6 +27,11 @@ test('tournament page shows current leaderboard, past leaderboards, countdown an
   assert.doesNotMatch(pageSource, /Operación cierra en/);
   assert.match(pageSource, /Próximos mercados del torneo/);
   assert.match(pageSource, /Todos los días a las 9:00 AM, hora de Ciudad de México/);
+  assert.match(pageSource, /displayCycleForTournament/);
+  assert.match(pageSource, /advertisingNextCycle/);
+  assert.match(pageSource, /displayCycle\?\.label/);
+  assert.match(pageSource, /nextTournamentMarketDropIso\(new Date\(nowMs\), displayCycle\?\.startsAt \|\| displayCycle\?\.startedAt\)/);
+  assert.match(apiSource, /configuredWindow:\s*data\.window \|\| null/);
   assert.match(pageSource, /200 MXNP agregados al inicio/);
   assert.match(pageSource, /50 MXNP por persona referida, máximo 10 referidos/);
   assert.match(pageSource, /premios aprobados de Instagram, TikTok, X y campañas/);

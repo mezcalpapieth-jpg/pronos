@@ -186,10 +186,16 @@ function utcMsForMexicoWallTime({ year, month, day, hour, minute = 0, second = 0
   return guess;
 }
 
-function nextTournamentMarketDropIso(now = new Date()) {
-  const parts = mexicoCityParts(now);
+function nextTournamentMarketDropIso(now = new Date(), earliestIso = null) {
+  const nowMs = now.getTime();
+  const earliestMs = earliestIso ? new Date(earliestIso).getTime() : NaN;
+  const anchor = Number.isFinite(earliestMs) && earliestMs > nowMs
+    ? new Date(earliestMs)
+    : now;
+  const anchorMs = anchor.getTime();
+  const parts = mexicoCityParts(anchor);
   let targetMs = utcMsForMexicoWallTime({ ...parts, hour: 9, minute: 0, second: 0 });
-  if (now.getTime() >= targetMs) {
+  if (anchorMs >= targetMs) {
     const nextDate = new Date(Date.UTC(parts.year, parts.month - 1, parts.day) + 86_400_000);
     targetMs = utcMsForMexicoWallTime({
       year: nextDate.getUTCFullYear(),
@@ -201,6 +207,29 @@ function nextTournamentMarketDropIso(now = new Date()) {
     });
   }
   return new Date(targetMs).toISOString();
+}
+
+function displayCycleForTournament(cycle, nowMs = Date.now()) {
+  if (!cycle || cycle.status !== 'closed') return cycle;
+  const window = cycle.configuredWindow || null;
+  const startsAtMs = new Date(window?.startsAt || '').getTime();
+  const endsAtMs = new Date(window?.rankingCutoffAt || window?.endsAt || '').getTime();
+  if (!Number.isFinite(startsAtMs) || startsAtMs <= nowMs) return cycle;
+  if (Number.isFinite(endsAtMs) && endsAtMs <= nowMs) return cycle;
+  return {
+    ...cycle,
+    id: null,
+    label: window.label || cycle.label,
+    status: 'scheduled',
+    paused: false,
+    scheduled: true,
+    startedAt: window.startsAt,
+    startsAt: window.startsAt,
+    operationCloseAt: window.operationCloseAt,
+    rankingCutoffAt: window.rankingCutoffAt,
+    endsAt: window.endsAt || window.rankingCutoffAt,
+    advertisingNextCycle: true,
+  };
 }
 
 function statusCopy(status, lang) {
@@ -892,19 +921,20 @@ export default function PointsTournament() {
   }, []);
 
   const rules = leaderboard?.rules || cycle?.rules || DEFAULT_RULES;
-  const countdownTarget = targetForCycle(cycle);
   const nowMs = Date.now();
+  const displayCycle = displayCycleForTournament(cycle, nowMs);
+  const countdownTarget = targetForCycle(displayCycle);
   const cycleTargetMs = countdownTarget?.iso ? new Date(countdownTarget.iso).getTime() : NaN;
-  const cycleEndMs = cycle?.endsAt ? new Date(cycle.endsAt).getTime() : cycleTargetMs;
-  const nextMarketDropIso = nextTournamentMarketDropIso(new Date(nowMs));
+  const cycleEndMs = displayCycle?.endsAt ? new Date(displayCycle.endsAt).getTime() : cycleTargetMs;
+  const nextMarketDropIso = nextTournamentMarketDropIso(new Date(nowMs), displayCycle?.startsAt || displayCycle?.startedAt);
   const nextMarketDropMs = new Date(nextMarketDropIso).getTime();
-  const showMarketDropTimer = cycle?.status !== 'closed'
+  const showMarketDropTimer = displayCycle?.status !== 'closed'
     && (!Number.isFinite(cycleEndMs) || (nowMs < cycleEndMs && nextMarketDropMs <= cycleEndMs));
   const countdown = useMemo(() => {
-    if (!countdownTarget?.iso) return statusCopy(cycle?.status || 'scheduled', lang);
+    if (!countdownTarget?.iso) return statusCopy(displayCycle?.status || 'scheduled', lang);
     const seconds = Math.max(0, Math.floor((new Date(countdownTarget.iso).getTime() - Date.now()) / 1000));
     return formatCountdown(seconds, lang);
-  }, [countdownTarget?.iso, cycle?.status, lang, tick]);
+  }, [countdownTarget?.iso, displayCycle?.status, lang, tick]);
   const marketDropCountdown = useMemo(() => {
     if (!showMarketDropTimer) return lang === 'en' ? 'Closed' : 'Cerrado';
     const seconds = Math.max(0, Math.floor((new Date(nextMarketDropIso).getTime() - Date.now()) / 1000));
@@ -974,13 +1004,13 @@ export default function PointsTournament() {
         marginBottom: 18,
       }}>
         <TournamentCard>
-          <SectionLabel>{cycle?.label || (lang === 'en' ? 'Current cycle' : 'Ciclo actual')}</SectionLabel>
+          <SectionLabel>{displayCycle?.label || (lang === 'en' ? 'Current cycle' : 'Ciclo actual')}</SectionLabel>
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, minmax(0, 1fr))', gap: 12 }}>
             <Metric
               label={lang === 'en' ? 'Status' : 'Estado'}
-              value={statusCopy(status, lang)}
-              tone={status === 'active' ? 'green' : 'orange'}
-              sub={cycle?.startsAt ? new Date(cycle.startsAt).toLocaleString(lang === 'en' ? 'en-US' : 'es-MX', {
+              value={statusCopy(displayCycle?.status || status, lang)}
+              tone={displayCycle?.status === 'active' ? 'green' : 'orange'}
+              sub={displayCycle?.startsAt ? new Date(displayCycle.startsAt).toLocaleString(lang === 'en' ? 'en-US' : 'es-MX', {
                 day: 'numeric',
                 month: 'short',
                 hour: '2-digit',

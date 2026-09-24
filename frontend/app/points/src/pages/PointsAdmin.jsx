@@ -28,6 +28,7 @@ import {
   adminCreateSocialTaskCampaign,
   adminDeactivateSocialTaskCampaign,
   adminListTaskCounts,
+  adminFetchPointsHealth,
   adminReviewResolutionCandidate,
   adminListCycles,
   adminFetchCycleStandingsSnapshot,
@@ -511,6 +512,7 @@ export default function PointsAdmin({ isAdmin }) {
           { id: 'api',     label: 'API' },
           { id: 'deck',    label: 'Deck' },
           { id: 'cycles',  label: 'Ciclos' },
+          { id: 'launch',  label: 'Launch' },
           { id: 'stats',   label: 'Estadísticas' },
         ].map(t => {
           const active = tab === t.id;
@@ -568,8 +570,438 @@ export default function PointsAdmin({ isAdmin }) {
       {tab === 'support' && <SupportTicketsQueue onQueueChange={refreshAdminTaskCounts} />}
       {tab === 'deck' && <DeckAdminPanel />}
       {tab === 'cycles' && <CyclesPanel />}
+      {tab === 'launch' && <LaunchReadinessPanel taskCounts={adminTaskCounts} />}
       {tab === 'stats' && <StatsPanel />}
     </main>
+  );
+}
+
+// ─── October launch readiness ───────────────────────────────────────────────
+// Read-only checks for the October 1 tournament launch. Expensive provider
+// dry-runs run only when the admin presses the button.
+const OCTOBER_READINESS_RUNBOOK = 'docs/OCTOBER_TOURNAMENT_READINESS.md';
+const OCTOBER_REQUIRED_CRONS = [
+  ['/api/cron/generate-markets-pending', '0 15 * * *', 'Genera mercados del torneo a las 09:00 CDMX'],
+  ['/api/cron/points-auto-resolve', '*/15 * * * *', 'Liquida mercados cerrados y manda manual-review'],
+  ['/api/cron/points-parlay-settle', '*/15 * * * *', 'Actualiza combinadas abiertas'],
+  ['/api/cron/points-maker-rewards', '0 16 * * *', 'Paga recompensas maker'],
+  ['/api/cron/points-snapshot-prices', '0 * * * *', 'Guarda precios para sparklines'],
+  ['/api/cron/points-tournament-snapshot', '59 5 * * *', 'Congela el ranking del corte 11:59 PM CDMX'],
+];
+
+function settledValue(result) {
+  return result?.status === 'fulfilled' ? result.value : null;
+}
+
+function settledError(result) {
+  if (!result || result.status === 'fulfilled') return null;
+  return result.reason?.detail || result.reason?.code || result.reason?.message || 'failed';
+}
+
+function readinessTone(status) {
+  if (status === 'ready') return { color: 'var(--green)', border: 'rgba(16,185,129,0.42)', background: 'rgba(16,185,129,0.09)' };
+  if (status === 'blocked') return { color: 'var(--red, #ef4444)', border: 'rgba(239,68,68,0.42)', background: 'rgba(239,68,68,0.09)' };
+  return { color: '#f59e0b', border: 'rgba(245,158,11,0.42)', background: 'rgba(245,158,11,0.09)' };
+}
+
+function readinessStatusLabel(status) {
+  if (status === 'ready') return 'Listo';
+  if (status === 'blocked') return 'Bloqueado';
+  return 'Revisar';
+}
+
+function ReadinessItem({ title, detail, status = 'review', meta }) {
+  const tone = readinessTone(status);
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: 'minmax(0, 1fr) auto',
+      gap: 12,
+      alignItems: 'start',
+      padding: '12px 0',
+      borderBottom: '1px solid var(--border)',
+    }}>
+      <div style={{ minWidth: 0 }}>
+        <strong style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-body)', fontSize: 14 }}>
+          {title}
+        </strong>
+        <p style={{ margin: '4px 0 0', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 11, lineHeight: 1.5 }}>
+          {detail}
+        </p>
+        {meta && (
+          <p style={{ margin: '6px 0 0', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: 10, lineHeight: 1.45 }}>
+            {meta}
+          </p>
+        )}
+      </div>
+      <span style={{
+        border: `1px solid ${tone.border}`,
+        background: tone.background,
+        color: tone.color,
+        borderRadius: 999,
+        padding: '5px 9px',
+        fontFamily: 'var(--font-mono)',
+        fontSize: 10,
+        letterSpacing: '0.08em',
+        textTransform: 'uppercase',
+        whiteSpace: 'nowrap',
+      }}>
+        {readinessStatusLabel(status)}
+      </span>
+    </div>
+  );
+}
+
+function LaunchMetric({ label, value, sub, tone = 'neutral' }) {
+  const color = tone === 'green' ? 'var(--green)' : tone === 'red' ? 'var(--red, #ef4444)' : tone === 'orange' ? '#f59e0b' : 'var(--text-primary)';
+  return (
+    <div style={{
+      padding: 12,
+      borderRadius: 8,
+      background: 'var(--surface2)',
+      border: '1px solid var(--border)',
+      minWidth: 0,
+    }}>
+      <div style={{
+        color: 'var(--text-muted)',
+        fontFamily: 'var(--font-mono)',
+        fontSize: 10,
+        letterSpacing: '0.08em',
+        textTransform: 'uppercase',
+        marginBottom: 6,
+      }}>
+        {label}
+      </div>
+      <div style={{ color, fontFamily: 'var(--font-display)', fontSize: 24, lineHeight: 1 }}>
+        {value}
+      </div>
+      {sub && (
+        <div style={{ marginTop: 6, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 10, lineHeight: 1.45 }}>
+          {sub}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function buildLaunchChecklist(report, taskCounts) {
+  const health = report?.health;
+  const cycles = report?.cycles;
+  const diagnostic = report?.diagnostic;
+  const generator = report?.generatorDry;
+  const resolver = report?.resolverDry;
+  const current = cycles?.current || null;
+  const octoberGenerator = generator?.sources?.['october-tournament-2026'];
+  const generatorError = report?.errors?.generatorDry || octoberGenerator?.error;
+  const resolverErrorCount = Array.isArray(resolver?.errors) ? resolver.errors.length : 0;
+  const pendingCount = Number(taskCounts?.pending || report?.taskCounts?.pending || 0);
+  const manualCount = Number(diagnostic?.summary?.manual || 0);
+  const missingResolverCount = Number(diagnostic?.summary?.missingResolver || 0);
+  const healthError = report?.errors?.health;
+  const cycleError = report?.errors?.cycles;
+  const diagnosticError = report?.errors?.diagnostic;
+
+  return [
+    {
+      title: 'Health y schema',
+      status: healthError || health?.ok === false ? 'blocked' : health ? 'ready' : 'review',
+      detail: health
+        ? `DB ${health.tests?.db || 'n/a'} · schema ${health.tests?.schema || 'n/a'} · Turnkey ${health.tests?.turnkey || 'n/a'}`
+        : 'Carga health para confirmar DB, schema, sesión, Turnkey y env de cron.',
+      meta: healthError || (Array.isArray(health?.errors) && health.errors.map(e => e.step).join(', ')) || null,
+    },
+    {
+      title: 'Ciclo activo',
+      status: cycleError ? 'blocked' : current ? (cycles?.paused ? 'review' : 'ready') : 'blocked',
+      detail: current
+        ? `${current.label || `Ciclo #${current.id}`} · ${cycles?.paused ? 'pausado en público' : 'visible en público'}`
+        : 'No hay ciclo activo. Reanuda ciclos antes del lanzamiento.',
+      meta: current?.endsAt ? `Cierra ${new Date(current.endsAt).toLocaleString('es-MX')}` : cycleError,
+    },
+    {
+      title: 'Generador octubre 2026',
+      status: generatorError ? 'blocked' : octoberGenerator ? (Number(octoberGenerator.count || 0) > 0 ? 'ready' : 'review') : 'review',
+      detail: octoberGenerator
+        ? `${Number(octoberGenerator.count || 0)} specs en dry-run del generador october-tournament-2026.`
+        : 'Corre dry-run para confirmar que el generador produce mercados y no falla ningún feed crítico.',
+      meta: generator
+        ? `Total specs: ${Number(generator.totalSpecs || generator.total || 0)} · schedule sync ${generator.scheduleSync?.wouldUpdate || 0} cambios`
+        : generatorError,
+    },
+    {
+      title: 'Resolver dry-run',
+      status: report?.errors?.resolverDry ? 'blocked' : resolver ? (resolverErrorCount > 0 ? 'review' : 'ready') : 'review',
+      detail: resolver
+        ? `${Number(resolver.checked || 0)} candidatos revisados · ${resolverErrorCount} errores · ${Number(resolver.deferred?.length || 0)} diferidos.`
+        : 'Corre dry-run para probar el mismo loop que usará el cron de auto-resolve.',
+      meta: report?.errors?.resolverDry || null,
+    },
+    {
+      title: 'Cola manual y resolvers',
+      status: diagnosticError ? 'blocked' : missingResolverCount > 0 ? 'blocked' : manualCount > 0 ? 'review' : 'ready',
+      detail: diagnostic
+        ? `${Number(diagnostic.summary?.resolvable || 0)} resolvibles · ${missingResolverCount} sin resolver_type · ${manualCount} manuales.`
+        : 'Carga diagnóstico para ver qué mercados resolverá el cron y cuáles necesitan admin.',
+      meta: diagnosticError || null,
+    },
+    {
+      title: 'Mercados pendientes',
+      status: pendingCount > 0 ? 'review' : 'ready',
+      detail: pendingCount > 0
+        ? `${pendingCount} mercados esperan aprobación. Revisa odds, traducción, resolver y bandera de torneo.`
+        : 'No hay pendientes de aprobación en este momento.',
+      meta: 'Los mercados del torneo deben quedar aprobados o explícitamente rechazados antes del drop.',
+    },
+    {
+      title: 'Cron jobs de producción',
+      status: 'review',
+      detail: 'Las rutas están declaradas en vercel.json, pero los probes con CRON_SECRET se corren desde producción.',
+      meta: 'Usa el runbook para dry-run de maker rewards, snapshots y generación antes del 1 de octubre.',
+    },
+  ];
+}
+
+function LaunchReadinessPanel({ taskCounts }) {
+  const [report, setReport] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [dryRunning, setDryRunning] = useState(false);
+  const [err, setErr] = useState(null);
+
+  async function loadQuickChecks() {
+    setLoading(true);
+    setErr(null);
+    try {
+      const [healthResult, cyclesResult, taskResult, diagnosticResult] = await Promise.allSettled([
+        adminFetchPointsHealth(),
+        adminListCycles(),
+        adminListTaskCounts(),
+        adminResolveDiagnostic(),
+      ]);
+      setReport(prev => ({
+        ...(prev || {}),
+        health: settledValue(healthResult),
+        cycles: settledValue(cyclesResult),
+        taskCounts: settledValue(taskResult),
+        diagnostic: settledValue(diagnosticResult),
+        errors: {
+          ...(prev?.errors || {}),
+          health: settledError(healthResult),
+          cycles: settledError(cyclesResult),
+          taskCounts: settledError(taskResult),
+          diagnostic: settledError(diagnosticResult),
+        },
+        checkedAt: new Date().toISOString(),
+      }));
+    } catch (e) {
+      setErr(e.code || e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function runDryChecks() {
+    setDryRunning(true);
+    setErr(null);
+    try {
+      const [generatorResult, resolverResult] = await Promise.allSettled([
+        adminRunGenerators({ dry: true }),
+        adminRunAutoResolve({ dry: true }),
+      ]);
+      setReport(prev => ({
+        ...(prev || {}),
+        generatorDry: settledValue(generatorResult),
+        resolverDry: settledValue(resolverResult),
+        errors: {
+          ...(prev?.errors || {}),
+          generatorDry: settledError(generatorResult),
+          resolverDry: settledError(resolverResult),
+        },
+        dryCheckedAt: new Date().toISOString(),
+      }));
+    } catch (e) {
+      setErr(e.code || e.message);
+    } finally {
+      setDryRunning(false);
+    }
+  }
+
+  useEffect(() => {
+    loadQuickChecks();
+  }, []);
+
+  const checklist = buildLaunchChecklist(report, taskCounts);
+  const sourceStats = report?.generatorDry?.sources || {};
+  const octoberCount = Number(sourceStats['october-tournament-2026']?.count || 0);
+  const activeCycle = report?.cycles?.current;
+  const taskSummary = report?.taskCounts || taskCounts || {};
+  const resolverSummary = report?.diagnostic?.summary || {};
+  const latestCheck = report?.dryCheckedAt || report?.checkedAt;
+
+  return (
+    <div>
+      <section style={{
+        background: 'var(--surface1)',
+        border: '1px solid var(--border)',
+        borderRadius: 12,
+        padding: 20,
+        marginBottom: 18,
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14, alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: 18 }}>
+          <div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--text-muted)', marginBottom: 8 }}>
+              OCTOBER 1 READINESS
+            </div>
+            <h2 style={{ margin: 0, color: 'var(--text-primary)', fontFamily: 'var(--font-display)', fontSize: 28 }}>
+              Launch checklist
+            </h2>
+            <p style={{ margin: '8px 0 0', maxWidth: 720, color: 'var(--text-secondary)', fontFamily: 'var(--font-body)', fontSize: 14, lineHeight: 1.55 }}>
+              Una vista para confirmar salud, ciclo, generador, resolver, aprobaciones y cron probes antes del torneo de octubre.
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            <button
+              onClick={loadQuickChecks}
+              disabled={loading || dryRunning}
+              style={{
+                padding: '9px 13px',
+                borderRadius: 8,
+                border: '1px solid var(--border)',
+                background: 'transparent',
+                color: 'var(--text-secondary)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                letterSpacing: '0.06em',
+                textTransform: 'uppercase',
+                cursor: loading || dryRunning ? 'not-allowed' : 'pointer',
+                opacity: loading || dryRunning ? 0.55 : 1,
+              }}
+            >
+              {loading ? 'Actualizando...' : 'Actualizar'}
+            </button>
+            <button
+              onClick={runDryChecks}
+              disabled={loading || dryRunning}
+              style={{
+                padding: '9px 13px',
+                borderRadius: 8,
+                border: '1px solid rgba(59,130,246,0.42)',
+                background: 'rgba(59,130,246,0.1)',
+                color: '#93c5fd',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                fontWeight: 700,
+                letterSpacing: '0.06em',
+                textTransform: 'uppercase',
+                cursor: loading || dryRunning ? 'not-allowed' : 'pointer',
+                opacity: loading || dryRunning ? 0.55 : 1,
+              }}
+            >
+              {dryRunning ? 'Corriendo dry-runs...' : 'Correr dry-runs'}
+            </button>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 10, marginBottom: 18 }}>
+          <LaunchMetric
+            label="Ciclo"
+            value={activeCycle ? (report?.cycles?.paused ? 'Pausado' : 'Activo') : 'Sin ciclo'}
+            tone={activeCycle ? (report?.cycles?.paused ? 'orange' : 'green') : 'red'}
+            sub={activeCycle?.label || 'Ciclo requerido para torneo'}
+          />
+          <LaunchMetric
+            label="October specs"
+            value={report?.generatorDry ? octoberCount : '-'}
+            tone={octoberCount > 0 ? 'green' : 'orange'}
+            sub="Dry-run del generador"
+          />
+          <LaunchMetric
+            label="Resolver"
+            value={report?.resolverDry ? Number(report.resolverDry.checked || 0) : '-'}
+            tone={report?.resolverDry?.errors?.length ? 'orange' : report?.resolverDry ? 'green' : 'neutral'}
+            sub="Candidatos dry-run"
+          />
+          <LaunchMetric
+            label="Admin queue"
+            value={Number(taskSummary.pending || 0) + Number(taskSummary.markets || 0)}
+            tone={(Number(taskSummary.pending || 0) + Number(taskSummary.markets || 0)) > 0 ? 'orange' : 'green'}
+            sub={`${Number(taskSummary.pending || 0)} por aprobar · ${Number(taskSummary.markets || 0)} por resolver`}
+          />
+        </div>
+
+        <div style={{ display: 'grid', gap: 0 }}>
+          {checklist.map(item => (
+            <ReadinessItem key={item.title} {...item} />
+          ))}
+        </div>
+
+        {latestCheck && (
+          <p style={{ margin: '12px 0 0', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 10 }}>
+            Última revisión: {new Date(latestCheck).toLocaleString('es-MX')}
+          </p>
+        )}
+        {err && (
+          <p style={{ margin: '12px 0 0', color: 'var(--red, #ef4444)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+            Error: {err}
+          </p>
+        )}
+      </section>
+
+      <section style={{
+        background: 'var(--surface1)',
+        border: '1px solid var(--border)',
+        borderRadius: 12,
+        padding: 20,
+        marginBottom: 18,
+      }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--text-muted)', marginBottom: 12 }}>
+          PRODUCTION CRONS
+        </div>
+        <div style={{ display: 'grid', gap: 9 }}>
+          {OCTOBER_REQUIRED_CRONS.map(([path, schedule, detail]) => (
+            <div key={path} style={{
+              display: 'grid',
+              gridTemplateColumns: 'minmax(190px, 0.78fr) minmax(90px, 0.24fr) minmax(0, 1fr)',
+              gap: 12,
+              alignItems: 'baseline',
+              borderBottom: '1px solid var(--border)',
+              paddingBottom: 9,
+            }}>
+              <code style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>{path}</code>
+              <span style={{ color: '#93c5fd', fontFamily: 'var(--font-mono)', fontSize: 11 }}>{schedule}</span>
+              <span style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-body)', fontSize: 13 }}>{detail}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section style={{
+        background: 'var(--surface1)',
+        border: '1px solid var(--border)',
+        borderRadius: 12,
+        padding: 20,
+      }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--text-muted)', marginBottom: 8 }}>
+          RUNBOOK
+        </div>
+        <p style={{ margin: 0, color: 'var(--text-secondary)', fontFamily: 'var(--font-body)', fontSize: 14, lineHeight: 1.55 }}>
+          Secuencia operativa y comandos en <code>{OCTOBER_READINESS_RUNBOOK}</code>. Mantén evidencia de cada dry-run antes de abrir el ciclo.
+        </p>
+        <div style={{ marginTop: 14, display: 'grid', gap: 8 }}>
+          {[
+            'Verificar health y ciclo activo.',
+            'Correr dry-run del generador y confirmar october-tournament-2026 > 0.',
+            'Aprobar o rechazar pendientes con resolver, traducción y bandera de torneo revisados.',
+            'Correr dry-run del resolver y revisar manual/missing-resolver.',
+            'Correr probes de crons con CRON_SECRET en producción.',
+            'Después del corte, tomar o verificar foto 11:59 antes de rollover.',
+          ].map(step => (
+            <div key={step} style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+              {step}
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
   );
 }
 

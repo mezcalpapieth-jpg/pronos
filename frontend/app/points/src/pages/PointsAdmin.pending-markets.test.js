@@ -173,6 +173,16 @@ test('Points admin can export conviction multiplier audit CSV', () => {
   assert.match(source, /Descargar convicción CSV/);
 });
 
+test('Points admin has an October launch readiness checklist', () => {
+  assert.match(source, /LaunchReadinessPanel/);
+  assert.match(source, /OCTOBER_REQUIRED_CRONS/);
+  assert.match(source, /adminFetchPointsHealth/);
+  assert.match(source, /adminRunGenerators\(\{ dry: true \}\)/);
+  assert.match(source, /adminRunAutoResolve\(\{ dry: true \}\)/);
+  assert.match(source, /docs\/OCTOBER_TOURNAMENT_READINESS\.md/);
+  assert.match(apiSource, /export async function adminFetchPointsHealth/);
+});
+
 test('Points markets filter surfaces por resolver count while inside Mercados', () => {
   assert.match(source, /pendingResolveCount=\{adminTaskCounts\.markets\}/);
   assert.match(source, /function MarketsTable\(\{ onQueueChange, pendingResolveCount = 0 \}\)/);
