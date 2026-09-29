@@ -80,6 +80,36 @@ function countdownTargetForCycle(cycle) {
   };
 }
 
+function displayCycleForHome(cycle, nowMs = Date.now()) {
+  if (!cycle) return cycle;
+  const status = String(cycle.status || '').toLowerCase();
+  if (!['closed', 'scheduled', 'paused'].includes(status)) return cycle;
+  const window = cycle.configuredWindow || null;
+  const startsAtMs = new Date(window?.startsAt || '').getTime();
+  const operationCloseAtMs = new Date(window?.operationCloseAt || window?.endsAt || '').getTime();
+  const endsAtMs = new Date(window?.rankingCutoffAt || window?.endsAt || '').getTime();
+  if (!Number.isFinite(startsAtMs) || !Number.isFinite(endsAtMs) || endsAtMs <= nowMs) return cycle;
+  const displayStatus = nowMs < startsAtMs
+    ? 'scheduled'
+    : Number.isFinite(operationCloseAtMs) && nowMs >= operationCloseAtMs
+      ? 'closing'
+      : 'active';
+  return {
+    ...cycle,
+    id: status === 'closed' ? null : cycle.id,
+    label: window.label || cycle.label,
+    status: displayStatus,
+    paused: false,
+    scheduled: displayStatus === 'scheduled',
+    startedAt: window.startsAt,
+    startsAt: window.startsAt,
+    operationCloseAt: window.operationCloseAt,
+    rankingCutoffAt: window.rankingCutoffAt,
+    endsAt: window.endsAt || window.rankingCutoffAt,
+    advertisingNextCycle: true,
+  };
+}
+
 function countdownParts(totalSeconds) {
   const safe = Math.max(0, Number(totalSeconds) || 0);
   const days = Math.floor(safe / 86400);
@@ -176,14 +206,20 @@ export default function PointsHome({ onOpenLogin }) {
 
   useEffect(() => {
     let cancelled = false;
-    fetchCurrentCycle()
-      .then(nextCycle => {
+    async function loadCycle() {
+      try {
+        const nextCycle = await fetchCurrentCycle();
         if (!cancelled) setCycle(nextCycle);
-      })
-      .catch(() => {
+      } catch {
         if (!cancelled) setCycle(null);
-      });
-    return () => { cancelled = true; };
+      }
+    }
+    loadCycle();
+    const id = window.setInterval(loadCycle, 60_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
   }, []);
 
   useEffect(() => {
@@ -244,15 +280,20 @@ export default function PointsHome({ onOpenLogin }) {
       : carouselMarkets
   ), [sharedMapLoaded, sharedMapMarkets, carouselMarkets, featuredTeamKeys]);
 
+  const displayCycle = useMemo(() => {
+    void tick;
+    return displayCycleForHome(cycle);
+  }, [cycle, tick]);
+
   const cycleCountdown = useMemo(() => {
     void tick;
-    const target = countdownTargetForCycle(cycle);
+    const target = countdownTargetForCycle(displayCycle);
     if (!target) return null;
     return {
       ...target,
       parts: countdownParts(target.seconds),
     };
-  }, [cycle, tick]);
+  }, [displayCycle, tick]);
 
   function handleAddParlayLeg({ market: targetMarket, outcomeIndex, outcomeLabel, price }) {
     const nextLeg = buildParlayLeg({
@@ -391,7 +432,7 @@ export default function PointsHome({ onOpenLogin }) {
                 lineHeight: 1.05,
                 color: 'var(--text-primary)',
               }}>
-                {cycle?.label || t('points.home.tournamentCountdown.title')}
+                {displayCycle?.label || t('points.home.tournamentCountdown.title')}
               </div>
             </div>
             <div style={{

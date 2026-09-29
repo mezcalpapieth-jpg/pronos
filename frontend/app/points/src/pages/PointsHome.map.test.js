@@ -74,3 +74,15 @@ test('paused prize cycles still show the full prize ladder on the tournament pag
   assert.match(tournament, /rank: '1', amount: 3500, prize: '\$3,500 MXN'/);
   assert.match(tournament, /fetchLeaderboard/);
 });
+
+test('home countdown advertises the next configured cycle after a stale cycle closes', () => {
+  assert.match(source, /function displayCycleForHome/);
+  assert.match(source, /cycle\.configuredWindow/);
+  assert.match(source, /const displayStatus = nowMs < startsAtMs/);
+  assert.match(source, /status: displayStatus/);
+  assert.match(source, /advertisingNextCycle/);
+  assert.match(source, /const displayCycle = useMemo/);
+  assert.match(source, /countdownTargetForCycle\(displayCycle\)/);
+  assert.match(source, /displayCycle\?\.label \|\| t\('points\.home\.tournamentCountdown\.title'\)/);
+  assert.match(source, /window\.setInterval\(loadCycle, 60_000\)/);
+});
