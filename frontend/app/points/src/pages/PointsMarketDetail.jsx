@@ -1519,6 +1519,7 @@ function ProbabilityRing({ pct, resolved, winner, label, logo, color = 'var(--ye
 }
 
 function ProbabilityGaugeRow({ outcomes, outcomeImages, pctFor, isResolved, winnerIndex }) {
+  const winnerIndexes = Array.isArray(winnerIndex) ? new Set(winnerIndex) : new Set([winnerIndex]);
   return (
     <div style={{
       display: 'grid',
@@ -1527,7 +1528,7 @@ function ProbabilityGaugeRow({ outcomes, outcomeImages, pctFor, isResolved, winn
       marginBottom: 32,
     }}>
       {outcomes.map((label, i) => {
-        const isWinner = isResolved && winnerIndex === i;
+        const isWinner = isResolved && winnerIndexes.has(i);
         const accent = accentFor(i, outcomes.length);
         return (
           <div
@@ -3272,6 +3273,12 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
   const winnerIndex = !isCanceled && market.status === 'resolved' && market.outcome != null ? Number(market.outcome) : null;
   const isResolved = parallelResolved || (winnerIndex != null && Number.isFinite(winnerIndex));
   const displayWinnerIndex = isResolved ? displayOutcomeIndices.indexOf(winnerIndex) : null;
+  const displayWinnerIndexes = isResolved && market.ammMode === 'parallel' && Array.isArray(parallelDisplayLegs)
+    ? parallelDisplayLegs
+        .map((leg, index) => Number(leg?.outcome) === 0 ? index : null)
+        .filter(index => index !== null)
+    : (displayWinnerIndex >= 0 ? [displayWinnerIndex] : []);
+  const displayWinnerIndexSet = new Set(displayWinnerIndexes);
   const isTradingLocked = !isResolved && (isCanceled || market.seriesLocked || market.status !== 'active');
   const seriesSubtitle = formatSeriesSubtitle(market.seriesMeta, { t });
   function pctFor(i) {
@@ -3918,7 +3925,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
                 outcomeImages={displayOutcomeImages}
                 pctFor={pctFor}
                 isResolved={isResolved}
-                winnerIndex={displayWinnerIndex}
+                winnerIndex={displayWinnerIndexes}
               />
             )}
 
@@ -3974,7 +3981,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
               }}>
                 {displayOutcomes.map((label, i) => {
                   const pct = pctFor(i);
-                  const isWin = isResolved && displayWinnerIndex === i;
+                  const isWin = isResolved && displayWinnerIndexSet.has(i);
                   const logo = displayOutcomeImages?.[i] || null;
                   const countryLabel = displayOutcomeCountryLabels?.[i] || null;
                   return (

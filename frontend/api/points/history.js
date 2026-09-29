@@ -47,6 +47,43 @@ function outcomeIndexOrNull(value) {
   return Number.isInteger(n) ? n : null;
 }
 
+function indexArrayFromJson(value, fallbackIndex = null) {
+  const parsed = parseJsonb(value, []);
+  const out = [];
+  const seen = new Set();
+  for (const item of Array.isArray(parsed) ? parsed : []) {
+    const n = Number(item);
+    if (Number.isInteger(n) && n >= 0 && !seen.has(n)) {
+      seen.add(n);
+      out.push(n);
+    }
+  }
+  const fallback = outcomeIndexOrNull(fallbackIndex);
+  if (out.length === 0 && Number.isInteger(fallback)) out.push(fallback);
+  return out;
+}
+
+function correctionPayloadForMarket(row, market) {
+  if (!row) return null;
+  const parentOutcomes = Array.isArray(market?.parentOutcomes) && market.parentOutcomes.length > 0
+    ? market.parentOutcomes
+    : market?.outcomes;
+  const oldOutcomeIndexes = indexArrayFromJson(row.old_outcomes, row.old_outcome);
+  const newOutcomeIndexes = indexArrayFromJson(row.new_outcomes, row.new_outcome);
+  const labels = Array.isArray(parentOutcomes) ? parentOutcomes : [];
+  return {
+    id: Number(row.id),
+    marketId: Number(row.market_id),
+    reason: row.reason || null,
+    finalScore: row.final_score || null,
+    createdAt: row.created_at || null,
+    oldOutcomeIndexes,
+    newOutcomeIndexes,
+    oldOutcomeLabels: oldOutcomeIndexes.map(index => labelFor(labels, index)),
+    newOutcomeLabels: newOutcomeIndexes.map(index => labelFor(labels, index)),
+  };
+}
+
 function parseCycleScope(value) {
   const raw = String(value || 'current').toLowerCase();
   if (raw === 'previous' || raw === 'all') return raw;
@@ -173,6 +210,7 @@ export default async function handler(req, res) {
              pm.id AS parent_market_id,
              pm.question AS parent_question,
              pm.category AS parent_category,
+             pm.outcomes AS parent_outcomes,
              m.status, m.outcome, m.end_time, m.resolved_at
       FROM points_trades t
       JOIN points_markets m ON m.id = t.market_id
@@ -189,6 +227,7 @@ export default async function handler(req, res) {
              pm.id AS parent_market_id,
              pm.question AS parent_question,
              pm.category AS parent_category,
+             pm.outcomes AS parent_outcomes,
              m.status, m.outcome, m.end_time, m.resolved_at
       FROM points_distributions d
       JOIN points_markets m ON m.id = d.reference_id
@@ -206,6 +245,7 @@ export default async function handler(req, res) {
       const mid = r.market_id;
       if (!markets.has(mid)) {
         const outcomes = parseJsonb(r.outcomes, ['Sí', 'No']);
+        const parentOutcomes = parseJsonb(r.parent_outcomes, null);
         const reserves = parseJsonb(r.reserves, []).map(Number);
         markets.set(mid, {
           marketId: mid,
@@ -216,6 +256,7 @@ export default async function handler(req, res) {
           status: r.status,
           outcome: r.outcome,
           outcomes,
+          parentOutcomes: Array.isArray(parentOutcomes) ? parentOutcomes : null,
           reserves,
           endTime: r.end_time,
           resolvedAt: r.resolved_at,
@@ -289,7 +330,56 @@ export default async function handler(req, res) {
       });
     }
 
+    const touchedMarketIds = Array.from(new Set(
+      [...rows, ...refundRows]
+        .flatMap(r => [r.market_id, r.parent_market_id])
+        .map(Number)
+        .filter(Number.isInteger),
+    ));
+    const correctionsByMarketId = new Map();
+    if (touchedMarketIds.length > 0) {
+      const correctionResult = await timer.time('db_resolution_corrections', () => sql.query(
+        `SELECT c.id, c.market_id, c.old_outcome, c.new_outcome,
+                c.old_outcomes, c.new_outcomes, c.reason, c.final_score,
+                c.affected_market_ids, c.created_at
+           FROM points_resolution_corrections c
+           LEFT JOIN points_resolution_correction_acknowledgments a
+             ON a.correction_id = c.id
+            AND LOWER(a.username) = LOWER($2)
+          WHERE a.correction_id IS NULL
+            AND EXISTS (
+              SELECT 1
+                FROM jsonb_array_elements_text(c.affected_market_ids) AS affected(market_id)
+               WHERE affected.market_id::int = ANY($1::int[])
+            )
+          ORDER BY c.created_at DESC, c.id DESC`,
+        [touchedMarketIds, username],
+      ));
+      const correctionRows = Array.isArray(correctionResult) ? correctionResult : (correctionResult.rows || []);
+      for (const row of correctionRows) {
+        const affectedIds = parseJsonb(row.affected_market_ids, [])
+          .map(Number)
+          .filter(Number.isInteger);
+        for (const marketId of affectedIds) {
+          if (!correctionsByMarketId.has(marketId)) correctionsByMarketId.set(marketId, []);
+          correctionsByMarketId.get(marketId).push(row);
+        }
+      }
+    }
+
     const history = Array.from(markets.values()).map(m => {
+      const correctionRows = [
+        ...(correctionsByMarketId.get(Number(m.marketId)) || []),
+        ...(m.parentMarketId ? (correctionsByMarketId.get(Number(m.parentMarketId)) || []) : []),
+      ];
+      const seenCorrectionIds = new Set();
+      const uniqueCorrectionRows = correctionRows.filter((row) => {
+        const id = Number(row.id);
+        if (!Number.isInteger(id) || seenCorrectionIds.has(id)) return false;
+        seenCorrectionIds.add(id);
+        return true;
+      });
+      const pendingResolutionCorrection = correctionPayloadForMarket(uniqueCorrectionRows[0], m);
       // currentHeld[oi] = heldByOutcome[oi] − redeemedByOutcome[oi]. Users
       // with no unredeemed, unsold shares have currentHeld=0 across the
       // board — they "exited".
@@ -377,6 +467,7 @@ export default async function handler(req, res) {
           canRedeem,
           markToMarket: round2(mtm),
           netPnl,
+          pendingResolutionCorrection,
           ...pickedOutcome,
           transactions: m.transactions,
         };
@@ -396,6 +487,7 @@ export default async function handler(req, res) {
         claimablePayout: round2(claimablePayout),
         canRedeem,
         netPnl: settledNetPnl,
+        pendingResolutionCorrection,
         ...pickedOutcome,
         transactions: m.transactions,
       };

@@ -13,9 +13,12 @@ const source = await readFile(new URL('./PointsMarketDetail.jsx', import.meta.ur
 
 test('points resolved binary ring follows the winning outcome', () => {
   assert.match(source, /const displayWinnerIndex = isResolved \? displayOutcomeIndices\.indexOf\(winnerIndex\) : null;/);
+  assert.match(source, /const displayWinnerIndexes = isResolved && market\.ammMode === 'parallel'/);
+  assert.match(source, /Number\(leg\?\.outcome\) === 0 \? index : null/);
   assert.match(source, /if \(isResolved\) \{[\s\S]*?return displayWinnerIndex === i \? 100 : 0;[\s\S]*?\}/);
   assert.match(source, /market\.ammMode === 'parallel' && Array\.isArray\(parallelDisplayLegs\)/);
-  assert.match(source, /winnerIndex=\{displayWinnerIndex\}/);
+  assert.match(source, /winnerIndex=\{displayWinnerIndexes\}/);
+  assert.match(source, /displayWinnerIndexSet\.has\(i\)/);
 });
 
 test('points series strip uses translated game and summary copy', () => {

@@ -56,3 +56,11 @@ test('portfolio history includes resolution correction reversals', () => {
   assert.match(source, /Corrección de resolución/);
   assert.match(source, /bucket\.totalReceived \+= collateral/);
 });
+
+test('portfolio history exposes unacknowledged resolution corrections', () => {
+  assert.match(source, /points_resolution_corrections/);
+  assert.match(source, /points_resolution_correction_acknowledgments/);
+  assert.match(source, /pendingResolutionCorrection/);
+  assert.match(source, /newOutcomeLabels/);
+  assert.match(source, /correctionPayloadForMarket/);
+});

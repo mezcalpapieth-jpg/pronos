@@ -11,6 +11,8 @@ test('correct-resolution is admin-only and only edits already resolved parent ma
   assert.match(source, /market_not_resolved/);
   assert.match(source, /leg_not_directly_correctable/);
   assert.match(source, /winningOutcomeIndex/);
+  assert.match(source, /winningOutcomeIndexes/);
+  assert.match(source, /multi_outcome_requires_parallel/);
 });
 
 test('correct-resolution keeps immutable redemption history and writes reversal ledger rows', () => {
@@ -33,10 +35,14 @@ test('correct-resolution refreshes holder data and releases stale orders', () =>
 test('schema and standalone migrate include correction tables', () => {
   for (const migrationSource of [schemaSource, migrateSource]) {
     assert.match(migrationSource, /CREATE TABLE IF NOT EXISTS points_resolution_corrections/);
+    assert.match(migrationSource, /old_outcomes\s+JSONB/);
+    assert.match(migrationSource, /new_outcomes\s+JSONB/);
     assert.match(migrationSource, /CREATE TABLE IF NOT EXISTS points_redemption_reversals/);
+    assert.match(migrationSource, /CREATE TABLE IF NOT EXISTS points_resolution_correction_acknowledgments/);
     assert.match(migrationSource, /idx_points_resolution_corrections_market/);
     assert.match(migrationSource, /idx_points_redemption_reversals_market_user/);
   }
   assert.match(schemaSource, /points_resolution_corrections/);
   assert.match(schemaSource, /points_redemption_reversals/);
+  assert.match(schemaSource, /points_resolution_correction_acknowledgments/);
 });

@@ -369,6 +369,10 @@ export async function dismissPosition({ marketId, outcomeIndex }) {
   return postJson('/api/points/dismiss-position', { marketId, outcomeIndex });
 }
 
+export async function acknowledgeResolutionCorrection({ correctionId }) {
+  return postJson('/api/points/ack-resolution-correction', { correctionId });
+}
+
 // ─── Turnkey delegated signing (M2) ──────────────────────────────────
 // First on-chain trade prompts a one-time consent: the user
 // authorizes Pronos to sign their trades within defined scope
@@ -910,9 +914,13 @@ export async function adminRunAutoResolve({ dry = false } = {}) {
 }
 
 export async function adminCorrectResolution({ marketId, winningOutcomeIndex, finalScore, reason } = {}) {
+  const winningOutcomeIndexes = Array.isArray(winningOutcomeIndex)
+    ? winningOutcomeIndex
+    : undefined;
   return postJson('/api/points/admin/correct-resolution', {
     marketId,
-    winningOutcomeIndex,
+    winningOutcomeIndex: winningOutcomeIndexes ? winningOutcomeIndexes[0] : winningOutcomeIndex,
+    ...(winningOutcomeIndexes ? { winningOutcomeIndexes } : {}),
     finalScore,
     reason,
   });

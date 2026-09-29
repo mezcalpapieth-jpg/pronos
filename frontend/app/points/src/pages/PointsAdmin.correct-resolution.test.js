@@ -13,10 +13,14 @@ test('admin markets table can correct a resolved market outcome', () => {
   assert.match(adminSource, /Se revertirán cobros que ahora sean perdedores/);
   assert.match(adminSource, /buttonLabel="Corregir"/);
   assert.match(adminSource, /actionLabel="Cambiar a"/);
+  assert.match(adminSource, /multiple=\{m\.ammMode === 'parallel'\}/);
+  assert.match(adminSource, /normalizeOutcomeSelection/);
+  assert.match(adminSource, /resolvedOutcomeIndexes/);
 });
 
 test('points api client posts correction requests to the admin endpoint', () => {
   assert.match(apiSource, /export async function adminCorrectResolution/);
   assert.match(apiSource, /\/api\/points\/admin\/correct-resolution/);
   assert.match(apiSource, /winningOutcomeIndex/);
+  assert.match(apiSource, /winningOutcomeIndexes/);
 });

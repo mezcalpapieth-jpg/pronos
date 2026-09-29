@@ -55,6 +55,7 @@ const POINTS_SCHEMA_READY_PROBE = `
     to_regclass('public.points_top_holder_snapshots') IS NOT NULL AS points_top_holder_snapshots,
     to_regclass('public.points_resolution_corrections') IS NOT NULL AS points_resolution_corrections,
     to_regclass('public.points_redemption_reversals') IS NOT NULL AS points_redemption_reversals,
+    to_regclass('public.points_resolution_correction_acknowledgments') IS NOT NULL AS points_resolution_correction_acknowledgments,
     to_regclass('public.points_risk_events') IS NOT NULL AS points_risk_events,
     to_regclass('public.points_account_reviews') IS NOT NULL AS points_account_reviews,
     to_regclass('public.points_risk_flags') IS NOT NULL AS points_risk_flags,
@@ -908,6 +909,8 @@ const POINTS_SCHEMA_MIGRATIONS = [
     market_id           INTEGER NOT NULL REFERENCES points_markets(id) ON DELETE CASCADE,
     old_outcome         SMALLINT,
     new_outcome         SMALLINT NOT NULL,
+    old_outcomes        JSONB NOT NULL DEFAULT '[]'::jsonb,
+    new_outcomes        JSONB NOT NULL DEFAULT '[]'::jsonb,
     admin_username      TEXT,
     reason              TEXT,
     final_score         TEXT,
@@ -916,6 +919,8 @@ const POINTS_SCHEMA_MIGRATIONS = [
     reversed_count      INTEGER NOT NULL DEFAULT 0,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
+  `ALTER TABLE points_resolution_corrections ADD COLUMN IF NOT EXISTS old_outcomes JSONB NOT NULL DEFAULT '[]'::jsonb`,
+  `ALTER TABLE points_resolution_corrections ADD COLUMN IF NOT EXISTS new_outcomes JSONB NOT NULL DEFAULT '[]'::jsonb`,
   `CREATE INDEX IF NOT EXISTS idx_points_resolution_corrections_market
     ON points_resolution_corrections(market_id, created_at DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_points_resolution_corrections_created
@@ -933,6 +938,14 @@ const POINTS_SCHEMA_MIGRATIONS = [
     ON points_redemption_reversals(correction_id)`,
   `CREATE INDEX IF NOT EXISTS idx_points_redemption_reversals_market_user
     ON points_redemption_reversals(market_id, username)`,
+  `CREATE TABLE IF NOT EXISTS points_resolution_correction_acknowledgments (
+    correction_id   BIGINT NOT NULL REFERENCES points_resolution_corrections(id) ON DELETE CASCADE,
+    username        TEXT NOT NULL,
+    acknowledged_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (correction_id, username)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_resolution_correction_acks_user
+    ON points_resolution_correction_acknowledgments(username, acknowledged_at DESC)`,
 
   // ── Site-time analytics (admin-only aggregate) ─────────────────────────
   // The client sends a low-frequency heartbeat while an authenticated user

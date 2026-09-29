@@ -554,6 +554,8 @@ const MIGRATIONS = [
     market_id           INTEGER NOT NULL REFERENCES points_markets(id) ON DELETE CASCADE,
     old_outcome         SMALLINT,
     new_outcome         SMALLINT NOT NULL,
+    old_outcomes        JSONB NOT NULL DEFAULT '[]'::jsonb,
+    new_outcomes        JSONB NOT NULL DEFAULT '[]'::jsonb,
     admin_username      TEXT,
     reason              TEXT,
     final_score         TEXT,
@@ -562,6 +564,8 @@ const MIGRATIONS = [
     reversed_count      INTEGER NOT NULL DEFAULT 0,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
+  `ALTER TABLE points_resolution_corrections ADD COLUMN IF NOT EXISTS old_outcomes JSONB NOT NULL DEFAULT '[]'::jsonb`,
+  `ALTER TABLE points_resolution_corrections ADD COLUMN IF NOT EXISTS new_outcomes JSONB NOT NULL DEFAULT '[]'::jsonb`,
   `CREATE INDEX IF NOT EXISTS idx_points_resolution_corrections_market
     ON points_resolution_corrections(market_id, created_at DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_points_resolution_corrections_created
@@ -579,6 +583,14 @@ const MIGRATIONS = [
     ON points_redemption_reversals(correction_id)`,
   `CREATE INDEX IF NOT EXISTS idx_points_redemption_reversals_market_user
     ON points_redemption_reversals(market_id, username)`,
+  `CREATE TABLE IF NOT EXISTS points_resolution_correction_acknowledgments (
+    correction_id   BIGINT NOT NULL REFERENCES points_resolution_corrections(id) ON DELETE CASCADE,
+    username        TEXT NOT NULL,
+    acknowledged_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (correction_id, username)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_resolution_correction_acks_user
+    ON points_resolution_correction_acknowledgments(username, acknowledged_at DESC)`,
 
   `CREATE TABLE IF NOT EXISTS points_site_time_daily (
     username      TEXT NOT NULL,

@@ -104,6 +104,14 @@ test('portfolio history can claim unredeemed winning resolved markets', () => {
   assert.match(source, /Reclamar/);
 });
 
+test('portfolio history shows resolution correction acknowledgments', () => {
+  assert.match(source, /acknowledgeResolutionCorrection/);
+  assert.match(source, /pendingResolutionCorrection/);
+  assert.match(source, /Cambio de resolución/);
+  assert.match(source, /resolution-correction-/);
+  assert.match(source, /ack-resolution-correction/);
+});
+
 test('portfolio shows liquidity reward payouts in their own market-linked tab', () => {
   assert.match(source, /fetchMakerRewards/);
   assert.match(source, /function RewardsView/);

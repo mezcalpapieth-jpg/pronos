@@ -3316,11 +3316,17 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
     }
   }
 
-  async function resolveMarket(marketId, winningOutcomeIndex) {
+  async function resolveMarket(marketOrId, winningOutcomeIndex) {
+    const market = marketOrId && typeof marketOrId === 'object' ? marketOrId : null;
+    const marketId = market?.id || marketOrId;
+    const winningOutcomeIndexes = normalizeOutcomeSelection(winningOutcomeIndex);
+    const primaryOutcomeIndex = winningOutcomeIndexes[0];
     setResolving(marketId);
     try {
       await postJson('/api/points/admin/resolve-market', {
-        marketId, winningOutcomeIndex,
+        marketId,
+        winningOutcomeIndex: primaryOutcomeIndex,
+        ...(winningOutcomeIndexes.length > 1 ? { winningOutcomeIndexes } : {}),
       });
       // In-place patch instead of refetching the whole list — the
       // refetch would scroll the page back to the top and lose the
@@ -3331,8 +3337,16 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
       setMarkets(prev => (prev || []).map(m => m.id === marketId ? {
         ...m,
         status: 'resolved',
-        outcome: winningOutcomeIndex,
+        outcome: primaryOutcomeIndex,
         resolvedAt: new Date().toISOString(),
+        parallelLegs: Array.isArray(m.parallelLegs)
+          ? m.parallelLegs.map((leg, index) => ({
+              ...leg,
+              status: 'resolved',
+              outcome: winningOutcomeIndexes.includes(index) ? 0 : 1,
+              resolvedAt: new Date().toISOString(),
+            }))
+          : m.parallelLegs,
       } : m));
       onQueueChange?.();
     } catch (e) {
@@ -3345,40 +3359,45 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
   async function correctResolution(market, winningOutcomeIndex) {
     if (!market?.id || market.status !== 'resolved') return;
     const outcomes = Array.isArray(market.outcomes) ? market.outcomes : [];
-    const label = outcomes[winningOutcomeIndex] || `Resultado ${Number(winningOutcomeIndex) + 1}`;
+    const winningOutcomeIndexes = normalizeOutcomeSelection(winningOutcomeIndex);
+    const primaryOutcomeIndex = winningOutcomeIndexes[0];
+    const labels = outcomeLabelsForIndexes(outcomes, winningOutcomeIndexes);
     const ok = window.confirm(
-      `¿Cambiar resolución de "${market.question}" a "${label}"?\n\n`
+      `¿Cambiar resolución de "${market.question}" a "${labels}"?\n\n`
       + 'Se revertirán cobros que ahora sean perdedores y los ganadores correctos podrán cobrar.',
     );
     if (!ok) return;
 
     const reason = window.prompt('Motivo de la corrección', 'Corrección manual de resolución');
     if (reason === null) return;
-    const finalScore = window.prompt('Resultado final mostrado (opcional)', market.finalScore || '');
+    const defaultFinalScore = market.finalScore
+      || (winningOutcomeIndexes.length > 1 ? `Nominados: ${labels}` : '');
+    const finalScore = window.prompt('Resultado final mostrado (opcional)', defaultFinalScore);
     if (finalScore === null) return;
 
     setCorrecting(market.id);
     try {
       const result = await adminCorrectResolution({
         marketId: market.id,
-        winningOutcomeIndex,
+        winningOutcomeIndex: winningOutcomeIndexes.length > 1 ? winningOutcomeIndexes : primaryOutcomeIndex,
         reason,
         finalScore,
       });
+      const winnerSet = new Set(winningOutcomeIndexes);
       setMarkets(prev => (prev || []).map((m) => {
         if (m.id !== market.id) return m;
         const nextLegs = Array.isArray(m.parallelLegs)
           ? m.parallelLegs.map((leg, index) => ({
               ...leg,
               status: 'resolved',
-              outcome: index === winningOutcomeIndex ? 0 : 1,
+              outcome: winnerSet.has(index) ? 0 : 1,
               resolvedAt: new Date().toISOString(),
             }))
           : m.parallelLegs;
         return {
           ...m,
           status: 'resolved',
-          outcome: winningOutcomeIndex,
+          outcome: primaryOutcomeIndex,
           resolvedAt: new Date().toISOString(),
           finalScore: result?.finalScore ?? m.finalScore,
           parallelLegs: nextLegs,
@@ -4160,7 +4179,8 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
                 <ResolveControls
                   market={m}
                   resolving={resolving === m.id}
-                  onResolve={(winnerIndex) => resolveMarket(m.id, winnerIndex)}
+                  onResolve={(winnerIndex) => resolveMarket(m, winnerIndex)}
+                  multiple={m.ammMode === 'parallel'}
                 />
               )}
             </>
@@ -4217,16 +4237,17 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
                 textTransform: 'uppercase',
                 letterSpacing: '0.04em',
               }}>
-                ✓ {m.outcomes[m.outcome]}
+                ✓ {resolvedOutcomeLabel(m)}
               </span>
               <ResolveControls
                 market={m}
                 resolving={correcting === m.id}
                 onResolve={(winnerIndex) => correctResolution(m, winnerIndex)}
-                initialSelected={Number.isInteger(Number(m.outcome)) ? Number(m.outcome) : 0}
+                initialSelected={resolvedOutcomeIndexes(m)}
                 actionLabel="Cambiar a"
                 busyLabel="Corrigiendo…"
                 buttonLabel="Corregir"
+                multiple={m.ammMode === 'parallel'}
               />
             </div>
           )}
@@ -5246,6 +5267,42 @@ function ResolutionCandidatePanel({ market, candidate, reviewing, onReview }) {
 // Compact dropdown + confirm button that works for any N outcomes. The
 // previous hardcoded "Ganó X / Ganó Y" pair of buttons only covered
 // N=2 markets, which broke resolution for 3-outcome W/D/L markets.
+function normalizeOutcomeSelection(value) {
+  const raw = Array.isArray(value) ? value : [value];
+  const seen = new Set();
+  const out = [];
+  for (const item of raw) {
+    const n = Number(item);
+    if (Number.isInteger(n) && n >= 0 && !seen.has(n)) {
+      seen.add(n);
+      out.push(n);
+    }
+  }
+  return out.length > 0 ? out : [0];
+}
+
+function outcomeLabelsForIndexes(outcomes, indexes) {
+  return normalizeOutcomeSelection(indexes)
+    .map(index => outcomes[index] || `Resultado ${index + 1}`)
+    .join(', ');
+}
+
+function resolvedOutcomeIndexes(market) {
+  if (market?.ammMode === 'parallel' && Array.isArray(market.parallelLegs)) {
+    const indexes = market.parallelLegs
+      .map((leg, index) => Number(leg?.outcome) === 0 ? index : null)
+      .filter(index => index !== null);
+    if (indexes.length > 0) return indexes;
+  }
+  const n = Number(market?.outcome);
+  return Number.isInteger(n) && n >= 0 ? [n] : [0];
+}
+
+function resolvedOutcomeLabel(market) {
+  const outcomes = Array.isArray(market?.outcomes) ? market.outcomes : [];
+  return outcomeLabelsForIndexes(outcomes, resolvedOutcomeIndexes(market));
+}
+
 function ResolveControls({
   market,
   resolving,
@@ -5254,48 +5311,91 @@ function ResolveControls({
   actionLabel = 'Ganó',
   busyLabel = 'Resolviendo…',
   buttonLabel = null,
+  multiple = false,
 }) {
   const outcomes = Array.isArray(market.outcomes) ? market.outcomes : [];
-  const safeInitial = Number.isInteger(Number(initialSelected))
-    ? Math.min(Math.max(0, Number(initialSelected)), Math.max(0, outcomes.length - 1))
-    : 0;
-  const [selected, setSelected] = useState(safeInitial);
+  const safeInitial = normalizeOutcomeSelection(initialSelected)
+    .filter(index => index < outcomes.length);
+  const normalizedInitial = safeInitial.length > 0 ? safeInitial : [0];
+  const [selected, setSelected] = useState(normalizedInitial);
 
   useEffect(() => {
-    setSelected(safeInitial);
-  }, [market?.id, safeInitial]);
+    setSelected(normalizedInitial);
+  }, [market?.id, normalizedInitial.join(',')]);
+
+  const selectedSet = new Set(selected);
+  const primarySelected = selected[0] ?? 0;
+  const selectedLabel = outcomeLabelsForIndexes(outcomes, selected);
+
+  function toggleSelected(index) {
+    setSelected(prev => {
+      const current = new Set(normalizeOutcomeSelection(prev));
+      if (current.has(index)) current.delete(index);
+      else current.add(index);
+      const next = Array.from(current).sort((a, b) => a - b);
+      return next.length > 0 ? next : [index];
+    });
+  }
 
   return (
     <>
-      <select
-        value={selected}
-        onChange={(e) => setSelected(Number(e.target.value))}
-        disabled={resolving}
-        style={{
-          padding: '6px 10px',
-          background: 'var(--surface2)',
-          border: '1px solid var(--border)',
-          borderRadius: 8,
-          fontFamily: 'var(--font-mono)',
-          fontSize: 11,
-          color: 'var(--text-primary)',
-          cursor: 'pointer',
-          minWidth: 120,
-        }}
-      >
-        {outcomes.map((label, i) => (
-          <option key={i} value={i}>
-            {label}
-          </option>
-        ))}
-      </select>
+      {multiple ? (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', maxWidth: 480 }}>
+          {outcomes.map((label, i) => {
+            const checked = selectedSet.has(i);
+            return (
+              <button
+                key={i}
+                type="button"
+                onClick={() => toggleSelected(i)}
+                disabled={resolving}
+                style={{
+                  padding: '5px 8px',
+                  borderRadius: 8,
+                  border: `1px solid ${checked ? 'rgba(0,232,122,0.45)' : 'var(--border)'}`,
+                  background: checked ? 'rgba(0,232,122,0.1)' : 'var(--surface2)',
+                  color: checked ? 'var(--green)' : 'var(--text-secondary)',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 10,
+                  cursor: resolving ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {checked ? '✓ ' : ''}{label}
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <select
+          value={primarySelected}
+          onChange={(e) => setSelected([Number(e.target.value)])}
+          disabled={resolving}
+          style={{
+            padding: '6px 10px',
+            background: 'var(--surface2)',
+            border: '1px solid var(--border)',
+            borderRadius: 8,
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            color: 'var(--text-primary)',
+            cursor: 'pointer',
+            minWidth: 120,
+          }}
+        >
+          {outcomes.map((label, i) => (
+            <option key={i} value={i}>
+              {label}
+            </option>
+          ))}
+        </select>
+      )}
       <button
-        onClick={() => onResolve(selected)}
+        onClick={() => onResolve(multiple ? selected : primarySelected)}
         disabled={resolving}
         className="btn-primary"
         style={{ padding: '6px 12px', fontSize: 11 }}
       >
-        {resolving ? busyLabel : (buttonLabel || `${actionLabel} ${outcomes[selected] || '—'}`)}
+        {resolving ? busyLabel : (buttonLabel || `${actionLabel} ${selectedLabel || '—'}`)}
       </button>
     </>
   );

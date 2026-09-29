@@ -1,6 +1,6 @@
 /**
  * POST /api/points/admin/correct-resolution
- * Body: { marketId, winningOutcomeIndex, finalScore?, reason? }
+ * Body: { marketId, winningOutcomeIndex|winningOutcomeIndexes, finalScore?, reason? }
  *
  * Admin-only correction for markets that were already resolved to the
  * wrong outcome. The original redeem trades stay immutable; already-claimed
@@ -49,47 +49,104 @@ function outcomeIndexOrNull(value) {
   return Number.isInteger(n) ? n : null;
 }
 
+function normalizeWinningOutcomeIndexes(body = {}) {
+  const raw = Array.isArray(body.winningOutcomeIndexes)
+    ? body.winningOutcomeIndexes
+    : Array.isArray(body.winningOutcomeIndices)
+      ? body.winningOutcomeIndices
+      : [body.winningOutcomeIndex];
+  const seen = new Set();
+  const indexes = [];
+  for (const value of raw) {
+    const n = Number(value);
+    if (!Number.isInteger(n) || n < 0) {
+      const err = new Error('invalid_outcome');
+      err.status = 400;
+      throw err;
+    }
+    if (!seen.has(n)) {
+      seen.add(n);
+      indexes.push(n);
+    }
+  }
+  if (indexes.length === 0) {
+    const err = new Error('invalid_outcome');
+    err.status = 400;
+    throw err;
+  }
+  return indexes;
+}
+
 function labelFor(outcomes, index) {
   const i = Number(index);
   if (!Number.isInteger(i)) return '—';
   return outcomes?.[i] || `Opción ${i + 1}`;
 }
 
+function labelsFor(outcomes, indexes) {
+  return indexes.map(index => labelFor(outcomes, index)).join(', ');
+}
+
 function reversalKey(row) {
   return `${Number(row.market_id)}:${String(row.username || '').toLowerCase()}`;
 }
 
-function buildTargetOutcomes(parent, relatedRows, winningOutcomeIndex) {
+function buildTargetOutcomes(parent, relatedRows, winningOutcomeIndexes) {
   const parentId = Number(parent.id);
   const target = new Map();
   const ammMode = parent.amm_mode || 'unified';
+  const winnerSet = new Set(winningOutcomeIndexes);
+  const primaryOutcome = winningOutcomeIndexes[0];
 
   if (ammMode === 'parallel') {
     const legs = relatedRows
       .filter(row => Number(row.parent_id) === parentId && row.status !== 'canceled')
       .sort((a, b) => Number(a.id) - Number(b.id));
-    if (winningOutcomeIndex >= legs.length) {
+    const invalid = winningOutcomeIndexes.find(index => index >= legs.length);
+    if (invalid != null) {
       const err = new Error('invalid_outcome');
       err.status = 400;
-      err.detail = `parent has ${legs.length} legs, winning index ${winningOutcomeIndex} out of range`;
+      err.detail = `parent has ${legs.length} legs, winning index ${invalid} out of range`;
       throw err;
     }
-    target.set(parentId, winningOutcomeIndex);
+    target.set(parentId, primaryOutcome);
     for (let i = 0; i < legs.length; i += 1) {
-      target.set(Number(legs[i].id), i === winningOutcomeIndex ? 0 : 1);
+      target.set(Number(legs[i].id), winnerSet.has(i) ? 0 : 1);
     }
     return { target, affectedMarketIds: Array.from(target.keys()), ammMode, legs };
   }
 
-  const outcomes = parseJsonb(parent.outcomes, ['Sí', 'No']);
-  if (winningOutcomeIndex >= outcomes.length) {
-    const err = new Error('invalid_outcome');
+  if (winningOutcomeIndexes.length > 1) {
+    const err = new Error('multi_outcome_requires_parallel');
     err.status = 400;
-    err.detail = `market has ${outcomes.length} outcomes, winning index ${winningOutcomeIndex} out of range`;
+    err.detail = 'Unified markets can only store one winning outcome.';
     throw err;
   }
-  target.set(parentId, winningOutcomeIndex);
+  const outcomes = parseJsonb(parent.outcomes, ['Sí', 'No']);
+  if (primaryOutcome >= outcomes.length) {
+    const err = new Error('invalid_outcome');
+    err.status = 400;
+    err.detail = `market has ${outcomes.length} outcomes, winning index ${primaryOutcome} out of range`;
+    throw err;
+  }
+  target.set(parentId, primaryOutcome);
   return { target, affectedMarketIds: [parentId], ammMode, legs: [] };
+}
+
+function oldWinningOutcomeIndexes(parent, relatedRows, oldOutcome) {
+  if ((parent.amm_mode || 'unified') !== 'parallel') {
+    return Number.isInteger(oldOutcome) ? [oldOutcome] : [];
+  }
+  const parentId = Number(parent.id);
+  const legs = relatedRows
+    .filter(row => Number(row.parent_id) === parentId && row.status !== 'canceled')
+    .sort((a, b) => Number(a.id) - Number(b.id));
+  const oldIndexes = [];
+  for (let i = 0; i < legs.length; i += 1) {
+    if (Number(legs[i].outcome) === 0) oldIndexes.push(i);
+  }
+  if (oldIndexes.length === 0 && Number.isInteger(oldOutcome)) oldIndexes.push(oldOutcome);
+  return oldIndexes;
 }
 
 export default async function handler(req, res) {
@@ -102,9 +159,14 @@ export default async function handler(req, res) {
 
   const body = req.body || {};
   const mid = parseInt(body.marketId, 10);
-  const oi = parseInt(body.winningOutcomeIndex, 10);
   if (!Number.isInteger(mid) || mid <= 0) return res.status(400).json({ error: 'invalid_market_id' });
-  if (!Number.isInteger(oi) || oi < 0) return res.status(400).json({ error: 'invalid_outcome' });
+  let winningOutcomeIndexes;
+  try {
+    winningOutcomeIndexes = normalizeWinningOutcomeIndexes(body);
+  } catch (e) {
+    return res.status(e?.status || 400).json({ error: e?.message || 'invalid_outcome' });
+  }
+  const oi = winningOutcomeIndexes[0];
 
   const finalScore = optionalText(body.finalScore, { field: 'final_score' });
   if (!finalScore.ok) return res.status(400).json({ error: finalScore.error });
@@ -149,22 +211,25 @@ export default async function handler(req, res) {
         [mid],
       );
       const relatedRows = relatedResult.rows || [];
-      const { target, affectedMarketIds, ammMode } = buildTargetOutcomes(parent, relatedRows, oi);
+      const { target, affectedMarketIds, ammMode } = buildTargetOutcomes(parent, relatedRows, winningOutcomeIndexes);
       const oldOutcome = outcomeIndexOrNull(parent.outcome);
       const parentOutcomes = parseJsonb(parent.outcomes, ['Sí', 'No']);
-      const oldLabel = labelFor(parentOutcomes, oldOutcome);
-      const newLabel = labelFor(parentOutcomes, oi);
+      const oldOutcomeIndexes = oldWinningOutcomeIndexes(parent, relatedRows, oldOutcome);
+      const oldLabel = oldOutcomeIndexes.length > 0 ? labelsFor(parentOutcomes, oldOutcomeIndexes) : labelFor(parentOutcomes, oldOutcome);
+      const newLabel = labelsFor(parentOutcomes, winningOutcomeIndexes);
 
       const correctionResult = await client.query(
         `INSERT INTO points_resolution_corrections (
-           market_id, old_outcome, new_outcome, admin_username, reason,
+           market_id, old_outcome, new_outcome, old_outcomes, new_outcomes, admin_username, reason,
            final_score, affected_market_ids
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
+         ) VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, $8, $9::jsonb)
          RETURNING id, created_at`,
         [
           mid,
           oldOutcome,
           oi,
+          JSON.stringify(oldOutcomeIndexes),
+          JSON.stringify(winningOutcomeIndexes),
           admin.username || null,
           reasonText,
           finalScore.provided ? finalScore.value : (parent.final_score || null),
@@ -325,7 +390,7 @@ export default async function handler(req, res) {
         client,
         mid,
         'admin/correct-resolution',
-        { resolution: { winningOutcomeIndex: oi } },
+        { resolution: { winningOutcomeIndex: oi, winningOutcomeIndexes } },
       );
       await releaseOpenLimitOrdersForMarkets(client, affectedMarketIds, {
         reason: 'resolution_corrected',
@@ -339,6 +404,8 @@ export default async function handler(req, res) {
         affectedMarketIds,
         oldOutcome,
         newOutcome: oi,
+        oldOutcomeIndexes,
+        newOutcomeIndexes: winningOutcomeIndexes,
         oldOutcomeLabel: oldLabel,
         newOutcomeLabel: newLabel,
         finalScore: finalScore.provided ? finalScore.value : (parent.final_score || null),

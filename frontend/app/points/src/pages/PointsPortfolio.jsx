@@ -31,6 +31,7 @@ import {
   claimDaily,
   fetchDailyStatus,
   dismissPosition,
+  acknowledgeResolutionCorrection,
   fetchPnlHistory,
   fetchMyParlays,
   publicErrorMessage,
@@ -1267,6 +1268,26 @@ export default function PointsPortfolio() {
     }
   }
 
+  async function handleAcknowledgeResolutionCorrection(item) {
+    const correctionId = Number(item?.pendingResolutionCorrection?.id || item?.correctionId);
+    if (!Number.isInteger(correctionId) || correctionId <= 0) return;
+    const key = `resolution-correction-${correctionId}`;
+    setHistory(prev => (prev || []).map(row => (
+      Number(row.pendingResolutionCorrection?.id) === correctionId
+        ? { ...row, pendingResolutionCorrection: null }
+        : row
+    )));
+    setActionState({ id: key, type: 'ack-resolution-correction' });
+    try {
+      await acknowledgeResolutionCorrection({ correctionId });
+    } catch (e) {
+      setMsg({ type: 'error', text: publicErrorMessage(e, lang, 'default') });
+      await load();
+    } finally {
+      setActionState({ id: null, type: null });
+    }
+  }
+
   const balance = Number(user?.balance || 0);
   const openPnl = Number(summary?.pnl || 0);
   const totalPnl = Number(historySummary?.totalPnl ?? openPnl);
@@ -1405,6 +1426,7 @@ export default function PointsPortfolio() {
               cycleScope={historyCycleScope}
               onCycleScopeChange={setHistoryCycleScope}
               onRedeem={handleRedeem}
+              onAcknowledgeCorrection={handleAcknowledgeResolutionCorrection}
               actionState={actionState}
             />
           )}
@@ -1487,6 +1509,7 @@ function HistoryView({
   cycleScope = 'current',
   onCycleScopeChange,
   onRedeem,
+  onAcknowledgeCorrection,
   actionState,
 }) {
   const cycleToggle = <CycleScopeToggle value={cycleScope} onChange={onCycleScopeChange} />;
@@ -1555,6 +1578,15 @@ function HistoryView({
           const pnlPos = pnl >= 0;
           const marketHref = portfolioMarketHref(m);
           const pickedLabel = m.pickedOutcomeLabel || pickedOutcomeLabelFromTransactions(m.transactions);
+          const correction = m.pendingResolutionCorrection || null;
+          const correctionKey = correction?.id ? `resolution-correction-${correction.id}` : null;
+          const acknowledgingCorrection = correctionKey
+            && actionState?.id === correctionKey
+            && actionState?.type === 'ack-resolution-correction';
+          const correctionResult = correction?.finalScore
+            || (Array.isArray(correction?.newOutcomeLabels) && correction.newOutcomeLabels.length > 0
+              ? `Resultado corregido: ${correction.newOutcomeLabels.join(', ')}`
+              : 'Resultado corregido');
           const winningOutcomeIndex = Number(m.winningOutcomeIndex);
           const canClaim = m.outcomeStatus === 'won'
             && Number(m.claimablePayout || 0) > 0.000001
@@ -1633,6 +1665,61 @@ function HistoryView({
                   {pnlPos ? '+' : ''}{fmt(pnl)} MXNP
                 </span>
               </div>
+              {correction && (
+                <div style={{
+                  marginTop: 12,
+                  padding: '10px 12px',
+                  borderRadius: 10,
+                  border: '1px solid rgba(255,85,0,0.32)',
+                  background: 'rgba(255,85,0,0.08)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                  flexWrap: 'wrap',
+                }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 10,
+                      letterSpacing: '0.12em',
+                      textTransform: 'uppercase',
+                      color: 'var(--orange)',
+                      marginBottom: 4,
+                    }}>
+                      Cambio de resolución
+                    </div>
+                    <div style={{
+                      fontFamily: 'var(--font-body)',
+                      fontSize: 13,
+                      lineHeight: 1.35,
+                      color: 'var(--text-primary)',
+                    }}>
+                      {correctionResult}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => onAcknowledgeCorrection?.(m)}
+                    disabled={acknowledgingCorrection}
+                    style={{
+                      padding: '7px 13px',
+                      borderRadius: 8,
+                      border: '1px solid rgba(255,85,0,0.35)',
+                      background: 'var(--surface1)',
+                      color: 'var(--orange)',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 11,
+                      fontWeight: 700,
+                      letterSpacing: '0.08em',
+                      textTransform: 'uppercase',
+                      cursor: acknowledgingCorrection ? 'wait' : 'pointer',
+                      opacity: acknowledgingCorrection ? 0.65 : 1,
+                    }}
+                  >
+                    {acknowledgingCorrection ? 'Guardando…' : 'OK'}
+                  </button>
+                </div>
+              )}
             </div>
           );
         })}

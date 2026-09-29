@@ -1,6 +1,6 @@
 /**
  * POST /api/points/admin/resolve-market
- * Body: { marketId, winningOutcomeIndex, finalScore? }
+ * Body: { marketId, winningOutcomeIndex|winningOutcomeIndexes, finalScore? }
  *
  * Unified: flips the market to resolved + sets the winning outcome.
  * Parallel: marketId is the parent id. We flip the parent AND cascade
@@ -27,6 +27,34 @@ import { bestEffortPersistTopHolderSnapshot } from '../../_lib/points-top-holder
 
 const schemaSql = neon(process.env.DATABASE_URL);
 
+function normalizeWinningOutcomeIndexes(body = {}) {
+  const raw = Array.isArray(body.winningOutcomeIndexes)
+    ? body.winningOutcomeIndexes
+    : Array.isArray(body.winningOutcomeIndices)
+      ? body.winningOutcomeIndices
+      : [body.winningOutcomeIndex];
+  const seen = new Set();
+  const indexes = [];
+  for (const value of raw) {
+    const n = Number(value);
+    if (!Number.isInteger(n) || n < 0) {
+      const err = new Error('invalid_outcome');
+      err.status = 400;
+      throw err;
+    }
+    if (!seen.has(n)) {
+      seen.add(n);
+      indexes.push(n);
+    }
+  }
+  if (indexes.length === 0) {
+    const err = new Error('invalid_outcome');
+    err.status = 400;
+    throw err;
+  }
+  return indexes;
+}
+
 export default async function handler(req, res) {
   const cors = applyCors(req, res, { methods: 'POST, OPTIONS', credentials: true });
   if (cors) return cors;
@@ -35,11 +63,17 @@ export default async function handler(req, res) {
   const admin = requirePointsAdmin(req, res);
   if (!admin) return;
 
-  const { marketId, winningOutcomeIndex, finalScore } = req.body || {};
+  const body = req.body || {};
+  const { marketId, finalScore } = body;
   const mid = parseInt(marketId, 10);
-  const oi = parseInt(winningOutcomeIndex, 10);
   if (!Number.isInteger(mid) || mid <= 0) return res.status(400).json({ error: 'invalid_market_id' });
-  if (!Number.isInteger(oi) || oi < 0) return res.status(400).json({ error: 'invalid_outcome' });
+  let winningOutcomeIndexes;
+  try {
+    winningOutcomeIndexes = normalizeWinningOutcomeIndexes(body);
+  } catch (e) {
+    return res.status(e?.status || 400).json({ error: e?.message || 'invalid_outcome' });
+  }
+  const oi = winningOutcomeIndexes[0];
   // finalScore: optional free-form string. Cap at 240 chars so weird
   // input can't break card / detail layouts. Empty string becomes NULL.
   let scoreVal = null;
@@ -76,6 +110,12 @@ export default async function handler(req, res) {
       if (m.status !== 'active') {
         const err = new Error('market_not_active'); err.status = 400; throw err;
       }
+      if ((m.amm_mode || 'unified') !== 'parallel' && winningOutcomeIndexes.length > 1) {
+        const err = new Error('multi_outcome_requires_parallel');
+        err.status = 400;
+        err.detail = 'Unified markets can only store one winning outcome.';
+        throw err;
+      }
 
       const relatedIdsResult = await client.query(
         `SELECT id FROM points_markets
@@ -89,7 +129,7 @@ export default async function handler(req, res) {
         client,
         mid,
         'admin/resolve-market',
-        { resolution: { winningOutcomeIndex: oi } },
+        { resolution: { winningOutcomeIndex: oi, winningOutcomeIndexes } },
       );
       await releaseOpenLimitOrdersForMarkets(client, relatedIds.length > 0 ? relatedIds : [mid], {
         reason: 'market_resolved',
@@ -132,15 +172,17 @@ export default async function handler(req, res) {
            FOR UPDATE`,
           [mid],
         );
-        if (oi >= legs.rows.length) {
+        const invalid = winningOutcomeIndexes.find(index => index >= legs.rows.length);
+        if (invalid != null) {
           const err = new Error('invalid_outcome');
           err.status = 400;
-          err.detail = `parent has ${legs.rows.length} legs, winning index ${oi} out of range`;
+          err.detail = `parent has ${legs.rows.length} legs, winning index ${invalid} out of range`;
           throw err;
         }
+        const winnerSet = new Set(winningOutcomeIndexes);
         for (let i = 0; i < legs.rows.length; i++) {
           const legId = legs.rows[i].id;
-          const legWinningOutcome = i === oi ? 0 : 1; // YES for winner, NO for losers
+          const legWinningOutcome = winnerSet.has(i) ? 0 : 1; // YES for winners, NO for losers
           await client.query(
             `UPDATE points_markets
                SET status = 'resolved', outcome = $1,
