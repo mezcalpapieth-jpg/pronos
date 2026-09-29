@@ -24,7 +24,7 @@ import {
 } from '../_lib/points-limit-orders.js';
 import { monotonicBuyDisplayPrice } from '../_lib/points-display-prices.js';
 import { binaryBuyQuote, binaryPrices, binarySellQuote } from '../_lib/amm-math.js';
-import { readTopHolderSnapshot } from '../_lib/points-top-holders.js';
+import { buildTopHoldersForMarket, readTopHolderSnapshot } from '../_lib/points-top-holders.js';
 
 const schemaSource = await readFile(new URL('../_lib/points-schema.js', import.meta.url), 'utf8');
 const migrateSource = await readFile(new URL('../migrate.js', import.meta.url), 'utf8');
@@ -454,7 +454,9 @@ test('top holders price positions with displayed book-trade odds', () => {
   assert.match(topHoldersHelperSource, /points_top_holder_snapshots/);
   assert.match(topHoldersHelperSource, /payoutValue/);
   assert.match(topHoldersHelperSource, /winningOutcomeIndex/);
+  assert.match(topHoldersHelperSource, /winningOutcomeIndexes/);
   assert.match(topHoldersHelperSource, /independentLegOutcomes/);
+  assert.match(topHoldersHelperSource, /independentLegOutcomesFromResolution/);
   assert.match(topHoldersHelperSource, /holderHasDisplayValue/);
   assert.match(topHoldersHelperSource, /Math\.round\(Math\.max\(0, beforeValue, payoutValue\)\) > 0/);
   assert.match(topHoldersHelperSource, /\.filter\(holderHasDisplayValue\)/);
@@ -511,11 +513,64 @@ test('stale parallel top-holder snapshots are ignored after resolution correctio
   assert.equal(await readTopHolderSnapshot(staleSnapshotClient, 92265), null);
 });
 
+test('multi-winner parallel top-holder snapshots price each winning leg independently', async () => {
+  const client = {
+    async query(sql) {
+      if (/FROM points_markets m/.test(sql)) {
+        return {
+          rows: [{
+            id: 100,
+            parent_id: null,
+            outcomes: JSON.stringify(['Brianda', 'Ernesto', 'Gema']),
+            reserves: JSON.stringify([500, 500]),
+            amm_mode: 'parallel',
+            status: 'active',
+            outcome: null,
+            display_trade_outcome_index: null,
+            display_trade_price: null,
+            display_trade_is_book: null,
+          }],
+        };
+      }
+      if (/FROM points_markets l/.test(sql)) {
+        return {
+          rows: [
+            { id: 101, leg_label: 'Brianda', reserves: JSON.stringify([500, 500]), status: 'active', outcome: null },
+            { id: 102, leg_label: 'Ernesto', reserves: JSON.stringify([500, 500]), status: 'active', outcome: null },
+            { id: 103, leg_label: 'Gema', reserves: JSON.stringify([500, 500]), status: 'active', outcome: null },
+          ],
+        };
+      }
+      if (/FROM points_positions p/.test(sql)) {
+        return {
+          rows: [
+            { username: 'holder-a', market_id: 101, outcome_index: 0, shares: 100, cost_basis: 40 },
+            { username: 'holder-b', market_id: 102, outcome_index: 1, shares: 90, cost_basis: 45 },
+            { username: 'holder-c', market_id: 103, outcome_index: 0, shares: 80, cost_basis: 35 },
+            { username: 'holder-d', market_id: 102, outcome_index: 0, shares: 70, cost_basis: 30 },
+          ],
+        };
+      }
+      throw new Error(`unexpected query: ${sql}`);
+    },
+  };
+
+  const result = await buildTopHoldersForMarket(client, 100, {
+    resolution: { winningOutcomeIndex: 0, winningOutcomeIndexes: [0, 2] },
+  });
+  const byLabel = new Map(result.holders.map(holder => [holder.outcomeLabel, holder]));
+
+  assert.equal(byLabel.get('Brianda — Sí')?.payoutValue, 100);
+  assert.equal(byLabel.get('Ernesto — No')?.payoutValue, 90);
+  assert.equal(byLabel.get('Gema — Sí')?.payoutValue, 80);
+  assert.equal(byLabel.get('Ernesto — Sí')?.payoutValue, 0);
+});
+
 test('market resolution freezes top-holder snapshots before final odds collapse', () => {
   for (const source of [resolveSource, cronResolveSource, crypto5MinSource]) {
     assert.match(source, /bestEffortPersistTopHolderSnapshot/);
   }
-  assert.match(resolveSource, /resolution: \{ winningOutcomeIndex: oi \}/);
+  assert.match(resolveSource, /resolution: \{ winningOutcomeIndex: oi, winningOutcomeIndexes \}/);
   assert.match(cronResolveSource, /resolution: \{ winningOutcomeIndex: winningIdx \}/);
   assert.match(cronResolveSource, /independentLegOutcomes: independentLegResolutions\.map/);
   assert.match(crypto5MinSource, /resolution: \{ winningOutcomeIndex: closingOutcome \}/);

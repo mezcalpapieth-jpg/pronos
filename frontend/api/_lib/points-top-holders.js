@@ -27,6 +27,30 @@ function outcomeIndexOrNull(value) {
   return Number.isInteger(n) ? n : null;
 }
 
+function normalizedOutcomeIndexes(value) {
+  const raw = Array.isArray(value) ? value : [];
+  const seen = new Set();
+  const out = [];
+  for (const item of raw) {
+    const n = outcomeIndexOrNull(item);
+    if (Number.isInteger(n) && n >= 0 && !seen.has(n)) {
+      seen.add(n);
+      out.push(n);
+    }
+  }
+  return out;
+}
+
+function independentLegOutcomesFromResolution(resolution, legCount) {
+  if (Array.isArray(resolution?.independentLegOutcomes)) {
+    return resolution.independentLegOutcomes.map(outcomeIndexOrNull);
+  }
+  const winningIndexes = normalizedOutcomeIndexes(resolution?.winningOutcomeIndexes);
+  if (winningIndexes.length === 0) return null;
+  const winnerSet = new Set(winningIndexes);
+  return Array.from({ length: legCount }, (_, index) => (winnerSet.has(index) ? 0 : 1));
+}
+
 function pricesForReserves(reserves) {
   if (!Array.isArray(reserves) || reserves.length === 0) return [];
   if (reserves.length === 2) return binaryPrices(reserves);
@@ -195,9 +219,6 @@ export async function buildTopHoldersForMarket(client, marketId, {
   const isResolved = m.status === 'resolved';
   const winningIdx = isResolved ? outcomeIndexOrNull(m.outcome) : null;
   const parentWinningIdx = outcomeIndexOrNull(resolution?.winningOutcomeIndex);
-  const independentLegOutcomes = Array.isArray(resolution?.independentLegOutcomes)
-    ? resolution.independentLegOutcomes.map(outcomeIndexOrNull)
-    : null;
   const max = clampLimit(limit);
 
   if (ammMode === 'parallel' && !m.parent_id) {
@@ -233,6 +254,7 @@ export async function buildTopHoldersForMarket(client, marketId, {
     if (legs.length === 0) {
       return { ammMode: 'parallel', outcomes: parentOutcomes, holders: [] };
     }
+    const independentLegOutcomes = independentLegOutcomesFromResolution(resolution, legs.length);
 
     const legIds = legs.map(l => Number(l.id)).filter(Number.isFinite);
     const positionsResult = await client.query(
