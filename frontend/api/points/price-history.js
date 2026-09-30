@@ -131,12 +131,9 @@ export default async function handler(req, res) {
     `;
 
     // Polymarket-style carry-forward: the price at the window's start is
-    // the last one BEFORE it, not the first one inside it. Without this
-    // boundary point a line whose first in-window point lands at noon
-    // starts mid-chart instead of at the left edge. Checked against BOTH
-    // price sources below (AMM snapshots and order-book fills), since a
-    // market's recent history can live entirely in either one. Clamped to
-    // the window start so chart axes never stretch past the range.
+    // the last AMM snapshot BEFORE it, not the first one inside it. Book
+    // fills can still move displayed probability, but only as collapsed
+    // execution-burst averages; AMM reserve movement remains canonical.
     const boundarySnapshotRows = await sql`
       SELECT DISTINCT ON (market_id)
         market_id, prices, snapshotted_at
@@ -145,31 +142,13 @@ export default async function handler(req, res) {
         AND snapshotted_at < NOW() - (${windowHours} || ' hours')::interval
       ORDER BY market_id ASC, snapshotted_at DESC
     `;
-    const boundaryTradeRows = outcomeIdx <= 1 ? await sql`
-      SELECT DISTINCT ON (t.market_id)
-        t.market_id, t.outcome_index, t.price_at_trade, t.created_at
-      FROM points_trades t
-      JOIN points_markets m ON m.id = t.market_id
-      WHERE t.market_id = ANY(${ids}::int[])
-        AND t.username <> ${PRONOS_TREASURY_USERNAME}
-        AND t.price_at_trade IS NOT NULL
-        AND t.outcome_index IN (0, 1)
-        AND t.reserves_before IS NOT NULL
-        AND t.reserves_after IS NOT NULL
-        AND t.reserves_before = t.reserves_after
-        AND jsonb_typeof(m.outcomes) = 'array'
-        AND jsonb_array_length(m.outcomes) = 2
-        AND t.created_at < NOW() - (${windowHours} || ' hours')::interval
-      ORDER BY t.market_id ASC, t.created_at DESC, t.id DESC
-    ` : [];
 
     // Public charts should move like the movement tape: one visible
-    // execution burst should leave one final display price. Raw reserve
-    // snapshots can include internal AMM steps from a mixed book/AMM fill,
-    // and rendering those alongside book fills makes a single 50c -> 54c buy
-    // look like a spike to ~60c and then a reversal. Fetch recent binary
-    // trade rows, collapse them by the same short execution bucket, and
-    // replace nearby snapshots with that public terminal price.
+    // execution burst should leave one final reserve price. Raw reserve
+    // snapshots can include internal AMM steps from a mixed book/AMM fill.
+    // Fetch recent binary trade rows, collapse them by the same short
+    // execution bucket, and replace nearby snapshots only when reserves
+    // actually moved.
     const tradeRowCap = Math.min(Math.max(maxPoints * 12, 240), 2400);
     const displayTradeRows = outcomeIdx <= 1 ? await sql`
       WITH ranked_trades AS (
@@ -233,14 +212,6 @@ export default async function handler(req, res) {
       const price = Number(prices[outcomeIdx]);
       if (!Number.isFinite(price)) continue;
       boundary.set(r.market_id, { at: new Date(r.snapshotted_at).getTime(), p: price });
-    }
-    for (const r of boundaryTradeRows) {
-      const tradePrice = Number(r.price_at_trade);
-      if (!Number.isFinite(tradePrice) || tradePrice <= 0 || tradePrice >= 1) continue;
-      const projected = Number(r.outcome_index) === outcomeIdx ? tradePrice : 1 - tradePrice;
-      const at = new Date(r.created_at).getTime();
-      const prev = boundary.get(r.market_id);
-      if (!prev || at > prev.at) boundary.set(r.market_id, { at, p: projected });
     }
     for (const [marketId, b] of boundary) {
       history[marketId].push({

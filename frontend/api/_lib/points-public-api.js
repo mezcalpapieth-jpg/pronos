@@ -32,8 +32,7 @@ export function pricesFromReserves(reserves, outcomeCount, row = {}) {
     return Array.from({ length: count }, () => 1 / count);
   }
   if (reserves.length === 2) {
-    const basePrices = binaryPrices(reserves);
-    return binaryPricesWithBookTrade(basePrices, {
+    return binaryPricesWithBookTrade(binaryPrices(reserves), {
       status: row.status,
       outcomeIndex: row.display_trade_outcome_index,
       price: row.display_trade_price,

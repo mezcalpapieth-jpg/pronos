@@ -11,7 +11,7 @@ test('points price history supports short hour windows for detail charts', () =>
   assert.match(source, /\|\| ' hours'/);
 });
 
-test('points price history includes binary orderbook fills that do not move reserves', () => {
+test('points price history adds averaged book-only execution bursts to probability movement', () => {
   assert.match(source, /PRONOS_TREASURY_USERNAME/);
   assert.match(source, /displayTradePointsFromRows/);
   assert.match(source, /mergeDisplayPricePoints/);
@@ -19,6 +19,9 @@ test('points price history includes binary orderbook fills that do not move rese
   assert.match(source, /t\.side IN \('buy', 'sell'\)/);
   assert.match(source, /jsonb_array_length\(m\.outcomes\) = 2/);
   assert.match(source, /tradeRowCap/);
+  assert.match(source, /execution-burst averages/);
+  assert.doesNotMatch(source, /boundaryTradeRows/);
+  assert.doesNotMatch(source, /t\.reserves_before = t\.reserves_after/);
   assert.match(source, /priceHistoryExecutionBucket\(r\.snapshotted_at\)/);
   assert.match(source, /sort\(\(a, b\) => a\.t - b\.t \|\| a\._id - b\._id\)/);
 });

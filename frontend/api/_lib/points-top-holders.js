@@ -128,28 +128,41 @@ function parallelSnapshotMatchesResolvedLegs(holders, expectedByLabel) {
 async function marketRow(client, marketId) {
   const result = await client.query(
     `SELECT m.id, m.parent_id, m.outcomes, m.reserves, m.amm_mode, m.status, m.outcome,
-            (SELECT t.outcome_index
-               FROM points_trades t
-              WHERE t.market_id = m.id
-                AND t.username <> $2
-                AND t.price_at_trade IS NOT NULL
-              ORDER BY t.created_at DESC, t.id DESC
-              LIMIT 1) AS display_trade_outcome_index,
-            (SELECT t.price_at_trade
-               FROM points_trades t
-              WHERE t.market_id = m.id
-                AND t.username <> $2
-                AND t.price_at_trade IS NOT NULL
-              ORDER BY t.created_at DESC, t.id DESC
-              LIMIT 1) AS display_trade_price,
-            (SELECT (t.reserves_before IS NOT NULL AND t.reserves_after IS NOT NULL AND t.reserves_before = t.reserves_after)
-               FROM points_trades t
-              WHERE t.market_id = m.id
-                AND t.username <> $2
-                AND t.price_at_trade IS NOT NULL
-              ORDER BY t.created_at DESC, t.id DESC
-              LIMIT 1) AS display_trade_is_book
+            dt.outcome_index AS display_trade_outcome_index,
+            dt.price_at_trade AS display_trade_price,
+            dt.is_book_trade AS display_trade_is_book
        FROM points_markets m
+       LEFT JOIN LATERAL (
+         WITH recent AS (
+           SELECT
+             t.*,
+             FLOOR(EXTRACT(EPOCH FROM t.created_at) * 1000 / 2000) AS execution_bucket
+           FROM points_trades t
+           WHERE t.market_id = m.id
+             AND t.username <> $2
+             AND t.price_at_trade IS NOT NULL
+             AND t.outcome_index IN (0, 1)
+           ORDER BY t.created_at DESC, t.id DESC
+           LIMIT 24
+         ),
+         grouped AS (
+           SELECT
+             outcome_index,
+             CASE
+               WHEN SUM(shares) > 0 THEN SUM(ABS(collateral)) / SUM(shares)
+               ELSE MAX(price_at_trade)
+             END AS price_at_trade,
+             BOOL_AND(reserves_before IS NOT NULL AND reserves_after IS NOT NULL AND reserves_before = reserves_after) AS is_book_trade,
+             MAX(created_at) AS last_at,
+             MAX(id) AS last_id
+           FROM recent
+           GROUP BY market_id, username, side, outcome_index, execution_bucket
+           ORDER BY MAX(created_at) DESC, MAX(id) DESC
+           LIMIT 1
+         )
+         SELECT outcome_index, price_at_trade, is_book_trade
+         FROM grouped
+       ) dt ON true
       WHERE m.id = $1
       LIMIT 1`,
     [marketId, PRONOS_TREASURY_USERNAME],
@@ -162,11 +175,11 @@ function displayPricesForMarket(row) {
   const basePrices = pricesForReserves(reserves);
   return basePrices.length === 2
     ? binaryPricesWithBookTrade(basePrices, {
-        status: row?.status,
-        outcomeIndex: row?.display_trade_outcome_index,
-        price: row?.display_trade_price,
-        isBookTrade: row?.display_trade_is_book,
-      })
+      status: row?.status,
+      outcomeIndex: row?.display_trade_outcome_index,
+      price: row?.display_trade_price,
+      isBookTrade: row?.display_trade_is_book,
+    })
     : basePrices;
 }
 
@@ -224,28 +237,41 @@ export async function buildTopHoldersForMarket(client, marketId, {
   if (ammMode === 'parallel' && !m.parent_id) {
     const legsResult = await client.query(
       `SELECT l.id, l.reserves, l.status, l.outcome, l.leg_label,
-              (SELECT t.outcome_index
-                 FROM points_trades t
-                WHERE t.market_id = l.id
-                  AND t.username <> $2
-                  AND t.price_at_trade IS NOT NULL
-                ORDER BY t.created_at DESC, t.id DESC
-                LIMIT 1) AS display_trade_outcome_index,
-              (SELECT t.price_at_trade
-                 FROM points_trades t
-                WHERE t.market_id = l.id
-                  AND t.username <> $2
-                  AND t.price_at_trade IS NOT NULL
-                ORDER BY t.created_at DESC, t.id DESC
-                LIMIT 1) AS display_trade_price,
-              (SELECT (t.reserves_before IS NOT NULL AND t.reserves_after IS NOT NULL AND t.reserves_before = t.reserves_after)
-                 FROM points_trades t
-                WHERE t.market_id = l.id
-                  AND t.username <> $2
-                  AND t.price_at_trade IS NOT NULL
-                ORDER BY t.created_at DESC, t.id DESC
-                LIMIT 1) AS display_trade_is_book
+              dt.outcome_index AS display_trade_outcome_index,
+              dt.price_at_trade AS display_trade_price,
+              dt.is_book_trade AS display_trade_is_book
          FROM points_markets l
+         LEFT JOIN LATERAL (
+           WITH recent AS (
+             SELECT
+               t.*,
+               FLOOR(EXTRACT(EPOCH FROM t.created_at) * 1000 / 2000) AS execution_bucket
+             FROM points_trades t
+             WHERE t.market_id = l.id
+               AND t.username <> $2
+               AND t.price_at_trade IS NOT NULL
+               AND t.outcome_index IN (0, 1)
+             ORDER BY t.created_at DESC, t.id DESC
+             LIMIT 24
+           ),
+           grouped AS (
+             SELECT
+               outcome_index,
+               CASE
+                 WHEN SUM(shares) > 0 THEN SUM(ABS(collateral)) / SUM(shares)
+                 ELSE MAX(price_at_trade)
+               END AS price_at_trade,
+               BOOL_AND(reserves_before IS NOT NULL AND reserves_after IS NOT NULL AND reserves_before = reserves_after) AS is_book_trade,
+               MAX(created_at) AS last_at,
+               MAX(id) AS last_id
+             FROM recent
+             GROUP BY market_id, username, side, outcome_index, execution_bucket
+             ORDER BY MAX(created_at) DESC, MAX(id) DESC
+             LIMIT 1
+           )
+           SELECT outcome_index, price_at_trade, is_book_trade
+           FROM grouped
+         ) dt ON true
         WHERE l.parent_id = $1
         ORDER BY l.id ASC`,
       [mid, PRONOS_TREASURY_USERNAME],

@@ -187,10 +187,11 @@ test('public activity tape renders named buys and sells without execution-source
   assert.match(activityTape, /item\.priceMax/);
   assert.match(activityTape, /showTradeDetails = false/);
   assert.match(activityTape, /const fills = Array\.isArray\(item\.fills\) \? item\.fills : \[\]/);
-  assert.match(activityTape, /const canShowDetails = showTradeDetails && fills\.length > 1/);
+  assert.match(activityTape, /const canShowDetails = showTradeDetails && fills\.length > 0/);
+  assert.match(activityTape, /liquidityRouteLabel\(fill\.liquidityRoute, t\)/);
+  assert.match(activityTape, /liquidityRouteNote\(fill\.liquidityRoute, fill\.side \|\| item\.side, t\)/);
   assert.match(activityTape, /expandedTradeRows/);
   assert.doesNotMatch(carousel, /showTradeDetails=\{true\}|showTradeDetails=\{isAdmin\}/);
-  assert.doesNotMatch(activityTape, /orderBookSource|source ===|AMM|maker/i);
 });
 
 test('an empty poll never blanks a slide already on screen', () => {

@@ -17,6 +17,7 @@ const buyModalSource = await readFile(new URL('../components/PointsBuyModal.jsx'
 const marketCardSource = await readFile(new URL('../components/PointsMarketCard.jsx', import.meta.url), 'utf8');
 const multiSource = await readFile(new URL('../../../src/components/MultiSparkline.jsx', import.meta.url), 'utf8');
 const tradeTapeSource = await readFile(new URL('../../../../api/points/trade-tape.js', import.meta.url), 'utf8');
+const activityTapeSource = await readFile(new URL('../components/PointsActivityTape.jsx', import.meta.url), 'utf8');
 
 test('points market detail overlays real activity and range controls on the chart', () => {
   assert.match(detailSource, /fetchTradeActivity/);
@@ -129,6 +130,11 @@ test('public trade tape exposes named movements but hides maker and AMM routing'
   assert.match(tradeTapeSource, /cachedJson\(cacheKey, includeDetails \? 0 : 2_000/);
   assert.match(tradeTapeSource, /fills: includeDetails \? \[\] : null/);
   assert.match(tradeTapeSource, /payload\.fills = \[\.\.\.group\.fills\]/);
+  assert.match(tradeTapeSource, /liquidityRouteFor/);
+  assert.match(tradeTapeSource, /has_treasury_counterparty/);
+  assert.match(tradeTapeSource, /has_user_counterparty/);
+  assert.match(tradeTapeSource, /liquidityRoute: route/);
+  assert.match(tradeTapeSource, /touchedAmm: reservesMoved\(row\)/);
   assert.doesNotMatch(tradeTapeSource, /source\s*:/);
   assert.doesNotMatch(tradeTapeSource, /executionSource|orderBookSource|makerSource/);
 });
@@ -139,6 +145,9 @@ test('market detail can request admin-only trade fill details without exposing t
   assert.match(detailSource, /fetchTradeTape\(tradeTapeIds, \{ hours: 24 \* 30, limit: 80, details: isAdmin \}\)/);
   assert.match(detailSource, /showTradeDetails=\{isAdmin\}/);
   assert.match(detailSource, /orderBookRefresh, isAdmin/);
+  assert.match(activityTapeSource, /const canShowDetails = showTradeDetails && fills\.length > 0/);
+  assert.match(activityTapeSource, /liquidityRouteLabel\(fill\.liquidityRoute, t\)/);
+  assert.match(activityTapeSource, /liquidityRouteNote\(fill\.liquidityRoute, fill\.side \|\| item\.side, t\)/);
 });
 
 test('chart range copy is translated', () => {
@@ -153,6 +162,14 @@ test('chart range copy is translated', () => {
   assert.match(i18nSource, /'points\.detail\.activityPressure'/);
   assert.match(i18nSource, /'points\.activity\.detailsShow'/);
   assert.match(i18nSource, /'points\.activity\.detailsHide'/);
+  assert.match(i18nSource, /'points\.activity\.detailsChain'/);
+  assert.match(i18nSource, /'points\.activity\.routeUserBook'/);
+  assert.match(i18nSource, /'points\.activity\.routePronosMaker'/);
+  assert.match(i18nSource, /'points\.activity\.routeMakerInventory'/);
+  assert.match(i18nSource, /'points\.activity\.routeMakerAmm'/);
+  assert.match(i18nSource, /'points\.activity\.routeAmm'/);
+  assert.match(i18nSource, /'points\.activity\.routeAmm\.buy'/);
+  assert.match(i18nSource, /'points\.activity\.routeAmm\.sell'/);
   assert.doesNotMatch(detailSource, /activityOpsShort/);
 });
 

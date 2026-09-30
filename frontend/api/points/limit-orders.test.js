@@ -22,14 +22,12 @@ import {
   previewRestingAsksForBuy,
   previewRestingBidsForSell,
 } from '../_lib/points-limit-orders.js';
-import { monotonicBuyDisplayPrice } from '../_lib/points-display-prices.js';
 import { binaryBuyQuote, binaryPrices, binarySellQuote } from '../_lib/amm-math.js';
 import { buildTopHoldersForMarket, readTopHolderSnapshot } from '../_lib/points-top-holders.js';
 
 const schemaSource = await readFile(new URL('../_lib/points-schema.js', import.meta.url), 'utf8');
 const migrateSource = await readFile(new URL('../migrate.js', import.meta.url), 'utf8');
 const helperSource = await readFile(new URL('../_lib/points-limit-orders.js', import.meta.url), 'utf8');
-const displayPriceSource = await readFile(new URL('../_lib/points-display-prices.js', import.meta.url), 'utf8');
 const entrySource = await readFile(new URL('../_lib/points-tournament-entry.js', import.meta.url), 'utf8');
 const orderbookSource = await readFile(new URL('./orderbook.js', import.meta.url), 'utf8');
 const limitOrdersSource = await readFile(new URL('./limit-orders.js', import.meta.url), 'utf8');
@@ -377,48 +375,65 @@ test('orderbook maker bid depth displays AMM-capped synthetic prices', () => {
   assert.ok(executableDepth.bids.every(row => row.total <= row.shares * row.makerLimitPrice + 0.000001));
 });
 
-test('buy quotes display orderbook-only execution price instead of stale AMM price', () => {
+test('Pronos maker depth keeps a second opposing buy below fifty when the leader has more liquidity', () => {
+  const reserves = [460, 540];
+  const outcomeIndex = 1;
+  const priceBefore = binaryPrices(reserves)[outcomeIndex];
+  const pureAmm = binaryBuyQuote(reserves, outcomeIndex, 100);
+  const maker = previewPronosMakerAsksForBuy({
+    reserves: JSON.stringify(reserves),
+  }, {
+    outcomeIndex,
+    collateral: 100,
+    usage: { askCollateralUsed: 100, bidCollateralUsed: 0 },
+    maxPrice: pureAmm.avgPrice,
+    currentPrice: priceBefore,
+  });
+  const makerDisplayAfter = maker.collateralSpent / maker.sharesOut;
+
+  approxEqual(priceBefore, 0.46, 0.000001, 'opposing side starts at 46 percent');
+  assert.ok(pureAmm.priceAfter > 0.55, 'pure AMM would cross fifty too aggressively');
+  approxEqual(maker.collateralSpent, 100, 0.000001, 'maker book should absorb the full second buy');
+  assert.equal(maker.remainingCollateral, 0);
+  assert.ok(makerDisplayAfter > priceBefore, 'buy should still move the displayed price up');
+  assert.ok(makerDisplayAfter < 0.5, 'filled buy should stay below fifty while the other side leads');
+});
+
+test('buy quotes use orderbook fills as damped display movement without stale market overrides', () => {
   assert.match(quoteBuySource, /function buyOrderbookPriceCap/);
   assert.match(quoteBuySource, /const bookMaxPrice = buyOrderbookPriceCap\(reserves, oi, amt\)/);
   assert.match(quoteBuySource, /previewRestingAsksForBuy\(askRows, \{\s*collateral: amt,\s*maxPrice: bookMaxPrice,\s*\}\)/s);
-  assert.match(quoteBuySource, /binaryPricesWithBookTrade/);
+  assert.doesNotMatch(quoteBuySource, /binaryPricesWithBookTrade/);
   assert.match(quoteBuySource, /monotonicBuyDisplayPrice/);
-  assert.match(quoteBuySource, /displayTradeRows/);
-  assert.match(quoteBuySource, /reserves_before = reserves_after/);
-  assert.match(quoteBuySource, /const priceBefore = displayPricesBefore\[oi\] \|\| pricesBefore\[oi\] \|\| 0/);
+  assert.doesNotMatch(quoteBuySource, /displayTradeRows/);
+  assert.doesNotMatch(quoteBuySource, /reserves_before = reserves_after/);
+  assert.match(quoteBuySource, /const priceBefore = pricesBefore\[oi\] \|\| 0/);
   assert.match(quoteBuySource, /currentPrice: priceBefore/);
   assert.match(quoteBuySource, /const executionPrice = avgPrice > 0 \? avgPrice : null/);
-  assert.match(quoteBuySource, /const lastBookFillPrice = \[\.\.\.\(orderbook\.fills \|\| \[\]\)\]/);
-  assert.match(quoteBuySource, /const rawPriceAfter = q\?\.pricesAfter\?\.\[oi\] \?\? null/);
   assert.match(quoteBuySource, /const priceAfter = monotonicBuyDisplayPrice\(priceBefore, \[/);
   assert.match(quoteBuySource, /priceImpactPts: \(priceAfter - priceBefore\) \* 100/);
-  assert.match(tradeServiceSource, /binaryPricesWithBookTrade/);
+  assert.doesNotMatch(tradeServiceSource, /binaryPricesWithBookTrade/);
+  assert.match(tradeServiceSource, /monotonicBuyDisplayPrice/);
   assert.match(tradeServiceSource, /function buyOrderbookPriceCap/);
   assert.match(tradeServiceSource, /const bookMaxPrice = buyOrderbookPriceCap\(reserves, oi, amt\)/);
   assert.match(tradeServiceSource, /matchRestingAsksForBuy\(client, \{[\s\S]*maxPrice: bookMaxPrice,[\s\S]*\}\)/);
   assert.match(tradeServiceSource, /matchPronosMakerAsksForBuy\(client, \{[\s\S]*maxPrice: bookMaxPrice,[\s\S]*\}\)/);
-  assert.match(tradeServiceSource, /PRONOS_TREASURY_USERNAME/);
+  assert.match(tradeServiceSource, /const pricesBefore = reserves\.length === 2 \? binaryPrices\(reserves\) : multiPrices\(reserves\)/);
+  assert.match(tradeServiceSource, /const displayPriceBefore = Number\(pricesBefore\[oi\] \?\? 0\)/);
   assert.match(tradeServiceSource, /currentPrice: displayPriceBefore \|\| null/);
-  assert.match(tradeServiceSource, /const responsePriceAfter = reserves\.length === 2\s*\?\s*monotonicBuyDisplayPrice\(responsePriceBefore, \[/s);
+  assert.match(tradeServiceSource, /const responsePriceAfter = monotonicBuyDisplayPrice\(responsePriceBefore, \[/);
   assert.match(quoteBuySource, /orderbookFillCount/);
   assert.doesNotMatch(quoteBuySource, /orderbookFills: orderbook\.fills/);
   assert.doesNotMatch(quoteBuySource, /ammCollateral,/);
   assert.match(buySource, /const \{ orderbookFills, triggeredLimitOrders, \.\.\.publicResult \} = result/);
 });
 
-test('buy display prices never report the selected side moving backward', () => {
-  assert.match(displayPriceSource, /export function monotonicBuyDisplayPrice/);
-  assert.equal(monotonicBuyDisplayPrice(0.76, [0.71]), 0.76);
-  assert.equal(monotonicBuyDisplayPrice(0.76, [0.82]), 0.82);
-  assert.equal(monotonicBuyDisplayPrice(0.5, [null, 0.49, 0.53]), 0.53);
-});
-
-test('sell quotes and orderbook current price only trust latest book-only fills', () => {
+test('sell quotes use orderbook fills as damped display movement', () => {
   for (const source of [quoteSellSource, orderbookSource]) {
-    assert.match(source, /reserves_before IS NOT NULL AND reserves_after IS NOT NULL AND reserves_before = reserves_after/);
-    assert.match(source, /is_book_trade/);
+    assert.doesNotMatch(source, /reserves_before IS NOT NULL AND reserves_after IS NOT NULL AND reserves_before = reserves_after/);
+    assert.doesNotMatch(source, /is_book_trade/);
+    assert.doesNotMatch(source, /binaryPricesWithBookTrade/);
   }
-  assert.match(quoteSellSource, /binaryPricesWithBookTrade/);
   assert.match(quoteSellSource, /function sellOrderbookPriceFloor/);
   assert.match(quoteSellSource, /const bookMinPrice = sellOrderbookPriceFloor\(reserves, oi, n\)/);
   assert.match(quoteSellSource, /previewRestingBidsForSell\(bidRows, \{\s*shares: n,\s*minPrice: bookMinPrice,\s*\}\)/s);
@@ -431,26 +446,26 @@ test('sell quotes and orderbook current price only trust latest book-only fills'
   assert.match(tradeServiceSource, /const reservesForAmm = Array\.isArray\(orderbookMatch\.reservesAfter\)/);
   assert.match(tradeServiceSource, /binarySellQuote\(reservesForAmm, oi, ammShares\)/);
   assert.match(quoteSellSource, /previewPronosMakerInventoryBidsForSell\(makerTradeRows, \{/);
-  assert.match(quoteSellSource, /const priceBefore = displayPricesBefore\[oi\] \|\| pricesBefore\[oi\] \|\| 0/);
-  assert.match(quoteSellSource, /const lastBookFillPrice = \[\.\.\.\(orderbook\.fills \|\| \[\]\)\]/);
-  assert.match(quoteSellSource, /const priceAfter = q\?\.priceAfter \?\? orderbook\.priceAfter \?\? lastBookFillPrice \?\? executionPrice \?\? priceBefore/);
-  assert.match(orderbookSource, /binaryPricesWithBookTrade/);
-  assert.match(orderbookSource, /outcomeIndex: lastRows\[0\]\?\.outcome_index/);
-  assert.match(orderbookSource, /currentPrice: Number\.isFinite\(displayCurrentPrice\) \? displayCurrentPrice : null/);
-  assert.match(orderbookSource, /const currentPrice = Number\.isFinite\(displayCurrentPrice\) \? displayCurrentPrice : depth\.currentPrice/);
+  assert.match(quoteSellSource, /const priceBefore = pricesBefore\[oi\] \|\| 0/);
+  assert.doesNotMatch(quoteSellSource, /lastBookFillPrice/);
+  assert.match(quoteSellSource, /const priceAfter = monotonicSellDisplayPrice\(priceBefore, \[/);
+  assert.doesNotMatch(orderbookSource, /lastRows/);
+  assert.doesNotMatch(orderbookSource, /displayCurrentPrice/);
+  assert.match(orderbookSource, /const currentPrice = depth\.currentPrice/);
   assert.match(quoteSellSource, /orderbookFillCount/);
   assert.doesNotMatch(quoteSellSource, /orderbookFills: orderbook\.fills/);
   assert.doesNotMatch(quoteSellSource, /ammShares,/);
   assert.match(sellSource, /const \{ orderbookFills, triggeredLimitOrders, \.\.\.publicResult \} = result/);
 });
 
-test('top holders price positions with displayed book-trade odds', () => {
+test('top holders price active positions with damped book-only display odds', () => {
   assert.match(topHoldersSource, /readTopHolderSnapshot/);
   assert.match(topHoldersSource, /buildTopHoldersForMarket/);
   assert.match(topHoldersHelperSource, /binaryPricesWithBookTrade/);
   assert.match(topHoldersHelperSource, /display_trade_outcome_index/);
   assert.match(topHoldersHelperSource, /display_trade_is_book/);
   assert.match(topHoldersHelperSource, /PRONOS_TREASURY_USERNAME/);
+  assert.match(topHoldersHelperSource, /SUM\(ABS\(collateral\)\) \/ SUM\(shares\)/);
   assert.match(topHoldersHelperSource, /points_top_holder_snapshots/);
   assert.match(topHoldersHelperSource, /payoutValue/);
   assert.match(topHoldersHelperSource, /winningOutcomeIndex/);
@@ -614,7 +629,7 @@ test('buy quotes and execution prioritize user orderbook liquidity before Pronos
   assert.match(tradeServiceSource, /collateralBudget: realOrderbookMatch\.remainingCollateral/);
 });
 
-test('Pronos maker previews can anchor to displayed binary odds', () => {
+test('Pronos maker previews can anchor to an explicit current price', () => {
   const market = {
     reserves: JSON.stringify([500, 500]),
     seed_liquidity: 500,
@@ -656,8 +671,8 @@ test('Pronos maker depth uses lightweight targets instead of legacy seed walls',
     levels: [10, 25, 50, 100],
   });
 
-  assert.equal(normalDepth.perSideDepth, 500);
-  assert.equal(trophyDepth.perSideDepth, 750);
+  assert.equal(normalDepth.perSideDepth, 750);
+  assert.equal(trophyDepth.perSideDepth, 1000);
 });
 
 test('Pronos maker depth keeps the middle light and adds shared edge walls', () => {

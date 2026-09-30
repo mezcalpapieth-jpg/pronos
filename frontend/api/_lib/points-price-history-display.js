@@ -20,6 +20,31 @@ function roundPct(price) {
   return Math.round(Number(price) * 10000) / 100;
 }
 
+function cleanTradePrice(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 && n < 1 ? n : null;
+}
+
+function executionAvgPrice(rows) {
+  let collateral = 0;
+  let shares = 0;
+  let fallbackPrice = null;
+  for (const row of rows) {
+    const c = Number(row?.collateral || 0);
+    const s = Number(row?.shares || 0);
+    if (Number.isFinite(c) && c > 0 && Number.isFinite(s) && s > 0) {
+      collateral += c;
+      shares += s;
+    }
+    const p = cleanTradePrice(row?.price_at_trade);
+    if (p !== null) fallbackPrice = p;
+  }
+  if (collateral > EPSILON && shares > EPSILON) {
+    return cleanTradePrice(collateral / shares);
+  }
+  return fallbackPrice;
+}
+
 export function priceHistoryExecutionBucket(value) {
   const ms = timestampMs(value);
   return ms > 0 ? Math.floor(ms / PRICE_HISTORY_EXECUTION_BUCKET_MS) : 0;
@@ -39,16 +64,6 @@ export function reservePriceForOutcome(value, outcomeIdx) {
   } catch {
     return null;
   }
-}
-
-function projectedTradePrice(row, outcomeIdx) {
-  const price = Number(row?.price_at_trade);
-  const tradeOutcome = Number(row?.outcome_index);
-  const requestedOutcome = Number(outcomeIdx);
-  if (!Number.isFinite(price) || price <= 0 || price >= 1) return null;
-  if (!Number.isInteger(tradeOutcome) || tradeOutcome < 0 || tradeOutcome > 1) return null;
-  if (!Number.isInteger(requestedOutcome) || requestedOutcome < 0 || requestedOutcome > 1) return null;
-  return tradeOutcome === requestedOutcome ? price : 1 - price;
 }
 
 function tradeGroupKey(row) {
@@ -94,14 +109,17 @@ export function displayTradePointsFromRows(rows, outcomeIdx) {
       }
     }
 
-    const tradeAfter = projectedTradePrice(last, outcomeIdx);
-    let displayAfter = lastMovedReserveAfter ?? lastReserveAfter;
-    if (
-      tradeAfter != null &&
-      (displayAfter == null || (before != null && Math.abs(displayAfter - before) <= EPSILON))
-    ) {
-      displayAfter = tradeAfter;
-    }
+    const displayAfter = lastMovedReserveAfter ?? (
+      before != null && lastReserveAfter != null && Math.abs(lastReserveAfter - before) > EPSILON
+        ? lastReserveAfter
+        : (() => {
+          const tradeOutcome = Number(last?.outcome_index);
+          if (!Number.isInteger(tradeOutcome) || tradeOutcome < 0 || tradeOutcome > 1) return null;
+          const avg = executionAvgPrice(sorted);
+          if (avg === null) return null;
+          return tradeOutcome === Number(outcomeIdx) ? avg : 1 - avg;
+        })()
+    );
     if (displayAfter == null) continue;
 
     points.push({

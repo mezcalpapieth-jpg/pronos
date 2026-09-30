@@ -49,7 +49,7 @@ test('price history collapses a mixed execution burst to the public final price'
   assert.deepEqual(merged.map(pt => pt.p), [50, 54]);
 });
 
-test('price history uses the fill price when a book-only execution does not move reserves', () => {
+test('price history uses averaged book-only fills as display movement', () => {
   const points = displayTradePointsFromRows([
     {
       id: 20,

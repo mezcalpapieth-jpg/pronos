@@ -3,6 +3,7 @@ import {
   binaryPrices,
   binarySellQuote,
   multiBuyQuote,
+  multiPrices,
   multiSellQuote,
 } from './amm-math.js';
 import { seriesTradeLockFromRows } from './series-markets.js';
@@ -16,11 +17,10 @@ import {
   matchPronosMakerInventoryBidsForSell,
   matchRestingAsksForBuy,
   matchRestingBidsForSell,
-  PRONOS_TREASURY_USERNAME,
 } from './points-limit-orders.js';
 import {
-  binaryPricesWithBookTrade,
   monotonicBuyDisplayPrice,
+  monotonicSellDisplayPrice,
 } from './points-display-prices.js';
 import { assertCryptoTradeAllowed } from './points-crypto-trade-guard.js';
 import {
@@ -196,28 +196,8 @@ export async function executePointsBuy(client, {
   if (reserves.length < 2) throw apiError('degenerate_reserves', 400);
   if (oi >= reserves.length) throw apiError('invalid_outcome_index', 400);
 
-  let displayPriceBefore = 0;
-  if (reserves.length === 2) {
-    const pricesBefore = binaryPrices(reserves);
-    const displayTradeResult = await client.query(
-      `SELECT outcome_index, price_at_trade,
-              (reserves_before IS NOT NULL AND reserves_after IS NOT NULL AND reserves_before = reserves_after) AS is_book_trade
-         FROM points_trades
-        WHERE market_id = $1
-          AND username <> $2
-          AND price_at_trade IS NOT NULL
-        ORDER BY created_at DESC, id DESC
-        LIMIT 1`,
-      [mid, PRONOS_TREASURY_USERNAME],
-    );
-    const displayPricesBefore = binaryPricesWithBookTrade(pricesBefore, {
-      status: market.status,
-      outcomeIndex: displayTradeResult.rows[0]?.outcome_index,
-      price: displayTradeResult.rows[0]?.price_at_trade,
-      isBookTrade: displayTradeResult.rows[0]?.is_book_trade,
-    });
-    displayPriceBefore = Number(displayPricesBefore[oi] ?? pricesBefore[oi] ?? 0);
-  }
+  const pricesBefore = reserves.length === 2 ? binaryPrices(reserves) : multiPrices(reserves);
+  const displayPriceBefore = Number(pricesBefore[oi] ?? 0);
 
   const balanceResult = await client.query(
     `SELECT balance FROM points_balances WHERE username = $1 FOR UPDATE`,
@@ -350,19 +330,11 @@ export async function executePointsBuy(client, {
   }
 
   const triggeredLimitOrders = await executeTriggeredLimitOrders(client, { marketId: mid });
-  const lastOrderbookFillPrice = [...(orderbookMatch.fills || [])]
-    .reverse()
-    .map(fill => Number(fill.price))
-    .find(price => Number.isFinite(price) && price > 0);
-  const rawPriceBefore = quote?.priceBefore ?? orderbookMatch.avgPrice;
-  const responsePriceBefore = displayPriceBefore || rawPriceBefore;
-  const responsePriceAfter = reserves.length === 2
-    ? monotonicBuyDisplayPrice(responsePriceBefore, [
-      quote?.priceAfter,
-      lastOrderbookFillPrice,
-      combinedAvgPrice,
-    ])
-    : (quote?.priceAfter ?? orderbookMatch.avgPrice);
+  const responsePriceBefore = quote?.priceBefore ?? displayPriceBefore ?? orderbookMatch.avgPrice;
+  const responsePriceAfter = monotonicBuyDisplayPrice(responsePriceBefore, [
+    quote?.priceAfter,
+    combinedAvgPrice,
+  ]);
 
   return {
     balance: newBalance,
@@ -417,28 +389,8 @@ export async function executePointsSell(client, {
   if (reserves.length < 2) throw apiError('degenerate_reserves', 400);
   if (oi >= reserves.length) throw apiError('invalid_outcome_index', 400);
 
-  let displayPriceBefore = 0;
-  if (reserves.length === 2) {
-    const pricesBefore = binaryPrices(reserves);
-    const displayTradeResult = await client.query(
-      `SELECT outcome_index, price_at_trade,
-              (reserves_before IS NOT NULL AND reserves_after IS NOT NULL AND reserves_before = reserves_after) AS is_book_trade
-         FROM points_trades
-        WHERE market_id = $1
-          AND username <> $2
-          AND price_at_trade IS NOT NULL
-        ORDER BY created_at DESC, id DESC
-        LIMIT 1`,
-      [mid, PRONOS_TREASURY_USERNAME],
-    );
-    const displayPricesBefore = binaryPricesWithBookTrade(pricesBefore, {
-      status: market.status,
-      outcomeIndex: displayTradeResult.rows[0]?.outcome_index,
-      price: displayTradeResult.rows[0]?.price_at_trade,
-      isBookTrade: displayTradeResult.rows[0]?.is_book_trade,
-    });
-    displayPriceBefore = Number(displayPricesBefore[oi] ?? pricesBefore[oi] ?? 0);
-  }
+  const pricesBefore = reserves.length === 2 ? binaryPrices(reserves) : multiPrices(reserves);
+  const displayPriceBefore = Number(pricesBefore[oi] ?? 0);
 
   const positionResult = await client.query(
     `SELECT shares, cost_basis, realized_pnl
@@ -611,8 +563,15 @@ export async function executePointsSell(client, {
     collateralOut: totalCollateralOut,
     sharesSold: sharesToSell,
     realizedPnl: orderbookMatch.realizedPnl + addedAmmRealized,
-    priceBefore: (displayPriceBefore || orderbookMatch.priceBefore) ?? quote?.priceBefore ?? orderbookMatch.avgPrice,
-    priceAfter: quote?.priceAfter ?? orderbookMatch.priceAfter ?? orderbookMatch.avgPrice,
+    priceBefore: quote?.priceBefore ?? orderbookMatch.priceBefore ?? displayPriceBefore ?? orderbookMatch.avgPrice,
+    priceAfter: monotonicSellDisplayPrice(
+      quote?.priceBefore ?? orderbookMatch.priceBefore ?? displayPriceBefore ?? orderbookMatch.avgPrice,
+      [
+        quote?.priceAfter,
+        orderbookMatch.priceAfter,
+        orderbookMatch.avgPrice,
+      ],
+    ),
     orderbookFills: orderbookMatch.fills,
     triggeredLimitOrders,
   };

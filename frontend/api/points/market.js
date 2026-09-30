@@ -19,10 +19,10 @@ import { deriveMarketTags } from '../_lib/category-tags.js';
 import { buildEspnLiveScoreConfig } from '../_lib/espn-live-score.js';
 import { deriveOutcomeCountryLabels } from '../_lib/outcome-country-labels.js';
 import { PRONOS_TREASURY_USERNAME } from '../_lib/points-limit-orders.js';
-import { binaryPricesWithBookTrade } from '../_lib/points-display-prices.js';
 import { readSession } from '../_lib/session.js';
 import { isAdminUsername } from '../_lib/points-admin.js';
 import { publicMarketTranslationFields } from '../_lib/market-translations.js';
+import { binaryPricesWithBookTrade } from '../_lib/points-display-prices.js';
 import { BANXICO_FIX_RESOLUTION_CRITERIA } from '../_lib/banxico.js';
 import { FRANKFURTER_RESOLUTION_CRITERIA, FRANKFURTER_SOURCE } from '../_lib/frankfurter.js';
 import { COINGECKO_TOKEN_MCAP_SOURCE } from '../_lib/solana-token-mcap.js';
@@ -442,11 +442,42 @@ export default async function handler(req, res) {
           pm.source_data AS pending_source_data,
           (SELECT COALESCE(SUM(ABS(collateral)), 0) FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME}) AS trade_volume,
           (SELECT MAX(created_at) FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME}) AS last_trade_at,
-          (SELECT t.outcome_index FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME} AND t.price_at_trade IS NOT NULL ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS display_trade_outcome_index,
-          (SELECT t.price_at_trade FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME} AND t.price_at_trade IS NOT NULL ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS display_trade_price,
-          (SELECT (t.reserves_before IS NOT NULL AND t.reserves_after IS NOT NULL AND t.reserves_before = t.reserves_after) FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME} AND t.price_at_trade IS NOT NULL ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS display_trade_is_book
+          dt.outcome_index AS display_trade_outcome_index,
+          dt.price_at_trade AS display_trade_price,
+          dt.is_book_trade AS display_trade_is_book
         FROM points_markets m
         LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
+        LEFT JOIN LATERAL (
+          WITH recent AS (
+            SELECT
+              t.*,
+              FLOOR(EXTRACT(EPOCH FROM t.created_at) * 1000 / 2000) AS execution_bucket
+            FROM points_trades t
+            WHERE t.market_id = m.id
+              AND t.username <> ${PRONOS_TREASURY_USERNAME}
+              AND t.price_at_trade IS NOT NULL
+              AND t.outcome_index IN (0, 1)
+            ORDER BY t.created_at DESC, t.id DESC
+            LIMIT 24
+          ),
+          grouped AS (
+            SELECT
+              outcome_index,
+              CASE
+                WHEN SUM(shares) > 0 THEN SUM(ABS(collateral)) / SUM(shares)
+                ELSE MAX(price_at_trade)
+              END AS price_at_trade,
+              BOOL_AND(reserves_before IS NOT NULL AND reserves_after IS NOT NULL AND reserves_before = reserves_after) AS is_book_trade,
+              MAX(created_at) AS last_at,
+              MAX(id) AS last_id
+            FROM recent
+            GROUP BY market_id, username, side, outcome_index, execution_bucket
+            ORDER BY MAX(created_at) DESC, MAX(id) DESC
+            LIMIT 1
+          )
+          SELECT outcome_index, price_at_trade, is_book_trade
+          FROM grouped
+        ) dt ON true
         WHERE m.id = ${id}
         LIMIT 1
       `;
@@ -654,10 +685,41 @@ export default async function handler(req, res) {
           SELECT l.id, l.leg_label, l.reserves, l.seed_liquidity, l.status, l.outcome,
             (SELECT COALESCE(SUM(ABS(collateral)), 0) FROM points_trades t WHERE t.market_id = l.id AND t.username <> ${PRONOS_TREASURY_USERNAME}) AS trade_volume,
             (SELECT MAX(created_at) FROM points_trades t WHERE t.market_id = l.id AND t.username <> ${PRONOS_TREASURY_USERNAME}) AS last_trade_at,
-            (SELECT t.outcome_index FROM points_trades t WHERE t.market_id = l.id AND t.username <> ${PRONOS_TREASURY_USERNAME} AND t.price_at_trade IS NOT NULL ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS display_trade_outcome_index,
-            (SELECT t.price_at_trade FROM points_trades t WHERE t.market_id = l.id AND t.username <> ${PRONOS_TREASURY_USERNAME} AND t.price_at_trade IS NOT NULL ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS display_trade_price,
-            (SELECT (t.reserves_before IS NOT NULL AND t.reserves_after IS NOT NULL AND t.reserves_before = t.reserves_after) FROM points_trades t WHERE t.market_id = l.id AND t.username <> ${PRONOS_TREASURY_USERNAME} AND t.price_at_trade IS NOT NULL ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS display_trade_is_book
+            dt.outcome_index AS display_trade_outcome_index,
+            dt.price_at_trade AS display_trade_price,
+            dt.is_book_trade AS display_trade_is_book
           FROM points_markets l
+          LEFT JOIN LATERAL (
+            WITH recent AS (
+              SELECT
+                t.*,
+                FLOOR(EXTRACT(EPOCH FROM t.created_at) * 1000 / 2000) AS execution_bucket
+              FROM points_trades t
+              WHERE t.market_id = l.id
+                AND t.username <> ${PRONOS_TREASURY_USERNAME}
+                AND t.price_at_trade IS NOT NULL
+                AND t.outcome_index IN (0, 1)
+              ORDER BY t.created_at DESC, t.id DESC
+              LIMIT 24
+            ),
+            grouped AS (
+              SELECT
+                outcome_index,
+                CASE
+                  WHEN SUM(shares) > 0 THEN SUM(ABS(collateral)) / SUM(shares)
+                  ELSE MAX(price_at_trade)
+                END AS price_at_trade,
+                BOOL_AND(reserves_before IS NOT NULL AND reserves_after IS NOT NULL AND reserves_before = reserves_after) AS is_book_trade,
+                MAX(created_at) AS last_at,
+                MAX(id) AS last_id
+              FROM recent
+              GROUP BY market_id, username, side, outcome_index, execution_bucket
+              ORDER BY MAX(created_at) DESC, MAX(id) DESC
+              LIMIT 1
+            )
+            SELECT outcome_index, price_at_trade, is_book_trade
+            FROM grouped
+          ) dt ON true
           WHERE l.parent_id = ${r.id}
             AND l.status <> 'canceled'
           ORDER BY l.id ASC

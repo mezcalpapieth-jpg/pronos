@@ -4,7 +4,6 @@ import { readFile } from 'node:fs/promises';
 
 const source = await readFile(new URL('./markets.js', import.meta.url), 'utf8');
 const detailSource = await readFile(new URL('./market.js', import.meta.url), 'utf8');
-const displayPriceSource = await readFile(new URL('../_lib/points-display-prices.js', import.meta.url), 'utf8');
 const pointsHome = await readFile(new URL('../../app/points/src/pages/PointsHome.jsx', import.meta.url), 'utf8');
 
 test('points market payload keeps admin featured and tournament markets on home', () => {
@@ -17,7 +16,7 @@ test('points market payload keeps admin featured and tournament markets on home'
 });
 
 test('points public lists hide bulk-hidden active markets outside trophy overrides', () => {
-  assert.match(source, /points:markets:v8/);
+  assert.match(source, /points:markets:v10/);
   assert.match(source, /m\.hidden_from_home IS NOT TRUE[\s\S]*?OR m\.tournament_featured = true/);
   assert.match(source, /m\.featured = true AND m\.hidden_from_home = false[\s\S]*?OR m\.tournament_featured = true/);
 });
@@ -69,16 +68,15 @@ test('parallel list payload exposes leg lifecycle for card previews', () => {
   assert.match(source, /activeOutcomeIndexes,/);
 });
 
-test('public market odds use reserves plus latest book-only fills', () => {
-  assert.match(displayPriceSource, /export function binaryPricesWithBookTrade/);
-  assert.match(displayPriceSource, /String\(status \|\| ''\)\.toLowerCase\(\) !== 'active'/);
-  assert.match(displayPriceSource, /isBookTrade === true \|\| String\(isBookTrade\)\.toLowerCase\(\) === 'true'/);
-  assert.match(displayPriceSource, /return oi === 0 \? \[p, 1 - p\] : \[1 - p, p\]/);
+test('public market odds use averaged book-only bursts without replacing resolved odds', () => {
   for (const text of [source, detailSource]) {
     assert.match(text, /pricesFromReserves\(reserves, outcomes\.length\)/);
     assert.match(text, /display_trade_is_book/);
-    assert.match(text, /t\.reserves_before = t\.reserves_after/);
+    assert.match(text, /reserves_before IS NOT NULL AND reserves_after IS NOT NULL AND reserves_before = reserves_after/);
+    assert.match(text, /SUM\(ABS\(collateral\)\) \/ SUM\(shares\)/);
     assert.match(text, /binaryPricesWithBookTrade\(/);
     assert.doesNotMatch(text, /function binaryPricesWithLatestTrade/);
   }
+  assert.match(source, /return binaryPricesWithBookTrade\(basePrices, \{/);
+  assert.match(detailSource, /prices: displayPrices/);
 });

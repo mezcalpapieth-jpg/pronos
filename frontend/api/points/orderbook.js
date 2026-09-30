@@ -10,7 +10,6 @@ import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { AMM_DEPTH_LEVELS } from '../_lib/amm-depth.js';
-import { binaryPrices } from '../_lib/amm-math.js';
 import {
   aggregateLimitOrderRows,
   makerUsageFromRows,
@@ -18,7 +17,6 @@ import {
   pronosMakerInventoryBidDepthFromRows,
   PRONOS_TREASURY_USERNAME,
 } from '../_lib/points-limit-orders.js';
-import { binaryPricesWithBookTrade } from '../_lib/points-display-prices.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 import { cachedJson, createApiTimer, setCacheHeaders } from '../_lib/api-performance.js';
 
@@ -115,29 +113,10 @@ export default async function handler(req, res) {
            AND side IN ('buy', 'sell')
          ORDER BY created_at ASC, id ASC
       `);
-      const lastRows = reserves.length === 2 ? await timer.time('db_last_trade', () => sql`
-        SELECT outcome_index, price_at_trade,
-               (reserves_before IS NOT NULL AND reserves_after IS NOT NULL AND reserves_before = reserves_after) AS is_book_trade
-        FROM points_trades
-        WHERE market_id = ${marketId}
-          AND username <> ${PRONOS_TREASURY_USERNAME}
-          AND price_at_trade IS NOT NULL
-        ORDER BY created_at DESC, id DESC
-        LIMIT 1
-      `) : [];
-      const basePrices = reserves.length === 2 ? binaryPrices(reserves) : [];
-      const displayPrices = reserves.length === 2 ? binaryPricesWithBookTrade(basePrices, {
-        status: market.status,
-        outcomeIndex: lastRows[0]?.outcome_index,
-        price: lastRows[0]?.price_at_trade,
-        isBookTrade: lastRows[0]?.is_book_trade,
-      }) : [];
-      const displayCurrentPrice = Number(displayPrices[outcomeIndex]);
       const depth = pronosMakerDepthForMarket(market, {
         outcomeIndex,
         levels: requestedLevels,
         usage: makerUsageFromRows(makerTradeRows),
-        currentPrice: Number.isFinite(displayCurrentPrice) ? displayCurrentPrice : null,
       });
       const limitRows = await timer.time('db_limit_orders', () => sql`
         SELECT side,
@@ -172,7 +151,7 @@ export default async function handler(req, res) {
       const spread = bestAsk == null || bestBid == null
         ? null
         : Math.max(0, bestAsk - bestBid);
-      const currentPrice = Number.isFinite(displayCurrentPrice) ? displayCurrentPrice : depth.currentPrice;
+      const currentPrice = depth.currentPrice;
 
       return {
         marketId,

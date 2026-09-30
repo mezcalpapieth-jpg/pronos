@@ -60,8 +60,47 @@ function priceMovementLabel(item) {
   return centLabel(item.price);
 }
 
+function hasPriceMovement(before, after) {
+  return toNumber(before) > 0 && toNumber(after) > 0 && Math.abs(toNumber(after) - toNumber(before)) >= 0.005;
+}
+
 function tradeRowKey(item, i) {
   return `${item.id || i}-${item.t || item.createdAt || i}`;
+}
+
+function liquidityRouteLabel(route, t) {
+  switch (route) {
+    case 'user_limit_order':
+      return t('points.activity.routeUserBook');
+    case 'pronos_maker_depth':
+      return t('points.activity.routePronosMaker');
+    case 'pronos_maker_inventory':
+      return t('points.activity.routeMakerInventory');
+    case 'pronos_maker_amm_capped':
+      return t('points.activity.routeMakerAmm');
+    case 'amm_pool':
+      return t('points.activity.routeAmm');
+    default:
+      return t('points.activity.routeBookFill');
+  }
+}
+
+function liquidityRouteNote(route, side, t) {
+  const action = side === 'sell' ? 'sell' : 'buy';
+  switch (route) {
+    case 'user_limit_order':
+      return t(`points.activity.routeUserBook.${action}`);
+    case 'pronos_maker_depth':
+      return t(`points.activity.routePronosMaker.${action}`);
+    case 'pronos_maker_inventory':
+      return t(`points.activity.routeMakerInventory.${action}`);
+    case 'pronos_maker_amm_capped':
+      return t(`points.activity.routeMakerAmm.${action}`);
+    case 'amm_pool':
+      return t(`points.activity.routeAmm.${action}`);
+    default:
+      return t(`points.activity.routeBookFill.${action}`);
+  }
 }
 
 export default function PointsActivityTape({
@@ -101,7 +140,7 @@ export default function PointsActivityTape({
         const bg = isBuy ? 'rgba(0,232,122,0.10)' : 'rgba(255,59,59,0.10)';
         const price = priceMovementLabel(item);
         const fills = Array.isArray(item.fills) ? item.fills : [];
-        const canShowDetails = showTradeDetails && fills.length > 1;
+        const canShowDetails = showTradeDetails && fills.length > 0;
         const expanded = canShowDetails && expandedTradeRows.has(key);
         return (
           <div key={key}>
@@ -235,18 +274,26 @@ export default function PointsActivityTape({
                   textTransform: 'uppercase',
                 }}>
                   <span>{fills.length} {fills.length === 1 ? t('points.activity.detailsFill') : t('points.activity.detailsFills')}</span>
-                  {item.priceBefore > 0 && item.priceAfter > 0 && (
+                  {hasPriceMovement(item.priceBefore, item.priceAfter) && (
                     <span>{centLabel(item.priceBefore)} → {centLabel(item.priceAfter)}</span>
                   )}
+                </div>
+                <div style={{
+                  color: 'var(--text-muted)',
+                  fontFamily: 'var(--font-body)',
+                  fontSize: 'var(--fs-2xs)',
+                  lineHeight: 1.35,
+                }}>
+                  {t('points.activity.detailsChain')}
                 </div>
                 {fills.map((fill, fillIndex) => (
                   <div
                     key={`${fill.id || fillIndex}-${fill.t || fill.createdAt || fillIndex}`}
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: compact ? '1fr auto' : 'auto minmax(0, 1fr) auto',
-                      gap: compact ? 8 : 10,
-                      alignItems: 'center',
+                      gridTemplateColumns: compact ? '1fr' : 'auto minmax(0, 1fr) auto',
+                      gap: compact ? 5 : 10,
+                      alignItems: 'start',
                       minWidth: 0,
                       color: 'var(--text-muted)',
                       fontFamily: 'var(--font-mono)',
@@ -255,19 +302,48 @@ export default function PointsActivityTape({
                     }}
                   >
                     {!compact && <span style={{ color: 'var(--text-secondary)' }}>#{fill.id || fillIndex + 1}</span>}
-                    <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      <span style={{ color: accent }}>{formatMoney(fill.collateral, locale)} MXNP</span>
-                      {' · '}
-                      {fill.outcomeDisplayLabel || fill.outcomeLabel || item.outcomeDisplayLabel || item.outcomeLabel || t('points.activity.tapeOutcome')}
-                      {showShares && fill.shares > 0 && (
-                        <>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        minWidth: 0,
+                        flexWrap: 'wrap',
+                      }}>
+                        <span style={{
+                          padding: '2px 6px',
+                          borderRadius: 6,
+                          border: '1px solid rgba(255,255,255,0.08)',
+                          background: fill.touchedAmm ? 'rgba(255,91,15,0.10)' : 'rgba(255,255,255,0.04)',
+                          color: fill.touchedAmm ? 'var(--orange)' : 'var(--text-secondary)',
+                          whiteSpace: 'nowrap',
+                        }}>
+                          {liquidityRouteLabel(fill.liquidityRoute, t)}
+                        </span>
+                        <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          <span style={{ color: accent }}>{formatMoney(fill.collateral, locale)} MXNP</span>
                           {' · '}
-                          {formatShares(fill.shares, locale)} {t('points.activity.tapeShares')}
-                        </>
-                      )}
-                    </span>
+                          {fill.outcomeDisplayLabel || fill.outcomeLabel || item.outcomeDisplayLabel || item.outcomeLabel || t('points.activity.tapeOutcome')}
+                          {showShares && fill.shares > 0 && (
+                            <>
+                              {' · '}
+                              {formatShares(fill.shares, locale)} {t('points.activity.tapeShares')}
+                            </>
+                          )}
+                        </span>
+                      </div>
+                      <div style={{
+                        marginTop: 3,
+                        color: 'var(--text-muted)',
+                        fontFamily: 'var(--font-body)',
+                        fontSize: 'var(--fs-2xs)',
+                        lineHeight: 1.35,
+                      }}>
+                        {liquidityRouteNote(fill.liquidityRoute, fill.side || item.side, t)}
+                      </div>
+                    </div>
                     <span style={{ color: accent, whiteSpace: 'nowrap' }}>
-                      {fill.priceBefore > 0 && fill.priceAfter > 0
+                      {hasPriceMovement(fill.priceBefore, fill.priceAfter)
                         ? `${centLabel(fill.priceBefore)} → ${centLabel(fill.priceAfter)}`
                         : centLabel(fill.price)}
                     </span>

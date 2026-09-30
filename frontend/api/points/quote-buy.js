@@ -24,10 +24,7 @@ import {
   previewRestingAsksForBuy,
   PRONOS_TREASURY_USERNAME,
 } from '../_lib/points-limit-orders.js';
-import {
-  binaryPricesWithBookTrade,
-  monotonicBuyDisplayPrice,
-} from '../_lib/points-display-prices.js';
+import { monotonicBuyDisplayPrice } from '../_lib/points-display-prices.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -155,23 +152,7 @@ export default async function handler(req, res) {
     }
 
     const pricesBefore = reserves.length === 2 ? binaryPrices(reserves) : multiPrices(reserves);
-    const displayTradeRows = reserves.length === 2 ? await sql`
-      SELECT outcome_index, price_at_trade,
-             (reserves_before IS NOT NULL AND reserves_after IS NOT NULL AND reserves_before = reserves_after) AS is_book_trade
-      FROM points_trades
-      WHERE market_id = ${mid}
-        AND username <> ${PRONOS_TREASURY_USERNAME}
-        AND price_at_trade IS NOT NULL
-      ORDER BY created_at DESC, id DESC
-      LIMIT 1
-    ` : [];
-    const displayPricesBefore = binaryPricesWithBookTrade(pricesBefore, {
-      status: r.status,
-      outcomeIndex: displayTradeRows[0]?.outcome_index,
-      price: displayTradeRows[0]?.price_at_trade,
-      isBookTrade: displayTradeRows[0]?.is_book_trade,
-    });
-    const priceBefore = displayPricesBefore[oi] || pricesBefore[oi] || 0;
+    const priceBefore = pricesBefore[oi] || 0;
 
     const askRows = await sql`
       SELECT id, username, limit_price, remaining_amount
@@ -222,14 +203,8 @@ export default async function handler(req, res) {
     const fee = Number(q?.fee || 0);
     const avgPrice = sharesOut > 0.000001 ? (collateralSpent - fee) / sharesOut : 0;
     const executionPrice = avgPrice > 0 ? avgPrice : null;
-    const lastBookFillPrice = [...(orderbook.fills || [])]
-      .reverse()
-      .map(fill => Number(fill.price))
-      .find(price => Number.isFinite(price) && price > 0);
-    const rawPriceAfter = q?.pricesAfter?.[oi] ?? null;
     const priceAfter = monotonicBuyDisplayPrice(priceBefore, [
-      rawPriceAfter,
-      lastBookFillPrice,
+      q?.pricesAfter?.[oi],
       executionPrice,
     ]);
     return res.status(200).json({

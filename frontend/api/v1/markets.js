@@ -85,35 +85,13 @@ export default async function handler(req, res) {
         m.tournament_featured, m.source, m.source_event_id, m.final_score,
         m.resolver_type, m.resolver_config, m.start_time, m.sport, m.league,
         pm.source_data AS pending_source_data,
+        dt.outcome_index AS display_trade_outcome_index,
+        dt.price_at_trade AS display_trade_price,
+        dt.is_book_trade AS display_trade_is_book,
         (SELECT COALESCE(SUM(ABS(t.collateral)), 0)
            FROM points_trades t
           WHERE t.market_id = m.id
-            AND t.username <> ${PRONOS_TREASURY_USERNAME}) AS trade_volume,
-        (SELECT t.outcome_index
-           FROM points_trades t
-          WHERE t.market_id = m.id
-            AND t.username <> ${PRONOS_TREASURY_USERNAME}
-            AND t.price_at_trade IS NOT NULL
-          ORDER BY t.created_at DESC, t.id DESC
-          LIMIT 1) AS display_trade_outcome_index,
-        (SELECT t.price_at_trade
-           FROM points_trades t
-          WHERE t.market_id = m.id
-            AND t.username <> ${PRONOS_TREASURY_USERNAME}
-            AND t.price_at_trade IS NOT NULL
-          ORDER BY t.created_at DESC, t.id DESC
-          LIMIT 1) AS display_trade_price,
-        (SELECT (
-            t.reserves_before IS NOT NULL
-            AND t.reserves_after IS NOT NULL
-            AND t.reserves_before = t.reserves_after
-          )
-           FROM points_trades t
-          WHERE t.market_id = m.id
-            AND t.username <> ${PRONOS_TREASURY_USERNAME}
-            AND t.price_at_trade IS NOT NULL
-          ORDER BY t.created_at DESC, t.id DESC
-          LIMIT 1) AS display_trade_is_book
+            AND t.username <> ${PRONOS_TREASURY_USERNAME}) AS trade_volume
         FROM points_markets m
         LEFT JOIN LATERAL (
           SELECT p.source_data
@@ -122,6 +100,37 @@ export default async function handler(req, res) {
            ORDER BY p.reviewed_at DESC NULLS LAST, p.id DESC
            LIMIT 1
         ) pm ON true
+        LEFT JOIN LATERAL (
+          WITH recent AS (
+            SELECT
+              t.*,
+              FLOOR(EXTRACT(EPOCH FROM t.created_at) * 1000 / 2000) AS execution_bucket
+            FROM points_trades t
+            WHERE t.market_id = m.id
+              AND t.username <> ${PRONOS_TREASURY_USERNAME}
+              AND t.price_at_trade IS NOT NULL
+              AND t.outcome_index IN (0, 1)
+            ORDER BY t.created_at DESC, t.id DESC
+            LIMIT 24
+          ),
+          grouped AS (
+            SELECT
+              outcome_index,
+              CASE
+                WHEN SUM(shares) > 0 THEN SUM(ABS(collateral)) / SUM(shares)
+                ELSE MAX(price_at_trade)
+              END AS price_at_trade,
+              BOOL_AND(reserves_before IS NOT NULL AND reserves_after IS NOT NULL AND reserves_before = reserves_after) AS is_book_trade,
+              MAX(created_at) AS last_at,
+              MAX(id) AS last_id
+            FROM recent
+            GROUP BY market_id, username, side, outcome_index, execution_bucket
+            ORDER BY MAX(created_at) DESC, MAX(id) DESC
+            LIMIT 1
+          )
+          SELECT outcome_index, price_at_trade, is_book_trade
+          FROM grouped
+        ) dt ON true
        WHERE (${status}::text = 'all' OR m.status = ${status}::text)
          AND (${category}::text IS NULL OR m.category = ${category}::text)
          AND COALESCE(m.mode, 'points') = 'points'

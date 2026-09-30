@@ -61,6 +61,44 @@ function reservePriceFor(value, outcomeIndex) {
   }
 }
 
+function movedReservePricePair(row) {
+  const priceBefore = reservePriceFor(row.reserves_before, row.outcome_index);
+  const priceAfter = reservePriceFor(row.reserves_after, row.outcome_index);
+  if (
+    priceBefore == null ||
+    priceAfter == null ||
+    Math.abs(priceAfter - priceBefore) <= EPSILON
+  ) {
+    return { priceBefore: null, priceAfter: null };
+  }
+  return { priceBefore, priceAfter };
+}
+
+function reservesMoved(row) {
+  const before = parseReserves(row.reserves_before);
+  const after = parseReserves(row.reserves_after);
+  if (before.length === 0 || before.length !== after.length) return false;
+  return before.some((value, index) => Math.abs(value - after[index]) > EPSILON);
+}
+
+function truthy(value) {
+  return value === true || String(value).toLowerCase() === 'true';
+}
+
+function liquidityRouteFor(row) {
+  const treasuryCounterparty = truthy(row.has_treasury_counterparty);
+  const userCounterparty = truthy(row.has_user_counterparty);
+  const moved = reservesMoved(row);
+
+  if (treasuryCounterparty) {
+    if (moved) return 'pronos_maker_amm_capped';
+    return row.side === 'sell' ? 'pronos_maker_inventory' : 'pronos_maker_depth';
+  }
+  if (userCounterparty) return 'user_limit_order';
+  if (moved) return 'amm_pool';
+  return 'book_fill';
+}
+
 function timestampMs(value) {
   const ms = new Date(value || 0).getTime();
   return Number.isFinite(ms) && ms > 0 ? ms : 0;
@@ -103,8 +141,8 @@ function tradeGroupKey(row) {
 }
 
 function fillDetailFor(row) {
-  const priceBefore = reservePriceFor(row.reserves_before, row.outcome_index);
-  const priceAfter = reservePriceFor(row.reserves_after, row.outcome_index);
+  const { priceBefore, priceAfter } = movedReservePricePair(row);
+  const route = liquidityRouteFor(row);
   return {
     id: Number(row.id),
     marketId: Number(row.market_id),
@@ -119,6 +157,8 @@ function fillDetailFor(row) {
     price: toNumber(row.price_at_trade),
     priceBefore: priceBefore == null ? null : toNumber(priceBefore),
     priceAfter: priceAfter == null ? null : toNumber(priceAfter),
+    liquidityRoute: route,
+    touchedAmm: reservesMoved(row),
     createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
     t: row.created_at ? Math.floor(new Date(row.created_at).getTime() / 1000) : null,
   };
@@ -127,8 +167,7 @@ function fillDetailFor(row) {
 function createTradeGroup(row, includeDetails = false) {
   const createdMs = timestampMs(row.created_at);
   const price = toNumber(row.price_at_trade);
-  const priceBefore = reservePriceFor(row.reserves_before, row.outcome_index);
-  const priceAfter = reservePriceFor(row.reserves_after, row.outcome_index);
+  const { priceBefore, priceAfter } = movedReservePricePair(row);
   return {
     id: Number(row.id),
     marketId: Number(row.market_id),
@@ -162,8 +201,7 @@ function addRowToTradeGroup(group, row, includeDetails = false) {
   const collateral = Math.max(0, toNumber(row.collateral));
   const fee = Math.max(0, toNumber(row.fee));
   const price = toNumber(row.price_at_trade);
-  const priceBefore = reservePriceFor(row.reserves_before, row.outcome_index);
-  const priceAfter = reservePriceFor(row.reserves_after, row.outcome_index);
+  const { priceBefore, priceAfter } = movedReservePricePair(row);
   const createdMs = timestampMs(row.created_at);
   const weight = shares > EPSILON ? shares : collateral;
 
@@ -182,11 +220,7 @@ function addRowToTradeGroup(group, row, includeDetails = false) {
   if (priceBefore != null && (group.priceBefore == null || createdMs <= group.firstCreatedMs)) {
     group.priceBefore = priceBefore;
   }
-  if (
-    priceAfter != null &&
-    Math.abs(priceAfter - (priceBefore ?? priceAfter)) > EPSILON &&
-    createdMs >= group.lastCreatedMs
-  ) {
+  if (priceAfter != null && createdMs >= group.lastCreatedMs) {
     group.priceAfter = priceAfter;
   } else if (priceAfter != null && group.priceAfter == null) {
     group.priceAfter = priceAfter;
@@ -325,6 +359,33 @@ export default async function handler(req, res) {
           t.reserves_before,
           t.reserves_after,
           t.created_at,
+          EXISTS (
+            SELECT 1
+              FROM points_trades cp
+             WHERE cp.market_id = t.market_id
+               AND cp.outcome_index = t.outcome_index
+               AND cp.id <> t.id
+               AND cp.side <> t.side
+               AND cp.username = ${PRONOS_TREASURY_USERNAME}
+               AND ABS(EXTRACT(EPOCH FROM (cp.created_at - t.created_at))) <= 2
+               AND ABS(cp.shares::numeric - t.shares::numeric) <= 0.000001
+               AND ABS(cp.collateral::numeric - t.collateral::numeric) <= 0.000001
+               AND ABS(cp.price_at_trade::numeric - t.price_at_trade::numeric) <= 0.000001
+          ) AS has_treasury_counterparty,
+          EXISTS (
+            SELECT 1
+              FROM points_trades cp
+             WHERE cp.market_id = t.market_id
+               AND cp.outcome_index = t.outcome_index
+               AND cp.id <> t.id
+               AND cp.side <> t.side
+               AND cp.username <> ${PRONOS_TREASURY_USERNAME}
+               AND cp.username <> t.username
+               AND ABS(EXTRACT(EPOCH FROM (cp.created_at - t.created_at))) <= 2
+               AND ABS(cp.shares::numeric - t.shares::numeric) <= 0.000001
+               AND ABS(cp.collateral::numeric - t.collateral::numeric) <= 0.000001
+               AND ABS(cp.price_at_trade::numeric - t.price_at_trade::numeric) <= 0.000001
+          ) AS has_user_counterparty,
           m.question,
           m.outcomes,
           m.leg_label
