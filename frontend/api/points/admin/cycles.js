@@ -8,8 +8,10 @@
  *     cycles. Drives the "Ciclos" tab in the admin panel.
  *
  *   POST /api/points/admin/cycles
- *     Body: { action: 'rollover', nextCycleLabel? }, { action: 'snapshot_cutoff' },
- *           { action: 'pause' }, or { action: 'apply_pre_cycle_carryover' }
+ *     Body: { action: 'rollover', nextCycleLabel?, nextCycleStartsAt?,
+ *             nextCycleEndsAt? }, { action: 'rollover_dry_run' },
+ *           { action: 'snapshot_cutoff' }, { action: 'pause' }, or
+ *           { action: 'apply_pre_cycle_carryover' }
  *     Closes the current active cycle:
  *       1. Snapshots the tournament leaderboard into points_cycle_snapshots
  *          if the cutoff photo was not already taken.
@@ -69,7 +71,50 @@ function cycleEndIso(startIso) {
   return configuredCycleEndIso(startIso, CYCLE_DAYS);
 }
 
-function cycleWindowForOpen(now = new Date()) {
+function requestError(message, status = 400) {
+  const err = new Error(message);
+  err.status = status;
+  return err;
+}
+
+function parseCycleIso(value, field) {
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (raw == null || raw === '') return null;
+  const date = new Date(raw);
+  if (!Number.isFinite(date.getTime())) throw requestError(`invalid_${field}`);
+  return date.toISOString();
+}
+
+function normalizeNextCycleOptions(body = {}) {
+  const label = typeof body.nextCycleLabel === 'string'
+    ? body.nextCycleLabel.trim().slice(0, 80)
+    : null;
+  const startsAt = parseCycleIso(body.nextCycleStartsAt ?? body.startsAt ?? body.startAt, 'next_cycle_starts_at');
+  const endsAt = parseCycleIso(body.nextCycleEndsAt ?? body.endsAt ?? body.endAt, 'next_cycle_ends_at');
+
+  if ((startsAt && !endsAt) || (!startsAt && endsAt)) {
+    throw requestError('next_cycle_start_and_end_required');
+  }
+  if (startsAt && endsAt && new Date(endsAt).getTime() <= new Date(startsAt).getTime()) {
+    throw requestError('next_cycle_end_must_be_after_start');
+  }
+
+  return {
+    nextCycleLabel: label || null,
+    nextCycleStartsAt: startsAt,
+    nextCycleEndsAt: endsAt,
+  };
+}
+
+function cycleWindowForOpen(now = new Date(), options = {}) {
+  if (options.nextCycleStartsAt && options.nextCycleEndsAt) {
+    return {
+      startIso: options.nextCycleStartsAt,
+      endIso: options.nextCycleEndsAt,
+      label: options.nextCycleLabel || cycleLabel(options.nextCycleStartsAt, options.nextCycleEndsAt),
+    };
+  }
+
   const configured = getTournamentWindow(now);
   const nowIso = now.toISOString();
   if (configured.status === 'scheduled') {
@@ -142,11 +187,11 @@ async function setCyclesPaused(client, paused) {
   );
 }
 
-async function openNewCycle(client, nextCycleLabel) {
+async function openNewCycle(client, nextCycleOptions = {}) {
   const now = new Date();
-  const { startIso, endIso, label: configuredLabel } = cycleWindowForOpen(now);
-  const label = nextCycleLabel && typeof nextCycleLabel === 'string'
-    ? nextCycleLabel.slice(0, 80)
+  const { startIso, endIso, label: configuredLabel } = cycleWindowForOpen(now, nextCycleOptions);
+  const label = nextCycleOptions.nextCycleLabel && typeof nextCycleOptions.nextCycleLabel === 'string'
+    ? nextCycleOptions.nextCycleLabel.slice(0, 80)
     : configuredLabel || cycleLabel(startIso, endIso);
   const inserted = await client.query(
     `INSERT INTO points_cycles (label, started_at, ends_at, status)
@@ -393,8 +438,11 @@ async function archiveAndClearPositionsForCycleReset(client, cycleId) {
 async function selectCycleResetBalances(client, {
   resetAtIso,
   includePreCycleCarryover = false,
+  lockBalances = true,
 } = {}) {
-  await client.query(`SELECT username FROM points_balances FOR UPDATE`);
+  if (lockBalances) {
+    await client.query(`SELECT username FROM points_balances FOR UPDATE`);
+  }
 
   const referralReward = includePreCycleCarryover ? PRE_CYCLE_REFERRAL_REWARD : 0;
   const referralCap = includePreCycleCarryover ? PRE_CYCLE_REFERRAL_CAP : 0;
@@ -470,6 +518,35 @@ async function selectCycleResetBalances(client, {
     ],
   );
   return result.rows;
+}
+
+function summarizeCycleResetBalanceRows(rows = []) {
+  let signupBonusTotal = 0;
+  let referralBonusTotal = 0;
+  let socialBonusTotal = 0;
+  let carryoverUsers = 0;
+
+  for (const row of rows) {
+    const signupBonus = numeric(row.signup_bonus);
+    const referralBonus = numeric(row.referral_bonus);
+    const socialBonus = numeric(row.social_bonus);
+    signupBonusTotal += signupBonus;
+    referralBonusTotal += referralBonus;
+    socialBonusTotal += socialBonus;
+    if (signupBonus + referralBonus + socialBonus > 0.000001) {
+      carryoverUsers += 1;
+    }
+  }
+
+  return {
+    balanceRows: rows.length,
+    resetCount: rows.filter(row => Math.abs(numeric(row.previous_balance) - numeric(row.target_balance)) > 0.000001).length,
+    carryoverUsers,
+    carryoverTotal: Number((signupBonusTotal + referralBonusTotal + socialBonusTotal).toFixed(6)),
+    signupBonusTotal: Number(signupBonusTotal.toFixed(6)),
+    referralBonusTotal: Number(referralBonusTotal.toFixed(6)),
+    socialBonusTotal: Number(socialBonusTotal.toFixed(6)),
+  };
 }
 
 async function resetBalancesForCycle(client, {
@@ -650,7 +727,91 @@ async function applyPreCycleCarryoverForCycle(client, {
   };
 }
 
-async function handleRollover(req, res, nextCycleLabel) {
+async function countCycleResetExposure(client) {
+  const result = await client.query(
+    `SELECT
+       COUNT(*) FILTER (
+         WHERE ABS(COALESCE(shares, 0)) > 0.000000000001
+            OR ABS(COALESCE(cost_basis, 0)) > 0.000001
+            OR ABS(COALESCE(realized_pnl, 0)) > 0.000001
+       )::int AS position_rows,
+       (
+         SELECT COUNT(*)::int
+         FROM points_limit_orders
+         WHERE status = 'open'
+       ) AS open_orders
+     FROM points_positions`,
+  );
+  const row = result.rows[0] || {};
+  return {
+    archivedPositions: Number(row.position_rows || 0),
+    clearedPositions: Number(row.position_rows || 0),
+    cancelledOrders: Number(row.open_orders || 0),
+  };
+}
+
+async function handleRolloverDryRun(req, res, nextCycleOptions) {
+  const result = await withTransaction(async (client) => {
+    const now = new Date();
+    const resetAtIso = now.toISOString();
+    const wasPaused = await getCyclesPausedForClient(client);
+    const cur = await client.query(
+      `SELECT id, label, started_at, ends_at
+       FROM points_cycles
+       WHERE status = 'active'
+       ORDER BY ends_at DESC
+       LIMIT 1`,
+    );
+    const activeCycle = cur.rows[0] || null;
+    const nextWindow = cycleWindowForOpen(now, nextCycleOptions);
+    const top = activeCycle
+      ? await buildTournamentLeaderboardRows(client, {
+        limit: 100,
+        now,
+        window: configuredCycleWindowFromRow(activeCycle),
+      })
+      : [];
+    const balances = await selectCycleResetBalances(client, {
+      resetAtIso,
+      includePreCycleCarryover: activeCycle ? wasPaused : true,
+      lockBalances: false,
+    });
+    const balanceSummary = summarizeCycleResetBalanceRows(balances);
+    const exposure = await countCycleResetExposure(client);
+
+    return {
+      dryRun: true,
+      restarted: !activeCycle,
+      closedCycleId: activeCycle?.id || null,
+      currentCycle: activeCycle
+        ? {
+            id: activeCycle.id,
+            label: activeCycle.label,
+            startedAt: activeCycle.started_at,
+            endsAt: configuredCycleWindowFromRow(activeCycle)?.endsAt || activeCycle.ends_at,
+          }
+        : null,
+      newCyclePreview: {
+        label: nextCycleOptions.nextCycleLabel || nextWindow.label || cycleLabel(nextWindow.startIso, nextWindow.endIso),
+        startedAt: nextWindow.startIso,
+        endsAt: nextWindow.endIso,
+      },
+      snapshotted: top.length,
+      ...balanceSummary,
+      ...exposure,
+      winners: top.slice(0, 5).map((r, i) => ({
+        rank: i + 1,
+        username: r.username,
+        finalBalance: Number(r.balance),
+        score: Number(r.score),
+      })),
+    };
+  });
+
+  return res.status(200).json({ ok: true, ...result });
+}
+
+async function handleRollover(req, res, nextCycleOptions) {
   const result = await withTransaction(async (client) => {
     const now = new Date();
     const resetAtIso = now.toISOString();
@@ -666,7 +827,7 @@ async function handleRollover(req, res, nextCycleLabel) {
        FOR UPDATE`,
     );
     if (cur.rows.length === 0) {
-      const newCycle = await openNewCycle(client, nextCycleLabel);
+      const newCycle = await openNewCycle(client, nextCycleOptions);
       const positions = await archiveAndClearPositionsForCycleReset(client, newCycle.id);
       const orders = await cancelOpenLimitOrdersForCycleReset(client);
       const balances = await resetBalancesForCycle(client, {
@@ -712,7 +873,7 @@ async function handleRollover(req, res, nextCycleLabel) {
     );
 
     // ── 4. Open the next cycle and unpause public cycle UI ───────────
-    const newCycle = await openNewCycle(client, nextCycleLabel);
+    const newCycle = await openNewCycle(client, nextCycleOptions);
     const balances = await resetBalancesForCycle(client, {
       cycleId: newCycle.id,
       resetAtIso,
@@ -808,7 +969,7 @@ export default async function handler(req, res) {
 
     if (req.method === 'GET') return await handleGet(req, res);
     if (req.method === 'POST') {
-      const { action, nextCycleLabel } = req.body || {};
+      const { action } = req.body || {};
       if (action === 'pause') {
         return await handlePause(req, res);
       }
@@ -818,11 +979,20 @@ export default async function handler(req, res) {
       if (action === 'snapshot_cutoff') {
         return await handleSnapshotCutoff(req, res);
       }
+      let nextCycleOptions;
+      try {
+        nextCycleOptions = normalizeNextCycleOptions(req.body || {});
+      } catch (e) {
+        return res.status(e.status || 400).json({ error: e.message });
+      }
+      if (action === 'rollover_dry_run') {
+        return await handleRolloverDryRun(req, res, nextCycleOptions);
+      }
       if (action !== 'rollover') {
         return res.status(400).json({ error: 'invalid_action' });
       }
       try {
-        return await handleRollover(req, res, nextCycleLabel);
+        return await handleRollover(req, res, nextCycleOptions);
       } catch (e) {
         if (e?.status && typeof e?.message === 'string') {
           return res.status(e.status).json({ error: e.message });

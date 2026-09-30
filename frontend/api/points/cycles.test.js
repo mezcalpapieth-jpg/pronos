@@ -26,10 +26,24 @@ test('points admin can pause and later reopen public cycles', () => {
   assert.match(adminSource, /restarted:\s*true/);
   assert.match(adminSource, /openNewCycle/);
   assert.match(adminSource, /cycleWindowForOpen/);
+  assert.match(adminSource, /normalizeNextCycleOptions/);
+  assert.match(adminSource, /nextCycleStartsAt/);
+  assert.match(adminSource, /nextCycleEndsAt/);
   assert.match(adminSource, /configured\.status === 'scheduled'/);
   assert.match(adminSource, /startIso:\s*configured\.startsAt/);
   assert.match(adminSource, /configuredCycleEndIso/);
   assert.match(adminSource, /cycleEndIso/);
+});
+
+test('points admin can dry-run a cycle rollover before reset', () => {
+  assert.match(adminSource, /action === 'rollover_dry_run'/);
+  assert.match(adminSource, /handleRolloverDryRun/);
+  assert.match(adminSource, /dryRun:\s*true/);
+  assert.match(adminSource, /selectCycleResetBalances\(client,\s*\{/);
+  assert.match(adminSource, /lockBalances:\s*false/);
+  assert.match(adminSource, /countCycleResetExposure/);
+  assert.match(adminSource, /newCyclePreview/);
+  assert.match(adminSource, /winners:\s*top\.slice\(0,\s*5\)/);
 });
 
 test('points rollover archives exposure and carries only approved pre-cycle bonuses on bootstrap', () => {
@@ -81,11 +95,11 @@ test('public cycles prefer the active database cycle once admin opens one', () =
   assert.doesNotMatch(currentSource, /tournamentPayload/);
 });
 
-test('public cycle history exposes enough rows for expanded tournament leaderboards', () => {
-  assert.match(historySource, /top-20 snapshot/);
-  assert.match(historySource, /CYCLE_HISTORY_LEADERBOARD_LIMIT = 20/);
+test('public cycle history exposes the top 10 rows for past tournament leaderboards', () => {
+  assert.match(historySource, /top-10 snapshot/);
+  assert.match(historySource, /CYCLE_HISTORY_LEADERBOARD_LIMIT = 10/);
   assert.match(historySource, /rank <= \$\{CYCLE_HISTORY_LEADERBOARD_LIMIT\}/);
-  assert.match(historySource, /points:cycles:history:v5/);
+  assert.match(historySource, /points:cycles:history:v6/);
   assert.match(historySource, /EXISTS \(\s*SELECT 1\s*FROM points_cycle_snapshots s\s*WHERE s\.cycle_id = c\.id/);
   assert.match(historySource, /COALESCE\(closed_at, ends_at, started_at\) DESC/);
   assert.match(historySource, /s\.hold_bonus, s\.liquidity_reward, s\.parlay_pnl/);

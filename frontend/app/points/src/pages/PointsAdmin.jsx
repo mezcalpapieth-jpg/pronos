@@ -33,6 +33,7 @@ import {
   adminListCycles,
   adminFetchCycleStandingsSnapshot,
   adminRolloverCycle,
+  adminPreviewCycleRollover,
   adminPauseCycles,
   adminApplyPreCycleCarryover,
   adminSnapshotCycleCutoff,
@@ -865,6 +866,12 @@ function buildLaunchChecklist(report, taskCounts) {
       meta: current?.endsAt ? `Cierra ${new Date(current.endsAt).toLocaleString('es-MX')}` : cycleError,
     },
     {
+      title: 'Reset dry-run y ciclo mensual',
+      status: 'review',
+      detail: 'Antes del reset real, entra a Ciclos y corre Previsualizar reset con la ventana del torneo de octubre.',
+      meta: 'Confirma snapshot, balances, posiciones, órdenes, popup de inicio y que el leaderboard anterior quede solo en historial Top 10.',
+    },
+    {
       title: 'Generador octubre 2026',
       status: generatorError ? 'blocked' : octoberGenerator ? (Number(octoberGenerator.count || 0) > 0 ? 'ready' : 'review') : 'review',
       detail: octoberGenerator
@@ -1394,6 +1401,14 @@ function CyclesPanel() {
   const [working, setWorking] = useState(false);
   const [downloadBusy, setDownloadBusy] = useState(false);
   const [convictionAuditBusy, setConvictionAuditBusy] = useState(false);
+  const [cycleForm, setCycleForm] = useState({
+    label: '',
+    startDate: '',
+    startTime: '',
+    endDate: '',
+    endTime: '',
+  });
+  const [rolloverPreview, setRolloverPreview] = useState(null);
   const [msg, setMsg] = useState(null);
   const [err, setErr] = useState(null);
 
@@ -1409,7 +1424,69 @@ function CyclesPanel() {
   }
   useEffect(() => { load(); }, []);
 
+  function updateCycleForm(field, value) {
+    setCycleForm(form => ({ ...form, [field]: value }));
+    setRolloverPreview(null);
+  }
+
+  function buildNextCyclePayload() {
+    const payload = {
+      nextCycleLabel: cycleForm.label.trim() || null,
+    };
+    const hasStart = cycleForm.startDate.trim() || cycleForm.startTime.trim();
+    const hasEnd = cycleForm.endDate.trim() || cycleForm.endTime.trim();
+    if (!hasStart && !hasEnd) return payload;
+    if (!cycleForm.startDate.trim() || !cycleForm.startTime.trim() || !cycleForm.endDate.trim() || !cycleForm.endTime.trim()) {
+      throw new Error('Completa inicio y fin, o deja todos esos campos vacíos para usar la ventana configurada.');
+    }
+    const nextCycleStartsAt = partsToIso(cycleForm.startDate, cycleForm.startTime);
+    const nextCycleEndsAt = partsToIso(cycleForm.endDate, cycleForm.endTime);
+    if (!nextCycleStartsAt || !nextCycleEndsAt) {
+      throw new Error('Revisa el formato de fechas. Usa dd/mm/aaaa y HH:mm.');
+    }
+    if (new Date(nextCycleEndsAt).getTime() <= new Date(nextCycleStartsAt).getTime()) {
+      throw new Error('El fin del ciclo debe ser posterior al inicio.');
+    }
+    payload.nextCycleStartsAt = nextCycleStartsAt;
+    payload.nextCycleEndsAt = nextCycleEndsAt;
+    return payload;
+  }
+
+  function formatCycleStamp(iso) {
+    if (!iso) return '-';
+    return new Date(iso).toLocaleString('es-MX', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    });
+  }
+
+  async function previewRollover() {
+    setWorking(true);
+    setMsg(null);
+    setErr(null);
+    try {
+      const payload = buildNextCyclePayload();
+      const r = await adminPreviewCycleRollover(payload);
+      setRolloverPreview(r);
+      setMsg(
+        `✓ Dry run listo — abriría "${r.newCyclePreview?.label || 'ciclo nuevo'}" ` +
+        `del ${formatCycleStamp(r.newCyclePreview?.startedAt)} al ${formatCycleStamp(r.newCyclePreview?.endsAt)}.`
+      );
+    } catch (e) {
+      setErr(`${e.code || e.message}${e.detail ? ' · ' + e.detail : ''}`);
+    } finally {
+      setWorking(false);
+    }
+  }
+
   async function rollover() {
+    let payload;
+    try {
+      payload = buildNextCyclePayload();
+    } catch (e) {
+      setErr(e.message);
+      return;
+    }
     // Double-confirm because this is destructive: it snapshots the
     // leaderboard AND resets every user's balance to 500 MXNP. Running
     // it too early means users lose late-cycle gains; running it late
@@ -1420,9 +1497,13 @@ function CyclesPanel() {
         'Esto es DESTRUCTIVO:\n' +
         '1. Guarda un snapshot inmutable del top-100.\n' +
         '2. REINICIA el balance de TODOS los usuarios a 500 MXNP.\n' +
-        '3. Abre un ciclo nuevo de 14 días.\n\n' +
+        '3. Abre el siguiente ciclo con la ventana indicada o la configurada.\n\n' +
+        (rolloverPreview?.newCyclePreview
+          ? `Dry run: ${rolloverPreview.newCyclePreview.label || 'ciclo nuevo'}\n` +
+            `${formatCycleStamp(rolloverPreview.newCyclePreview.startedAt)} → ${formatCycleStamp(rolloverPreview.newCyclePreview.endsAt)}\n\n`
+          : 'Recomendado: corre "Previsualizar reset" antes de continuar.\n\n') +
         '¿Continuar?'
-      : '¿Reanudar los ciclos y abrir un ciclo nuevo de 14 días?\n\n' +
+      : '¿Reanudar los ciclos y abrir un ciclo nuevo?\n\n' +
         'No hay ciclo activo que cerrar, así que esto solo crea el nuevo ciclo.'
     );
     if (!ok) return;
@@ -1430,7 +1511,7 @@ function CyclesPanel() {
     setMsg(null);
     setErr(null);
     try {
-      const r = await adminRolloverCycle();
+      const r = await adminRolloverCycle(payload);
       if (r.restarted || !r.closedCycleId) {
         setMsg(`✓ Ciclos reanudados — ciclo #${r.newCycleId || r.newCycle?.id} abierto.`);
       } else {
@@ -1439,6 +1520,7 @@ function CyclesPanel() {
           (r.winners?.[0] ? `Ganador: ${r.winners[0].username} (${Math.round(r.winners[0].finalBalance)} MXNP)` : '')
         );
       }
+      setRolloverPreview(null);
       await load();
     } catch (e) {
       setErr(`${e.code || e.message}${e.detail ? ' · ' + e.detail : ''}`);
@@ -1574,6 +1656,102 @@ function CyclesPanel() {
   const closed = data?.closed || [];
   const paused = data?.paused !== false;
   const busy = working || downloadBusy || convictionAuditBusy;
+  const cycleWindowControls = (
+    <div style={{
+      marginBottom: 16,
+      padding: 14,
+      border: '1px solid var(--border)',
+      borderRadius: 10,
+      background: 'var(--surface2)',
+    }}>
+      <div style={{ display: 'grid', gap: 10 }}>
+        <div>
+          <label style={cycleControlLabel}>Etiqueta del siguiente ciclo</label>
+          <input
+            value={cycleForm.label}
+            onChange={e => updateCycleForm('label', e.target.value)}
+            placeholder="Vacío usa la etiqueta configurada"
+            style={inputStyle}
+          />
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10 }}>
+          <div>
+            <label style={cycleControlLabel}>Inicio fecha</label>
+            <input
+              value={cycleForm.startDate}
+              onChange={e => updateCycleForm('startDate', e.target.value)}
+              placeholder="01/10/2026"
+              style={inputStyle}
+            />
+          </div>
+          <div>
+            <label style={cycleControlLabel}>Inicio hora</label>
+            <input
+              value={cycleForm.startTime}
+              onChange={e => updateCycleForm('startTime', e.target.value)}
+              placeholder="00:00"
+              style={inputStyle}
+            />
+          </div>
+          <div>
+            <label style={cycleControlLabel}>Fin fecha</label>
+            <input
+              value={cycleForm.endDate}
+              onChange={e => updateCycleForm('endDate', e.target.value)}
+              placeholder="31/10/2026"
+              style={inputStyle}
+            />
+          </div>
+          <div>
+            <label style={cycleControlLabel}>Fin hora</label>
+            <input
+              value={cycleForm.endTime}
+              onChange={e => updateCycleForm('endTime', e.target.value)}
+              placeholder="23:59"
+              style={inputStyle}
+            />
+          </div>
+        </div>
+        <p style={{
+          margin: 0,
+          color: 'var(--text-muted)',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10,
+          lineHeight: 1.45,
+        }}>
+          Deja inicio y fin vacíos para usar la ventana configurada. Si los llenas, se usan en tu zona del navegador ({currentTimezoneLabel()}).
+        </p>
+      </div>
+      {rolloverPreview && (
+        <div style={{
+          marginTop: 12,
+          paddingTop: 12,
+          borderTop: '1px dashed var(--border)',
+          display: 'grid',
+          gap: 6,
+          color: 'var(--text-secondary)',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 11,
+          lineHeight: 1.5,
+        }}>
+          <strong style={{ color: 'var(--green)', fontFamily: 'var(--font-body)', fontSize: 13 }}>
+            Dry run del reset
+          </strong>
+          <span>
+            Nuevo ciclo: {rolloverPreview.newCyclePreview?.label || 'ciclo nuevo'} · {formatCycleStamp(rolloverPreview.newCyclePreview?.startedAt)} → {formatCycleStamp(rolloverPreview.newCyclePreview?.endsAt)}
+          </span>
+          <span>
+            Snapshot: {rolloverPreview.snapshotted || 0} usuarios · balances: {rolloverPreview.resetCount || 0}/{rolloverPreview.balanceRows || 0} · posiciones: {rolloverPreview.archivedPositions || 0} · órdenes: {rolloverPreview.cancelledOrders || 0}
+          </span>
+          {rolloverPreview.winners?.[0] && (
+            <span>
+              Top preview: {rolloverPreview.winners[0].username} ({Math.round(rolloverPreview.winners[0].score || 0)} pts)
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div>
@@ -1618,7 +1796,27 @@ function CyclesPanel() {
                 </span>
               )}
             </div>
+            {cycleWindowControls}
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <button
+                onClick={previewRollover}
+                disabled={busy}
+                style={{
+                  padding: '10px 18px',
+                  background: 'transparent',
+                  color: '#93c5fd',
+                  border: '1px solid rgba(147,197,253,0.45)',
+                  borderRadius: 8,
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  letterSpacing: '0.06em',
+                  textTransform: 'uppercase',
+                  cursor: busy ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {working ? 'Calculando…' : 'Previsualizar reset'}
+              </button>
               <button
                 onClick={snapshotCutoff}
                 disabled={busy}
@@ -1744,6 +1942,27 @@ function CyclesPanel() {
             <div style={{ color: 'var(--text-muted)', marginBottom: 14 }}>
               No hay ciclo activo. La página pública se queda en “Próximamente” hasta que lo reanudes aquí.
             </div>
+            {cycleWindowControls}
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <button
+                onClick={previewRollover}
+                disabled={working}
+                style={{
+                  padding: '10px 18px',
+                  background: 'transparent',
+                  color: '#93c5fd',
+                  border: '1px solid rgba(147,197,253,0.45)',
+                  borderRadius: 8,
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  letterSpacing: '0.06em',
+                  textTransform: 'uppercase',
+                  cursor: working ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {working ? 'Calculando…' : 'Previsualizar reset'}
+              </button>
             <button
               onClick={rollover}
               disabled={working}
@@ -1763,6 +1982,7 @@ function CyclesPanel() {
             >
               {working ? 'Abriendo ciclo…' : '▶ Reanudar ciclos'}
             </button>
+            </div>
             {msg && <div style={{ marginTop: 12, color: 'var(--green)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{msg}</div>}
             {err && <div style={{ marginTop: 12, color: 'var(--red, #ef4444)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>Error: {err}</div>}
           </>
@@ -3174,6 +3394,16 @@ const inputStyle = {
   fontSize: 14,
   color: 'var(--text-primary)',
   outline: 'none',
+};
+
+const cycleControlLabel = {
+  display: 'block',
+  marginBottom: 5,
+  color: 'var(--text-muted)',
+  fontFamily: 'var(--font-mono)',
+  fontSize: 9,
+  letterSpacing: '0.1em',
+  textTransform: 'uppercase',
 };
 
 const DEFAULT_CRYPTO_INTERVAL_OPTIONS = [

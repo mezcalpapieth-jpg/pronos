@@ -2,7 +2,7 @@
  * GET /api/points/cycles/history?limit=10
  *
  * Returns closed cycles, plus active cycles that already have a frozen cutoff
- * snapshot, with their top-20 snapshot. Drives a "winners of past cycles"
+ * snapshot, with their top-10 snapshot. Drives a "winners of past cycles"
  * strip on the home page and inside the admin panel.
  *
  * Response:
@@ -24,7 +24,7 @@ import { cachedJson, createApiTimer, setCacheHeaders } from '../../_lib/api-perf
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
-const CYCLE_HISTORY_LEADERBOARD_LIMIT = 20;
+const CYCLE_HISTORY_LEADERBOARD_LIMIT = 10;
 
 export default async function handler(req, res) {
   const timer = createApiTimer(res, 'points/cycles/history');
@@ -37,7 +37,7 @@ export default async function handler(req, res) {
     const limit = Number.isInteger(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 50) : 10;
     setCacheHeaders(res, { scope: 'public', maxAge: 30, sMaxage: 60, staleWhileRevalidate: 300 });
 
-    const { value: payload, hit } = await cachedJson(`points:cycles:history:v5:${limit}`, 60_000, async () => {
+    const { value: payload, hit } = await cachedJson(`points:cycles:history:v6:${limit}`, 60_000, async () => {
       await timer.time('schema', () => ensurePointsSchema(schemaSql));
       const cycles = await timer.time('db_cycles', () => sql`
         SELECT id, label, started_at, ends_at, closed_at

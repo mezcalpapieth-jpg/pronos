@@ -23,3 +23,6 @@ scripts/dist/
 .DS_Store
 .vercel/
 contracts/lib/
+
+# Local tournament notes
+docs/CAMBIOS_TORNEO_OCTUBRE_2026.md

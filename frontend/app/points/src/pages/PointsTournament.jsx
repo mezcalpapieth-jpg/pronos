@@ -54,7 +54,9 @@ const DEFAULT_RULES = {
 };
 const MEXICO_CITY_TIME_ZONE = 'America/Mexico_City';
 const LEADERBOARD_DISPLAY_LIMIT = 20;
+const HISTORY_LEADERBOARD_DISPLAY_LIMIT = 10;
 const WINNERS_DISPLAY_LIMIT = 5;
+const TOURNAMENT_START_NOTICE_PREFIX = 'points:tournament-start-notice:';
 
 function fmt(n, digits = 2) {
   return Number(n || 0).toLocaleString('es-MX', {
@@ -424,6 +426,122 @@ function PrizeRows({ rules }) {
           </strong>
         </div>
       ))}
+    </div>
+  );
+}
+
+function TournamentStartNotice({ cycle, rules, lang = 'es', onClose }) {
+  const prizes = Array.isArray(rules?.prizes) && rules.prizes.length > 0
+    ? rules.prizes
+    : DEFAULT_RULES.prizes;
+  const endsAt = cycle?.endsAt || cycle?.rankingCutoffAt || cycle?.operationCloseAt;
+  const endLabel = endsAt
+    ? new Date(endsAt).toLocaleDateString(lang === 'en' ? 'en-US' : 'es-MX', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    })
+    : null;
+  const startingBalance = fmtInteger(rules?.startingBalance || DEFAULT_RULES.startingBalance);
+
+  return (
+    <div style={{
+      position: 'fixed',
+      inset: 0,
+      zIndex: 2000,
+      display: 'grid',
+      placeItems: 'center',
+      padding: 18,
+      background: 'rgba(0,0,0,0.72)',
+      backdropFilter: 'blur(8px)',
+    }}>
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="tournament-start-title"
+        style={{
+          width: 'min(520px, 100%)',
+          border: '1px solid rgba(255,85,0,0.38)',
+          borderRadius: 10,
+          background: 'var(--surface1)',
+          boxShadow: '0 26px 80px rgba(0,0,0,0.55)',
+          padding: 'clamp(18px, 4vw, 26px)',
+        }}
+      >
+        <SectionLabel>{lang === 'en' ? 'Tournament started' : 'Torneo iniciado'}</SectionLabel>
+        <h2
+          id="tournament-start-title"
+          style={{
+            margin: 0,
+            color: 'var(--text-primary)',
+            fontFamily: 'var(--font-display)',
+            fontSize: 'clamp(25px, 4vw, 38px)',
+            lineHeight: 1,
+            textTransform: 'uppercase',
+          }}
+        >
+          {lang === 'en' ? 'The new cycle is live' : 'El nuevo ciclo ya empezó'}
+        </h2>
+        <p style={{
+          margin: '14px 0 0',
+          color: 'var(--text-secondary)',
+          fontFamily: 'var(--font-body)',
+          fontSize: 15,
+          lineHeight: 1.55,
+        }}>
+          {lang === 'en'
+            ? `Your MXNP balance was reset to ${startingBalance} MXNP. This tournament runs for one month${endLabel ? `, through ${endLabel}` : ''}.`
+            : `Tu balance MXNP se reinició a ${startingBalance} MXNP. Este torneo dura un mes${endLabel ? `, hasta el ${endLabel}` : ''}.`}
+        </p>
+
+        <div style={{
+          marginTop: 18,
+          display: 'grid',
+          gap: 8,
+        }}>
+          {prizes.map(row => (
+            <div key={row.rank} style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 14,
+              padding: '9px 10px',
+              borderRadius: 8,
+              border: '1px solid var(--border)',
+              background: 'var(--surface2)',
+            }}>
+              <span style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+                {lang === 'en' ? `Place ${row.rank}` : `Lugar ${row.rank}`}
+              </span>
+              <strong style={{ color: 'var(--green)', fontFamily: 'var(--font-body)', fontSize: 14 }}>
+                {row.prize}
+              </strong>
+            </div>
+          ))}
+        </div>
+
+        <button
+          type="button"
+          onClick={onClose}
+          style={{
+            marginTop: 20,
+            width: '100%',
+            padding: '12px 16px',
+            borderRadius: 8,
+            border: '1px solid var(--orange)',
+            background: 'var(--orange)',
+            color: '#000',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 12,
+            fontWeight: 800,
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+            cursor: 'pointer',
+          }}
+        >
+          {lang === 'en' ? 'Got it' : 'Entendido'}
+        </button>
+      </section>
     </div>
   );
 }
@@ -1055,6 +1173,7 @@ export default function PointsTournament() {
   const [cycle, setCycle] = useState(null);
   const [leaderboard, setLeaderboard] = useState(null);
   const [history, setHistory] = useState(null);
+  const [startNoticeOpen, setStartNoticeOpen] = useState(false);
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
@@ -1091,6 +1210,35 @@ export default function PointsTournament() {
     return () => window.clearInterval(id);
   }, []);
 
+  useEffect(() => {
+    if (!cycle?.id || cycle.paused || cycle.scheduled) {
+      setStartNoticeOpen(false);
+      return;
+    }
+    if (cycle.status !== 'active' && cycle.status !== 'closing') {
+      setStartNoticeOpen(false);
+      return;
+    }
+    const key = `${TOURNAMENT_START_NOTICE_PREFIX}${cycle.id}`;
+    try {
+      if (window.localStorage?.getItem(key) === 'dismissed') return;
+    } catch {
+      // If localStorage is unavailable, show the notice for this page load.
+    }
+    setStartNoticeOpen(true);
+  }, [cycle?.id, cycle?.paused, cycle?.scheduled, cycle?.status]);
+
+  function closeStartNotice() {
+    if (cycle?.id) {
+      try {
+        window.localStorage?.setItem(`${TOURNAMENT_START_NOTICE_PREFIX}${cycle.id}`, 'dismissed');
+      } catch {
+        // Non-critical: the modal still closes for this session.
+      }
+    }
+    setStartNoticeOpen(false);
+  }
+
   const rules = leaderboard?.rules || cycle?.rules || DEFAULT_RULES;
   const nowMs = Date.now();
   const displayCycle = displayCycleForTournament(cycle, nowMs);
@@ -1117,18 +1265,14 @@ export default function PointsTournament() {
   const currentCycleSnapshot = cycle?.id
     ? cycles.find(row => Number(row?.id) === Number(cycle.id) && Array.isArray(row?.top) && row.top.length > 0)
     : null;
-  const snapshotTop = Array.isArray(currentCycleSnapshot?.top) ? currentCycleSnapshot.top : [];
+  const snapshotTop = status === 'closed' && Array.isArray(currentCycleSnapshot?.top) ? currentCycleSnapshot.top : [];
   const top = Array.isArray(leaderboard?.top) ? leaderboard.top : [];
-  const visibleTop = top.length > 0 ? top : snapshotTop;
+  const leaderboardFailed = Boolean(leaderboard?.error);
+  const visibleTop = top.length > 0 ? top : (leaderboardFailed ? snapshotTop : []);
   const leaderboardRows = visibleTop.slice(0, LEADERBOARD_DISPLAY_LIMIT);
   const leaderboardLoading = leaderboard === null && snapshotTop.length === 0;
-  const leaderboardFailed = Boolean(leaderboard?.error);
   const me = leaderboard?.me || null;
   const qualifiedCount = visibleTop.filter(row => row.qualified).length;
-  const latestHistoryCycle = cycles.find(row => Array.isArray(row?.top) && row.top.length > 0);
-  const latestCompletedCycle = latestHistoryCycle && (!cycle?.id || Number(latestHistoryCycle.id) !== Number(cycle.id))
-    ? latestHistoryCycle
-    : null;
   const liveClosedCycle = status === 'closed' && leaderboardRows.length > 0
     ? {
         label: cycle?.label,
@@ -1136,9 +1280,9 @@ export default function PointsTournament() {
         top: leaderboardRows,
       }
     : null;
-  const winnersCycle = currentCycleSnapshot
-    || liveClosedCycle
-    || latestCompletedCycle;
+  const winnersCycle = status === 'closed'
+    ? (currentCycleSnapshot || liveClosedCycle)
+    : null;
   const prizeRows = Array.isArray(rules.prizes) && rules.prizes.length > 0
     ? rules.prizes
     : DEFAULT_RULES.prizes;
@@ -1154,6 +1298,14 @@ export default function PointsTournament() {
       margin: '0 auto',
       padding: 'clamp(28px, 5vw, 56px) clamp(16px, 4vw, 28px)',
     }}>
+      {startNoticeOpen && (
+        <TournamentStartNotice
+          cycle={cycle}
+          rules={rules}
+          lang={lang}
+          onClose={closeStartNotice}
+        />
+      )}
       <section style={{ marginBottom: 22 }}>
         <SectionLabel>{lang === 'en' ? 'Pronos tournament' : 'Torneo Pronos'}</SectionLabel>
         <h1 style={{
@@ -1366,7 +1518,7 @@ export default function PointsTournament() {
                     </span>
                   )}
                 </div>
-                {(cycleRow.top || []).slice(0, LEADERBOARD_DISPLAY_LIMIT).map(row => (
+                {(cycleRow.top || []).slice(0, HISTORY_LEADERBOARD_DISPLAY_LIMIT).map(row => (
                   <LeaderboardRow key={`${cycleRow.id}-${row.username}`} row={row} currentUsername={user?.username} rules={rules} compact={isMobile} lang={lang} />
                 ))}
               </div>

@@ -19,12 +19,16 @@ as a launch runbook, not product copy.
 3. Confirm `Health y schema` is `Listo`.
 4. Confirm `Ciclo activo` is `Listo`. If cycles are paused, restart them from
    `Ciclos` before opening the tournament publicly.
-5. Click `Correr dry-runs`.
-6. Confirm `Generador octubre 2026` reports `october-tournament-2026 > 0`.
-7. Confirm `Resolver dry-run` has no fatal errors. Nonfatal deferred markets
+5. In `Ciclos`, run `Previsualizar reset` before any real reset. Confirm the
+   next window is the October monthly cycle, the snapshot count looks right,
+   balances are reset, old positions/orders are cleared, and the previous
+   leaderboard will remain in history.
+6. Click `Correr dry-runs`.
+7. Confirm `Generador octubre 2026` reports `october-tournament-2026 > 0`.
+8. Confirm `Resolver dry-run` has no fatal errors. Nonfatal deferred markets
    should have a clear reason and owner.
-8. Confirm `Cola manual y resolvers` has `missingResolver = 0`.
-9. Review `Mercados pendientes`: every tournament market should have source,
+9. Confirm `Cola manual y resolvers` has `missingResolver = 0`.
+10. Review `Mercados pendientes`: every tournament market should have source,
    Spanish/English translation, suggested pricing, seed liquidity,
    `resolver_config`, and `tournamentFeatured` checked before approval.
 
@@ -96,6 +100,19 @@ Required production schedules:
    dispute.
 4. After rollover, re-open the Launch tab and confirm the next cycle is active.
 
+## Opening Reset Verification
+
+After pressing the real reset/open action for October:
+
+1. Confirm the current leaderboard starts clean for the new active cycle.
+2. Confirm the previous cycle appears only under historical leaderboards and
+   shows the Top 10.
+3. Open `/points/torneo` in a fresh browser session and confirm the start popup
+   says the tournament has started, MXNP were reset, the cycle lasts one month,
+   and the prize values are shown.
+4. Confirm the public countdown and market-drop timer point to the October
+   cycle, not the old two-week cycle.
+
 ## Stop Conditions
 
 Stop the launch and escalate if any of these are true:
@@ -104,6 +121,7 @@ Stop the launch and escalate if any of these are true:
 - `Health y schema` is blocked.
 - There is no active cycle.
 - Generator dry-run returns zero October specs.
+- Reset dry-run does not preview the intended October monthly window.
 - A critical feed needed by the October markets is unavailable.
 - `missingResolver > 0` for tournament markets.
 - Resolver dry-run has fatal errors.

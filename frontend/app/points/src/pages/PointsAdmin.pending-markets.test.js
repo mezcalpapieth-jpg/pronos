@@ -180,6 +180,9 @@ test('Points admin has an October launch readiness checklist', () => {
   assert.match(source, /adminRunGenerators\(\{ dry: true \}\)/);
   assert.match(source, /adminRunAutoResolve\(\{ dry: true \}\)/);
   assert.match(source, /docs\/OCTOBER_TOURNAMENT_READINESS\.md/);
+  assert.match(source, /Reset dry-run y ciclo mensual/);
+  assert.match(source, /Previsualizar reset/);
+  assert.match(source, /leaderboard anterior quede solo en historial Top 10/);
   assert.match(apiSource, /export async function adminFetchPointsHealth/);
 });
 

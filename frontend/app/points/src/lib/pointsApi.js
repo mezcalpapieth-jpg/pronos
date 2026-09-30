@@ -1060,10 +1060,24 @@ export async function adminFetchCycleStandingsSnapshot({ cycleId, limit = 100 } 
   return getJson(`/api/points/admin/cycles?${q.toString()}`);
 }
 
-export async function adminRolloverCycle(nextCycleLabel) {
+export async function adminRolloverCycle(options = {}) {
+  const payload = typeof options === 'string'
+    ? { nextCycleLabel: options }
+    : (options || {});
   return postJson('/api/points/admin/cycles', {
     action: 'rollover',
-    nextCycleLabel: nextCycleLabel || null,
+    nextCycleLabel: payload.nextCycleLabel || null,
+    nextCycleStartsAt: payload.nextCycleStartsAt || null,
+    nextCycleEndsAt: payload.nextCycleEndsAt || null,
+  });
+}
+
+export async function adminPreviewCycleRollover(options = {}) {
+  return postJson('/api/points/admin/cycles', {
+    action: 'rollover_dry_run',
+    nextCycleLabel: options.nextCycleLabel || null,
+    nextCycleStartsAt: options.nextCycleStartsAt || null,
+    nextCycleEndsAt: options.nextCycleEndsAt || null,
   });
 }
 
