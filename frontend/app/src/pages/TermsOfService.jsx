@@ -5,15 +5,11 @@ import { useLang, useT } from '../lib/i18n.js';
 /**
  * Terms of Service / Términos y Condiciones
  *
- * Draft tailored to Pronos:
+ * Tailored to Pronos:
  *   - Prediction-market platform with own AMM contracts on Arbitrum
  *   - MXNB collateral on mainnet, MockMXNB on testnet
  *   - Mexico-first audience (jurisdictional grey zone — clear disclaimers)
  *   - No-investment-advice / smart-contract-risk / regulatory-uncertainty
- *
- * MUST be reviewed by a Mexican lawyer before launch. The risk
- * disclosures and limitation of liability clauses in particular need
- * a real attorney's eyes.
  */
 export default function TermsOfService() {
   const lang = useLang();
@@ -37,7 +33,6 @@ export default function TermsOfService() {
         lineHeight: 1.7,
       }}>
         <LegalLanguageSwitch currentLang={lang} />
-        <DraftBanner lang="en" />
 
         <Eyebrow>TERMS · LAST UPDATED {lastUpdated.toUpperCase()}</Eyebrow>
         <H1>{title}</H1>
@@ -260,7 +255,6 @@ export default function TermsOfService() {
       lineHeight: 1.7,
     }}>
       <LegalLanguageSwitch currentLang={lang} />
-      <DraftBanner />
 
       <Eyebrow>TÉRMINOS · ÚLTIMA ACTUALIZACIÓN {lastUpdated.toUpperCase()}</Eyebrow>
       <H1>{title}</H1>
@@ -489,25 +483,6 @@ export default function TermsOfService() {
 
 // ─── Shared visual primitives ──────────────────────────────────────────────
 
-function DraftBanner({ lang = 'es' }) {
-  return (
-    <div style={{
-      background: 'rgba(255,85,0,0.08)',
-      border: '1px solid var(--orange, #FF5500)',
-      borderRadius: 10,
-      padding: '12px 16px',
-      marginBottom: 32,
-      fontFamily: 'var(--font-mono, ui-monospace)',
-      fontSize: 12,
-      color: 'var(--orange, #FF5500)',
-      letterSpacing: '0.06em',
-    }}>
-      {lang === 'en'
-        ? 'DRAFT · pending legal review · not final text'
-        : 'BORRADOR · pendiente de revisión legal · no es texto definitivo'}
-    </div>
-  );
-}
 function Eyebrow({ children }) {
   return (
     <div style={{

@@ -56,6 +56,16 @@ test('tournament page shows current leaderboard, past leaderboards, countdown an
   assert.match(pageSource, /America\/Mexico_City/);
   assert.match(pageSource, /Reglas/);
   assert.match(pageSource, /Preguntas frecuentes/);
+  assert.match(pageSource, /RewardEligibilityNotice/);
+  assert.match(pageSource, /Reward eligibility/);
+  assert.match(pageSource, /Elegibilidad de premios/);
+  assert.match(pageSource, /to="\/terms"/);
+  assert.match(pageSource, /Rewards abuse, multiple accounts/);
+  assert.match(pageSource, /El abuso de recompensas, múltiples cuentas/);
+  assert.match(pageSource, /limit or withhold rewards/);
+  assert.match(pageSource, /limite o retenga premios y recompensas/);
+  assert.doesNotMatch(pageSource, /Referral or rewards abuse/);
+  assert.doesNotMatch(pageSource, /abuso de referidos o recompensas/);
   assert.match(pageSource, /WinnerPodium/);
   assert.match(pageSource, /PodiumAvatar/);
   assert.match(pageSource, /profileImageUrl/);

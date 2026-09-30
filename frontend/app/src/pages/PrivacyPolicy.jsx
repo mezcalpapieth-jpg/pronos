@@ -5,15 +5,11 @@ import { useLang, useT } from '../lib/i18n.js';
 /**
  * Privacy Policy / Política de Privacidad
  *
- * Draft tailored to Pronos's actual stack:
+ * Tailored to Pronos's actual stack:
  *   - Auth: Turnkey email-OTP (no passwords stored on Pronos)
  *   - Storage: Neon (Postgres), Vercel (hosting), Sentry (errors)
  *   - Wallet: Turnkey-managed sub-organizations
  *   - Audience: Mexico-first (LFPDPPP applies)
- *
- * Review with a Mexican privacy lawyer before going live. The
- * "BORRADOR" banner at the top is a visible cue that this isn't
- * legally cleared yet.
  */
 export default function PrivacyPolicy() {
   const lang = useLang();
@@ -37,7 +33,6 @@ export default function PrivacyPolicy() {
         lineHeight: 1.7,
       }}>
         <LegalLanguageSwitch currentLang={lang} />
-        <DraftBanner lang="en" />
 
         <Eyebrow>PRIVACY · LAST UPDATED {lastUpdated.toUpperCase()}</Eyebrow>
         <H1>{title}</H1>
@@ -203,7 +198,6 @@ export default function PrivacyPolicy() {
       lineHeight: 1.7,
     }}>
       <LegalLanguageSwitch currentLang={lang} />
-      <DraftBanner />
 
       <Eyebrow>POLÍTICA · ÚLTIMA ACTUALIZACIÓN {lastUpdated.toUpperCase()}</Eyebrow>
       <H1>{title}</H1>
@@ -369,25 +363,6 @@ export default function PrivacyPolicy() {
 
 // ─── Shared visual primitives ──────────────────────────────────────────────
 
-function DraftBanner({ lang = 'es' }) {
-  return (
-    <div style={{
-      background: 'rgba(255,85,0,0.08)',
-      border: '1px solid var(--orange, #FF5500)',
-      borderRadius: 10,
-      padding: '12px 16px',
-      marginBottom: 32,
-      fontFamily: 'var(--font-mono, ui-monospace)',
-      fontSize: 12,
-      color: 'var(--orange, #FF5500)',
-      letterSpacing: '0.06em',
-    }}>
-      {lang === 'en'
-        ? 'DRAFT · pending legal review · not final text'
-        : 'BORRADOR · pendiente de revisión legal · no es texto definitivo'}
-    </div>
-  );
-}
 function Eyebrow({ children }) {
   return (
     <div style={{

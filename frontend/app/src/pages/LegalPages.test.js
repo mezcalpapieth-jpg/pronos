@@ -19,6 +19,17 @@ test('legal pages expose an in-page Spanish and English language switch', () => 
   assert.match(termsSource, /<LegalLanguageSwitch currentLang=\{lang\} \/>/);
 });
 
+test('legal pages do not show the draft banner and keep existing dates', () => {
+  assert.doesNotMatch(privacySource, /DraftBanner/);
+  assert.doesNotMatch(termsSource, /DraftBanner/);
+  assert.doesNotMatch(privacySource, /BORRADOR · pendiente de revisión legal/);
+  assert.doesNotMatch(termsSource, /BORRADOR · pendiente de revisión legal/);
+  assert.match(privacySource, /May 6, 2026/);
+  assert.match(privacySource, /6 de mayo de 2026/);
+  assert.match(termsSource, /August 25, 2026/);
+  assert.match(termsSource, /25 de agosto de 2026/);
+});
+
 test('terms prohibit points tournament and rewards exploits', () => {
   assert.match(termsSource, /August 25, 2026/);
   assert.match(termsSource, /public display name, profile picture, social handle/);

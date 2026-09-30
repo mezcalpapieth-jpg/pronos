@@ -428,6 +428,47 @@ function PrizeRows({ rules }) {
   );
 }
 
+function RewardEligibilityNotice({ lang = 'es' }) {
+  return (
+    <div style={{
+      marginTop: 14,
+      paddingTop: 14,
+      borderTop: '1px solid var(--border)',
+      color: 'var(--text-secondary)',
+      fontFamily: 'var(--font-body)',
+      fontSize: 13,
+      lineHeight: 1.55,
+    }}>
+      <strong style={{
+        display: 'block',
+        marginBottom: 5,
+        color: 'var(--text-primary)',
+        fontSize: 13,
+      }}>
+        {lang === 'en' ? 'Reward eligibility' : 'Elegibilidad de premios'}
+      </strong>
+      <span>
+        {lang === 'en'
+          ? 'Tournament rewards require compliance with the '
+          : 'Para recibir premios o recompensas del torneo, debes cumplir los '}
+        <Link
+          to="/terms"
+          style={{
+            color: 'var(--orange)',
+            textDecoration: 'none',
+            fontWeight: 700,
+          }}
+        >
+          {lang === 'en' ? 'Terms of Service' : 'Términos y Condiciones'}
+        </Link>
+        {lang === 'en'
+          ? '. Rewards abuse, multiple accounts, unauthorized automation, or any violation may disqualify you or cause Pronos to limit or withhold rewards.'
+          : '. El abuso de recompensas, múltiples cuentas, automatización no autorizada o cualquier incumplimiento puede hacer que no califiques, o que Pronos limite o retenga premios y recompensas.'}
+      </span>
+    </div>
+  );
+}
+
 function WinnerPodium({ cycle, rows, currentUsername, lang = 'es' }) {
   const winners = (Array.isArray(rows) ? rows : []).slice(0, WINNERS_DISPLAY_LIMIT);
   if (winners.length === 0) return null;
@@ -1187,6 +1228,7 @@ export default function PointsTournament() {
         <TournamentCard>
           <SectionLabel>{lang === 'en' ? 'Cash prizes' : 'Premios en efectivo'}</SectionLabel>
           <PrizeRows rules={rules} />
+          <RewardEligibilityNotice lang={lang} />
         </TournamentCard>
       </div>
 
