@@ -2581,6 +2581,316 @@ function StatCard({ label, value }) {
   );
 }
 
+function formatMxnp(value) {
+  const n = Number(value || 0);
+  return `${n >= 0 ? '+' : ''}${n.toLocaleString('es-MX', { maximumFractionDigits: 2 })} MXNP`;
+}
+
+function formatPlainMxnp(value) {
+  return `${Number(value || 0).toLocaleString('es-MX', { maximumFractionDigits: 2 })} MXNP`;
+}
+
+function formatAdminDate(value) {
+  if (!value) return '—';
+  try {
+    return new Date(value).toLocaleString('es-MX', {
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    return '—';
+  }
+}
+
+function StrategyStatusPill({ status }) {
+  const normalized = String(status || 'open').toLowerCase();
+  const color = normalized === 'won' ? 'var(--green)'
+    : normalized === 'lost' ? 'var(--red)'
+      : normalized === 'void' ? 'var(--yellow)'
+        : 'var(--orange)';
+  const label = {
+    open: 'Abierta',
+    won: 'Ganada',
+    lost: 'Perdida',
+    void: 'Anulada',
+  }[normalized] || normalized;
+  return (
+    <span style={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      padding: '5px 8px',
+      borderRadius: 999,
+      border: `1px solid ${color}`,
+      color,
+      fontFamily: 'var(--font-mono)',
+      fontSize: 10,
+      letterSpacing: '0.08em',
+      textTransform: 'uppercase',
+    }}>
+      {label}
+    </span>
+  );
+}
+
+function StrategiesSection() {
+  const [data, setData] = useState(null);
+  const [cycleId, setCycleId] = useState('');
+  const [err, setErr] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async (nextCycleId = cycleId) => {
+    setLoading(true);
+    setErr(null);
+    try {
+      const q = new URLSearchParams({
+        ticketLimit: '80',
+        longHoldLimit: '40',
+      });
+      if (nextCycleId) q.set('cycleId', String(nextCycleId));
+      const { ok, data: payload } = await getJson(`/api/points/admin/strategies?${q.toString()}`);
+      if (!ok) throw new Error(payload?.error || 'strategies_failed');
+      setData(payload);
+      if (!nextCycleId && payload?.cycle?.id) setCycleId(String(payload.cycle.id));
+    } catch (e) {
+      setErr(e?.message || 'strategies_failed');
+    } finally {
+      setLoading(false);
+    }
+  }, [cycleId]);
+
+  useEffect(() => {
+    load('');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const summary = data?.parlay?.summary || {};
+  const tickets = data?.parlay?.tickets || [];
+  const longHoldRows = data?.longHold?.rows || [];
+
+  return (
+    <section style={{
+      padding: 20, border: '1px solid var(--border)', borderRadius: 14,
+      background: 'var(--surface1)',
+    }}>
+      <SectionHeader
+        title="Combinadas / Long Hold"
+        subtitle="Auditoría de estrategias del torneo: tickets, multiplicadores, PnL y bonos por mantener posición."
+        right={(
+          <button className="btn-secondary" onClick={() => load(cycleId)} disabled={loading}>
+            Actualizar
+          </button>
+        )}
+      />
+
+      {err && (
+        <p style={{ color: 'var(--red)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+          Error: {err}
+        </p>
+      )}
+
+      <div style={{ display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap', marginBottom: 16 }}>
+        <Field label="Ciclo">
+          <select
+            value={cycleId}
+            onChange={(e) => {
+              const next = e.target.value;
+              setCycleId(next);
+              load(next);
+            }}
+            style={{ ...inputStyle, minWidth: 240 }}
+          >
+            {(data?.cycles || []).map(cycle => (
+              <option key={cycle.id} value={cycle.id}>
+                {cycle.label || `Ciclo #${cycle.id}`} · {cycle.status}
+              </option>
+            ))}
+          </select>
+        </Field>
+        {data?.cycle && (
+          <div style={{
+            fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)',
+            paddingBottom: 16,
+          }}>
+            {formatAdminDate(data.cycle.startedAt)} → {formatAdminDate(data.cycle.endsAt)}
+            {data.longHold?.source === 'cycle_snapshot' ? ' · snapshot cerrado' : ' · leaderboard en vivo'}
+          </div>
+        )}
+      </div>
+
+      {loading && !data ? (
+        <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Cargando…</p>
+      ) : (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 22 }}>
+            <StatCard label="Combinadas" value={Number(summary.count || 0).toLocaleString('es-MX')} />
+            <StatCard label="Stake total" value={formatPlainMxnp(summary.stake)} />
+            <StatCard label="Pago potencial" value={formatPlainMxnp(summary.potentialPayout)} />
+            <StatCard label="PnL realizado" value={formatMxnp(summary.realizedPnl)} />
+          </div>
+
+          <div style={{ marginBottom: 26 }}>
+            <SectionHeader
+              title="Combinadas"
+              subtitle={`${summary.open || 0} abiertas · ${summary.won || 0} ganadas · ${summary.lost || 0} perdidas · ${summary.void || 0} anuladas`}
+            />
+            {tickets.length === 0 ? (
+              <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+                Todavía no hay combinadas en este ciclo.
+              </p>
+            ) : (
+              <div style={{ display: 'grid', gap: 12 }}>
+                {tickets.map(ticket => (
+                  <div key={ticket.id} style={{
+                    padding: 14,
+                    borderRadius: 12,
+                    border: '1px solid var(--border)',
+                    background: 'var(--surface2)',
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
+                      <div>
+                        <div style={{ fontFamily: 'var(--font-display)', color: 'var(--text-primary)', fontSize: 19 }}>
+                          #{ticket.id} · @{ticket.username}
+                        </div>
+                        <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontSize: 11, marginTop: 3 }}>
+                          {formatAdminDate(ticket.submittedAt)} · {ticket.legs?.length || 0} mercados · x{Number(ticket.multiplier || 0).toFixed(2)}
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <StrategyStatusPill status={ticket.derivedStatus} />
+                        <div style={{
+                          marginTop: 8,
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: 12,
+                          color: Number(ticket.realizedPnl || 0) >= 0 ? 'var(--green)' : 'var(--red)',
+                        }}>
+                          Realizado {formatMxnp(ticket.realizedPnl)}
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
+                      gap: 8,
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 11,
+                      color: 'var(--text-secondary)',
+                      marginBottom: 10,
+                    }}>
+                      <div>Stake: <strong style={{ color: 'var(--text-primary)' }}>{formatPlainMxnp(ticket.stake)}</strong></div>
+                      <div>Potencial: <strong style={{ color: 'var(--text-primary)' }}>{formatPlainMxnp(ticket.potentialPayout)}</strong></div>
+                      <div>Upside: <strong style={{ color: 'var(--green)' }}>{formatMxnp(ticket.potentialPnl)}</strong></div>
+                    </div>
+                    <div style={{ display: 'grid', gap: 6 }}>
+                      {(ticket.legs || []).map(leg => (
+                        <div key={leg.id} style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'minmax(0, 1fr) auto',
+                          gap: 10,
+                          alignItems: 'center',
+                          padding: '8px 10px',
+                          borderRadius: 8,
+                          background: 'rgba(255,255,255,0.03)',
+                          border: '1px solid rgba(255,255,255,0.06)',
+                        }}>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{
+                              color: 'var(--text-primary)',
+                              fontSize: 12,
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}>
+                              {leg.question || `Mercado #${leg.marketId}`}
+                            </div>
+                            <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontSize: 10, marginTop: 2 }}>
+                              Eligió: {leg.outcomeLabel || `Opción ${leg.outcomeIndex + 1}`} · cierre {formatAdminDate(leg.marketEndTime)}
+                            </div>
+                          </div>
+                          <StrategyStatusPill status={leg.derivedStatus} />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <SectionHeader
+              title="Long Hold"
+              subtitle="Bonos de convicción calculados con la misma lógica del leaderboard."
+            />
+            {longHoldRows.length === 0 ? (
+              <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+                Todavía no hay bonos long hold en este ciclo.
+              </p>
+            ) : (
+              <div style={{ display: 'grid', gap: 12 }}>
+                {longHoldRows.map(row => (
+                  <div key={row.username} style={{
+                    padding: 14,
+                    borderRadius: 12,
+                    border: '1px solid var(--border)',
+                    background: 'var(--surface2)',
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
+                      <div>
+                        <div style={{ fontFamily: 'var(--font-display)', color: 'var(--text-primary)', fontSize: 19 }}>
+                          @{row.username}
+                          {row.rank ? <span style={{ color: 'var(--text-muted)', fontSize: 13 }}> · rank #{row.rank}</span> : null}
+                        </div>
+                        <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontSize: 11, marginTop: 3 }}>
+                          {row.convictionMarkets || 0} mercados · {row.convictionLots || 0} lotes elegibles
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right', fontFamily: 'var(--font-mono)' }}>
+                        <div style={{ color: 'var(--green)', fontSize: 14, fontWeight: 800 }}>{formatMxnp(row.holdBonus)}</div>
+                        <div style={{ color: 'var(--text-muted)', fontSize: 10 }}>bonus long hold</div>
+                      </div>
+                    </div>
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+                      gap: 8,
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 11,
+                      color: 'var(--text-secondary)',
+                      marginBottom: (row.breakdown || []).length > 0 ? 10 : 0,
+                    }}>
+                      <div>PnL mercado: <strong style={{ color: 'var(--text-primary)' }}>{formatMxnp(row.marketPnl)}</strong></div>
+                      <div>Profit elegible: <strong style={{ color: 'var(--text-primary)' }}>{formatPlainMxnp(row.convictionEligibleProfit)}</strong></div>
+                      <div>Cap aplicado: <strong style={{ color: 'var(--orange)' }}>{formatPlainMxnp(row.convictionBonusCapApplied)}</strong></div>
+                    </div>
+                    {(row.breakdown || []).slice(0, 5).map(item => (
+                      <div key={`${row.username}-${item.marketId}`} style={{
+                        padding: '8px 10px',
+                        borderRadius: 8,
+                        background: 'rgba(255,255,255,0.03)',
+                        border: '1px solid rgba(255,255,255,0.06)',
+                        marginTop: 6,
+                      }}>
+                        <div style={{ fontSize: 12, color: 'var(--text-primary)' }}>
+                          {item.question || `Mercado #${item.marketId}`}
+                        </div>
+                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
+                          x{Number(item.averageMultiplier || 1).toFixed(2)} promedio · {item.eligibleLots || 0} lotes · bonus {formatMxnp(item.bonus)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
 function StatsSection() {
   const { user } = usePointsAuth();
   const [stats, setStats] = useState(null);
@@ -2680,6 +2990,7 @@ const ADMIN_TABS = [
   { id: 'markets',  label: 'Mercados',        countKey: 'markets' },
   { id: 'social',   label: 'Tareas sociales', countKey: 'social' },
   { id: 'funding',  label: 'Fondeo',          countKey: 'funding' },
+  { id: 'strategies', label: 'Estrategias'    },
   { id: 'stats',    label: 'Estadísticas'    },
 ];
 
@@ -2704,7 +3015,7 @@ export default function Admin({ username, userIsAdmin, loading, onOpenLogin }) {
     if (typeof window === 'undefined') return 'create';
     const sp = new URLSearchParams(window.location.search);
     const t = sp.get('tab');
-    return ['create', 'generate', 'pending', 'markets', 'social', 'funding', 'stats'].includes(t) ? t : 'create';
+    return ['create', 'generate', 'pending', 'markets', 'social', 'funding', 'strategies', 'stats'].includes(t) ? t : 'create';
   })();
   const createSeed = (() => {
     if (typeof window === 'undefined') return null;
@@ -2854,6 +3165,7 @@ export default function Admin({ username, userIsAdmin, loading, onOpenLogin }) {
         )}
         {tab === 'social'   && <SocialTasksSection onQueueChange={loadAdminTaskCounts} />}
         {tab === 'funding'  && <FundingMonitorSection onQueueChange={loadAdminTaskCounts} />}
+        {tab === 'strategies' && <StrategiesSection />}
         {tab === 'stats'    && <StatsSection />}
       </>
     );

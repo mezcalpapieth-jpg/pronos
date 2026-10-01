@@ -144,6 +144,19 @@ test('MVP admin tabs show badges for pending work outside the active tab', () =>
   assert.match(adminShell, /taskCount > 0/);
 });
 
+test('MVP admin has a strategies tab for combinadas and long hold audits', () => {
+  const strategiesSection = section('function StrategiesSection', 'function StatsSection');
+  const adminShell = source;
+
+  assert.match(adminShell, /id:\s*'strategies',\s*label:\s*'Estrategias'/);
+  assert.match(adminShell, /tab === 'strategies'/);
+  assert.match(strategiesSection, /\/api\/points\/admin\/strategies/);
+  assert.match(strategiesSection, /Combinadas \/ Long Hold/);
+  assert.match(strategiesSection, /derivedStatus/);
+  assert.match(strategiesSection, /convictionBreakdown|breakdown/);
+  assert.doesNotMatch(strategiesSection, /\/api\/protocol\/admin\/pending-markets/);
+});
+
 test('MVP nav surfaces admin work count outside admin', () => {
   assert.match(navSource, /adminListMvpTaskCounts/);
   assert.match(navSource, /adminTaskTotal/);
