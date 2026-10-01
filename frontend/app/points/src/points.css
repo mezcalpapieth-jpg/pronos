@@ -260,6 +260,146 @@
   filter: brightness(1.1);
 }
 
+/* Admin generated-market queue */
+.points-admin-pending-card {
+  background: var(--surface1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 10px;
+  min-width: 0;
+  overflow: hidden;
+  padding: 16px 18px;
+}
+
+.points-admin-pending-review,
+.points-admin-pending-main {
+  min-width: 0;
+}
+
+.points-admin-pending-main {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.points-admin-pending-title {
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.28;
+  max-width: 900px;
+  overflow-wrap: anywhere;
+}
+
+.points-admin-pending-controls {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.points-admin-pending-toggles,
+.points-admin-pending-actions,
+.points-admin-pending-status-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.points-admin-pending-actions button,
+.points-admin-pending-status-actions button {
+  min-height: 34px;
+  min-width: 0;
+  white-space: normal;
+}
+
+.points-admin-pending-meta {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  line-height: 1.55;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.points-admin-pending-meta-top {
+  text-transform: uppercase;
+}
+
+.points-admin-edit-meta {
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  gap: 4px;
+  letter-spacing: 0.04em;
+  line-height: 1.55;
+  margin: -8px 0 18px;
+  overflow-wrap: anywhere;
+  padding: 10px 12px;
+}
+
+@media (max-width: 720px) {
+  .points-admin-pending-card {
+    border-radius: 12px;
+    padding: 16px;
+  }
+
+  .points-admin-pending-main {
+    gap: 12px;
+  }
+
+  .points-admin-pending-title {
+    font-size: 17px;
+    line-height: 1.25;
+    max-width: none;
+  }
+
+  .points-admin-pending-controls {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .points-admin-pending-toggles {
+    justify-content: flex-start;
+  }
+
+  .points-admin-pending-actions {
+    display: grid;
+    gap: 8px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .points-admin-pending-actions button,
+  .points-admin-pending-status-actions button {
+    line-height: 1.18;
+    padding: 10px 8px !important;
+    width: 100%;
+  }
+
+  .points-admin-pending-status-actions {
+    align-items: stretch;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .points-admin-pending-meta {
+    display: none;
+  }
+}
+
 /* RIS 26 live event page */
 .ris26-page {
   min-height: 100svh;

@@ -8349,109 +8349,76 @@ function PendingMarketsTable({ onQueueChange }) {
         const suggestedOdds = formatSuggestedPricing(r);
         const displaySeedLiquidities = displayLiquiditiesForPendingRow(r);
         return (
-          <div key={r.id} style={{
-            background: 'var(--surface1)',
-            border: '1px solid var(--border)',
-            borderRadius: 10,
-            padding: '14px 18px',
-            marginBottom: 10,
-          }}>
-            <div style={{
-              display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
-              gap: 12, marginBottom: 8,
-            }}>
-              {/* Featured (🔥) toggle — PENDING rows only. When ON at
-                  approval time, the created market goes into the home
-                  Trending grid in addition to its category page. When
-                  OFF (default), it only shows under /c/<category>.
-                  The approved-row equivalent of this lives in the
-                  Mercados tab so admins can flip featured after the
-                  market already exists. */}
-              {isPending && (
-                <div style={{ display: 'inline-flex', gap: 8, flexShrink: 0 }}>
-                  <button
-                    onClick={() => togglePendingFeatured(r)}
-                    title={r.pendingFeatured
-                      ? 'Este mercado irá a Trending al aprobarse (click para quitar)'
-                      : 'Click para que este mercado salga en Trending al aprobarse'}
-                    style={{
-                      flexShrink: 0,
-                      width: 32, height: 32,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      borderRadius: '50%',
-                      border: `1px solid ${r.pendingFeatured ? 'rgba(245,158,11,0.5)' : 'var(--border)'}`,
-                      background: r.pendingFeatured ? 'rgba(245,158,11,0.15)' : 'transparent',
-                      cursor: 'pointer',
-                      fontSize: 16,
-                      lineHeight: 1,
-                      padding: 0,
-                      filter: r.pendingFeatured ? 'none' : 'grayscale(1)',
-                      opacity: r.pendingFeatured ? 1 : 0.45,
-                      transition: 'opacity 0.15s, background 0.15s, border-color 0.15s',
-                    }}
-                  >
-                    🔥
-                  </button>
-                  <button
-                    onClick={() => togglePendingTournamentFeatured(r)}
-                    title={r.pendingTournamentFeatured
-                      ? 'Este mercado irá al bloque de torneo al aprobarse (click para quitar)'
-                      : 'Click para que aparezca como mercado de torneo aunque todo lo demás esté oculto'}
-                    style={{
-                      flexShrink: 0,
-                      width: 32, height: 32,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      borderRadius: '50%',
-                      border: `1px solid ${r.pendingTournamentFeatured ? 'rgba(250,204,21,0.58)' : 'var(--border)'}`,
-                      background: r.pendingTournamentFeatured ? 'rgba(250,204,21,0.16)' : 'transparent',
-                      cursor: 'pointer',
-                      fontSize: 16,
-                      lineHeight: 1,
-                      padding: 0,
-                      filter: r.pendingTournamentFeatured ? 'none' : 'grayscale(1)',
-                      opacity: r.pendingTournamentFeatured ? 1 : 0.45,
-                      transition: 'opacity 0.15s, background 0.15s, border-color 0.15s',
-                    }}
-                  >
-                    🏆
-                  </button>
-                </div>
-              )}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{
-                  fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)',
-                  letterSpacing: '0.04em', marginBottom: 4, textTransform: 'uppercase',
-                }}>
-                  #{r.id} · {r.source} · {r.category} · {r.ammMode}
-                  {r.sport && <> · {r.sport}</>}
-                  {r.league && <>/{r.league}</>}
-                  {r.sourceData?.competitionName && <> · {r.sourceData.competitionName}</>}
-                  {r.resolverType && <> · resolver: {r.resolverType}</>}
-                </div>
-                <div style={{ fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.35 }}>
+          <div key={r.id} className="points-admin-pending-card">
+            <div className="points-admin-pending-review">
+              <div className="points-admin-pending-main">
+                <div className="points-admin-pending-title">
                   {r.question}
                 </div>
-                <div style={{
-                  fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)',
-                  marginTop: 4, letterSpacing: '0.04em',
-                }}>
-                  Opciones ({Array.isArray(r.outcomes) ? r.outcomes.length : 0}): {formatOutcomeList(r.outcomes)}
-                  {' · Cierra: '}{formatAdminMarketDate(r.endTime)}
-                  {' · Liquidez: '}
-                  {Array.isArray(displaySeedLiquidities) && displaySeedLiquidities.length === r.outcomes?.length
-                    ? displaySeedLiquidities.map(v => Number(v).toLocaleString('es-MX')).join(' / ')
-                    : Number(r.seedLiquidity || 0).toLocaleString('es-MX')}
-                  {' MXNP'}
-                  {suggestedOdds && <> · Odds sugeridos: {suggestedOdds}</>}
-                </div>
-              </div>
-
-              {isPending ? (
-                <div style={{ display: 'flex', gap: 6 }}>
+                <div className="points-admin-pending-controls">
+                  {/* Featured (🔥) toggle — PENDING rows only. When ON at
+                      approval time, the created market goes into the home
+                      Trending grid in addition to its category page. When
+                      OFF (default), it only shows under /c/<category>.
+                      The approved-row equivalent of this lives in the
+                      Mercados tab so admins can flip featured after the
+                      market already exists. */}
+                  {isPending && (
+                    <div className="points-admin-pending-toggles">
+                      <button
+                        onClick={() => togglePendingFeatured(r)}
+                        title={r.pendingFeatured
+                          ? 'Este mercado irá a Trending al aprobarse (click para quitar)'
+                          : 'Click para que este mercado salga en Trending al aprobarse'}
+                        style={{
+                          flexShrink: 0,
+                          width: 32, height: 32,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          borderRadius: '50%',
+                          border: `1px solid ${r.pendingFeatured ? 'rgba(245,158,11,0.5)' : 'var(--border)'}`,
+                          background: r.pendingFeatured ? 'rgba(245,158,11,0.15)' : 'transparent',
+                          cursor: 'pointer',
+                          fontSize: 16,
+                          lineHeight: 1,
+                          padding: 0,
+                          filter: r.pendingFeatured ? 'none' : 'grayscale(1)',
+                          opacity: r.pendingFeatured ? 1 : 0.45,
+                          transition: 'opacity 0.15s, background 0.15s, border-color 0.15s',
+                        }}
+                      >
+                        🔥
+                      </button>
+                      <button
+                        onClick={() => togglePendingTournamentFeatured(r)}
+                        title={r.pendingTournamentFeatured
+                          ? 'Este mercado irá al bloque de torneo al aprobarse (click para quitar)'
+                          : 'Click para que aparezca como mercado de torneo aunque todo lo demás esté oculto'}
+                        style={{
+                          flexShrink: 0,
+                          width: 32, height: 32,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          borderRadius: '50%',
+                          border: `1px solid ${r.pendingTournamentFeatured ? 'rgba(250,204,21,0.58)' : 'var(--border)'}`,
+                          background: r.pendingTournamentFeatured ? 'rgba(250,204,21,0.16)' : 'transparent',
+                          cursor: 'pointer',
+                          fontSize: 16,
+                          lineHeight: 1,
+                          padding: 0,
+                          filter: r.pendingTournamentFeatured ? 'none' : 'grayscale(1)',
+                          opacity: r.pendingTournamentFeatured ? 1 : 0.45,
+                          transition: 'opacity 0.15s, background 0.15s, border-color 0.15s',
+                        }}
+                      >
+                        🏆
+                      </button>
+                    </div>
+                  )}
+                  {isPending ? (
+                    <div className="points-admin-pending-actions">
                   <button
                     onClick={() => refreshPricing(r.id)}
                     disabled={busyId === r.id}
@@ -8524,9 +8491,9 @@ function PendingMarketsTable({ onQueueChange }) {
                   >
                     Rechazar
                   </button>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                    </div>
+                  ) : (
+                    <div className="points-admin-pending-status-actions">
                   <span style={{
                     fontFamily: 'var(--font-mono)', fontSize: 10,
                     color: r.status === 'approved' ? 'var(--green)' : 'var(--text-muted)',
@@ -8558,8 +8525,27 @@ function PendingMarketsTable({ onQueueChange }) {
                       Reagregar
                     </button>
                   )}
+                    </div>
+                  )}
                 </div>
-              )}
+                <div className="points-admin-pending-meta points-admin-pending-meta-top">
+                  #{r.id} · {r.source} · {r.category} · {r.ammMode}
+                  {r.sport && <> · {r.sport}</>}
+                  {r.league && <>/{r.league}</>}
+                  {r.sourceData?.competitionName && <> · {r.sourceData.competitionName}</>}
+                  {r.resolverType && <> · resolver: {r.resolverType}</>}
+                </div>
+                <div className="points-admin-pending-meta points-admin-pending-meta-details">
+                  Opciones ({Array.isArray(r.outcomes) ? r.outcomes.length : 0}): {formatOutcomeList(r.outcomes)}
+                  {' · Cierra: '}{formatAdminMarketDate(r.endTime)}
+                  {' · Liquidez: '}
+                  {Array.isArray(displaySeedLiquidities) && displaySeedLiquidities.length === r.outcomes?.length
+                    ? displaySeedLiquidities.map(v => Number(v).toLocaleString('es-MX')).join(' / ')
+                    : Number(r.seedLiquidity || 0).toLocaleString('es-MX')}
+                  {' MXNP'}
+                  {suggestedOdds && <> · Odds sugeridos: {suggestedOdds}</>}
+                </div>
+              </div>
             </div>
           </div>
         );
@@ -8751,6 +8737,23 @@ function PendingMarketEditModal({ row, onClose, onSaved }) {
         <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, marginTop: 0, marginBottom: 20 }}>
           Antes de aprobar
         </h3>
+        <div className="points-admin-edit-meta">
+          <span>
+            Origen #{row.id} · {row.source} · {row.category} · {ammMode}
+            {row.sport && <> · {row.sport}</>}
+            {row.league && <>/{row.league}</>}
+            {row.sourceData?.competitionName && <> · {row.sourceData.competitionName}</>}
+            {row.resolverType && <> · resolver: {row.resolverType}</>}
+          </span>
+          <span>
+            Opciones ({initialOutcomes.length}): {formatOutcomeList(initialOutcomes)}
+          </span>
+          <span>Cierra: {formatAdminMarketDate(row.endTime)}</span>
+          <span>
+            Liquidez: {initialSeeds.map(v => Number(v).toLocaleString('es-MX')).join(' / ')} MXNP
+          </span>
+          {suggestedOdds && <span>Odds sugeridos: {suggestedOdds}</span>}
+        </div>
 
         <Field label="Pregunta">
           <textarea

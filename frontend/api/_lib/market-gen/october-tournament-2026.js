@@ -126,6 +126,13 @@ const HURRICANE_RESOLVE_ISO = dateAtMexicoCityTime({
   hour: 12,
   minute: 0,
 }).toISOString();
+const FOOD_PRICE_RESOLVE_ISO = dateAtMexicoCityTime({
+  year: 2026,
+  month: 11,
+  day: 2,
+  hour: 12,
+  minute: 0,
+}).toISOString();
 
 const EVIDENCE = Object.freeze({
   banxicoFix: 'https://www.banxico.org.mx/tipcamb/main.do?page=tip&idioma=sp',
@@ -133,12 +140,43 @@ const EVIDENCE = Object.freeze({
   chainlinkFeeds: 'https://docs.chain.link/data-feeds/price-feeds/addresses',
   chainlinkXau: 'https://data.chain.link/feeds/arbitrum/mainnet/xau-usd',
   nobelDates: 'https://www.nobelprize.org/prizes/about/prize-announcement-dates/',
+  nobelPeaceAnnouncement: 'https://www.nobelpeaceprize.org/press/events/announcement-nobel-peace-prize-2026',
+  prioNobelUpdatedList: 'https://www.prio.org/news/3746',
   rottenTomatoes: 'https://www.rottentomatoes.com/',
   ballonDor: 'https://www.uefa.com/ballondor/',
+  ballonDorNominees: 'https://www.uefa.com/uefachampionsleague/news/02a9-218b019cbca5-cb4b9be51c4b-1000--2026-ballon-dor-awards-nominees-revealed/',
   fedCalendar: 'https://www.federalreserve.gov/newsevents/2026-october.htm',
   inegiFeeds: 'https://www.inegi.org.mx/servicios/feedsnoticias/feeds.html',
   ibtracs: IBTRACS_PRODUCT_PAGE,
+  sniimTortilla: 'https://www.economia-sniim.gob.mx/Tortilla.asp',
+  sniimNationalMarkets: 'https://www.economia-sniim.gob.mx/e_MenNal.asp',
+  siapWhiteCorn: 'https://nube.agricultura.gob.mx/Balanza/MaizGranoBlanco/index.php',
 });
+
+const DEFAULT_NOBEL_PEACE_CANDIDATES_ES = Object.freeze([
+  'Mykola Kuleba y Save the Children',
+  'Salas de Respuesta de Emergencia de Sudán',
+  'Comité para la Protección de los Periodistas',
+  'Corte Internacional de Justicia y Corte Penal Internacional',
+  'Estación Espacial Internacional',
+]);
+
+const DEFAULT_NOBEL_PEACE_CANDIDATES_EN = Object.freeze([
+  'Mykola Kuleba and Save the Children',
+  "Sudan's Emergency Response Rooms",
+  'Committee to Protect Journalists',
+  'International Court of Justice and International Criminal Court',
+  'International Space Station',
+]);
+
+const DEFAULT_BALLON_DOR_CANDIDATES = Object.freeze([
+  'Lamine Yamal',
+  'Kylian Mbappé',
+  'Erling Haaland',
+  'Ousmane Dembélé',
+  'Jude Bellingham',
+  'Vitinha',
+]);
 
 function roundDownToStep(value, step) {
   return Math.floor(Number(value) / step) * step;
@@ -218,11 +256,12 @@ function sourceDataBase({
 }
 
 function pricedSpec(spec, probabilities = null) {
-  return attachSuggestedPricing(spec, {
-    probabilities: probabilities || Array.from({ length: spec.outcomes.length }, () => 1 / spec.outcomes.length),
+  const tournamentSpec = { tournament_featured: true, ...spec };
+  return attachSuggestedPricing(tournamentSpec, {
+    probabilities: probabilities || Array.from({ length: tournamentSpec.outcomes.length }, () => 1 / tournamentSpec.outcomes.length),
     source: 'cofounder-brief',
     rationale: 'Mercado preparado para el torneo octubre 2026; revisar en admin antes de aprobar.',
-    evidence: spec.source_data?.evidence || [],
+    evidence: tournamentSpec.source_data?.evidence || [],
   });
 }
 
@@ -397,15 +436,25 @@ function csvList(value) {
     .filter(Boolean);
 }
 
-function candidateOutcomes(env, key) {
-  const es = csvList(env[`${key}_ES`] || env[key]);
-  const enRaw = csvList(env[`${key}_EN`] || env[key]);
-  if (es.length < 6) return null;
-  const en = enRaw.length >= 6 ? enRaw : es;
+function candidateOutcomes(env, key, fallbackEs = [], fallbackEn = fallbackEs) {
+  const configuredEs = csvList(env[`${key}_ES`] || env[key]);
+  const configuredEn = csvList(env[`${key}_EN`] || env[key]);
+  const es = configuredEs.length >= 2 ? configuredEs : fallbackEs;
+  if (es.length < 2) return null;
+  const enRaw = configuredEn.length >= 2 ? configuredEn : (configuredEs.length >= 2 ? configuredEs : fallbackEn);
+  const en = enRaw.length >= 2 ? enRaw : es;
   return {
     es: [...es.slice(0, 6), 'Otro'],
     en: [...en.slice(0, 6), 'Other'],
   };
+}
+
+function bucketMetadata(outcomesEs, outcomesEn, ranges) {
+  return outcomesEs.map((label, idx) => ({
+    label,
+    labelEn: outcomesEn[idx],
+    ...(ranges[idx] || {}),
+  }));
 }
 
 async function usdMxnSpec() {
@@ -629,11 +678,12 @@ async function commodityChainlinkSpecs({
   envKey,
   env,
   now,
+  defaultChainId = 42161,
 }) {
   const weekly = weeklyCommodityWindow(now);
   const configuredFeed = {
     feedAddress: env[`${envKey}_FEED_ADDRESS`],
-    chainId: Number(env[`${envKey}_CHAIN_ID`] || 42161),
+    chainId: Number(env[`${envKey}_CHAIN_ID`] || defaultChainId),
     symbol: env[`${envKey}_SYMBOL`] || `${asset}/USD`,
   };
   if (!configuredFeed.feedAddress) {
@@ -777,7 +827,157 @@ function manualMarkets(env = process.env) {
     evidence: [{ title: 'INEGI feeds', url: EVIDENCE.inegiFeeds }],
   }));
 
-  const nobel = candidateOutcomes(env, 'OCTOBER_NOBEL_PEACE_CANDIDATES');
+  const tortillaOutcomesEs = [
+    'Menos de $23.00 MXN/kg',
+    '$23.00 a $24.00 MXN/kg',
+    '$24.00 a $25.00 MXN/kg',
+    '$25.00 a $26.00 MXN/kg',
+    '$26.00 a $27.00 MXN/kg',
+    '$27.00 MXN/kg o más',
+  ];
+  const tortillaOutcomesEn = [
+    'Under $23.00 MXN/kg',
+    '$23.00 to $24.00 MXN/kg',
+    '$24.00 to $25.00 MXN/kg',
+    '$25.00 to $26.00 MXN/kg',
+    '$26.00 to $27.00 MXN/kg',
+    '$27.00 MXN/kg or higher',
+  ];
+  specs.push(buildManualSpec({
+    key: 'tortilla-national-tortilleria-close',
+    questionEs: 'Tortilla de maíz: precio nacional en tortillería al cierre de octubre 2026',
+    questionEn: 'Corn tortilla: national tortilleria price at October 2026 close',
+    category: 'mexico',
+    tags: { categoryTags: ['mexico', 'finanzas'], geoTags: ['mexico'], topicTags: ['alimentos', 'commodities'] },
+    icon: 'SNIIM',
+    outcomesEs: tortillaOutcomesEs,
+    outcomesEn: tortillaOutcomesEn,
+    closeIso: TOURNAMENT_END_ISO,
+    resolveIso: FOOD_PRICE_RESOLVE_ISO,
+    criteriaEs: 'Se resuelve con el precio nacional de tortilla en tortillerías publicado por SNIIM, usando el último dato oficial publicado en día hábil hasta el 31 de octubre de 2026. No cuenta autoservicio. Si el dato cae exactamente en un límite, gana el bucket superior.',
+    criteriaEn: 'Resolve from the national tortilleria corn-tortilla price published by SNIIM, using the latest official business-day datapoint published through October 31, 2026. Supermarket prices do not count. If the value lands exactly on a boundary, the upper bucket wins.',
+    evidence: [{ title: 'SNIIM tortilla prices', url: EVIDENCE.sniimTortilla }],
+    kind: 'october_tournament_food_price',
+    extraSourceData: {
+      commodity: 'tortilla',
+      unit: 'MXN/kg',
+      sourceTitle: 'SNIIM tortilla nacional en tortillería',
+      bucketTieRule: 'upper_bucket',
+      buckets: bucketMetadata(tortillaOutcomesEs, tortillaOutcomesEn, [
+        { min: null, max: 23 },
+        { min: 23, max: 24 },
+        { min: 24, max: 25 },
+        { min: 25, max: 26 },
+        { min: 26, max: 27 },
+        { min: 27, max: null },
+      ]),
+    },
+  }));
+
+  const avocadoOutcomesEs = [
+    'Menos de $35 MXN/kg',
+    '$35 a $45 MXN/kg',
+    '$45 a $55 MXN/kg',
+    '$55 a $65 MXN/kg',
+    '$65 a $75 MXN/kg',
+    '$75 MXN/kg o más',
+  ];
+  const avocadoOutcomesEn = [
+    'Under $35 MXN/kg',
+    '$35 to $45 MXN/kg',
+    '$45 to $55 MXN/kg',
+    '$55 to $65 MXN/kg',
+    '$65 to $75 MXN/kg',
+    '$75 MXN/kg or higher',
+  ];
+  specs.push(buildManualSpec({
+    key: 'avocado-hass-cdmx-wholesale-close',
+    questionEs: 'Aguacate Hass: precio mayoreo CDMX al cierre de octubre 2026',
+    questionEn: 'Hass avocado: Mexico City wholesale price at October 2026 close',
+    category: 'mexico',
+    tags: { categoryTags: ['mexico', 'finanzas'], geoTags: ['mexico', 'cdmx'], topicTags: ['alimentos', 'commodities'] },
+    icon: 'SNIIM',
+    outcomesEs: avocadoOutcomesEs,
+    outcomesEn: avocadoOutcomesEn,
+    closeIso: TOURNAMENT_END_ISO,
+    resolveIso: FOOD_PRICE_RESOLVE_ISO,
+    criteriaEs: 'Se resuelve con el precio mayoreo de Aguacate Hass en SNIIM para Central de Abasto CDMX, usando el último dato oficial publicado hasta el 31 de octubre de 2026. Si SNIIM muestra mínimo y máximo sin precio medio, se usa el punto medio aritmético. Si el dato cae exactamente en un límite, gana el bucket superior.',
+    criteriaEn: 'Resolve from the SNIIM wholesale Hass avocado price for Mexico City Central de Abasto, using the latest official datapoint published through October 31, 2026. If SNIIM shows only min/max prices, use their arithmetic midpoint. If the value lands exactly on a boundary, the upper bucket wins.',
+    evidence: [{ title: 'SNIIM national market prices', url: EVIDENCE.sniimNationalMarkets }],
+    kind: 'october_tournament_food_price',
+    extraSourceData: {
+      commodity: 'aguacate_hass',
+      unit: 'MXN/kg',
+      market: 'Central de Abasto CDMX',
+      sourceTitle: 'SNIIM Aguacate Hass',
+      bucketTieRule: 'upper_bucket',
+      buckets: bucketMetadata(avocadoOutcomesEs, avocadoOutcomesEn, [
+        { min: null, max: 35 },
+        { min: 35, max: 45 },
+        { min: 45, max: 55 },
+        { min: 55, max: 65 },
+        { min: 65, max: 75 },
+        { min: 75, max: null },
+      ]),
+    },
+  }));
+
+  const whiteCornOutcomesEs = [
+    'Menos de $5,000 MXN/t',
+    '$5,000 a $5,500 MXN/t',
+    '$5,500 a $6,000 MXN/t',
+    '$6,000 a $6,500 MXN/t',
+    '$6,500 a $7,000 MXN/t',
+    '$7,000 MXN/t o más',
+  ];
+  const whiteCornOutcomesEn = [
+    'Under $5,000 MXN/t',
+    '$5,000 to $5,500 MXN/t',
+    '$5,500 to $6,000 MXN/t',
+    '$6,000 to $6,500 MXN/t',
+    '$6,500 to $7,000 MXN/t',
+    '$7,000 MXN/t or higher',
+  ];
+  specs.push(buildManualSpec({
+    key: 'white-corn-wholesale-close',
+    questionEs: 'Maíz blanco: precio mayoreo al cierre de octubre 2026',
+    questionEn: 'White corn: wholesale price at October 2026 close',
+    category: 'mexico',
+    tags: { categoryTags: ['mexico', 'finanzas'], geoTags: ['mexico'], topicTags: ['alimentos', 'commodities'] },
+    icon: 'SIAP',
+    outcomesEs: whiteCornOutcomesEs,
+    outcomesEn: whiteCornOutcomesEn,
+    closeIso: TOURNAMENT_END_ISO,
+    resolveIso: FOOD_PRICE_RESOLVE_ISO,
+    criteriaEs: 'Se resuelve con el precio mayoreo de maíz blanco publicado por SNIIM para el último día hábil disponible hasta el 31 de octubre de 2026. Si SNIIM no tiene dato utilizable, se usa la publicación oficial SIAP/SADER más reciente disponible para maíz blanco y se documenta la fuente en la resolución. Si el dato cae exactamente en un límite, gana el bucket superior.',
+    criteriaEn: 'Resolve from the SNIIM wholesale white-corn price for the latest available business day through October 31, 2026. If SNIIM has no usable datapoint, use the latest official SIAP/SADER white-corn publication and document the source in the resolution. If the value lands exactly on a boundary, the upper bucket wins.',
+    evidence: [
+      { title: 'SNIIM national market prices', url: EVIDENCE.sniimNationalMarkets },
+      { title: 'SIAP white corn balance', url: EVIDENCE.siapWhiteCorn },
+    ],
+    kind: 'october_tournament_food_price',
+    extraSourceData: {
+      commodity: 'maiz_blanco',
+      unit: 'MXN/t',
+      sourceTitle: 'SNIIM/SIAP Maiz blanco',
+      bucketTieRule: 'upper_bucket',
+      buckets: bucketMetadata(whiteCornOutcomesEs, whiteCornOutcomesEn, [
+        { min: null, max: 5000 },
+        { min: 5000, max: 5500 },
+        { min: 5500, max: 6000 },
+        { min: 6000, max: 6500 },
+        { min: 6500, max: 7000 },
+        { min: 7000, max: null },
+      ]),
+    },
+  }));
+
+  const nobel = candidateOutcomes(
+    env,
+    'OCTOBER_NOBEL_PEACE_CANDIDATES',
+    DEFAULT_NOBEL_PEACE_CANDIDATES_ES,
+    DEFAULT_NOBEL_PEACE_CANDIDATES_EN,
+  );
   if (nobel) {
     specs.push(buildManualSpec({
       key: 'nobel-peace-prize',
@@ -792,15 +992,27 @@ function manualMarkets(env = process.env) {
       resolveIso: NOBEL_RESOLVE_ISO,
       criteriaEs: 'Se resuelve con el anuncio oficial del Comite Nobel noruego. Si el premio es compartido, gana cualquier opcion incluida entre los laureados. Si gana alguien fuera de la lista o se declara desierto, gana Otro.',
       criteriaEn: 'Resolve from the official Norwegian Nobel Committee announcement. If the prize is shared, any listed laureate wins. If the winner is outside the list or no prize is awarded, Other wins.',
-      evidence: [{ title: 'Nobel Prize announcement dates', url: EVIDENCE.nobelDates }],
+      evidence: [
+        { title: 'Nobel Peace Prize 2026 announcement', url: EVIDENCE.nobelPeaceAnnouncement },
+        { title: 'Nobel Prize announcement dates', url: EVIDENCE.nobelDates },
+        { title: 'PRIO Director updated 2026 list', url: EVIDENCE.prioNobelUpdatedList },
+      ],
       kind: 'award',
-      extraSourceData: { awardLabel: 'Nobel de la Paz 2026' },
+      extraSourceData: {
+        awardLabel: 'Nobel de la Paz 2026',
+        candidateSource: 'PRIO Director updated 2026 public list. Official Nobel nominations are not public.',
+      },
     }));
   } else {
     console.warn('[market-gen/october-2026] OCTOBER_NOBEL_PEACE_CANDIDATES not configured; skipping Nobel market');
   }
 
-  const ballonDor = candidateOutcomes(env, 'OCTOBER_BALLON_DOR_CANDIDATES');
+  const ballonDor = candidateOutcomes(
+    env,
+    'OCTOBER_BALLON_DOR_CANDIDATES',
+    DEFAULT_BALLON_DOR_CANDIDATES,
+    DEFAULT_BALLON_DOR_CANDIDATES,
+  );
   if (ballonDor) {
     specs.push(buildManualSpec({
       key: 'ballon-dor-men',
@@ -815,10 +1027,14 @@ function manualMarkets(env = process.env) {
       resolveIso: dateAtMexicoCityTime({ year: 2026, month: 10, day: 26, hour: 23, minute: 59 }).toISOString(),
       criteriaEs: 'Se resuelve con el ganador del Balon de Oro masculino 2026 anunciado por France Football/Ballon d’Or. Si gana alguien fuera de la lista, gana Otro.',
       criteriaEn: 'Resolve from the 2026 men’s Ballon d’Or winner announced by France Football/Ballon d’Or. If the winner is outside the list, Other wins.',
-      evidence: [{ title: 'Ballon d’Or official information', url: EVIDENCE.ballonDor }],
+      evidence: [
+        { title: 'Ballon d’Or official information', url: EVIDENCE.ballonDor },
+        { title: 'UEFA 2026 Ballon d’Or nominees', url: EVIDENCE.ballonDorNominees },
+      ],
       kind: 'award',
       extraSourceData: {
         awardLabel: 'Balon de Oro masculino 2026',
+        candidateSource: 'UEFA published nominee list; default market uses six high-salience nominees plus Otro.',
         pendingSetup: 'Confirmar hora de ceremonia antes de aprobar.',
       },
     }));
@@ -904,6 +1120,7 @@ export async function generateOctoberTournament2026Markets({ env = process.env, 
     envKey: 'CHAINLINK_WTI_USD',
     env,
     now,
+    defaultChainId: 56,
   }));
   specs.push(hurricaneMarket());
   specs.push(...manualMarkets(env));
@@ -911,6 +1128,9 @@ export async function generateOctoberTournament2026Markets({ env = process.env, 
 }
 
 export const _internal = {
+  DEFAULT_BALLON_DOR_CANDIDATES,
+  DEFAULT_NOBEL_PEACE_CANDIDATES_EN,
+  DEFAULT_NOBEL_PEACE_CANDIDATES_ES,
   buildPriceBuckets,
   candidateOutcomes,
   hurricaneMarket,

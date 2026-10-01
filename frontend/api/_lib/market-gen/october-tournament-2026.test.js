@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { FEEDS_ARBITRUM_ONE } from '../chainlink.js';
-import { generateOctoberTournament2026Markets } from './october-tournament-2026.js';
+import { generateOctoberTournament2026Markets, _internal } from './october-tournament-2026.js';
 
 function jsonResponse(body) {
   return {
@@ -94,7 +94,6 @@ test('October tournament generator emits bilingual auto and review specs when co
       CHAINLINK_XAU_USD_FEED_ADDRESS: xauFeed,
       CHAINLINK_XAU_USD_SYMBOL: 'XAU/USD',
       CHAINLINK_WTI_USD_FEED_ADDRESS: wtiFeed,
-      CHAINLINK_WTI_USD_CHAIN_ID: '56',
       CHAINLINK_WTI_USD_SYMBOL: 'WTI/USD',
       OCTOBER_NOBEL_PEACE_CANDIDATES: 'Candidate A,Candidate B,Candidate C,Candidate D,Candidate E,Candidate F',
       OCTOBER_BALLON_DOR_CANDIDATES: 'Kane,Mbappe,Haaland,Yamal,Vinicius,Bellingham',
@@ -102,8 +101,9 @@ test('October tournament generator emits bilingual auto and review specs when co
     now: new Date('2026-10-01T15:30:00.000Z'),
   });
 
-  assert.equal(specs.length, 15);
+  assert.equal(specs.length, 18);
   const byEventId = Object.fromEntries(specs.map(spec => [spec.source_event_id, spec]));
+  assert.equal(Object.values(byEventId).every(spec => spec.tournament_featured === true), true);
 
   const usd = byEventId['october-2026:usd-mxn-close'];
   assert.equal(usd.resolver_type, 'api_price');
@@ -128,6 +128,7 @@ test('October tournament generator emits bilingual auto and review specs when co
 
   const hurricane = byEventId['october-2026:mexico-major-hurricane-landfall'];
   assert.equal(hurricane.resolver_type, 'api_hurricane');
+  assert.equal(hurricane.tournament_featured, true);
   assert.deepEqual(hurricane.outcomes, ['Sí', 'No']);
   assert.equal(hurricane.source_data.translations.en.question, 'Will a Category 4 or 5 hurricane make landfall in Mexico during October 2026?');
 
@@ -136,7 +137,51 @@ test('October tournament generator emits bilingual auto and review specs when co
   assert.deepEqual(fed.outcomes, ['Recorta', 'Mantiene', 'Sube']);
   assert.deepEqual(fed.source_data.translations.en.outcomes, ['Cut', 'Hold', 'Hike']);
 
+  const tortilla = byEventId['october-2026:tortilla-national-tortilleria-close'];
+  assert.equal(tortilla.resolver_type, 'manual_review');
+  assert.equal(tortilla.source_data.kind, 'october_tournament_food_price');
+  assert.equal(tortilla.source_data.translations.en.question, 'Corn tortilla: national tortilleria price at October 2026 close');
+  assert.equal(tortilla.source_data.buckets[0].max, 23);
+  assert.match(tortilla.resolver_config.criteria, /SNIIM/);
+
+  const avocado = byEventId['october-2026:avocado-hass-cdmx-wholesale-close'];
+  assert.equal(avocado.resolver_type, 'manual_review');
+  assert.equal(avocado.source_data.translations.en.question, 'Hass avocado: Mexico City wholesale price at October 2026 close');
+  assert.equal(avocado.source_data.market, 'Central de Abasto CDMX');
+  assert.equal(avocado.source_data.bucketTieRule, 'upper_bucket');
+
+  const whiteCorn = byEventId['october-2026:white-corn-wholesale-close'];
+  assert.equal(whiteCorn.resolver_type, 'manual_review');
+  assert.equal(whiteCorn.source_data.translations.en.question, 'White corn: wholesale price at October 2026 close');
+  assert.equal(whiteCorn.source_data.unit, 'MXN/t');
+  assert.equal(whiteCorn.source_data.evidence.length, 2);
+
   const nobel = byEventId['october-2026:nobel-peace-prize'];
   assert.equal(nobel.outcomes.length, 7);
   assert.equal(nobel.outcomes[6], 'Otro');
+});
+
+test('October award markets have default candidates when env lists are not configured', () => {
+  const specs = _internal.manualMarkets({});
+  const byEventId = Object.fromEntries(specs.map(spec => [spec.source_event_id, spec]));
+
+  const nobel = byEventId['october-2026:nobel-peace-prize'];
+  assert.ok(nobel);
+  assert.deepEqual(nobel.outcomes, [
+    ..._internal.DEFAULT_NOBEL_PEACE_CANDIDATES_ES,
+    'Otro',
+  ]);
+  assert.deepEqual(nobel.source_data.translations.en.outcomes, [
+    ..._internal.DEFAULT_NOBEL_PEACE_CANDIDATES_EN,
+    'Other',
+  ]);
+  assert.equal(nobel.tournament_featured, true);
+
+  const ballonDor = byEventId['october-2026:ballon-dor-men'];
+  assert.ok(ballonDor);
+  assert.deepEqual(ballonDor.outcomes, [
+    ..._internal.DEFAULT_BALLON_DOR_CANDIDATES,
+    'Otro',
+  ]);
+  assert.equal(ballonDor.tournament_featured, true);
 });

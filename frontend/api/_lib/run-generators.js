@@ -158,7 +158,7 @@ export async function upsertPending(sql, allSpecs) {
           (source, source_event_id, source_data, question, category, icon,
            outcomes, seed_liquidity, seed_liquidities, start_time, end_time, amm_mode,
            resolver_type, resolver_config, sport, league, outcome_images,
-           category_tags, geo_tags, topic_tags, is_test_market)
+           featured, tournament_featured, category_tags, geo_tags, topic_tags, is_test_market)
         VALUES (
           ${s.source},
           ${s.source_event_id},
@@ -177,6 +177,8 @@ export async function upsertPending(sql, allSpecs) {
           ${s.sport || null},
           ${s.league || null},
           ${s.outcome_images ? JSON.stringify(s.outcome_images) : null}::jsonb,
+          ${s.featured === true},
+          ${s.tournament_featured === true},
           ${JSON.stringify(tags.categoryTags)}::jsonb,
           ${JSON.stringify(tags.geoTags)}::jsonb,
           ${JSON.stringify(tags.topicTags)}::jsonb,
@@ -199,6 +201,8 @@ export async function upsertPending(sql, allSpecs) {
             sport           = EXCLUDED.sport,
             league          = EXCLUDED.league,
             outcome_images  = EXCLUDED.outcome_images,
+            featured        = points_pending_markets.featured OR EXCLUDED.featured,
+            tournament_featured = points_pending_markets.tournament_featured OR EXCLUDED.tournament_featured,
             category_tags   = EXCLUDED.category_tags,
             geo_tags        = EXCLUDED.geo_tags,
             topic_tags      = EXCLUDED.topic_tags,
@@ -248,6 +252,8 @@ export async function upsertPending(sql, allSpecs) {
                OR points_pending_markets.sport IS DISTINCT FROM EXCLUDED.sport
                OR points_pending_markets.league IS DISTINCT FROM EXCLUDED.league
                OR points_pending_markets.outcome_images IS DISTINCT FROM EXCLUDED.outcome_images
+               OR (EXCLUDED.featured IS TRUE AND points_pending_markets.featured IS DISTINCT FROM TRUE)
+               OR (EXCLUDED.tournament_featured IS TRUE AND points_pending_markets.tournament_featured IS DISTINCT FROM TRUE)
                OR points_pending_markets.category_tags IS DISTINCT FROM EXCLUDED.category_tags
                OR points_pending_markets.geo_tags IS DISTINCT FROM EXCLUDED.geo_tags
                OR points_pending_markets.topic_tags IS DISTINCT FROM EXCLUDED.topic_tags

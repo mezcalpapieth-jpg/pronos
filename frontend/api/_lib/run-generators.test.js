@@ -29,6 +29,15 @@ test('points pending upsert persists per-option seed liquidities', () => {
   assert.match(source, /seed_liquidities\s*=\s*EXCLUDED\.seed_liquidities/);
 });
 
+test('points pending upsert preserves generator featured flags', () => {
+  assert.match(source, /featured,\s*tournament_featured,\s*category_tags/);
+  assert.match(source, /\$\{s\.featured === true\}/);
+  assert.match(source, /\$\{s\.tournament_featured === true\}/);
+  assert.match(source, /featured\s*=\s*points_pending_markets\.featured OR EXCLUDED\.featured/);
+  assert.match(source, /tournament_featured\s*=\s*points_pending_markets\.tournament_featured OR EXCLUDED\.tournament_featured/);
+  assert.match(source, /EXCLUDED\.tournament_featured IS TRUE AND points_pending_markets\.tournament_featured IS DISTINCT FROM TRUE/);
+});
+
 test('points pending upsert avoids rewriting unchanged pending rows', () => {
   assert.match(source, /points_pending_markets\.status = 'pending'[\s\S]*IS DISTINCT FROM EXCLUDED\.source_data/);
   assert.match(source, /points_pending_markets\.question IS DISTINCT FROM EXCLUDED\.question/);

@@ -13,6 +13,7 @@ const source = await readFile(new URL('./PointsAdmin.jsx', import.meta.url), 'ut
 const navSource = await readFile(new URL('../components/PointsNav.jsx', import.meta.url), 'utf8');
 const apiSource = await readFile(new URL('../lib/pointsApi.js', import.meta.url), 'utf8');
 const statsApiSource = await readFile(new URL('../../../../api/points/admin/stats.js', import.meta.url), 'utf8');
+const pointsCss = await readFile(new URL('../points.css', import.meta.url), 'utf8');
 
 function sourceForFunction(name) {
   const start = source.indexOf(`function ${name}`);
@@ -103,6 +104,20 @@ test('Points pending queue keeps large generated fields readable', () => {
   assert.match(source, /Opciones \(\{Array\.isArray\(r\.outcomes\) \? r\.outcomes\.length : 0\}\): \{formatOutcomeList\(r\.outcomes\)\}/);
   assert.match(source, /r\.sport && <> · \{r\.sport\}<\/>/);
   assert.match(source, /r\.league && <>\/\{r\.league\}<\/>/);
+});
+
+test('Points pending queue has a mobile-first review card layout', () => {
+  const pendingTableSource = sourceForFunction('PendingMarketsTable');
+  assert.match(pendingTableSource, /points-admin-pending-card/);
+  assert.match(pendingTableSource, /points-admin-pending-title/);
+  assert.match(pendingTableSource, /points-admin-pending-controls/);
+  assert.match(pendingTableSource, /points-admin-pending-actions/);
+  assert.match(pendingTableSource, /points-admin-pending-meta/);
+  assert.match(source, /points-admin-edit-meta/);
+  assert.match(pointsCss, /\.points-admin-pending-title/);
+  assert.match(pointsCss, /\.points-admin-pending-actions/);
+  assert.match(pointsCss, /@media \(max-width: 720px\)[\s\S]*\.points-admin-pending-actions\s*\{[\s\S]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(pointsCss, /@media \(max-width: 720px\)[\s\S]*\.points-admin-pending-meta\s*\{[\s\S]*display: none/);
 });
 
 test('Points admin tabs show pending-work badges outside the active tab', () => {
