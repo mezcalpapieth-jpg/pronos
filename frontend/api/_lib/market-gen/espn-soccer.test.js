@@ -65,11 +65,13 @@ test('international friendlies remain three-way and carry an international label
   }), config);
 
   assert.equal(spec.league, 'international');
-  assert.deepEqual(spec.outcomes, ['Mexico', 'Empate', 'Argentina']);
+  assert.equal(spec.question, 'México vs Argentina');
+  assert.deepEqual(spec.outcomes, ['México', 'Empate', 'Argentina']);
   assert.deepEqual(spec.outcome_images, ['https://example.com/sea.png', null, 'https://example.com/qro.png']);
   assert.equal(spec.resolver_config.leaguePath, 'soccer/fifa.friendly');
   assert.equal(spec.resolver_config.shape, 'draw3');
   assert.equal(spec.source_data.matchTypeLabel, 'INTERNACIONAL');
+  assert.deepEqual(spec.source_data.translations.en.outcomes, ['Mexico', 'Draw', 'Argentina']);
 });
 
 test('UEFA Europa and Conference ESPN events become tournament draw markets', () => {
@@ -103,17 +105,17 @@ test('UEFA Europa and Conference ESPN events become tournament draw markets', ()
 
 test('international tournament ESPN feeds become auto-resolving tournament markets', () => {
   const cases = [
-    ['uefa.nations', 'uefa-nations-league', 'soccer/uefa.nations', 'uefa.nations:401999001', 'UEFA Nations League'],
-    ['uefa.euro', 'eurocopa', 'soccer/uefa.euro', 'uefa.euro:401999002', 'Eurocopa'],
-    ['fifa.worldq.conmebol', 'conmebol', 'soccer/fifa.worldq.conmebol', 'fifa.worldq.conmebol:401999003', 'Eliminatorias CONMEBOL'],
-    ['conmebol.sudamericana', 'conmebol', 'soccer/conmebol.sudamericana', 'conmebol.sudamericana:401999004', 'CONMEBOL Sudamericana'],
-    ['conmebol.america', 'conmebol', 'soccer/conmebol.america', 'conmebol.america:401999005', 'Copa América'],
-    ['concacaf.nations.league', 'concacaf', 'soccer/concacaf.nations.league', 'concacaf.nations.league:401999006', 'CONCACAF Nations League'],
-    ['concacaf.gold', 'concacaf', 'soccer/concacaf.gold', 'concacaf.gold:401999007', 'CONCACAF Gold Cup'],
-    ['concacaf.champions', 'concacaf', 'soccer/concacaf.champions', 'concacaf.champions:401999008', 'CONCACAF Champions Cup'],
+    ['uefa.nations', 'uefa-nations-league', 'soccer/uefa.nations', 'uefa.nations:401999001', 'UEFA Nations League', ['México', 'Empate', 'Canadá']],
+    ['uefa.euro', 'eurocopa', 'soccer/uefa.euro', 'uefa.euro:401999002', 'Eurocopa', ['México', 'Empate', 'Canadá']],
+    ['fifa.worldq.conmebol', 'conmebol', 'soccer/fifa.worldq.conmebol', 'fifa.worldq.conmebol:401999003', 'Eliminatorias CONMEBOL', ['México', 'Empate', 'Canadá']],
+    ['conmebol.sudamericana', 'conmebol', 'soccer/conmebol.sudamericana', 'conmebol.sudamericana:401999004', 'CONMEBOL Sudamericana', ['Mexico', 'Empate', 'Canada']],
+    ['conmebol.america', 'conmebol', 'soccer/conmebol.america', 'conmebol.america:401999005', 'Copa América', ['México', 'Empate', 'Canadá']],
+    ['concacaf.nations.league', 'concacaf', 'soccer/concacaf.nations.league', 'concacaf.nations.league:401999006', 'CONCACAF Nations League', ['México', 'Empate', 'Canadá']],
+    ['concacaf.gold', 'concacaf', 'soccer/concacaf.gold', 'concacaf.gold:401999007', 'CONCACAF Gold Cup', ['México', 'Empate', 'Canadá']],
+    ['concacaf.champions', 'concacaf', 'soccer/concacaf.champions', 'concacaf.champions:401999008', 'CONCACAF Champions Cup', ['Mexico', 'Empate', 'Canada']],
   ];
 
-  for (const [leagueCode, league, leaguePath, sourceEventId, leagueLabel] of cases) {
+  for (const [leagueCode, league, leaguePath, sourceEventId, leagueLabel, expectedOutcomes] of cases) {
     const config = _internal.ESPN_SOCCER_LEAGUES.find(c => c.leagueCode === leagueCode);
     const spec = _internal.eventToSpec(espnEvent({
       id: sourceEventId.split(':').at(-1),
@@ -127,8 +129,30 @@ test('international tournament ESPN feeds become auto-resolving tournament marke
     assert.equal(spec.source_event_id, sourceEventId);
     assert.equal(spec.source_data.leagueLabel, leagueLabel);
     assert.equal(spec.source_data.matchTypeLabel, 'TORNEO');
-    assert.deepEqual(spec.outcomes, ['Mexico', 'Empate', 'Canada']);
+    assert.deepEqual(spec.outcomes, expectedOutcomes);
   }
+});
+
+test('UEFA Nations League national teams keep English translations for English mode', () => {
+  const config = _internal.ESPN_SOCCER_LEAGUES.find(c => c.leagueCode === 'uefa.nations');
+  const spec = _internal.eventToSpec(espnEvent({
+    id: '401999009',
+    homeName: 'Spain',
+    awayName: 'Germany',
+  }), config);
+
+  assert.equal(spec.question, 'España vs Alemania');
+  assert.deepEqual(spec.outcomes, ['España', 'Empate', 'Alemania']);
+  assert.deepEqual(spec.source_data.translations, {
+    es: {
+      question: 'España vs Alemania',
+      outcomes: ['España', 'Empate', 'Alemania'],
+    },
+    en: {
+      question: 'Spain vs Germany',
+      outcomes: ['Spain', 'Draw', 'Germany'],
+    },
+  });
 });
 
 test('club friendly feed is limited to the summer break while MLS stays year-round', () => {

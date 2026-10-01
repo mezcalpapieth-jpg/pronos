@@ -32,6 +32,7 @@
  */
 
 import { fetchEspnScoreboardData, formatEspnDateCompact, formatEspnVenue } from './espn-scoreboard.js';
+import { nationalTeamMarketTranslations, spanishNationalTeamName } from '../national-team-labels.js';
 
 const BASE = 'https://site.api.espn.com/apis/site/v2/sports/soccer';
 const HORIZON_DAYS = 14;
@@ -250,6 +251,21 @@ function isPlaceholderTeamName(name) {
   return PLACEHOLDER_TEAM_RE.test(String(name || '').trim());
 }
 
+function translatedSoccerLabels({ leagueCode, homeName, awayName, winnerOnly }) {
+  const translations = nationalTeamMarketTranslations({ leagueCode, homeName, awayName, winnerOnly });
+  const questionEs = translations?.es?.question || `${homeName} vs ${awayName}`;
+  const questionEn = translations?.en?.question || `${homeName} vs ${awayName}`;
+  const outcomesEs = translations?.es?.outcomes || (winnerOnly ? [homeName, awayName] : [homeName, 'Empate', awayName]);
+  const outcomesEn = translations?.en?.outcomes || (winnerOnly ? [homeName, awayName] : [homeName, 'Draw', awayName]);
+  return {
+    isNationalTeamMarket: Boolean(translations),
+    questionEs,
+    questionEn,
+    outcomesEs,
+    outcomesEn,
+  };
+}
+
 /**
  * Convert an ESPN soccer event into the shared market-spec shape used
  * by points_pending_markets. Returns null for events we should skip.
@@ -289,6 +305,7 @@ function eventToSpec(ev, {
   // reliably populate. Draw has no image.
   const homeLogo = home?.team?.logo || home?.team?.logos?.[0]?.href || null;
   const awayLogo = away?.team?.logo || away?.team?.logos?.[0]?.href || null;
+  const labels = translatedSoccerLabels({ leagueCode, homeName, awayName, winnerOnly });
 
   return {
     source: 'espn-soccer',
@@ -297,10 +314,10 @@ function eventToSpec(ev, {
     sport: 'soccer',
     league,
     // Match the football-data generator's bare "Home vs Away" format.
-    question: `${homeName} vs ${awayName}`,
+    question: labels.questionEs,
     category: 'deportes',
     icon: null,
-    outcomes: winnerOnly ? [homeName, awayName] : [homeName, 'Empate', awayName],
+    outcomes: labels.outcomesEs,
     outcome_images: winnerOnly ? [homeLogo, awayLogo] : [homeLogo, null, awayLogo],
     seed_liquidity: 1000,
     start_time: startTime,
@@ -323,6 +340,12 @@ function eventToSpec(ev, {
       home: { id: home?.team?.id, name: homeName, abbr: home?.team?.abbreviation },
       away: { id: away?.team?.id, name: awayName, abbr: away?.team?.abbreviation },
       venue: formatEspnVenue(comp?.venue),
+      ...(labels.isNationalTeamMarket ? {
+        translations: {
+          es: { question: labels.questionEs, outcomes: labels.outcomesEs },
+          en: { question: labels.questionEn, outcomes: labels.outcomesEn },
+        },
+      } : {}),
     },
   };
 }
@@ -360,4 +383,6 @@ export const _internal = {
   isPlaceholderTeamName,
   isSummerBreakDate,
   shouldFetchLeagueEvents,
+  spanishNationalTeamName,
+  translatedSoccerLabels,
 };

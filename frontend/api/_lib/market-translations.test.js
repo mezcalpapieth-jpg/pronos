@@ -53,6 +53,33 @@ test('sports matchup labels stay as team names when already language neutral', (
   assert.deepEqual(spec.source_data.translations.en.outcomes, ['Los Angeles Rams', 'San Francisco 49ers']);
 });
 
+test('ESPN national soccer rows translate country teams and repair stale generated labels', () => {
+  const spec = attachMarketTranslations({
+    question: 'Spain vs Germany',
+    outcomes: ['Spain', 'Empate', 'Germany'],
+    sport: 'soccer',
+    league: 'uefa-nations-league',
+    source_data: {
+      leagueCode: 'uefa.nations',
+      home: { name: 'Spain' },
+      away: { name: 'Germany' },
+      translations: {
+        es: { question: 'Spain vs Germany', outcomes: ['Spain', 'Empate', 'Germany'] },
+        en: { question: 'Spain vs Germany', outcomes: ['Spain', 'Draw', 'Germany'] },
+      },
+    },
+  });
+
+  assert.deepEqual(spec.source_data.translations.es, {
+    question: 'España vs Alemania',
+    outcomes: ['España', 'Empate', 'Alemania'],
+  });
+  assert.deepEqual(spec.source_data.translations.en, {
+    question: 'Spain vs Germany',
+    outcomes: ['Spain', 'Draw', 'Germany'],
+  });
+});
+
 test('manual Mexico seismic markets translate without generator metadata', () => {
   const alertFields = publicMarketTranslationFields({
     question: 'Se activará la alerta sísmica en la Ciudad de México durante el mes de septiembre de 2026?',

@@ -1,3 +1,5 @@
+import { nationalTeamMarketTranslations } from './national-team-labels.js';
+
 function cleanString(value) {
   const text = String(value ?? '').replace(/\s+/g, ' ').trim();
   return text || '';
@@ -393,16 +395,28 @@ export function buildMarketTranslations(spec = {}) {
   const existingEn = normalizeTranslationBranch(existing.en);
   const question = cleanString(spec.question || spec.title);
   const outcomes = normalizeOutcomes(spec.outcomes);
+  const soccerNationalTranslations = spec.sport === 'soccer'
+    ? nationalTeamMarketTranslations({
+      leagueCode: sourceData.leagueCode,
+      homeName: sourceData.home?.name,
+      awayName: sourceData.away?.name,
+      winnerOnly: outcomes.length === 2,
+    })
+    : null;
 
   const es = {
-    question: existingEs.question || question,
-    outcomes: existingEs.outcomes?.length === outcomes.length ? existingEs.outcomes : outcomes,
+    question: soccerNationalTranslations?.es?.question || existingEs.question || question,
+    outcomes: soccerNationalTranslations?.es?.outcomes?.length === outcomes.length
+      ? soccerNationalTranslations.es.outcomes
+      : existingEs.outcomes?.length === outcomes.length ? existingEs.outcomes : outcomes,
   };
   const en = {
-    question: existingEn.question || translateMarketQuestion(question, sourceData, spec),
-    outcomes: existingEn.outcomes?.length === outcomes.length
-      ? existingEn.outcomes
-      : outcomes.map(label => translateOutcomeLabel(label, 'en')),
+    question: soccerNationalTranslations?.en?.question || existingEn.question || translateMarketQuestion(question, sourceData, spec),
+    outcomes: soccerNationalTranslations?.en?.outcomes?.length === outcomes.length
+      ? soccerNationalTranslations.en.outcomes
+      : existingEn.outcomes?.length === outcomes.length
+        ? existingEn.outcomes
+        : outcomes.map(label => translateOutcomeLabel(label, 'en')),
   };
 
   return { es, en };
