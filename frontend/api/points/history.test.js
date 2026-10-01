@@ -39,11 +39,21 @@ test('portfolio history defaults to the current cycle window', () => {
   assert.match(source, /function parseCycleScope\(value\)/);
   assert.match(source, /String\(value \|\| 'current'\)\.toLowerCase\(\)/);
   assert.match(source, /resolveCycleWindow\(cycleScope\)/);
-  assert.match(source, /WHERE status = 'active'/);
-  assert.match(source, /WHERE status = 'closed'/);
+  assert.match(source, /readCycleWindowForScope\(sql, scope\)/);
+  assert.match(source, /scoringStartIsoForWindow\(window\)/);
   assert.match(source, /t\.created_at >= \$\{cycleWindow\.fromIso\}::timestamptz/);
   assert.match(source, /t\.created_at < \$\{cycleWindow\.toIso\}::timestamptz/);
   assert.match(source, /d\.created_at >= \$\{cycleWindow\.fromIso\}::timestamptz/);
+});
+
+test('history claim buttons are backed by live current-cycle positions', () => {
+  assert.match(source, /currentHeldByOutcome: new Map\(\)/);
+  assert.match(source, /timer\.time\('db_positions'/);
+  assert.match(source, /FROM points_positions/);
+  assert.match(source, /dismissed_at IS NULL/);
+  assert.match(source, /cycleWindow\.scope === 'current' && outcomeStatus === 'won'/);
+  assert.match(source, /currentWinningShares/);
+  assert.match(source, /Math\.min\(\s*currentWinningShares,\s*Math\.max\(0, winningGross - redeemedWinning\),\s*\)/s);
 });
 
 test('previous-cycle unresolved markets are not labeled open', () => {

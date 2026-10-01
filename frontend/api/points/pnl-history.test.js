@@ -45,8 +45,8 @@ test('pnl-history defaults to the active cycle and can read the previous cycle',
   assert.match(source, /function parseCycleScope\(value\)/);
   assert.match(source, /String\(value \|\| 'current'\)\.toLowerCase\(\)/);
   assert.match(source, /resolveCycleWindow\(cycleScope\)/);
-  assert.match(source, /WHERE status = 'active'/);
-  assert.match(source, /WHERE status = 'closed'/);
+  assert.match(source, /readCycleWindowForScope\(sql, scope\)/);
+  assert.match(source, /scoringStartIsoForWindow\(window\)/);
   assert.match(source, /t\.created_at >= \$\{cycleWindow\.fromIso\}::timestamptz/);
   assert.match(source, /t\.created_at < \$\{cycleWindow\.toIso\}::timestamptz/);
   assert.match(source, /d\.created_at >= \$\{cycleWindow\.fromIso\}::timestamptz/);

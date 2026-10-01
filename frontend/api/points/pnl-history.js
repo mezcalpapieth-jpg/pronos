@@ -24,6 +24,10 @@ import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { readSession } from '../_lib/session.js';
 import { buildPnlSeries } from '../_lib/points-pnl-series.js';
 import { createApiTimer } from '../_lib/api-performance.js';
+import {
+  readCycleWindowForScope,
+  scoringStartIsoForWindow,
+} from '../_lib/points-cycle-window.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -52,46 +56,18 @@ async function resolveCycleWindow(scope) {
     return { scope: 'all', fromIso: null, toIso: null, fromMs: 0, toMs: null, empty: false };
   }
 
-  if (scope === 'previous') {
-    const rows = await sql`
-      SELECT id, label, started_at, ends_at, closed_at
-      FROM points_cycles
-      WHERE status = 'closed'
-      ORDER BY closed_at DESC NULLS LAST, ends_at DESC
-      LIMIT 1
-    `;
-    const row = rows[0];
-    if (!row) return { scope, empty: true };
-    const toIso = row.closed_at || row.ends_at;
-    return {
-      scope,
-      id: row.id,
-      label: row.label || null,
-      fromIso: row.started_at,
-      toIso,
-      fromMs: toMs(row.started_at) || 0,
-      toMs: toMs(toIso),
-      empty: false,
-    };
-  }
-
-  const rows = await sql`
-    SELECT id, label, started_at, ends_at, closed_at
-    FROM points_cycles
-    WHERE status = 'active'
-    ORDER BY ends_at DESC
-    LIMIT 1
-  `;
-  const row = rows[0];
-  if (!row) return { scope: 'current', empty: true };
+  const window = await readCycleWindowForScope(sql, scope);
+  if (!window) return { scope, empty: true };
+  const fromIso = scoringStartIsoForWindow(window);
+  const toIso = scope === 'previous' ? (window.closedAt || window.endsAt) : null;
   return {
-    scope: 'current',
-    id: row.id,
-    label: row.label || null,
-    fromIso: row.started_at,
-    toIso: null,
-    fromMs: toMs(row.started_at) || 0,
-    toMs: null,
+    scope,
+    id: window.id,
+    label: window.label || null,
+    fromIso,
+    toIso,
+    fromMs: toMs(fromIso) || 0,
+    toMs: toMs(toIso),
     empty: false,
   };
 }

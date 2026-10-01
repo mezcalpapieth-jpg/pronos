@@ -14,3 +14,12 @@ test('claimable endpoint counts only winning resolved points positions', () => {
   assert.match(source, /COUNT\(\*\)::int AS count/);
   assert.match(source, /COALESCE\(SUM\(p\.shares\), 0\)::text AS payout/);
 });
+
+test('claimable ignores resolved winners outside the active scoring window', () => {
+  assert.match(source, /readActiveCycleWindow/);
+  assert.match(source, /scoringStartIsoForWindow/);
+  assert.match(source, /if \(!scoringStartIso\)/);
+  assert.match(source, /EXISTS \(\s*SELECT 1\s*FROM points_trades t/s);
+  assert.match(source, /t\.side = 'buy'/);
+  assert.match(source, /t\.created_at >= \$\{scoringStartIso\}::timestamptz/);
+});

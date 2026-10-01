@@ -7,6 +7,10 @@ import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { requireSession } from '../_lib/session.js';
+import {
+  readActiveCycleWindow,
+  scoringStartIsoForWindow,
+} from '../_lib/points-cycle-window.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -27,6 +31,12 @@ export default async function handler(req, res) {
 
   try {
     await ensurePointsSchema(schemaSql);
+    const activeWindow = await readActiveCycleWindow(sql);
+    const scoringStartIso = scoringStartIsoForWindow(activeWindow);
+    if (!scoringStartIso) {
+      return res.status(200).json({ count: 0, payout: 0 });
+    }
+
     const rows = await sql`
       SELECT
         COUNT(*)::int AS count,
@@ -39,6 +49,15 @@ export default async function handler(req, res) {
         AND COALESCE(m.mode, 'points') = 'points'
         AND m.status = 'resolved'
         AND m.outcome = p.outcome_index
+        AND EXISTS (
+          SELECT 1
+          FROM points_trades t
+          WHERE LOWER(t.username) = LOWER(p.username)
+            AND t.market_id = p.market_id
+            AND t.outcome_index = p.outcome_index
+            AND t.side = 'buy'
+            AND t.created_at >= ${scoringStartIso}::timestamptz
+        )
     `;
     const row = rows[0] || {};
     return res.status(200).json({

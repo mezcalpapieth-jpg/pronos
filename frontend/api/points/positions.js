@@ -12,6 +12,10 @@ import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { binaryPrices, multiPrices } from '../_lib/amm-math.js';
 import { requireSession } from '../_lib/session.js';
+import {
+  readActiveCycleWindow,
+  scoringStartIsoForWindow,
+} from '../_lib/points-cycle-window.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -49,6 +53,23 @@ export default async function handler(req, res) {
                     : 'points';
   try {
     await ensurePointsSchema(schemaSql);
+    const activeWindow = await readActiveCycleWindow(sql);
+    const scoringStartIso = scoringStartIsoForWindow(activeWindow);
+    if (!scoringStartIso) {
+      return res.status(200).json({
+        positions: [],
+        summary: {
+          totalPositions: 0,
+          activePositions: 0,
+          totalInvested: 0,
+          currentValue: 0,
+          pnl: 0,
+          unrealizedPnl: 0,
+          realizedPnl: 0,
+        },
+      });
+    }
+
     // Positions sit on leg ids for parallel markets, so we LEFT JOIN the
     // parent row to pick up the group-level question / category for
     // display. Unified markets have parent = NULL — the join yields NULL
@@ -64,7 +85,22 @@ export default async function handler(req, res) {
              pm.id        AS parent_id_val,
              pm.question  AS parent_question,
              pm.category  AS parent_category,
-             pm.outcomes  AS parent_outcomes
+             pm.outcomes  AS parent_outcomes,
+             (
+               SELECT COALESCE(SUM(
+                 CASE
+                   WHEN t.side = 'buy' THEN t.shares
+                   WHEN t.side IN ('sell', 'redeem') THEN -t.shares
+                   ELSE 0
+                 END
+               ), 0)
+               FROM points_trades t
+               WHERE LOWER(t.username) = LOWER(p.username)
+                 AND t.market_id = p.market_id
+                 AND t.outcome_index = p.outcome_index
+                 AND t.created_at >= ${scoringStartIso}::timestamptz
+                 AND t.side IN ('buy', 'sell', 'redeem')
+             ) AS current_cycle_shares
       FROM points_positions p
       JOIN points_markets m ON m.id = p.market_id
       LEFT JOIN points_markets pm ON pm.id = m.parent_id
@@ -72,6 +108,15 @@ export default async function handler(req, res) {
         AND p.shares >= ${DISPLAYABLE_SHARE_EPSILON}
         AND p.dismissed_at IS NULL
         AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
+        AND EXISTS (
+          SELECT 1
+          FROM points_trades t
+          WHERE LOWER(t.username) = LOWER(p.username)
+            AND t.market_id = p.market_id
+            AND t.outcome_index = p.outcome_index
+            AND t.side = 'buy'
+            AND t.created_at >= ${scoringStartIso}::timestamptz
+        )
       ORDER BY
         CASE m.status WHEN 'active' THEN 0 WHEN 'resolved' THEN 1 ELSE 2 END,
         m.end_time ASC
@@ -83,11 +128,14 @@ export default async function handler(req, res) {
       const reserves = parseJsonb(r.reserves, []).map(Number);
       const prices = reserves.length === 2
         ? binaryPrices(reserves)
-        : reserves.length >= 2
-          ? multiPrices(reserves)
-          : outcomes.map(() => 1 / (outcomes.length || 2));
-      const shares = Number(r.shares);
-      const costBasis = Number(r.cost_basis);
+          : reserves.length >= 2
+            ? multiPrices(reserves)
+            : outcomes.map(() => 1 / (outcomes.length || 2));
+      const rawShares = Number(r.shares);
+      const currentCycleShares = Math.max(0, Number(r.current_cycle_shares || 0));
+      const shares = Math.min(rawShares, currentCycleShares);
+      const shareRatio = rawShares > 0 ? shares / rawShares : 1;
+      const costBasis = Number(r.cost_basis) * shareRatio;
       const realized = Number(r.realized_pnl || 0);
 
       let currentPrice;
@@ -126,7 +174,7 @@ export default async function handler(req, res) {
         pnl: round2(unrealized + realized),
         canRedeem: r.status === 'resolved' && Number(r.outcome) === r.outcome_index,
       };
-    });
+    }).filter(p => Number(p.shares || 0) >= DISPLAYABLE_SHARE_EPSILON);
 
     const active = positions.filter(p => p.status === 'active');
     const totalInvested = active.reduce((s, p) => s + p.costBasis, 0);

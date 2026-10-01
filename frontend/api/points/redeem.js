@@ -13,8 +13,13 @@ import { requireSession } from '../_lib/session.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 import { withTransaction } from '../_lib/db-tx.js';
 import { capturePointsRiskEvent } from '../_lib/points-risk.js';
+import {
+  readActiveCycleWindow,
+  scoringStartIsoForWindow,
+} from '../_lib/points-cycle-window.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
+const SHARE_EPSILON = 0.000001;
 
 export default async function handler(req, res) {
   const cors = applyCors(req, res, { methods: 'POST, OPTIONS', credentials: true });
@@ -71,7 +76,33 @@ export default async function handler(req, res) {
       }
       const p = positionResult.rows[0];
       const shares = Number(p.shares);
-      const payout = shares; // 1 MXNP per winning share
+      const activeWindow = await readActiveCycleWindow(client);
+      const scoringStartIso = scoringStartIsoForWindow(activeWindow);
+      if (!scoringStartIso) {
+        const err = new Error('no_active_cycle'); err.status = 409; throw err;
+      }
+      const cycleSharesResult = await client.query(
+        `SELECT COALESCE(SUM(
+           CASE
+             WHEN side = 'buy' THEN shares
+             WHEN side IN ('sell', 'redeem') THEN -shares
+             ELSE 0
+           END
+         ), 0) AS current_cycle_shares
+         FROM points_trades
+         WHERE LOWER(username) = LOWER($1)
+           AND market_id = $2
+           AND outcome_index = $3
+           AND created_at >= $4::timestamptz
+           AND side IN ('buy', 'sell', 'redeem')`,
+        [username, mid, oi, scoringStartIso],
+      );
+      const currentCycleShares = Math.max(0, Number(cycleSharesResult.rows[0]?.current_cycle_shares || 0));
+      const redeemShares = Math.min(shares, currentCycleShares);
+      if (redeemShares <= SHARE_EPSILON) {
+        const err = new Error('position_outside_current_cycle'); err.status = 409; throw err;
+      }
+      const payout = redeemShares; // 1 MXNP per winning share
 
       const balanceResult = await client.query(
         `SELECT balance FROM points_balances WHERE username = $1 FOR UPDATE`,
@@ -91,14 +122,24 @@ export default async function handler(req, res) {
         );
       }
 
-      const addedRealized = payout - Number(p.cost_basis);
+      const currentCostBasis = Number(p.cost_basis);
+      const redeemRatio = shares > SHARE_EPSILON ? Math.min(1, redeemShares / shares) : 1;
+      const redeemedCostBasis = currentCostBasis * redeemRatio;
+      const remainingShares = Math.max(0, shares - redeemShares);
+      const remainingCostBasis = Math.max(0, currentCostBasis - redeemedCostBasis);
+      const staleRemainder = remainingShares > SHARE_EPSILON && currentCycleShares + SHARE_EPSILON < shares;
+      const addedRealized = payout - redeemedCostBasis;
       const newRealized = Number(p.realized_pnl || 0) + addedRealized;
 
       await client.query(
         `UPDATE points_positions
-         SET shares = 0, cost_basis = 0, realized_pnl = $1, updated_at = NOW()
-         WHERE market_id = $2 AND username = $3 AND outcome_index = $4`,
-        [newRealized, mid, username, oi],
+         SET shares = $1,
+             cost_basis = $2,
+             realized_pnl = $3,
+             dismissed_at = CASE WHEN $4::boolean THEN COALESCE(dismissed_at, NOW()) ELSE dismissed_at END,
+             updated_at = NOW()
+         WHERE market_id = $5 AND username = $6 AND outcome_index = $7`,
+        [remainingShares, remainingCostBasis, newRealized, remainingShares <= SHARE_EPSILON || staleRemainder, mid, username, oi],
       );
 
       await client.query(
@@ -106,16 +147,16 @@ export default async function handler(req, res) {
            market_id, username, side, outcome_index,
            shares, collateral, fee, price_at_trade
          ) VALUES ($1, $2, 'redeem', $3, $4, $5, 0, 1)`,
-        [mid, username, oi, shares, payout],
+        [mid, username, oi, redeemShares, payout],
       );
 
       await client.query(
         `INSERT INTO points_distributions (username, amount, kind, reference_id, reason)
          VALUES ($1, $2, 'redemption', $3, $4)`,
-        [username, payout, mid, `Cobro de ${shares.toFixed(2)} acciones ganadoras`],
+        [username, payout, mid, `Cobro de ${redeemShares.toFixed(2)} acciones ganadoras`],
       );
 
-      return { balance: newBalance, payout, shares };
+      return { balance: newBalance, payout, shares: redeemShares };
     });
 
     await capturePointsRiskEvent(schemaSql, req, {

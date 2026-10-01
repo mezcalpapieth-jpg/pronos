@@ -12,6 +12,10 @@ import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { binaryPrices, multiPrices } from '../_lib/amm-math.js';
 import { requireSession } from '../_lib/session.js';
 import { createApiTimer } from '../_lib/api-performance.js';
+import {
+  readCycleWindowForScope,
+  scoringStartIsoForWindow,
+} from '../_lib/points-cycle-window.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -113,41 +117,14 @@ async function resolveCycleWindow(scope) {
     return { scope: 'all', fromIso: null, toIso: null, empty: false };
   }
 
-  if (scope === 'previous') {
-    const rows = await sql`
-      SELECT id, label, started_at, ends_at, closed_at
-      FROM points_cycles
-      WHERE status = 'closed'
-      ORDER BY closed_at DESC NULLS LAST, ends_at DESC
-      LIMIT 1
-    `;
-    const row = rows[0];
-    if (!row) return { scope, empty: true };
-    return {
-      scope,
-      id: row.id,
-      label: row.label || null,
-      fromIso: row.started_at,
-      toIso: row.closed_at || row.ends_at,
-      empty: false,
-    };
-  }
-
-  const rows = await sql`
-    SELECT id, label, started_at, ends_at, closed_at
-    FROM points_cycles
-    WHERE status = 'active'
-    ORDER BY ends_at DESC
-    LIMIT 1
-  `;
-  const row = rows[0];
-  if (!row) return { scope: 'current', empty: true };
+  const window = await readCycleWindowForScope(sql, scope);
+  if (!window) return { scope, empty: true };
   return {
-    scope: 'current',
-    id: row.id,
-    label: row.label || null,
-    fromIso: row.started_at,
-    toIso: null,
+    scope,
+    id: window.id,
+    label: window.label || null,
+    fromIso: scoringStartIsoForWindow(window),
+    toIso: scope === 'previous' ? (window.closedAt || window.endsAt) : null,
     empty: false,
   };
 }
@@ -270,6 +247,7 @@ export default async function handler(req, res) {
           // carried separately for computing currently-held.
           heldByOutcome: new Map(),
           redeemedByOutcome: new Map(),
+          currentHeldByOutcome: new Map(),
         });
       }
       return markets.get(mid);
@@ -336,6 +314,24 @@ export default async function handler(req, res) {
         .map(Number)
         .filter(Number.isInteger),
     ));
+    if (touchedMarketIds.length > 0) {
+      const positionResult = await timer.time('db_positions', () => sql.query(
+        `SELECT market_id, outcome_index, shares
+           FROM points_positions
+          WHERE LOWER(username) = LOWER($2)
+            AND market_id = ANY($1::int[])
+            AND dismissed_at IS NULL
+            AND shares > 0.000001`,
+        [touchedMarketIds, username],
+      ));
+      const positionRows = Array.isArray(positionResult) ? positionResult : (positionResult.rows || []);
+      for (const row of positionRows) {
+        const bucket = markets.get(Number(row.market_id));
+        if (!bucket) continue;
+        bucket.currentHeldByOutcome.set(Number(row.outcome_index), Number(row.shares || 0));
+      }
+    }
+
     const correctionsByMarketId = new Map();
     if (touchedMarketIds.length > 0) {
       const correctionResult = await timer.time('db_resolution_corrections', () => sql.query(
@@ -421,14 +417,20 @@ export default async function handler(req, res) {
       const winningOutcomeLabel = Number.isInteger(winningOutcomeIndex)
         ? displayOutcomeLabel(m, winningOutcomeIndex)
         : null;
-      if (outcomeStatus === 'won') {
+      if (cycleWindow.scope === 'current' && outcomeStatus === 'won') {
         const winningGross = Number.isInteger(winningOutcomeIndex)
           ? (m.heldByOutcome.get(winningOutcomeIndex) || 0)
           : 0;
         const redeemedWinning = Number.isInteger(winningOutcomeIndex)
           ? (m.redeemedByOutcome.get(winningOutcomeIndex) || 0)
           : 0;
-        claimablePayout = Math.max(0, winningGross - redeemedWinning);
+        const currentWinningShares = Number.isInteger(winningOutcomeIndex)
+          ? (m.currentHeldByOutcome.get(winningOutcomeIndex) || 0)
+          : 0;
+        claimablePayout = Math.min(
+          currentWinningShares,
+          Math.max(0, winningGross - redeemedWinning),
+        );
       }
       const effectiveReceived = m.totalReceived + claimablePayout;
       const pickedOutcome = pickedOutcomeSummary(m.transactions);
