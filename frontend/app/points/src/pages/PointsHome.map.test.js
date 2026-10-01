@@ -48,8 +48,8 @@ test('points home trending cards sort by closest deadline', () => {
   const carouselBlock = source.slice(carouselIndex, source.indexOf('const homeMapMarkets'));
 
   assert.match(source, /sortMarketsByLiveThenEndDate/);
-  assert.match(mapMarketsBlock, /sortMarketsByLiveThenEndDate\(prioritizeFeaturedMarkets\(out, featuredTeamKeys\)\)/);
-  assert.match(filteredBlock, /sortMarketsByLiveThenEndDate\(prioritizeFeaturedMarkets\(out, featuredTeamKeys\)\)/);
+  assert.match(mapMarketsBlock, /sortMarketsByLiveThenEndDate\(out\)/);
+  assert.match(filteredBlock, /sortMarketsByLiveThenEndDate\(out\)/);
   assert.match(carouselBlock, /sortMarketsByLiveThenEndDate\(mapMarkets\.filter\(m => shouldShowOnHome\(m, featuredTeamKeys\)\)\)/);
 });
 

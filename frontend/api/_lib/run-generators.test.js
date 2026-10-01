@@ -23,6 +23,11 @@ test('generator runner includes the AICM infrastructure pipeline', () => {
   assert.match(source, /\{ name:\s*'aicm',\s*run:\s*generateAicmMarkets/);
 });
 
+test('generator runner includes the MLB World Series winner pipeline', () => {
+  assert.match(source, /generateMlbWorldSeries2026Markets/);
+  assert.match(source, /\{ name:\s*'mlb-world-series-2026',\s*run:\s*generateMlbWorldSeries2026Markets/);
+});
+
 test('points pending upsert persists per-option seed liquidities', () => {
   assert.match(source, /seed_liquidity,\s*seed_liquidities/);
   assert.match(source, /\$\{s\.seed_liquidities \? JSON\.stringify\(s\.seed_liquidities\) : null\}::jsonb/);

@@ -31,7 +31,6 @@ import { useLang, useT } from '@app/lib/i18n.js';
 import { useIsMobile } from '@app/lib/useIsMobile.js';
 import {
   marketMatchesFeaturedTeam,
-  prioritizeFeaturedMarkets,
   useFeaturedTeamKeys,
 } from '@app/lib/featuredTeams.js';
 import { sortMarketsByLiveThenEndDate } from '@app/lib/marketOrdering.js';
@@ -261,14 +260,14 @@ export default function PointsHome({ onOpenLogin }) {
     const now = Date.now();
     let out = markets.filter(m => !isPendingMarket(m, now));
     if (q) out = out.filter(m => (m.question || '').toLowerCase().includes(q));
-    return sortMarketsByLiveThenEndDate(prioritizeFeaturedMarkets(out, featuredTeamKeys));
-  }, [markets, searchQuery, featuredTeamKeys]);
+    return sortMarketsByLiveThenEndDate(out);
+  }, [markets, searchQuery]);
 
   // Home = Trending. Always active, never pending (those live on
   // /c/porresolver). Search narrows the visible list through mapMarkets.
   const filtered = useMemo(() => {
     const out = mapMarkets.filter(m => shouldShowOnHome(m, featuredTeamKeys));
-    return sortMarketsByLiveThenEndDate(prioritizeFeaturedMarkets(out, featuredTeamKeys));
+    return sortMarketsByLiveThenEndDate(out);
   }, [mapMarkets, featuredTeamKeys]);
 
   const carouselMarkets = useMemo(() => (
