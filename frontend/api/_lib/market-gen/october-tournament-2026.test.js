@@ -101,7 +101,7 @@ test('October tournament generator emits bilingual auto and review specs when co
     now: new Date('2026-10-01T15:30:00.000Z'),
   });
 
-  assert.equal(specs.length, 18);
+  assert.equal(specs.length, 19);
   const byEventId = Object.fromEntries(specs.map(spec => [spec.source_event_id, spec]));
   assert.equal(Object.values(byEventId).every(spec => spec.tournament_featured === true), true);
 
@@ -166,6 +166,17 @@ test('October tournament generator emits bilingual auto and review specs when co
   assert.equal(whiteCorn.source_data.unit, 'MXN/t');
   assert.equal(whiteCorn.source_data.rawUnit, 'MXN/kg');
   assert.equal(whiteCorn.source_data.evidence.length, 1);
+
+  const whiteEgg = byEventId['october-2026:white-egg-cdmx-wholesale-close'];
+  assert.equal(whiteEgg.resolver_type, 'api_price');
+  assert.equal(whiteEgg.resolver_config.source, 'sniim-food-price');
+  assert.equal(whiteEgg.resolver_config.commodity, 'huevo_blanco');
+  assert.equal(whiteEgg.resolver_config.destino, 100);
+  assert.equal(whiteEgg.resolver_config.productCode, 'H01');
+  assert.equal(whiteEgg.source_data.translations.en.question, 'White egg: Mexico City wholesale price at October 2026 close');
+  assert.equal(whiteEgg.source_data.market, 'Central de Abasto de Iztapalapa');
+  assert.equal(whiteEgg.source_data.unit, 'MXN/kg');
+  assert.equal(whiteEgg.source_data.buckets[0].max, 25);
 
   const nobel = byEventId['october-2026:nobel-peace-prize'];
   assert.equal(nobel.outcomes.length, 7);

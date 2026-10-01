@@ -39,6 +39,20 @@ test('points home keeps cards curated but feeds all active markets to the map', 
   assert.match(source, /function shouldShowOnHome[\s\S]*marketMatchesFeaturedTeam\(market, featuredTeamKeys\)/);
 });
 
+test('points home trending cards sort live first and then by closest deadline', () => {
+  const mapMarketsIndex = source.indexOf('const mapMarkets');
+  const filteredIndex = source.indexOf('const filtered');
+  const carouselIndex = source.indexOf('const carouselMarkets');
+  const mapMarketsBlock = source.slice(mapMarketsIndex, filteredIndex);
+  const filteredBlock = source.slice(filteredIndex, carouselIndex);
+  const carouselBlock = source.slice(carouselIndex, source.indexOf('const homeMapMarkets'));
+
+  assert.match(source, /sortMarketsByLiveThenEndDate/);
+  assert.match(mapMarketsBlock, /sortMarketsByLiveThenEndDate\(prioritizeFeaturedMarkets\(out, featuredTeamKeys\)\)/);
+  assert.match(filteredBlock, /sortMarketsByLiveThenEndDate\(prioritizeFeaturedMarkets\(out, featuredTeamKeys\)\)/);
+  assert.match(carouselBlock, /sortMarketsByLiveThenEndDate\(mapMarkets\.filter\(m => shouldShowOnHome\(m, featuredTeamKeys\)\)\)/);
+});
+
 test('points home map loads the same shared news and market feed as the news globe', () => {
   const sharedLoaderIndex = source.indexOf('fetchPublicMapMarkets');
   assert.ok(sharedLoaderIndex > 0, 'points home should import the shared public map loader');

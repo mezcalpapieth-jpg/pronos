@@ -387,6 +387,121 @@ export function parseSniimWhiteCornCdmx(html, {
   };
 }
 
+export async function readSniimWhiteEggCdmx(cfg = {}) {
+  const targetYear = Number(cfg.targetYear);
+  const targetMonth = Number(cfg.targetMonth);
+  if (!Number.isFinite(targetYear) || !Number.isFinite(targetMonth)) {
+    throw new Error('sniim white egg: missing targetYear/targetMonth');
+  }
+
+  let lastError = null;
+  const weeks = Array.isArray(cfg.weeks)
+    ? cfg.weeks.map(Number).filter(Number.isFinite)
+    : [5, 4, 3, 2, 1];
+  for (const week of weeks) {
+    const sourceUrl = buildUrl('/SNIIM-Pecuarios-Nacionales/e_Hue.asp', {
+      RegPag: cfg.registrosPorPagina ?? 100,
+      anio: targetYear,
+      destino: cfg.destino ?? 100,
+      mes: pad2(targetMonth),
+      prod: cfg.productCode || 'H01',
+      sem: week,
+    });
+    const html = await fetchText(sourceUrl, { encoding: 'iso-8859-1' });
+    try {
+      return parseSniimWhiteEggCdmx(html, {
+        targetYear,
+        targetMonth,
+        week,
+        destinationIncludes: cfg.destinationIncludes || 'Central de Abasto de Iztapalapa',
+        presentation: cfg.presentation || 'Mayoreo',
+        sourceUrl,
+      });
+    } catch (err) {
+      lastError = err;
+      if (!err?.benign) throw err;
+    }
+  }
+
+  const err = new Error('sniim_white_egg_cdmx_row_not_found');
+  err.benign = true;
+  err.cause = lastError;
+  throw err;
+}
+
+export function parseSniimWhiteEggCdmx(html, {
+  targetYear,
+  targetMonth,
+  week = null,
+  destinationIncludes = 'Central de Abasto de Iztapalapa',
+  presentation = 'Mayoreo',
+  sourceUrl = null,
+} = {}) {
+  const targetPrefix = Number.isFinite(Number(targetYear)) && Number.isFinite(Number(targetMonth))
+    ? `${Number(targetYear)}-${pad2(targetMonth)}-`
+    : null;
+  const targetDestination = normalizeText(destinationIncludes);
+  const targetPresentation = normalizeText(presentation);
+  const rows = parseHtmlRows(html);
+  let currentMarket = null;
+  const candidates = [];
+
+  for (const row of rows) {
+    if (row.length === 1 && normalizeText(row[0])) {
+      currentMarket = row[0];
+      continue;
+    }
+    if (row.length < 6) continue;
+    const dateYmd = dmyToYmd(row[0]);
+    if (!dateYmd) continue;
+    if (targetPrefix && !dateYmd.startsWith(targetPrefix)) continue;
+    if (normalizeText(row[1]) !== 'huevo blanco') continue;
+    if (normalizeText(row[2]) !== targetPresentation) continue;
+    if (!normalizeText(currentMarket).includes(targetDestination)) continue;
+
+    const frequent = parseNumber(row[3]);
+    const min = parseNumber(row[4]);
+    const max = parseNumber(row[5]);
+    if (!Number.isFinite(frequent) && (!Number.isFinite(min) || !Number.isFinite(max))) continue;
+    candidates.push({
+      fecha: row[0],
+      dateYmd,
+      product: row[1],
+      presentation: row[2],
+      market: currentMarket,
+      frequent,
+      min,
+      max,
+    });
+  }
+
+  const latest = candidates.sort((a, b) => a.dateYmd.localeCompare(b.dateYmd)).at(-1);
+  if (!latest) {
+    const err = new Error('sniim_white_egg_cdmx_row_not_found');
+    err.benign = true;
+    throw err;
+  }
+
+  const value = Number.isFinite(latest.frequent)
+    ? latest.frequent
+    : Number(((latest.min + latest.max) / 2).toFixed(4));
+
+  return {
+    value,
+    unit: 'MXN/kg',
+    commodity: 'huevo_blanco',
+    market: latest.market,
+    presentation: latest.presentation,
+    product: latest.product,
+    fecha: latest.fecha,
+    dateYmd: latest.dateYmd,
+    targetYear: Number(targetYear),
+    targetMonth: Number(targetMonth),
+    week,
+    sourceUrl,
+  };
+}
+
 export async function readSniimFoodPrice(cfg = {}) {
   if (cfg.source && cfg.source !== SNIIM_FOOD_PRICE_SOURCE) {
     throw new Error(`unsupported sniim food source: ${cfg.source}`);
@@ -394,5 +509,6 @@ export async function readSniimFoodPrice(cfg = {}) {
   if (cfg.commodity === 'tortilla') return readSniimTortillaNational(cfg);
   if (cfg.commodity === 'aguacate_hass') return readSniimAvocadoHassCdmx(cfg);
   if (cfg.commodity === 'maiz_blanco') return readSniimWhiteCornCdmx(cfg);
+  if (cfg.commodity === 'huevo_blanco') return readSniimWhiteEggCdmx(cfg);
   throw new Error(`unsupported sniim food commodity: ${cfg.commodity}`);
 }

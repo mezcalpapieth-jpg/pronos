@@ -151,6 +151,7 @@ const EVIDENCE = Object.freeze({
   ibtracs: IBTRACS_PRODUCT_PAGE,
   sniimTortilla: 'https://www.economia-sniim.gob.mx/Tortilla.asp',
   sniimNationalMarkets: 'https://www.economia-sniim.gob.mx/e_MenNal.asp',
+  sniimEgg: 'https://www.economia-sniim.gob.mx/SNIIM-Pecuarios-Nacionales/e_SelHue.asp',
 });
 
 const DEFAULT_NOBEL_PEACE_CANDIDATES_ES = Object.freeze([
@@ -1020,6 +1021,74 @@ function manualMarkets(env = process.env) {
         { min: 6000, max: 6500 },
         { min: 6500, max: 7000 },
         { min: 7000, max: null },
+      ]),
+    },
+  }));
+
+  const whiteEggOutcomesEs = [
+    'Menos de $25 MXN/kg',
+    '$25 a $30 MXN/kg',
+    '$30 a $35 MXN/kg',
+    '$35 a $40 MXN/kg',
+    '$40 a $45 MXN/kg',
+    '$45 MXN/kg o más',
+  ];
+  const whiteEggOutcomesEn = [
+    'Under $25 MXN/kg',
+    '$25 to $30 MXN/kg',
+    '$30 to $35 MXN/kg',
+    '$35 to $40 MXN/kg',
+    '$40 to $45 MXN/kg',
+    '$45 MXN/kg or higher',
+  ];
+  specs.push(buildPriceBucketSpec({
+    key: 'white-egg-cdmx-wholesale-close',
+    questionEs: 'Huevo blanco: precio mayoreo CDMX al cierre de octubre 2026',
+    questionEn: 'White egg: Mexico City wholesale price at October 2026 close',
+    category: 'mexico',
+    tags: { categoryTags: ['mexico', 'finanzas'], geoTags: ['mexico', 'cdmx'], topicTags: ['alimentos', 'commodities'] },
+    icon: 'SNIIM',
+    outcomesEs: whiteEggOutcomesEs,
+    outcomesEn: whiteEggOutcomesEn,
+    buckets: [
+      { label: whiteEggOutcomesEs[0], labelEn: whiteEggOutcomesEn[0], min: null, max: 25 },
+      { label: whiteEggOutcomesEs[1], labelEn: whiteEggOutcomesEn[1], min: 25, max: 30 },
+      { label: whiteEggOutcomesEs[2], labelEn: whiteEggOutcomesEn[2], min: 30, max: 35 },
+      { label: whiteEggOutcomesEs[3], labelEn: whiteEggOutcomesEn[3], min: 35, max: 40 },
+      { label: whiteEggOutcomesEs[4], labelEn: whiteEggOutcomesEn[4], min: 40, max: 45 },
+      { label: whiteEggOutcomesEs[5], labelEn: whiteEggOutcomesEn[5], min: 45, max: null },
+    ],
+    endTime: TOURNAMENT_END_ISO,
+    resolverType: 'api_price',
+    resolverConfig: {
+      source: SNIIM_FOOD_PRICE_SOURCE,
+      commodity: 'huevo_blanco',
+      targetYear: 2026,
+      targetMonth: 10,
+      destino: 100,
+      productCode: 'H01',
+      destinationIncludes: 'Central de Abasto de Iztapalapa',
+      presentation: 'Mayoreo',
+      resolveAt: FOOD_PRICE_RESOLVE_ISO,
+    },
+    resolutionCriteria: 'Se resuelve con el precio frecuente mayoreo de huevo blanco publicado por SNIIM para Central de Abasto de Iztapalapa, usando el último dato semanal oficial disponible de octubre de 2026. Si SNIIM no muestra precio frecuente pero sí mínimo y máximo, se usa el punto medio aritmético. Si el dato cae exactamente en un límite, gana el bucket superior.',
+    evidence: [{ title: 'SNIIM egg prices', url: EVIDENCE.sniimEgg }],
+    kind: 'october_tournament_food_price',
+    extraSourceData: {
+      commodity: 'huevo_blanco',
+      unit: 'MXN/kg',
+      market: 'Central de Abasto de Iztapalapa',
+      sourceTitle: 'SNIIM Huevo blanco mayoreo CDMX',
+      sourceReader: SNIIM_FOOD_PRICE_SOURCE,
+      targetMonth: '2026-10',
+      resolutionCriteriaEn: 'Resolve from the frequent wholesale white-egg price published by SNIIM for Mexico City Central de Abasto de Iztapalapa, using the latest official weekly datapoint available for October 2026. If SNIIM does not show a frequent price but has min/max prices, use their arithmetic midpoint. If the value lands exactly on a boundary, the upper bucket wins.',
+      buckets: bucketMetadata(whiteEggOutcomesEs, whiteEggOutcomesEn, [
+        { min: null, max: 25 },
+        { min: 25, max: 30 },
+        { min: 30, max: 35 },
+        { min: 35, max: 40 },
+        { min: 40, max: 45 },
+        { min: 45, max: null },
       ]),
     },
   }));

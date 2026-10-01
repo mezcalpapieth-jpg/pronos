@@ -34,6 +34,7 @@ import {
   prioritizeFeaturedMarkets,
   useFeaturedTeamKeys,
 } from '@app/lib/featuredTeams.js';
+import { sortMarketsByLiveThenEndDate } from '@app/lib/marketOrdering.js';
 import { fetchNews, fetchPublicMapMarkets } from '@app/lib/newsApi.js';
 import { enrichNewsItemsWithGeo } from '@app/lib/newsGeo.js';
 import NewsMapView from '@app/components/NewsMapView.jsx';
@@ -260,18 +261,18 @@ export default function PointsHome({ onOpenLogin }) {
     const now = Date.now();
     let out = markets.filter(m => !isPendingMarket(m, now));
     if (q) out = out.filter(m => (m.question || '').toLowerCase().includes(q));
-    return prioritizeFeaturedMarkets(out, featuredTeamKeys);
+    return sortMarketsByLiveThenEndDate(prioritizeFeaturedMarkets(out, featuredTeamKeys));
   }, [markets, searchQuery, featuredTeamKeys]);
 
   // Home = Trending. Always active, never pending (those live on
   // /c/porresolver). Search narrows the visible list through mapMarkets.
   const filtered = useMemo(() => {
     const out = mapMarkets.filter(m => shouldShowOnHome(m, featuredTeamKeys));
-    return prioritizeFeaturedMarkets(out, featuredTeamKeys);
+    return sortMarketsByLiveThenEndDate(prioritizeFeaturedMarkets(out, featuredTeamKeys));
   }, [mapMarkets, featuredTeamKeys]);
 
   const carouselMarkets = useMemo(() => (
-    mapMarkets.filter(m => shouldShowOnHome(m, featuredTeamKeys))
+    sortMarketsByLiveThenEndDate(mapMarkets.filter(m => shouldShowOnHome(m, featuredTeamKeys)))
   ), [mapMarkets, featuredTeamKeys]);
 
   const homeMapMarkets = useMemo(() => (
