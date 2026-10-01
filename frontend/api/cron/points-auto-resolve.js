@@ -3,7 +3,7 @@
  *
  * Scans points_markets for active rows whose trading window has closed
  * AND whose resolver_type is one we know how to settle automatically.
- * Active resolver types: chainlink_price, api_price, weather_api, aicm_delay_count,
+ * Active resolver types: chainlink_price, api_price, weather_api, api_hurricane, aicm_delay_count,
  * aicm_delay_minutes_live,
  * api_chart, api_transcript, api_lcdlf, sports_api (espn / espn-pga / espn-liv / etc.).
  * manual_review/manual markets are queued into
@@ -60,6 +60,7 @@ import {
   resolveObservedWeatherMaxTempC,
   WEATHER_MODEL_AUDIT_THRESHOLD_C,
 } from '../_lib/weather.js';
+import { resolveMexicoMajorHurricaneLandfall } from '../_lib/hurricanes.js';
 import { aicmDelayBucketIndexFor, readAicmDelayCount } from '../_lib/aicm-board.js';
 import { aicmAeBucketIndexFor, countAicmAeDaysInclusive } from '../_lib/aicm-aviation-edge.js';
 import { readAicmTimetableDelayCount } from '../_lib/aicm-timetable.js';
@@ -170,6 +171,13 @@ function buildFinalScore({ resolverType, cfg, result, resolverInfo, outcomes, wi
     if (resolverType === 'weather_api') {
       const temp = resolverInfo?.recordedMaxC;
       if (Number.isFinite(temp)) return clip(`${Number(temp).toFixed(1)}°C máx`);
+      return clip(winLabel);
+    }
+
+    if (resolverType === 'api_hurricane') {
+      if (resolverInfo?.finalScore) return clip(resolverInfo.finalScore);
+      const count = Number(resolverInfo?.count);
+      if (Number.isFinite(count)) return clip(`${count} huracanes Cat 4+ tocaron tierra en Mexico`);
       return clip(winLabel);
     }
 
@@ -1580,7 +1588,7 @@ export async function runAutoResolve({ dry = false } = {}) {
         AND m.parent_id IS NULL
         AND (
           (
-            m.resolver_type IN ('chainlink_price', 'api_price', 'weather_api', 'aicm_delay_count', 'aicm_delay_minutes_live', 'api_chart', 'api_transcript', 'api_lcdlf', 'sports_api')
+            m.resolver_type IN ('chainlink_price', 'api_price', 'weather_api', 'api_hurricane', 'aicm_delay_count', 'aicm_delay_minutes_live', 'api_chart', 'api_transcript', 'api_lcdlf', 'sports_api')
             AND (
               m.end_time < NOW()
               OR (
@@ -2146,6 +2154,20 @@ export async function runAutoResolve({ dry = false } = {}) {
               forecastDateYmd: cfg.forecastDateYmd,
             };
           }
+        } else if (resolverType === 'api_hurricane') {
+          if (cfg.source !== 'noaa-ibtracs' || cfg.shape !== 'mexico-major-hurricane-landfall') {
+            throw new Error('invalid api_hurricane config');
+          }
+          const resolved = await resolveMexicoMajorHurricaneLandfall({
+            startIso: cfg.startIso || m.start_time,
+            endIso: cfg.endIso || m.end_time,
+            resolveAt: cfg.resolveAt,
+            minCategory: Number(cfg.minCategory) || 4,
+            sourceUrl: cfg.sourceUrl,
+          });
+          winningIdx = resolved.winningIdx;
+          resolverInfo = resolved.resolverInfo || {};
+          resolverConfigPatch = resolved.resolverConfigPatch || null;
         } else if (resolverType === 'aicm_delay_count') {
           if (!cfg.fromDateYmd || !cfg.toDateYmd || !Array.isArray(cfg.buckets)) {
             throw new Error('invalid aicm_delay_count config');
@@ -2798,6 +2820,34 @@ export async function runAutoResolve({ dry = false } = {}) {
         }
       } catch (e) {
         if (e?.benign) {
+          if (e?.manualReview) {
+            try {
+              await queueManualReviewCandidate({
+                market: m,
+                cfg: {
+                  ...cfg,
+                  ...(e.info || {}),
+                  source: cfg?.source || e.info?.source || resolverType,
+                  confidenceBps: Number(e.info?.confidenceBps) || 0,
+                  rationale: e.info?.rationale
+                    || 'El mercado requiere revision manual porque la fuente encontro un caso cercano pero no concluyente.',
+                },
+                sourceData: {
+                  ...sourceData,
+                  resolverInfo: e.info || null,
+                },
+                outcomes: marketOutcomes,
+                dry,
+                report,
+              });
+            } catch (queueErr) {
+              report.errors.push({
+                id: m.id,
+                error: `manual_review_queue_failed: ${queueErr.message}; original: ${e.message}`,
+              });
+            }
+            continue;
+          }
           const deferred = {
             id: m.id,
             reason: e.message || 'deferred',

@@ -16,6 +16,7 @@ import {
   mexicoDateKeyToUtcNoon,
   previousMexicoDateKey,
   roundTournamentAmount,
+  tournamentScoringStartsAt,
 } from './points-tournament-config.js';
 
 async function queryRows(db, text, params = []) {
@@ -491,19 +492,33 @@ export function buildHoldBonusByUser(tradeRows, options = {}) {
 async function readParlayScoreRows(db, startIso, cutoffIso) {
   try {
     return await queryRows(db, `
-      SELECT username,
+      SELECT t.username,
              COALESCE(SUM(
                CASE
-                 WHEN status = 'won' THEN COALESCE(NULLIF(payout, 0), potential_payout, 0) - stake
-                 WHEN status = 'lost' THEN -stake
+                 WHEN t.status = 'won' THEN COALESCE(NULLIF(t.payout, 0), t.potential_payout, 0) - t.stake
+                 WHEN t.status = 'lost' THEN -t.stake
                  ELSE 0
                END
              ), 0) AS parlay_pnl,
              COUNT(*)::int AS parlay_tickets,
-             COUNT(*) FILTER (WHERE status = 'won')::int AS parlay_wins
-      FROM points_parlay_tickets
-      WHERE submitted_at >= $1 AND submitted_at <= $2
-      GROUP BY username
+             COUNT(*) FILTER (WHERE t.status = 'won')::int AS parlay_wins
+      FROM points_parlay_tickets t
+      WHERE t.submitted_at >= $1
+        AND t.submitted_at <= $2
+        AND EXISTS (
+          SELECT 1
+          FROM points_parlay_legs l
+          WHERE l.ticket_id = t.id
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM points_parlay_legs l
+          JOIN points_markets m ON m.id = l.market_id
+          LEFT JOIN points_markets parent ON parent.id = m.parent_id
+          WHERE l.ticket_id = t.id
+            AND COALESCE(m.tournament_featured, parent.tournament_featured, false) IS NOT TRUE
+        )
+      GROUP BY t.username
     `, [startIso, cutoffIso]);
   } catch (error) {
     if (error?.code === '42P01') return [];
@@ -514,13 +529,16 @@ async function readParlayScoreRows(db, startIso, cutoffIso) {
 async function readLiquidityRewardRows(db, startIso, cutoffIso) {
   try {
     return await queryRows(db, `
-      SELECT username,
-             COALESCE(SUM(amount), 0) AS liquidity_reward
-      FROM points_distributions
-      WHERE kind = 'limit_maker_reward'
-        AND created_at >= $1
-        AND created_at <= $2
-      GROUP BY username
+      SELECT d.username,
+             COALESCE(SUM(d.amount), 0) AS liquidity_reward
+      FROM points_distributions d
+      JOIN points_markets m ON m.id = d.reference_id
+      LEFT JOIN points_markets parent ON parent.id = m.parent_id
+      WHERE d.kind = 'limit_maker_reward'
+        AND d.created_at >= $1
+        AND d.created_at <= $2
+        AND COALESCE(m.tournament_featured, parent.tournament_featured, false) IS TRUE
+      GROUP BY d.username
     `, [startIso, cutoffIso]);
   } catch (error) {
     if (error?.code === '42P01') return [];
@@ -545,25 +563,29 @@ export async function buildTournamentLeaderboardRows(
     return buildNeutralLeaderboardRows(users, limit);
   }
 
-  const startIso = scoringWindow.startsAt || TOURNAMENT_START_ISO;
+  const startIso = tournamentScoringStartsAt(scoringWindow);
   const cutoffIso = scoringWindow.rankingCutoffAt || TOURNAMENT_RANKING_CUTOFF_ISO;
   const qualifyingMinimum = TOURNAMENT_MIN_ENTRY_MXNP;
 
   const activityRows = await queryRows(db, `
-    SELECT username,
-           COUNT(*) FILTER (WHERE side IN ('buy', 'sell', 'redeem')) AS total_actions,
-           COUNT(*) FILTER (WHERE side = 'buy') AS buy_count,
-           COUNT(DISTINCT market_id) FILTER (
-             WHERE side = 'buy' AND ABS(COALESCE(collateral, 0)) >= $3
+    SELECT t.username,
+           COUNT(*) FILTER (WHERE t.side IN ('buy', 'sell', 'redeem')) AS total_actions,
+           COUNT(*) FILTER (WHERE t.side = 'buy') AS buy_count,
+           COUNT(DISTINCT COALESCE(m.parent_id, m.id)) FILTER (
+             WHERE t.side = 'buy' AND ABS(COALESCE(t.collateral, 0)) >= $3
            ) AS qualifying_markets,
            COALESCE(
-             ARRAY_AGG(DISTINCT ((created_at AT TIME ZONE 'America/Mexico_City')::date)::text)
-               FILTER (WHERE side IN ('buy', 'sell', 'redeem')),
+             ARRAY_AGG(DISTINCT ((t.created_at AT TIME ZONE 'America/Mexico_City')::date)::text)
+               FILTER (WHERE t.side IN ('buy', 'sell', 'redeem')),
              '{}'::text[]
            ) AS active_day_keys
-    FROM points_trades
-    WHERE created_at >= $1 AND created_at <= $2
-    GROUP BY username
+    FROM points_trades t
+    JOIN points_markets m ON m.id = t.market_id
+    LEFT JOIN points_markets parent ON parent.id = m.parent_id
+    WHERE t.created_at >= $1
+      AND t.created_at <= $2
+      AND COALESCE(m.tournament_featured, parent.tournament_featured, false) IS TRUE
+    GROUP BY t.username
   `, [startIso, cutoffIso, qualifyingMinimum]);
 
   const positionRows = await queryRows(db, `
@@ -574,7 +596,8 @@ export async function buildTournamentLeaderboardRows(
     FROM points_positions p
     JOIN points_markets m ON m.id = p.market_id
     LEFT JOIN points_markets parent ON parent.id = m.parent_id
-    WHERE EXISTS (
+    WHERE COALESCE(m.tournament_featured, parent.tournament_featured, false) IS TRUE
+      AND EXISTS (
       SELECT 1
       FROM points_trades t
       WHERE t.username = p.username
@@ -602,6 +625,7 @@ export async function buildTournamentLeaderboardRows(
     WHERE t.created_at >= $1
       AND t.created_at <= $2
       AND t.side IN ('buy', 'sell', 'redeem')
+      AND COALESCE(m.tournament_featured, parent.tournament_featured, false) IS TRUE
     ORDER BY t.created_at ASC, t.id ASC
   `, [startIso, cutoffIso]);
 

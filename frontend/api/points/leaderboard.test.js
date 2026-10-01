@@ -31,14 +31,16 @@ test('points tournament leaderboard scores against the active cycle window', () 
   assert.match(tournamentSource, /WHERE status = 'active'/);
   assert.match(tournamentSource, /return null/);
   assert.match(tournamentSource, /buildNeutralLeaderboardRows/);
-  assert.match(tournamentSource, /const startIso = scoringWindow\.startsAt/);
+  assert.match(tournamentSource, /const startIso = tournamentScoringStartsAt\(scoringWindow\)/);
   assert.match(tournamentSource, /const cutoffIso = scoringWindow\.rankingCutoffAt/);
+  assert.match(tournamentSource, /COALESCE\(m\.tournament_featured, parent\.tournament_featured, false\) IS TRUE/);
+  assert.match(tournamentSource, /COUNT\(DISTINCT COALESCE\(m\.parent_id, m\.id\)\)/);
   assert.match(tournamentSource, /readLiquidityRewardRows/);
   assert.match(tournamentSource, /kind = 'limit_maker_reward'/);
   assert.match(tournamentSource, /marketPnl \+ holdBonus \+ liquidityReward \+ parlayPnl/);
   assert.match(tournamentSource, /buildConvictionBonusByUser/);
   assert.match(source, /readActiveCycleLeaderboardCacheKey/);
-  assert.match(source, /points:leaderboard:ranked:v9:\$\{leaderboardCycleKey\}/);
+  assert.match(source, /points:leaderboard:ranked:v10:\$\{leaderboardCycleKey\}/);
   assert.match(source, /profileImageUrl:\s*null/);
   assert.match(tournamentSource, /u\.profile_image_url/);
   assert.match(tournamentSource, /profileImageUrl:\s*user\.profile_image_url \|\| null/);

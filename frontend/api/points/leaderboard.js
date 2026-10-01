@@ -115,7 +115,7 @@ export default async function handler(req, res) {
     await timer.time('schema', () => ensurePointsSchema(schemaSql));
     const leaderboardCycleKey = await timer.time('db_cycle_key', () => readActiveCycleLeaderboardCacheKey(schemaSql));
 
-    const { value: ranked, hit } = await cachedJson(`points:leaderboard:ranked:v9:${leaderboardCycleKey}`, 15_000, async () => {
+    const { value: ranked, hit } = await cachedJson(`points:leaderboard:ranked:v10:${leaderboardCycleKey}`, 15_000, async () => {
       return await timer.time('db_leaderboard', async () => {
         const frozen = await readFrozenLeaderboardRowsForActiveCutoff(sql, { limit: 5000 });
         if (frozen?.rows?.length) return frozen.rows;

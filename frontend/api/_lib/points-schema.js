@@ -1298,6 +1298,7 @@ const POINTS_SCHEMA_MIGRATIONS = [
   // ── Resolver metadata on points_markets ───────────────────────────────────
   // resolver_type  = 'manual' (default, admin resolves) | 'chainlink_price'
   //                  (auto-settle via a Chainlink price feed at close) |
+  //                  'api_price' / 'api_hurricane' / 'weather_api' |
   //                  'sports_api' (auto-settle from the generator's source).
   // resolver_config = opaque JSONB that varies per resolver. For
   //   chainlink_price: { feedId, feedAddress, chainId, threshold, op: 'gt'|'lt'|'gte'|'lte' }

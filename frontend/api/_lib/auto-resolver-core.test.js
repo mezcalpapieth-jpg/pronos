@@ -403,6 +403,35 @@ test('auto resolver core settles Solana token mcap markets from stored CoinGecko
   assert.equal(decision.resolverConfigPatch.verificationMarketCapUsd, 125000);
 });
 
+test('auto resolver core settles Mexico major hurricane landfall markets', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  globalThis.fetch = async () => htmlResponse([
+    'sid,season,basin,name,iso_time,latitude,longitude,usa_wind,usa_sshs,dist2land,landfall,usa_record',
+    '2026275N14264,2026,EP,TEST,2026-10-10T18:00:00Z,18.6,-103.7,120,4,0,0,L',
+  ].join('\n'));
+
+  const decision = await resolveAutoResolverCandidate({
+    resolver_type: 'api_hurricane',
+    resolver_config: {
+      source: 'noaa-ibtracs',
+      shape: 'mexico-major-hurricane-landfall',
+      startIso: '2026-10-01T06:00:00.000Z',
+      endIso: '2026-11-01T05:59:00.000Z',
+      resolveAt: '2026-01-01T00:00:00.000Z',
+      minCategory: 4,
+    },
+    outcomes: ['Sí', 'No'],
+  });
+
+  assert.equal(decision.winningIdx, 0);
+  assert.equal(decision.resolverInfo.source, 'NOAA IBTrACS');
+  assert.equal(decision.finalScore, 'TEST 2026275N14264');
+});
+
 test('auto resolver core settles AICM delay-count bucket markets from stored oracle evidence', async () => {
   const calls = [];
   const sql = {

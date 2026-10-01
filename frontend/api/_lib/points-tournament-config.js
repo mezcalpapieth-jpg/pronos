@@ -6,6 +6,7 @@ export const TOURNAMENT_RANKING_CUTOFF_ISO = '2026-08-27T05:59:00.000Z';
 export const TOURNAMENT_CYCLE_LABEL = 'Ciclo 12 ago - 26 ago';
 
 export const NEXT_TOURNAMENT_START_ISO = '2026-10-01T06:00:00.000Z';
+export const NEXT_TOURNAMENT_SCORING_START_ISO = '2026-10-01T15:00:00.000Z';
 export const NEXT_TOURNAMENT_OPERATION_CLOSE_ISO = '2026-11-01T05:59:00.000Z';
 export const NEXT_TOURNAMENT_RANKING_CUTOFF_ISO = '2026-11-01T05:59:00.000Z';
 export const NEXT_TOURNAMENT_CYCLE_LABEL = 'Ciclo octubre 2026';
@@ -60,6 +61,7 @@ export const TOURNAMENT_WINDOWS = Object.freeze([
   Object.freeze({
     label: TOURNAMENT_CYCLE_LABEL,
     startsAt: TOURNAMENT_START_ISO,
+    scoringStartsAt: TOURNAMENT_START_ISO,
     operationCloseAt: TOURNAMENT_OPERATION_CLOSE_ISO,
     rankingCutoffAt: TOURNAMENT_RANKING_CUTOFF_ISO,
     endsAt: TOURNAMENT_RANKING_CUTOFF_ISO,
@@ -67,6 +69,7 @@ export const TOURNAMENT_WINDOWS = Object.freeze([
   Object.freeze({
     label: NEXT_TOURNAMENT_CYCLE_LABEL,
     startsAt: NEXT_TOURNAMENT_START_ISO,
+    scoringStartsAt: NEXT_TOURNAMENT_SCORING_START_ISO,
     operationCloseAt: NEXT_TOURNAMENT_OPERATION_CLOSE_ISO,
     rankingCutoffAt: NEXT_TOURNAMENT_RANKING_CUTOFF_ISO,
     endsAt: NEXT_TOURNAMENT_RANKING_CUTOFF_ISO,
@@ -177,10 +180,21 @@ export function configuredCycleWindowFromRow(row) {
     id: row.id ?? null,
     label: shouldExtend ? configured.label : (row.label || configured?.label || null),
     startsAt: row.started_at,
+    scoringStartsAt: configured?.scoringStartsAt || row.started_at,
     operationCloseAt: shouldExtend ? configured.operationCloseAt : endsAt,
     rankingCutoffAt: endsAt,
     endsAt,
   };
+}
+
+export function tournamentScoringStartsAt(window) {
+  const cycleStart = window?.startsAt || TOURNAMENT_START_ISO;
+  const scoringStart = window?.scoringStartsAt || cycleStart;
+  const cycleStartMs = new Date(cycleStart).getTime();
+  const scoringStartMs = new Date(scoringStart).getTime();
+  if (!Number.isFinite(scoringStartMs)) return cycleStart;
+  if (!Number.isFinite(cycleStartMs)) return scoringStart;
+  return new Date(Math.max(cycleStartMs, scoringStartMs)).toISOString();
 }
 
 export function getTournamentWindow(now = new Date()) {
@@ -207,6 +221,7 @@ export function getTournamentWindow(now = new Date()) {
     scheduled: status === 'scheduled',
     active: status === 'active' || status === 'closing',
     startsAt: configured.startsAt,
+    scoringStartsAt: configured.scoringStartsAt || configured.startsAt,
     operationCloseAt: configured.operationCloseAt,
     rankingCutoffAt: configured.rankingCutoffAt,
     endsAt: configured.endsAt,

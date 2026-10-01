@@ -27,6 +27,12 @@ const SECONDS_PER_WEEK = 7 * 24 * 60 * 60;
 
 export const PRONOS_TREASURY_USERNAME = process.env.POINTS_TREASURY_USERNAME || 'pronos_treasury';
 
+function truthy(value) {
+  if (value === true) return true;
+  const normalized = String(value || '').trim().toLowerCase();
+  return normalized === 'true' || normalized === '1' || normalized === 'yes';
+}
+
 function configNumber(name, fallback) {
   const value = Number(process.env[name]);
   return Number.isFinite(value) && value >= 0 ? value : fallback;
@@ -286,11 +292,13 @@ export function normalizeLimitPrice(value) {
 
 async function lockMarket(client, marketId) {
   const result = await client.query(
-    `SELECT id, question, status, reserves, outcomes, end_time, resolver_config,
-            amm_mode, parent_id
-       FROM points_markets
-      WHERE id = $1
-      FOR UPDATE`,
+    `SELECT m.id, m.question, m.status, m.reserves, m.outcomes, m.end_time, m.resolver_config,
+            m.amm_mode, m.parent_id,
+            COALESCE(m.tournament_featured, p.tournament_featured, false) AS tournament_featured
+       FROM points_markets m
+       LEFT JOIN points_markets p ON p.id = m.parent_id
+      WHERE m.id = $1
+      FOR UPDATE OF m`,
     [marketId],
   );
   if (result.rows.length === 0) {
@@ -339,8 +347,9 @@ async function setBalance(client, username, balance) {
   );
 }
 
-async function assertTournamentShareCap(client, { marketId, username, additionalShares }) {
+async function assertTournamentShareCap(client, { market, marketId, username, additionalShares }) {
   if (!tournamentRulesActive()) return;
+  if (!truthy(market?.tournament_featured ?? market?.tournamentFeatured)) return;
   const rows = await client.query(
     `SELECT shares
        FROM points_positions
@@ -421,6 +430,7 @@ async function fillBuyOrder(client, { order, market, reserves }) {
   }
 
   await assertTournamentShareCap(client, {
+    market,
     marketId: order.market_id,
     username: order.username,
     additionalShares: quote.sharesOut,
@@ -1396,6 +1406,7 @@ export async function matchRestingAsksForBuy(client, {
     if (fillShares <= EPSILON || fillCollateral <= EPSILON) continue;
 
     await assertTournamentShareCap(client, {
+      market,
       marketId,
       username,
       additionalShares: fillShares,
@@ -1528,6 +1539,7 @@ export async function matchPronosMakerAsksForBuy(client, {
     if (fillShares <= EPSILON || fillCollateral <= EPSILON) continue;
 
     await assertTournamentShareCap(client, {
+      market,
       marketId,
       username,
       additionalShares: fillShares,
@@ -1641,6 +1653,7 @@ export async function matchRestingBidsForSell(client, {
     if (fillShares <= EPSILON || fillCollateral <= EPSILON) continue;
 
     await assertTournamentShareCap(client, {
+      market,
       marketId,
       username: order.username,
       additionalShares: fillShares,

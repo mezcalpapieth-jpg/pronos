@@ -44,6 +44,12 @@ function parseJsonb(value, fallback) {
   try { return JSON.parse(value); } catch { return fallback; }
 }
 
+function truthy(value) {
+  if (value === true) return true;
+  const normalized = String(value || '').trim().toLowerCase();
+  return normalized === 'true' || normalized === '1' || normalized === 'yes';
+}
+
 function apiError(message, status = 400, detail = undefined) {
   const err = new Error(message);
   err.status = status;
@@ -116,8 +122,9 @@ async function readSeriesTradeLock(client, market) {
   return seriesTradeLockFromRows(market, siblingResult.rows);
 }
 
-async function assertTournamentShareCap(client, { marketId, username, additionalShares }) {
+async function assertTournamentShareCap(client, { market, marketId, username, additionalShares }) {
   if (!tournamentRulesActive()) return;
+  if (!truthy(market?.tournament_featured ?? market?.tournamentFeatured)) return;
   const rows = await client.query(
     `SELECT outcome_index, shares
        FROM points_positions
@@ -265,6 +272,7 @@ export async function executePointsBuy(client, {
 
   if (quote) {
     await assertTournamentShareCap(client, {
+      market,
       marketId: mid,
       username,
       additionalShares: quote.sharesOut,

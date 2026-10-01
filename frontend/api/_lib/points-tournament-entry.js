@@ -1,8 +1,8 @@
 import {
   TOURNAMENT_MIN_ENTRY_MXNP,
   TOURNAMENT_RANKING_CUTOFF_ISO,
-  TOURNAMENT_START_ISO,
   getTournamentWindow,
+  tournamentScoringStartsAt,
   tournamentRulesActive,
 } from './points-tournament-config.js';
 import { resolveTournamentScoringWindow } from './points-tournament-leaderboard.js';
@@ -114,7 +114,7 @@ export async function hasCoveredTournamentMarket(client, { market, username } = 
   if (ids.length === 0) return false;
 
   const scoringWindow = await resolveTournamentScoringWindow(client).catch(() => null);
-  const startIso = scoringWindow?.startsAt || TOURNAMENT_START_ISO;
+  const startIso = tournamentScoringStartsAt(scoringWindow);
   const cutoffIso = scoringWindow?.rankingCutoffAt || TOURNAMENT_RANKING_CUTOFF_ISO;
 
   const rows = await client.query(
@@ -134,7 +134,8 @@ export async function hasCoveredTournamentMarket(client, { market, username } = 
 
 export async function assertTournamentMinimumEntry(client, { market, username, amount } = {}) {
   const value = Number(amount);
-  if (!tournamentRulesActive() || !Number.isFinite(value) || value >= TOURNAMENT_MIN_ENTRY_MXNP) return;
+  if (!tournamentRulesActive() || !truthy(market?.tournament_featured ?? market?.tournamentFeatured)) return;
+  if (!Number.isFinite(value) || value >= TOURNAMENT_MIN_ENTRY_MXNP) return;
   if (await hasCoveredTournamentMarket(client, { market, username })) return;
 
   const err = new Error('tournament_min_entry');

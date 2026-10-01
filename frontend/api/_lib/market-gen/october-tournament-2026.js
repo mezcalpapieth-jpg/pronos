@@ -2,6 +2,7 @@ import { readChainlinkPrice, FEEDS_ARBITRUM_ONE } from '../chainlink.js';
 import { BANXICO_FIX_RESOLUTION_CRITERIA, readBanxicoLatest, SERIES } from '../banxico.js';
 import { readCreAverages, fuelLabel } from '../fuel.js';
 import { attachSuggestedPricing } from '../market-pricing.js';
+import { IBTRACS_PRODUCT_PAGE } from '../hurricanes.js';
 import { dateAtMexicoCityTime } from './mexico-time.js';
 
 const SOURCE = 'october-tournament-2026';
@@ -34,6 +35,12 @@ const PRICE_RESOLVE_ISO = dateAtMexicoCityTime({
   hour: 15,
   minute: 0,
 }).toISOString();
+const COMMODITY_WEEKLY_RESOLVE_WINDOWS = Object.freeze([
+  dateAtMexicoCityTime({ year: 2026, month: 10, day: 7, hour: 15, minute: 0 }).toISOString(),
+  dateAtMexicoCityTime({ year: 2026, month: 10, day: 14, hour: 15, minute: 0 }).toISOString(),
+  dateAtMexicoCityTime({ year: 2026, month: 10, day: 21, hour: 15, minute: 0 }).toISOString(),
+  dateAtMexicoCityTime({ year: 2026, month: 10, day: 28, hour: 15, minute: 0 }).toISOString(),
+]);
 const USD_MXN_TRADING_CLOSE_ISO = dateAtMexicoCityTime({
   year: 2026,
   month: 10,
@@ -112,6 +119,13 @@ const GDP_RESOLVE_ISO = dateAtMexicoCityTime({
   hour: 8,
   minute: 0,
 }).toISOString();
+const HURRICANE_RESOLVE_ISO = dateAtMexicoCityTime({
+  year: 2026,
+  month: 11,
+  day: 4,
+  hour: 12,
+  minute: 0,
+}).toISOString();
 
 const EVIDENCE = Object.freeze({
   banxicoFix: 'https://www.banxico.org.mx/tipcamb/main.do?page=tip&idioma=sp',
@@ -123,6 +137,7 @@ const EVIDENCE = Object.freeze({
   ballonDor: 'https://www.uefa.com/ballondor/',
   fedCalendar: 'https://www.federalreserve.gov/newsevents/2026-october.htm',
   inegiFeeds: 'https://www.inegi.org.mx/servicios/feedsnoticias/feeds.html',
+  ibtracs: IBTRACS_PRODUCT_PAGE,
 });
 
 function roundDownToStep(value, step) {
@@ -320,6 +335,61 @@ function buildManualSpec({
   });
 }
 
+function buildAutoBinarySpec({
+  key,
+  questionEs,
+  questionEn,
+  category,
+  tags,
+  icon,
+  outcomesEs,
+  outcomesEn,
+  closeIso,
+  resolverType,
+  resolverConfig,
+  criteriaEs,
+  criteriaEn,
+  evidence,
+  kind,
+  extraSourceData = {},
+  touchMarket = false,
+}) {
+  return pricedSpec({
+    source: SOURCE,
+    source_event_id: `october-2026:${key}`,
+    question: questionEs,
+    category,
+    icon,
+    outcomes: outcomesEs,
+    seed_liquidity: 1000,
+    start_time: START_ISO,
+    end_time: closeIso,
+    amm_mode: 'unified',
+    resolver_type: resolverType,
+    resolver_config: {
+      ...resolverConfig,
+      criteria: criteriaEs,
+      criteriaEn,
+      evidence,
+    },
+    source_data: sourceDataBase({
+      kind,
+      translations: {
+        es: { question: questionEs, outcomes: outcomesEs },
+        en: { question: questionEn, outcomes: outcomesEn },
+      },
+      tags,
+      resolutionCriteria: criteriaEs,
+      evidence,
+      extra: {
+        touchMarket,
+        resolutionCriteriaEn: criteriaEn,
+        ...extraSourceData,
+      },
+    }),
+  }, [0.28, 0.72]);
+}
+
 function csvList(value) {
   return String(value || '')
     .split(',')
@@ -440,7 +510,47 @@ async function premiumGasolineSpec() {
   })];
 }
 
-async function chainlinkBucketSpec({ asset, feed, step, decimals, envKey, env = process.env }) {
+function weeklyCommodityWindow(now = new Date()) {
+  const nowMs = now instanceof Date ? now.getTime() : new Date(now).getTime();
+  const fallback = COMMODITY_WEEKLY_RESOLVE_WINDOWS[0];
+  const resolveIso = COMMODITY_WEEKLY_RESOLVE_WINDOWS.find(iso => {
+    const ms = new Date(iso).getTime();
+    return !Number.isFinite(nowMs) || ms > nowMs;
+  }) || COMMODITY_WEEKLY_RESOLVE_WINDOWS[COMMODITY_WEEKLY_RESOLVE_WINDOWS.length - 1] || fallback;
+  const resolveMs = new Date(resolveIso).getTime();
+  const closeIso = Number.isFinite(resolveMs)
+    ? new Date(resolveMs - 60 * 1000).toISOString()
+    : PRICE_TRADING_CLOSE_ISO;
+  return {
+    keySuffix: resolveIso.slice(0, 10),
+    closeIso,
+    resolveIso,
+  };
+}
+
+async function chainlinkBucketSpec({
+  asset,
+  feed,
+  step,
+  decimals,
+  envKey,
+  env = process.env,
+  key = `${asset.toLowerCase()}-usd-close`,
+  displayNameEs = asset,
+  displayNameEn = asset,
+  questionEs = `${asset} cierre de octubre 2026`,
+  questionEn = `${asset} October 2026 close`,
+  closeIso = PRICE_TRADING_CLOSE_ISO,
+  resolveIso = PRICE_RESOLVE_ISO,
+  criteriaEs = null,
+  category = asset === 'BTC' || asset === 'ETH' ? 'crypto' : 'finanzas',
+  tags = {
+    categoryTags: [asset === 'BTC' || asset === 'ETH' ? 'crypto' : 'finanzas'],
+    geoTags: ['world'],
+    topicTags: [asset === 'BTC' || asset === 'ETH' ? 'crypto' : 'finanzas'],
+  },
+  icon = asset,
+}) {
   const configuredFeed = feed || {
     feedAddress: env[`${envKey}_FEED_ADDRESS`],
     chainId: Number(env[`${envKey}_CHAIN_ID`] || 42161),
@@ -470,30 +580,27 @@ async function chainlinkBucketSpec({ asset, feed, step, decimals, envKey, env = 
     prefix: '$',
     suffix: ' USD',
   });
-  const criteria = `${asset} se resuelve con el precio del feed Chainlink ${configuredFeed.symbol || `${asset}/USD`} a las 15:00 CDMX del 30 de octubre de 2026. Si cae exactamente en un limite, gana el bucket superior.`;
+  const criteria = criteriaEs
+    || `${displayNameEs} se resuelve con el precio del feed Chainlink ${configuredFeed.symbol || `${asset}/USD`} a las 15:00 CDMX del 30 de octubre de 2026. Si cae exactamente en un limite, gana el bucket superior.`;
   return [buildPriceBucketSpec({
-    key: `${asset.toLowerCase()}-usd-close`,
-    questionEs: `${asset} cierre de octubre 2026`,
-    questionEn: `${asset} October 2026 close`,
-    category: asset === 'BTC' || asset === 'ETH' ? 'crypto' : 'finanzas',
-    tags: {
-      categoryTags: [asset === 'BTC' || asset === 'ETH' ? 'crypto' : 'finanzas'],
-      geoTags: ['world'],
-      topicTags: [asset === 'BTC' || asset === 'ETH' ? 'crypto' : 'finanzas'],
-    },
-    icon: asset,
+    key,
+    questionEs,
+    questionEn,
+    category,
+    tags,
+    icon,
     outcomesEs,
     outcomesEn,
     buckets,
-    endTime: PRICE_TRADING_CLOSE_ISO,
+    endTime: closeIso,
     resolverType: 'chainlink_price',
     resolverConfig: {
       source: 'chainlink',
       feedAddress: configuredFeed.feedAddress,
       chainId: configuredFeed.chainId,
       symbol: configuredFeed.symbol || `${asset}/USD`,
-      closesAt: PRICE_RESOLVE_ISO,
-      resolveAt: PRICE_RESOLVE_ISO,
+      closesAt: resolveIso,
+      resolveAt: resolveIso,
     },
     resolutionCriteria: criteria,
     evidence: [{
@@ -502,13 +609,74 @@ async function chainlinkBucketSpec({ asset, feed, step, decimals, envKey, env = 
     }],
     extraSourceData: {
       asset,
+      displayNameEs,
+      displayNameEn,
       spotAtGeneration: spot,
       feed: configuredFeed.feedAddress,
       chainId: configuredFeed.chainId,
-      closesAt: PRICE_TRADING_CLOSE_ISO,
-      resolvesAt: PRICE_RESOLVE_ISO,
+      closesAt: closeIso,
+      resolvesAt: resolveIso,
     },
   })];
+}
+
+async function commodityChainlinkSpecs({
+  asset,
+  displayNameEs,
+  displayNameEn,
+  step,
+  decimals,
+  envKey,
+  env,
+  now,
+}) {
+  const weekly = weeklyCommodityWindow(now);
+  const configuredFeed = {
+    feedAddress: env[`${envKey}_FEED_ADDRESS`],
+    chainId: Number(env[`${envKey}_CHAIN_ID`] || 42161),
+    symbol: env[`${envKey}_SYMBOL`] || `${asset}/USD`,
+  };
+  if (!configuredFeed.feedAddress) {
+    console.warn(`[market-gen/october-2026] ${asset} feed not configured; skipping`);
+    return [];
+  }
+  const common = {
+    asset,
+    displayNameEs,
+    displayNameEn,
+    step,
+    decimals,
+    envKey,
+    env,
+    feed: configuredFeed,
+    category: 'finanzas',
+    tags: {
+      categoryTags: ['finanzas'],
+      geoTags: ['world'],
+      topicTags: ['finanzas', 'commodities'],
+    },
+    icon: asset,
+  };
+  const specs = [];
+  specs.push(...await chainlinkBucketSpec({
+    ...common,
+    key: `${asset.toLowerCase()}-usd-weekly-${weekly.keySuffix}`,
+    questionEs: `${displayNameEs}: cierre semanal ${weekly.keySuffix}`,
+    questionEn: `${displayNameEn}: weekly close ${weekly.keySuffix}`,
+    closeIso: weekly.closeIso,
+    resolveIso: weekly.resolveIso,
+    criteriaEs: `${displayNameEs} se resuelve con el precio del feed Chainlink ${configuredFeed.symbol || `${asset}/USD`} a las 15:00 CDMX del ${weekly.keySuffix}. Si cae exactamente en un limite, gana el bucket superior.`,
+  }));
+  specs.push(...await chainlinkBucketSpec({
+    ...common,
+    key: `${asset.toLowerCase()}-usd-close`,
+    questionEs: `${displayNameEs}: cierre mensual de octubre 2026`,
+    questionEn: `${displayNameEn}: October 2026 monthly close`,
+    closeIso: PRICE_TRADING_CLOSE_ISO,
+    resolveIso: PRICE_RESOLVE_ISO,
+    criteriaEs: `${displayNameEs} se resuelve con el precio del feed Chainlink ${configuredFeed.symbol || `${asset}/USD`} a las 15:00 CDMX del 30 de octubre de 2026. Si cae exactamente en un limite, gana el bucket superior.`,
+  }));
+  return specs;
 }
 
 function manualMarkets(env = process.env) {
@@ -661,7 +829,45 @@ function manualMarkets(env = process.env) {
   return specs;
 }
 
-export async function generateOctoberTournament2026Markets({ env = process.env } = {}) {
+function hurricaneMarket() {
+  const criteriaEs = 'Gana Sí si NOAA IBTrACS registra que el centro de un huracán categoría 4 o 5 toca tierra dentro de México entre el 1 de octubre 00:00 CDMX y el 31 de octubre 23:59 CDMX. No cuenta solo acercarse a la costa ni tocar tierra fuera de México. Si no hay un evento oficial que cumpla esos criterios, gana No.';
+  const criteriaEn = 'Yes wins if NOAA IBTrACS records the center of a Category 4 or 5 hurricane making landfall inside Mexico between October 1 00:00 Mexico City time and October 31 23:59 Mexico City time. A close coastal approach or landfall outside Mexico does not count. If no official event meets those criteria, No wins.';
+  return buildAutoBinarySpec({
+    key: 'mexico-major-hurricane-landfall',
+    questionEs: '¿Un huracán categoría 4 o 5 tocará tierra en México durante octubre 2026?',
+    questionEn: 'Will a Category 4 or 5 hurricane make landfall in Mexico during October 2026?',
+    category: 'mexico',
+    tags: { categoryTags: ['mexico', 'clima'], geoTags: ['mexico'], topicTags: ['clima'] },
+    icon: 'NOAA',
+    outcomesEs: ['Sí', 'No'],
+    outcomesEn: ['Yes', 'No'],
+    closeIso: TOURNAMENT_END_ISO,
+    resolverType: 'api_hurricane',
+    resolverConfig: {
+      source: 'noaa-ibtracs',
+      shape: 'mexico-major-hurricane-landfall',
+      startIso: START_ISO,
+      endIso: TOURNAMENT_END_ISO,
+      resolveAt: HURRICANE_RESOLVE_ISO,
+      minCategory: 4,
+      yesOutcome: 0,
+      noOutcome: 1,
+      sourceUrl: 'https://erddap.aoml.noaa.gov/hdb/erddap/tabledap/IBTRACS_last3years.csv',
+    },
+    criteriaEs,
+    criteriaEn,
+    evidence: [{ title: 'NOAA IBTrACS', url: EVIDENCE.ibtracs }],
+    kind: 'october_tournament_hurricane',
+    touchMarket: true,
+    extraSourceData: {
+      sourceTitle: 'NOAA IBTrACS',
+      closesAt: TOURNAMENT_END_ISO,
+      resolvesAt: HURRICANE_RESOLVE_ISO,
+    },
+  });
+}
+
+export async function generateOctoberTournament2026Markets({ env = process.env, now = new Date() } = {}) {
   const specs = [];
   specs.push(...await usdMxnSpec());
   specs.push(...await premiumGasolineSpec());
@@ -679,20 +885,27 @@ export async function generateOctoberTournament2026Markets({ env = process.env }
     decimals: 0,
     env,
   }));
-  specs.push(...await chainlinkBucketSpec({
+  specs.push(...await commodityChainlinkSpecs({
     asset: 'XAU',
+    displayNameEs: 'Oro (XAU/USD)',
+    displayNameEn: 'Gold (XAU/USD)',
     step: 100,
     decimals: 0,
     envKey: 'CHAINLINK_XAU_USD',
     env,
+    now,
   }));
-  specs.push(...await chainlinkBucketSpec({
+  specs.push(...await commodityChainlinkSpecs({
     asset: 'WTI',
+    displayNameEs: 'Petróleo WTI (WTI/USD)',
+    displayNameEn: 'WTI oil (WTI/USD)',
     step: 5,
     decimals: 0,
     envKey: 'CHAINLINK_WTI_USD',
     env,
+    now,
   }));
+  specs.push(hurricaneMarket());
   specs.push(...manualMarkets(env));
   return specs;
 }
@@ -700,5 +913,7 @@ export async function generateOctoberTournament2026Markets({ env = process.env }
 export const _internal = {
   buildPriceBuckets,
   candidateOutcomes,
+  hurricaneMarket,
   manualMarkets,
+  weeklyCommodityWindow,
 };

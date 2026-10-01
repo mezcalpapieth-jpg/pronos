@@ -107,7 +107,7 @@ test('tournament minimum applies only before a market is covered', () => {
   assert.match(entrySource, /export async function hasCoveredTournamentMarket/);
   assert.match(entrySource, /export async function assertTournamentMinimumEntry/);
   assert.match(entrySource, /resolveTournamentScoringWindow/);
-  assert.match(entrySource, /TOURNAMENT_START_ISO/);
+  assert.match(entrySource, /tournamentScoringStartsAt/);
   assert.match(entrySource, /TOURNAMENT_RANKING_CUTOFF_ISO/);
   assert.match(entrySource, /WHERE id = \$1 OR parent_id = \$1/);
   assert.match(entrySource, /side = 'buy'/);
@@ -118,7 +118,8 @@ test('tournament minimum applies only before a market is covered', () => {
   assert.match(entrySource, /if \(await hasCoveredTournamentMarket\(client, \{ market, username \}\)\) return/);
   assert.match(entrySource, /primera entrada/);
   assert.match(helperSource, /assertTournamentMinimumEntry/);
-  assert.match(helperSource, /SELECT id, question, status, reserves, outcomes, end_time, resolver_config,\s*amm_mode, parent_id/s);
+  assert.match(helperSource, /COALESCE\(m\.tournament_featured, p\.tournament_featured, false\) AS tournament_featured/);
+  assert.match(helperSource, /FOR UPDATE OF m/);
   assert.match(helperSource, /await assertTournamentMinimumEntry\(client, \{\s*market,\s*username,\s*amount: qty,\s*\}\)/s);
   assert.doesNotMatch(helperSource, /qty < TOURNAMENT_MIN_ENTRY_MXNP/);
   assert.match(tradeServiceSource, /assertTournamentMinimumEntry/);

@@ -132,11 +132,17 @@ test('points auto-resolver settles AICM delay-count markets from stored oracle e
   assert.match(SOURCE, /readAicmTimetableDelayCount/);
   assert.match(SOURCE, /aicmDelayBucketIndexFor/);
   assert.match(SOURCE, /aicmAeBucketIndexFor/);
-  assert.match(SOURCE, /m\.resolver_type IN \('chainlink_price', 'api_price', 'weather_api', 'aicm_delay_count', 'aicm_delay_minutes_live'/);
+  assert.match(SOURCE, /m\.resolver_type IN \('chainlink_price', 'api_price', 'weather_api', 'api_hurricane', 'aicm_delay_count', 'aicm_delay_minutes_live'/);
   assert.match(SOURCE, /aicm_oracle_observations_not_ready/);
   assert.match(SOURCE, /aicm_live_observations_not_ready/);
   assert.match(SOURCE, /minObservedPolls/);
   assert.match(SOURCE, /flightsWithAnyStatus/);
   assert.match(SOURCE, /minOperatorFlights/);
   assert.match(SOURCE, /salidas demoradas/);
+});
+
+test('points auto-resolver includes NOAA hurricane markets in automatic settlement', () => {
+  assert.match(SOURCE, /api_hurricane/);
+  assert.match(SOURCE, /resolveMexicoMajorHurricaneLandfall/);
+  assert.match(SOURCE, /mexico-major-hurricane-landfall/);
 });

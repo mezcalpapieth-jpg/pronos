@@ -18,6 +18,7 @@ import {
   resolveObservedWeatherMaxTempC,
   WEATHER_MODEL_AUDIT_THRESHOLD_C,
 } from './weather.js';
+import { resolveMexicoMajorHurricaneLandfall } from './hurricanes.js';
 import { aicmDelayBucketIndexFor, readAicmDelayCount } from './aicm-board.js';
 import {
   aicmAeBucketIndexFor,
@@ -112,6 +113,13 @@ export function buildAutoResolverFinalScore({
     if (resolverType === 'weather_api') {
       const temp = resolverInfo?.recordedMaxC;
       if (Number.isFinite(temp)) return clip(`${Number(temp).toFixed(1)}°C máx`);
+      return clip(winLabel);
+    }
+
+    if (resolverType === 'api_hurricane') {
+      if (resolverInfo?.finalScore) return clip(resolverInfo.finalScore);
+      const count = Number(resolverInfo?.count);
+      if (Number.isFinite(count)) return clip(`${count} huracanes Cat 4+ tocaron tierra en Mexico`);
       return clip(winLabel);
     }
 
@@ -507,6 +515,20 @@ export async function resolveAutoResolverCandidate(candidate = {}, { sql = null 
         forecastDateYmd: cfg.forecastDateYmd,
       };
     }
+  } else if (resolverType === 'api_hurricane') {
+    if (cfg.source !== 'noaa-ibtracs' || cfg.shape !== 'mexico-major-hurricane-landfall') {
+      throw new Error('invalid api_hurricane config');
+    }
+    const resolved = await resolveMexicoMajorHurricaneLandfall({
+      startIso: cfg.startIso || candidate.start_time,
+      endIso: cfg.endIso || candidate.end_time,
+      resolveAt: cfg.resolveAt,
+      minCategory: Number(cfg.minCategory) || 4,
+      sourceUrl: cfg.sourceUrl,
+    });
+    winningIdx = resolved.winningIdx;
+    resolverInfo = resolved.resolverInfo || {};
+    resolverConfigPatch = resolved.resolverConfigPatch || null;
   } else if (resolverType === 'aicm_delay_count') {
     if (!sql) throw new Error('aicm_delay_count_requires_sql');
     if (!cfg.fromDateYmd || !cfg.toDateYmd || !Array.isArray(cfg.buckets)) {

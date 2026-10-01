@@ -99,9 +99,10 @@ test('October tournament generator emits bilingual auto and review specs when co
       OCTOBER_NOBEL_PEACE_CANDIDATES: 'Candidate A,Candidate B,Candidate C,Candidate D,Candidate E,Candidate F',
       OCTOBER_BALLON_DOR_CANDIDATES: 'Kane,Mbappe,Haaland,Yamal,Vinicius,Bellingham',
     },
+    now: new Date('2026-10-01T15:30:00.000Z'),
   });
 
-  assert.equal(specs.length, 12);
+  assert.equal(specs.length, 15);
   const byEventId = Object.fromEntries(specs.map(spec => [spec.source_event_id, spec]));
 
   const usd = byEventId['october-2026:usd-mxn-close'];
@@ -113,6 +114,22 @@ test('October tournament generator emits bilingual auto and review specs when co
   const btc = byEventId['october-2026:btc-usd-close'];
   assert.equal(btc.resolver_type, 'chainlink_price');
   assert.equal(btc.resolver_config.closesAt, '2026-10-30T21:00:00.000Z');
+
+  const goldWeekly = byEventId['october-2026:xau-usd-weekly-2026-10-07'];
+  assert.equal(goldWeekly.question, 'Oro (XAU/USD): cierre semanal 2026-10-07');
+  assert.equal(goldWeekly.resolver_type, 'chainlink_price');
+  assert.equal(goldWeekly.resolver_config.closesAt, '2026-10-07T21:00:00.000Z');
+  assert.equal(goldWeekly.source_data.translations.en.question, 'Gold (XAU/USD): weekly close 2026-10-07');
+
+  const oilMonthly = byEventId['october-2026:wti-usd-close'];
+  assert.equal(oilMonthly.question, 'Petróleo WTI (WTI/USD): cierre mensual de octubre 2026');
+  assert.equal(oilMonthly.resolver_type, 'chainlink_price');
+  assert.equal(oilMonthly.resolver_config.chainId, 56);
+
+  const hurricane = byEventId['october-2026:mexico-major-hurricane-landfall'];
+  assert.equal(hurricane.resolver_type, 'api_hurricane');
+  assert.deepEqual(hurricane.outcomes, ['Sí', 'No']);
+  assert.equal(hurricane.source_data.translations.en.question, 'Will a Category 4 or 5 hurricane make landfall in Mexico during October 2026?');
 
   const fed = byEventId['october-2026:fed-october-decision'];
   assert.equal(fed.resolver_type, 'manual_review');

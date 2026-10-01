@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   NEXT_TOURNAMENT_OPERATION_CLOSE_ISO,
   NEXT_TOURNAMENT_RANKING_CUTOFF_ISO,
+  NEXT_TOURNAMENT_SCORING_START_ISO,
   NEXT_TOURNAMENT_START_ISO,
   TOURNAMENT_CYCLE_LABEL,
   TOURNAMENT_CONVICTION_BONUS_RATE,
@@ -23,6 +24,7 @@ import {
   configuredCycleEndIso,
   configuredCycleWindowFromRow,
   getTournamentWindow,
+  tournamentScoringStartsAt,
   tournamentRulesActive,
   tournamentRulesPayload,
 } from './points-tournament-config.js';
@@ -76,6 +78,7 @@ test('current points tournament closes at 11:59pm Mexico City on August 26', () 
 
 test('October points tournament starts at midnight Mexico City and lasts through October', () => {
   assert.equal(NEXT_TOURNAMENT_START_ISO, '2026-10-01T06:00:00.000Z');
+  assert.equal(NEXT_TOURNAMENT_SCORING_START_ISO, '2026-10-01T15:00:00.000Z');
   assert.equal(NEXT_TOURNAMENT_OPERATION_CLOSE_ISO, '2026-11-01T05:59:00.000Z');
   assert.equal(NEXT_TOURNAMENT_RANKING_CUTOFF_ISO, '2026-11-01T05:59:00.000Z');
   assert.equal(configuredCycleEndIso('2026-10-01T06:00:00.000Z'), NEXT_TOURNAMENT_OPERATION_CLOSE_ISO);
@@ -83,6 +86,8 @@ test('October points tournament starts at midnight Mexico City and lasts through
   const window = getTournamentWindow(new Date('2026-09-24T18:00:00.000Z'));
   assert.equal(window.status, 'scheduled');
   assert.equal(window.startsAt, NEXT_TOURNAMENT_START_ISO);
+  assert.equal(window.scoringStartsAt, NEXT_TOURNAMENT_SCORING_START_ISO);
+  assert.equal(tournamentScoringStartsAt(window), NEXT_TOURNAMENT_SCORING_START_ISO);
 });
 
 test('configured cycle rows extend stale stored ends to the current tournament close', () => {
@@ -95,4 +100,16 @@ test('configured cycle rows extend stale stored ends to the current tournament c
   assert.equal(row.endsAt, TOURNAMENT_RANKING_CUTOFF_ISO);
   assert.equal(row.operationCloseAt, TOURNAMENT_OPERATION_CLOSE_ISO);
   assert.equal(row.label, TOURNAMENT_CYCLE_LABEL);
+});
+
+test('configured October cycle rows keep midnight open but score from 9am Mexico City', () => {
+  const row = configuredCycleWindowFromRow({
+    id: 13,
+    label: 'Torneo Octubre 2026',
+    started_at: NEXT_TOURNAMENT_START_ISO,
+    ends_at: NEXT_TOURNAMENT_RANKING_CUTOFF_ISO,
+  });
+  assert.equal(row.startsAt, NEXT_TOURNAMENT_START_ISO);
+  assert.equal(row.scoringStartsAt, NEXT_TOURNAMENT_SCORING_START_ISO);
+  assert.equal(tournamentScoringStartsAt(row), NEXT_TOURNAMENT_SCORING_START_ISO);
 });
