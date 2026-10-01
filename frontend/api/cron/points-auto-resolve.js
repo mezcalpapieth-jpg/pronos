@@ -465,10 +465,12 @@ function finalScoreForLcdlfParallelStatus(legResolutions = [], statusKey = 'nomi
   const targetStatus = String(statusKey || '').trim().toLowerCase();
   if (yesRows.length === 0) {
     if (targetStatus === 'eliminado') return 'Sin eliminado oficial';
+    if (targetStatus === 'ganador') return 'Sin ganador oficial';
     return 'Sin nominados oficiales';
   }
   const names = yesRows.map(row => row.residentName || row.label).filter(Boolean);
   if (targetStatus === 'eliminado') return `Eliminado/a: ${names.join(', ')}`;
+  if (targetStatus === 'ganador') return `Ganador/a: ${names.join(', ')}`;
   return `Nominados: ${names.join(', ')}`;
 }
 

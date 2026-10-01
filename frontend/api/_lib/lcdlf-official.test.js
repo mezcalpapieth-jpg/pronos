@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  buildLcdlfFinalSixthPlaceMarketSpec,
+  buildLcdlfFinalWinnerMarketSpec,
   buildLcdlfNominationMarketSpecs,
   buildLcdlfResolutionReview,
   buildLcdlfWeeklyMarketSpec,
@@ -16,6 +18,8 @@ test('parseLcdlfResidentStatus recognizes official status labels', () => {
   assert.equal(parseLcdlfResidentStatus('<span>NOMINADA</span>').key, 'nominado');
   assert.equal(parseLcdlfResidentStatus('<span>Podría estar eliminado</span>').key, 'nominado');
   assert.equal(parseLcdlfResidentStatus('<span>LÍDER DE LA SEMANA</span>').key, 'lider_semana');
+  assert.equal(parseLcdlfResidentStatus('<span>FINALISTA</span>').key, 'finalista');
+  assert.equal(parseLcdlfResidentStatus('<span>GANADORA</span>').key, 'ganador');
   assert.equal(parseLcdlfResidentStatus('<span>ELIMINADO</span>').key, 'eliminado');
 });
 
@@ -72,6 +76,16 @@ test('extractResidentsFromIndexHtml uses card titles and scoped card badges', ()
 
   assert.deepEqual(rows.map(row => row.name), ['Ximena Herrera', 'Masad Altamimi', 'Memo Schutz']);
   assert.deepEqual(rows.map(row => row.statusKey), ['eliminado', null, null]);
+});
+
+test('extractResidentsFromIndexHtml cleans final-week official badges from names', () => {
+  const rows = extractResidentsFromIndexHtml(`
+    <a href="/habitantes/gema-garoa">FINALISTA Gema Garoa Actriz y conductora Ver más</a>
+    <a href="/habitantes/mariana-ochoa">GANADORA Mariana Ochoa Cantante Ver más</a>
+  `);
+
+  assert.deepEqual(rows.map(row => row.name), ['Gema Garoa', 'Mariana Ochoa']);
+  assert.deepEqual(rows.map(row => row.statusKey), ['finalista', 'ganador']);
 });
 
 test('nextLcdlfNominationClose defaults to before the Wednesday nomination gala', () => {
@@ -258,6 +272,120 @@ test('buildLcdlfNominationMarketSpecs waits while the current nomination slate i
   };
 
   assert.deepEqual(buildLcdlfNominationMarketSpecs({ snapshot, now }), []);
+});
+
+test('buildLcdlfFinalSixthPlaceMarketSpec creates the Thursday sixth-place market from six finalists', () => {
+  const now = new Date('2026-10-01T16:00:00Z');
+  const finalists = [
+    ['Gema Garoa', 'gema-garoa'],
+    ['Mariana Ochoa', 'mariana-ochoa'],
+    ['Ese Pérez', 'ese-perez'],
+    ['Memo Schutz', 'memo-schutz'],
+    ['Karina Torres', 'karina-torres'],
+    ['Yahir', 'yahir'],
+  ].map(([name, slug]) => ({
+    name,
+    slug,
+    ok: true,
+    statusKey: 'finalista',
+    statusLabel: 'Finalista',
+    url: `https://example.com/${slug}`,
+  }));
+  const snapshot = {
+    ok: true,
+    sourceUrl: 'https://www.lacasadelosfamososmexico.tv',
+    observedAt: now.toISOString(),
+    parsedCount: 7,
+    total: 7,
+    rows: [
+      { name: 'Ernesto Laguardia', slug: 'ernesto-laguardia', ok: true, statusKey: 'eliminado', statusLabel: 'Eliminado/a', url: 'https://example.com/ernesto' },
+      ...finalists,
+    ],
+    active: finalists,
+    nominated: [],
+    eliminated: [
+      { name: 'Ernesto Laguardia', slug: 'ernesto-laguardia', ok: true, statusKey: 'eliminado', statusLabel: 'Eliminado/a', url: 'https://example.com/ernesto' },
+    ],
+  };
+
+  const spec = buildLcdlfFinalSixthPlaceMarketSpec({ snapshot, now });
+
+  assert.equal(spec.source_event_id, 'lcdlf-mx-final-sixth:2026-10-01');
+  assert.equal(spec.question, '¿Quién queda en sexto lugar en La Casa de los Famosos México 2026?');
+  assert.equal(spec.end_time, '2026-10-02T03:55:00.000Z');
+  assert.equal(spec.amm_mode, 'parallel');
+  assert.equal(spec.resolver_type, 'api_lcdlf');
+  assert.equal(spec.resolver_config.statusKey, 'eliminado');
+  assert.equal(spec.resolver_config.statusMinStatusCount, 1);
+  assert.deepEqual(spec.outcomes, ['Gema Garoa', 'Mariana Ochoa', 'Ese Pérez', 'Memo Schutz', 'Karina Torres', 'Yahir']);
+  assert.deepEqual(
+    spec.resolver_config.legs.map(leg => leg.residentSlug),
+    ['gema-garoa', 'mariana-ochoa', 'ese-perez', 'memo-schutz', 'karina-torres', 'yahir'],
+  );
+  assert.equal(spec.source_data.kind, 'lcdlf_final_sixth_place');
+  assert.equal(spec.source_data.closeLocalTime, 'jueves 21:55 America/Mexico_City');
+  assert.deepEqual(buildLcdlfNominationMarketSpecs({ snapshot, now }), []);
+});
+
+test('buildLcdlfFinalWinnerMarketSpec waits for the sixth-place result and then uses five finalists', () => {
+  const now = new Date('2026-10-02T05:00:00Z');
+  const fiveFinalists = [
+    ['Gema Garoa', 'gema-garoa'],
+    ['Mariana Ochoa', 'mariana-ochoa'],
+    ['Ese Pérez', 'ese-perez'],
+    ['Memo Schutz', 'memo-schutz'],
+    ['Yahir', 'yahir'],
+  ].map(([name, slug]) => ({
+    name,
+    slug,
+    ok: true,
+    statusKey: 'finalista',
+    statusLabel: 'Finalista',
+    url: `https://example.com/${slug}`,
+  }));
+  const sixFinalists = [
+    ...fiveFinalists,
+    { name: 'Karina Torres', slug: 'karina-torres', ok: true, statusKey: 'finalista', statusLabel: 'Finalista', url: 'https://example.com/karina-torres' },
+  ];
+
+  const beforeSnapshot = {
+    ok: true,
+    sourceUrl: 'https://www.lacasadelosfamososmexico.tv',
+    observedAt: now.toISOString(),
+    parsedCount: 6,
+    total: 6,
+    rows: sixFinalists,
+    active: sixFinalists,
+    nominated: [],
+    eliminated: [],
+  };
+  assert.equal(buildLcdlfFinalWinnerMarketSpec({ snapshot: beforeSnapshot, now }), null);
+
+  const afterSnapshot = {
+    ...beforeSnapshot,
+    parsedCount: 7,
+    total: 7,
+    rows: [
+      { name: 'Karina Torres', slug: 'karina-torres', ok: true, statusKey: 'eliminado', statusLabel: 'Eliminado/a', url: 'https://example.com/karina-torres' },
+      ...fiveFinalists,
+    ],
+    active: fiveFinalists,
+    eliminated: [
+      { name: 'Karina Torres', slug: 'karina-torres', ok: true, statusKey: 'eliminado', statusLabel: 'Eliminado/a', url: 'https://example.com/karina-torres' },
+    ],
+  };
+
+  const spec = buildLcdlfFinalWinnerMarketSpec({ snapshot: afterSnapshot, now });
+
+  assert.equal(spec.source_event_id, 'lcdlf-mx-winner:2026-10-04');
+  assert.equal(spec.question, '¿Quién gana La Casa de los Famosos México 2026?');
+  assert.equal(spec.end_time, '2026-10-05T02:25:00.000Z');
+  assert.equal(spec.resolver_type, 'api_lcdlf');
+  assert.equal(spec.resolver_config.statusKey, 'ganador');
+  assert.equal(spec.resolver_config.statusMinStatusCount, 1);
+  assert.deepEqual(spec.outcomes, ['Gema Garoa', 'Mariana Ochoa', 'Ese Pérez', 'Memo Schutz', 'Yahir']);
+  assert.equal(spec.source_data.kind, 'lcdlf_final_winner');
+  assert.equal(spec.source_data.closeLocalTime, 'domingo 20:25 America/Mexico_City');
 });
 
 test('buildLcdlfResolutionReview suggests the eliminated nominee only after official evidence', async () => {

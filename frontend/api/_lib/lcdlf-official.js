@@ -17,6 +17,12 @@ const DEFAULT_NOMINATION_CLOSE_WEEKDAY = 3; // Wednesday in Mexico City.
 // partial nomination information starts becoming public during the broadcast.
 const DEFAULT_NOMINATION_CLOSE_HOUR = 21;
 const DEFAULT_NOMINATION_CLOSE_MINUTE = 55;
+const DEFAULT_FINAL_SIXTH_PLACE_YMD = '2026-10-01';
+const DEFAULT_FINAL_SIXTH_PLACE_CLOSE_HOUR = 21;
+const DEFAULT_FINAL_SIXTH_PLACE_CLOSE_MINUTE = 55;
+const DEFAULT_FINAL_WINNER_YMD = '2026-10-04';
+const DEFAULT_FINAL_WINNER_CLOSE_HOUR = 20;
+const DEFAULT_FINAL_WINNER_CLOSE_MINUTE = 25;
 
 const DEFAULT_RESIDENTS = [
   'Aldo Rendón',
@@ -102,6 +108,8 @@ function getBaseUrl(baseUrl = process.env.LCDLF_BASE_URL || LCDLF_DEFAULT_BASE_U
 
 function lcdlfStatusFromKey(key, rawFallback = '') {
   const normalized = String(key || '').trim().toLowerCase();
+  if (normalized === 'ganador') return { key: 'ganador', label: 'Ganador/a', raw: rawFallback || 'GANADOR' };
+  if (normalized === 'finalista') return { key: 'finalista', label: 'Finalista', raw: rawFallback || 'FINALISTA' };
   if (normalized === 'eliminado') return { key: 'eliminado', label: 'Eliminado/a', raw: rawFallback || 'ELIMINADO' };
   if (normalized === 'nominado') return { key: 'nominado', label: 'Nominado/a', raw: rawFallback || 'NOMINADO' };
   if (normalized === 'lider_semana') return { key: 'lider_semana', label: 'Líder de la semana', raw: rawFallback || 'LIDER DE LA SEMANA' };
@@ -188,6 +196,8 @@ export function normalizeLcdlfStatus(value) {
   if (/\bPODRIA\s+ESTAR\s+ELIMINAD[OA]\b/.test(text)) {
     return { key: 'nominado', label: 'Podría estar eliminado/a', raw: 'PODRIA ESTAR ELIMINADO' };
   }
+  if (/\bGANADOR[AO]?\b/.test(text)) return { key: 'ganador', label: 'Ganador/a', raw: 'GANADOR' };
+  if (/\bFINALISTA\b/.test(text)) return { key: 'finalista', label: 'Finalista', raw: 'FINALISTA' };
   if (/\bELIMINAD[OA]\b/.test(text)) return { key: 'eliminado', label: 'Eliminado/a', raw: 'ELIMINADO' };
   if (/\bNOMINAD[OA]\b/.test(text)) return { key: 'nominado', label: 'Nominado/a', raw: 'NOMINADO' };
   if (/\bLIDER\s+DE\s+LA\s+SEMANA\b/.test(text)) return { key: 'lider_semana', label: 'Líder de la semana', raw: 'LIDER DE LA SEMANA' };
@@ -237,7 +247,7 @@ export function parseLcdlfResidentStatus(html, resident = null) {
 
 function cleanResidentCardName(label, slug) {
   const cleaned = stripHtml(label)
-    .replace(/\b(?:PODR[IÍ]A\s+ESTAR\s+ELIMINAD[OA]|ELIMINAD[OA]|NOMINAD[OA]|L[IÍ]DER\s+DE\s+LA\s+SEMANA|EN\s+CASA)\b/gi, ' ')
+    .replace(/\b(?:PODR[IÍ]A\s+ESTAR\s+ELIMINAD[OA]|GANADOR[AO]?|FINALISTA|ELIMINAD[OA]|NOMINAD[OA]|L[IÍ]DER\s+DE\s+LA\s+SEMANA|EN\s+CASA)\b/gi, ' ')
     .replace(/\bVer\s+m[aá]s\b/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim();
@@ -266,8 +276,12 @@ function cardHtmlForAnchor(source, anchorIndex, titleInfo) {
     : Math.max(0, anchorIndex - 900);
   const after = source.slice(anchorIndex + 1);
   const nextCard = after.search(/\bdata-card-title=["']/i);
-  const end = nextCard >= 0
-    ? anchorIndex + 1 + nextCard
+  const nextResidentAnchor = after.search(/<a\b[^>]*href=["'][^"']*\/habitantes\//i);
+  const nextBoundary = [nextCard, nextResidentAnchor]
+    .filter(index => index >= 0)
+    .sort((a, b) => a - b)[0];
+  const end = nextBoundary >= 0
+    ? anchorIndex + 1 + nextBoundary
     : Math.min(source.length, anchorIndex + 5000);
   return source.slice(start, end);
 }
@@ -427,7 +441,7 @@ export async function readLcdlfOfficialSnapshot({
   const active = rows.filter(row => (
     row.statusKey !== 'eliminado'
     && (row.ok || row.statusKey)
-    && (!row.statusKey || ['en_casa', 'nominado', 'lider_semana'].includes(row.statusKey))
+    && (!row.statusKey || ['en_casa', 'nominado', 'lider_semana', 'finalista', 'ganador'].includes(row.statusKey))
   ));
   const usable = parsedCount >= 1;
 
@@ -445,6 +459,36 @@ export async function readLcdlfOfficialSnapshot({
     eliminated,
     error: usable ? null : 'lcdlf_status_parse_failed',
   };
+}
+
+function mexicoDateFromYmd(value, {
+  hour = 23,
+  minute = 59,
+  second = 0,
+} = {}) {
+  const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  return dateAtMexicoCityTime({
+    year: Number(match[1]),
+    month: Number(match[2]),
+    day: Number(match[3]),
+    hour,
+    minute,
+    second,
+  });
+}
+
+function lcdlfFinalistRows(snapshot) {
+  const rows = Array.isArray(snapshot?.rows) ? snapshot.rows : [];
+  return rows.filter(row => String(row?.statusKey || '').trim().toLowerCase() === 'finalista');
+}
+
+function compactFinalRows(rows = []) {
+  return compactRows(rows).map(row => ({
+    ...row,
+    statusKey: row.statusKey || 'finalista',
+    statusLabel: row.statusLabel || 'Finalista',
+  }));
 }
 
 function mexicoDateTimeParts(date) {
@@ -616,6 +660,184 @@ export function buildLcdlfWeeklyMarketSpec({
   };
 }
 
+export function buildLcdlfFinalSixthPlaceMarketSpec({
+  snapshot,
+  now = new Date(),
+  seedLiquidity = 1000,
+  seasonLabel = process.env.LCDLF_SEASON_LABEL || LCDLF_DEFAULT_SEASON_LABEL,
+} = {}) {
+  if (!snapshot?.ok) return null;
+  const finalists = lcdlfFinalistRows(snapshot);
+  if (finalists.length !== 6) return null;
+
+  const ymd = process.env.LCDLF_FINAL_SIXTH_PLACE_YMD || DEFAULT_FINAL_SIXTH_PLACE_YMD;
+  const closeHour = Number(process.env.LCDLF_FINAL_SIXTH_PLACE_CLOSE_HOUR ?? DEFAULT_FINAL_SIXTH_PLACE_CLOSE_HOUR);
+  const closeMinute = Number(process.env.LCDLF_FINAL_SIXTH_PLACE_CLOSE_MINUTE ?? DEFAULT_FINAL_SIXTH_PLACE_CLOSE_MINUTE);
+  const close = mexicoDateFromYmd(ymd, { hour: closeHour, minute: closeMinute, second: 0 });
+  if (!close || close.getTime() <= now.getTime()) return null;
+
+  const sourceEventId = `lcdlf-mx-final-sixth:${ymd}`;
+  const evidence = [
+    { title: 'La Casa de los Famosos México', url: snapshot.sourceUrl },
+    {
+      title: '¿Cuándo se revelará quién será el sexto finalista de La Casa de los Famosos México 2026?',
+      url: `${snapshot.sourceUrl}/cuando-se-revelara-quien-sera-el-sexto-finalista-de-la-casa-de-los-famosos-mexico-2026/`,
+    },
+    ...finalists.map(row => ({
+      title: `${row.name} · ${row.statusLabel || 'Finalista'}`,
+      url: row.url,
+    })),
+  ].filter(item => item.url);
+
+  return {
+    source: LCDLF_SOURCE,
+    source_event_id: sourceEventId,
+    question: '¿Quién queda en sexto lugar en La Casa de los Famosos México 2026?',
+    category: 'musica',
+    icon: null,
+    outcomes: finalists.map(row => row.name).filter(Boolean),
+    seed_liquidity: seedLiquidity,
+    start_time: now.toISOString(),
+    end_time: close.toISOString(),
+    amm_mode: 'parallel',
+    resolver_type: 'api_lcdlf',
+    resolver_config: {
+      source: LCDLF_SOURCE,
+      sourceEventId,
+      shape: 'parallel-status',
+      statusKey: 'eliminado',
+      yesOutcome: 0,
+      noOutcome: 1,
+      closeOnStatus: false,
+      statusMinStatusCount: 1,
+      legs: finalists.map(row => ({
+        label: row.name,
+        residentName: row.name,
+        residentSlug: row.slug,
+        statusKey: 'eliminado',
+        evidenceUrl: row.url || snapshot.sourceUrl,
+      })),
+      criteria: 'Cada finalista se resuelve de forma independiente: Sí si el sitio oficial marca a esa persona como Eliminado/a después de la gala del jueves 1 de octubre. Cuando el sexto lugar oficial aparezca, los demás finalistas de este mercado se resuelven No. Si no hay una marca clara, el resolver difiere.',
+      evidence,
+      sourceUrls: evidence.map(item => item.url).filter(Boolean),
+      evidenceUrl: snapshot.sourceUrl,
+      timezone: MEXICO_CITY_TZ,
+      staleReadPolicy: 'Usar lectura fresca del sitio oficial; si el sexto lugar no se puede leer, diferir o enviar a revisión manual.',
+    },
+    source_data: {
+      kind: 'lcdlf_final_sixth_place',
+      eliminationMarketShape: 'parallel-status',
+      showLabel: 'La Casa de los Famosos México',
+      seasonLabel,
+      weekKey: ymd,
+      closeLocalTime: `jueves ${String(closeHour).padStart(2, '0')}:${String(closeMinute).padStart(2, '0')} ${MEXICO_CITY_TZ}`,
+      finalists: compactFinalRows(finalists),
+      snapshot: {
+        sourceUrl: snapshot.sourceUrl,
+        observedAt: snapshot.observedAt,
+        parsedCount: snapshot.parsedCount,
+        total: snapshot.total,
+        rows: compactRows(snapshot.rows),
+      },
+      categorization: {
+        topicTags: ['tv', 'farandula'],
+      },
+    },
+    topic_tags: ['tv', 'farandula'],
+  };
+}
+
+export function buildLcdlfFinalWinnerMarketSpec({
+  snapshot,
+  now = new Date(),
+  seedLiquidity = 1000,
+  seasonLabel = process.env.LCDLF_SEASON_LABEL || LCDLF_DEFAULT_SEASON_LABEL,
+} = {}) {
+  if (!snapshot?.ok) return null;
+  const finalists = lcdlfFinalistRows(snapshot);
+  if (finalists.length < 2 || finalists.length > 5) return null;
+
+  const ymd = process.env.LCDLF_FINAL_WINNER_YMD || DEFAULT_FINAL_WINNER_YMD;
+  const closeHour = Number(process.env.LCDLF_FINAL_WINNER_CLOSE_HOUR ?? DEFAULT_FINAL_WINNER_CLOSE_HOUR);
+  const closeMinute = Number(process.env.LCDLF_FINAL_WINNER_CLOSE_MINUTE ?? DEFAULT_FINAL_WINNER_CLOSE_MINUTE);
+  const close = mexicoDateFromYmd(ymd, { hour: closeHour, minute: closeMinute, second: 0 });
+  if (!close || close.getTime() <= now.getTime()) return null;
+
+  const sourceEventId = `lcdlf-mx-winner:${ymd}`;
+  const evidence = [
+    { title: 'La Casa de los Famosos México', url: snapshot.sourceUrl },
+    {
+      title: '¿Cuándo y dónde puedes votar por el ganador de La Casa de los Famosos México 2026?',
+      url: `${snapshot.sourceUrl}/cuando-y-donde-puedes-votar-por-el-ganador-de-la-casa-de-los-famosos-mexico-2026/`,
+    },
+    {
+      title: 'Arranca la semana final de La Casa de los Famosos México 2026',
+      url: `${snapshot.sourceUrl}/arranca-la-semana-final-de-la-casa-de-los-famosos-mexico-2026-quien-ganara/`,
+    },
+    ...finalists.map(row => ({
+      title: `${row.name} · ${row.statusLabel || 'Finalista'}`,
+      url: row.url,
+    })),
+  ].filter(item => item.url);
+
+  return {
+    source: LCDLF_SOURCE,
+    source_event_id: sourceEventId,
+    question: '¿Quién gana La Casa de los Famosos México 2026?',
+    category: 'musica',
+    icon: null,
+    outcomes: finalists.map(row => row.name).filter(Boolean),
+    seed_liquidity: seedLiquidity,
+    start_time: now.toISOString(),
+    end_time: close.toISOString(),
+    amm_mode: 'parallel',
+    resolver_type: 'api_lcdlf',
+    resolver_config: {
+      source: LCDLF_SOURCE,
+      sourceEventId,
+      shape: 'parallel-status',
+      statusKey: 'ganador',
+      yesOutcome: 0,
+      noOutcome: 1,
+      closeOnStatus: false,
+      statusMinStatusCount: 1,
+      legs: finalists.map(row => ({
+        label: row.name,
+        residentName: row.name,
+        residentSlug: row.slug,
+        statusKey: 'ganador',
+        evidenceUrl: row.url || snapshot.sourceUrl,
+      })),
+      criteria: 'Cada finalista se resuelve de forma independiente: Sí si el sitio oficial marca a esa persona como Ganador/a de La Casa de los Famosos México 2026. Cuando el ganador oficial aparezca, los demás finalistas se resuelven No. Si no hay una marca clara, el resolver difiere.',
+      evidence,
+      sourceUrls: evidence.map(item => item.url).filter(Boolean),
+      evidenceUrl: snapshot.sourceUrl,
+      timezone: MEXICO_CITY_TZ,
+      staleReadPolicy: 'Usar lectura fresca del sitio oficial; si el ganador no se puede leer, diferir o enviar a revisión manual.',
+    },
+    source_data: {
+      kind: 'lcdlf_final_winner',
+      winnerMarketShape: 'parallel-status',
+      showLabel: 'La Casa de los Famosos México',
+      seasonLabel,
+      weekKey: ymd,
+      closeLocalTime: `domingo ${String(closeHour).padStart(2, '0')}:${String(closeMinute).padStart(2, '0')} ${MEXICO_CITY_TZ}`,
+      finalists: compactFinalRows(finalists),
+      snapshot: {
+        sourceUrl: snapshot.sourceUrl,
+        observedAt: snapshot.observedAt,
+        parsedCount: snapshot.parsedCount,
+        total: snapshot.total,
+        rows: compactRows(snapshot.rows),
+      },
+      categorization: {
+        topicTags: ['tv', 'farandula'],
+      },
+    },
+    topic_tags: ['tv', 'farandula'],
+  };
+}
+
 export function buildLcdlfNominationMarketSpecs({
   snapshot,
   now = new Date(),
@@ -623,6 +845,7 @@ export function buildLcdlfNominationMarketSpecs({
   seasonLabel = process.env.LCDLF_SEASON_LABEL || LCDLF_DEFAULT_SEASON_LABEL,
 } = {}) {
   if (!snapshot?.ok || !Array.isArray(snapshot.active) || snapshot.active.length < 2) return [];
+  if (lcdlfFinalistRows(snapshot).length >= 2) return [];
   const nominationMinStatusCount = Math.max(
     2,
     Number.isFinite(Number(process.env.LCDLF_NOMINATION_MIN_STATUS_COUNT))

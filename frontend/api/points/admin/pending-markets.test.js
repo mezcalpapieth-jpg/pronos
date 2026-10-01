@@ -110,6 +110,13 @@ test('legacy LCDLF binary nomination rows are auto-rejected after grouped market
   assert.match(source, /AND \(reviewer IS NULL OR reviewer = 'system'\)/);
 });
 
+test('current season grouped LCDLF nomination rows are auto-rejected without blocking future seasons', () => {
+  assert.match(source, /LCDLF nomination markets paused until next season/);
+  assert.match(source, /source_event_id ~ '\^lcdlf-mx-nomination:\[0-9\]\{4\}-\[0-9\]\{2\}-\[0-9\]\{2\}\$'/);
+  assert.match(source, /source_event_id <= 'lcdlf-mx-nomination:2026-10-04'/);
+  assert.match(source, /approved_market_id IS NULL/);
+});
+
 test('pending mañanera approval syncs transcript phrase from quoted question', () => {
   assert.match(source, /syncMananeraPhraseFromQuestion\(\{\s*question: r\.question,/);
   assert.match(source, /resolver_config = \$5::jsonb/);

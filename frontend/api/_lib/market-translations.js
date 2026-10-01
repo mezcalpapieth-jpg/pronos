@@ -187,6 +187,12 @@ function translateKnownKind(question, sourceData) {
     const season = firstString(sourceData.seasonLabel);
     return `Who wins ${show}${season ? ` (${season})` : ''}?`;
   }
+  if (kind === 'lcdlf_final_sixth_place') {
+    return 'Who finishes in sixth place on La Casa de los Famosos Mexico 2026?';
+  }
+  if (kind === 'lcdlf_final_winner') {
+    return 'Who wins La Casa de los Famosos Mexico 2026?';
+  }
   if (kind === 'aicm_delay_window') {
     const threshold = sourceData.thresholdMinutes ?? '';
     const fromDate = dateLabelFromYmd(sourceData.fromDateYmd);
@@ -230,6 +236,12 @@ function translateByPattern(question, sourceData = {}, spec = {}) {
 
   match = text.match(/^Quién gana (.+?) \((.+?)\)$/i);
   if (match) return `Who wins ${match[1]} (${match[2]})?`;
+
+  match = text.match(/^Quién queda en sexto lugar en La Casa de los Famosos México 2026$/i);
+  if (match) return 'Who finishes in sixth place on La Casa de los Famosos Mexico 2026?';
+
+  match = text.match(/^Quién gana La Casa de los Famosos México 2026$/i);
+  if (match) return 'Who wins La Casa de los Famosos Mexico 2026?';
 
   match = text.match(/^Quién gana:\s*(.+?)\s+vs\s+(.+?)\s+en el\s+(.+)$/i);
   if (match) return `Who wins: ${match[1]} vs ${match[2]} at ${match[3]}?`;

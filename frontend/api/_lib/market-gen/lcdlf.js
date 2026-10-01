@@ -1,4 +1,6 @@
 import {
+  buildLcdlfFinalSixthPlaceMarketSpec,
+  buildLcdlfFinalWinnerMarketSpec,
   buildLcdlfNominationMarketSpecs,
   buildLcdlfWeeklyMarketSpec,
   readLcdlfOfficialSnapshot,
@@ -19,6 +21,8 @@ export async function generateLcdlfMarkets({
   const snapshot = await readLcdlfOfficialSnapshot({ fetchImpl, now });
   const nominationSpecs = buildLcdlfNominationMarketSpecs({ snapshot, now });
   const weeklySpec = buildLcdlfWeeklyMarketSpec({ snapshot, now });
+  const finalSixthSpec = buildLcdlfFinalSixthPlaceMarketSpec({ snapshot, now });
+  const finalWinnerSpec = buildLcdlfFinalWinnerMarketSpec({ snapshot, now });
   const specs = [
     ...nominationSpecs.map(spec => attachSuggestedPricing(spec, {
       probabilities: spec.amm_mode === 'parallel'
@@ -33,6 +37,18 @@ export async function generateLcdlfMarkets({
       source: 'lcdlf-official:nominated',
       rationale: 'Nominados oficiales del sitio de La Casa de los Famosos México; admin puede editar odds y liquidez antes de aprobar.',
       evidence: weeklySpec.resolver_config?.evidence || [],
+    })] : []),
+    ...(finalSixthSpec ? [attachSuggestedPricing(finalSixthSpec, {
+      probabilities: uniformProbabilities(finalSixthSpec.outcomes.length),
+      source: 'lcdlf-official:finalists',
+      rationale: 'Finalistas oficiales del sitio de La Casa de los Famosos México; este mercado se resuelve cuando el sitio marca al sexto lugar como Eliminado/a.',
+      evidence: finalSixthSpec.resolver_config?.evidence || [],
+    })] : []),
+    ...(finalWinnerSpec ? [attachSuggestedPricing(finalWinnerSpec, {
+      probabilities: uniformProbabilities(finalWinnerSpec.outcomes.length),
+      source: 'lcdlf-official:finalists',
+      rationale: 'Se activa sólo después de la eliminación del sexto lugar, con los finalistas oficiales restantes. Admin puede editar odds y liquidez antes de aprobar.',
+      evidence: finalWinnerSpec.resolver_config?.evidence || [],
     })] : []),
   ];
   if (!specs.length) return [];

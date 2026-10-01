@@ -315,6 +315,18 @@ async function list(req, res) {
         AND source_event_id ~ '^lcdlf-mx-nomination:[0-9]{4}-[0-9]{2}-[0-9]{2}:.+'
         AND COALESCE(amm_mode, 'unified') <> 'parallel'
     `;
+    await schemaSql`
+      UPDATE points_pending_markets
+      SET status = 'rejected',
+          admin_note = COALESCE(NULLIF(admin_note, ''), 'auto-rejected: LCDLF nomination markets paused until next season'),
+          reviewer = COALESCE(reviewer, 'system'),
+          reviewed_at = COALESCE(reviewed_at, NOW())
+      WHERE status = 'pending'
+        AND source = ${LCDLF_SOURCE}
+        AND source_event_id ~ '^lcdlf-mx-nomination:[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+        AND source_event_id <= 'lcdlf-mx-nomination:2026-10-04'
+        AND approved_market_id IS NULL
+    `;
   } catch (e) {
     // Don't block the list on the cleanup query — log and continue.
     // The list itself still returns even if cleanup fails.

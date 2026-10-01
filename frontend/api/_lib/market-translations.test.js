@@ -74,6 +74,28 @@ test('manual Mexico seismic markets translate without generator metadata', () =>
   );
 });
 
+test('LCDLF final-stage markets translate from source kind', () => {
+  const sixth = attachMarketTranslations({
+    question: '¿Quién queda en sexto lugar en La Casa de los Famosos México 2026?',
+    outcomes: ['Gema Garoa', 'Mariana Ochoa'],
+    source_data: { kind: 'lcdlf_final_sixth_place' },
+  });
+  assert.equal(
+    sixth.source_data.translations.en.question,
+    'Who finishes in sixth place on La Casa de los Famosos Mexico 2026?',
+  );
+
+  const winner = attachMarketTranslations({
+    question: '¿Quién gana La Casa de los Famosos México 2026?',
+    outcomes: ['Gema Garoa', 'Mariana Ochoa'],
+    source_data: { kind: 'lcdlf_final_winner' },
+  });
+  assert.equal(
+    winner.source_data.translations.en.question,
+    'Who wins La Casa de los Famosos Mexico 2026?',
+  );
+});
+
 test('crypto direction and long-window manual markets translate without source data', () => {
   const rapidFields = publicMarketTranslationFields({
     question: 'Bitcoin: ¿sube o baja a las 13:25 CDMX?',
