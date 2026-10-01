@@ -16,9 +16,11 @@ import { useT, useLang, setLang } from '@app/lib/i18n.js';
 import { fetchMarkets, adminListTaskCounts, fetchClaimableSummary } from '../lib/pointsApi.js';
 import { onPointsRefresh } from '../lib/pointsLiveRefresh.js';
 
-// Public info page on pronos.io that explains prediction markets. The MVP
-// and old landing both link here — we match so the user journey is the same.
-const COMO_FUNCIONA_URL = 'https://pronos.io/que-son-los-mercados-de-predicciones';
+// Public info pages on pronos.io that explain prediction markets.
+const HOW_IT_WORKS_URLS = {
+  es: 'https://pronos.io/que-son-los-mercados-de-predicciones',
+  en: 'https://pronos.io/what-are-prediction-markets',
+};
 
 function languageToggleLabel(lang) {
   return lang === 'es' ? 'English' : 'Español';
@@ -64,6 +66,7 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
   const mobileMenuRef = useRef(null);
   const t = useT();
   const lang = useLang();
+  const howItWorksUrl = HOW_IT_WORKS_URLS[lang] || HOW_IT_WORKS_URLS.es;
 
   // Search: URL mirror (?q=foo) for list filtering on home, PLUS an
   // autocomplete dropdown that navigates straight to a market detail.
@@ -438,7 +441,7 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
               {lang === 'en' ? 'Support' : 'Soporte'}
             </Link>
             <a
-              href={COMO_FUNCIONA_URL}
+              href={howItWorksUrl}
               target="_blank"
               rel="noopener noreferrer"
               onClick={closeMobileMenu}
@@ -520,7 +523,7 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
             an account to do anything with. */}
         <Link to="/torneo" style={navLinkStyle}>{t('points.nav.tournament')}</Link>
         <a
-          href={COMO_FUNCIONA_URL}
+          href={howItWorksUrl}
           target="_blank"
           rel="noopener noreferrer"
           style={navLinkStyle}

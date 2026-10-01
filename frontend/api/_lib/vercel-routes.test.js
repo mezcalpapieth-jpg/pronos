@@ -103,6 +103,25 @@ test('root referral route serves a share wrapper while app referral links stay i
   );
 });
 
+test('prediction-market guides serve Spanish and English static pages', () => {
+  assert.ok(
+    hasRule(vercelConfig.rewrites, '/que-son-los-mercados-de-predicciones', '/que-son-los-mercados-de-predicciones.html'),
+    'expected Spanish prediction-market guide to serve the static HTML page',
+  );
+  assert.ok(
+    hasRule(vercelConfig.rewrites, '/what-are-prediction-markets', '/what-are-prediction-markets.html'),
+    'expected English prediction-market guide to serve the static HTML page',
+  );
+  assert.ok(
+    hasRule(rootVercelConfig.rewrites, '/que-son-los-mercados-de-predicciones', '/que-son-los-mercados-de-predicciones.html'),
+    'expected root config to route the Spanish prediction-market guide',
+  );
+  assert.ok(
+    hasRule(rootVercelConfig.rewrites, '/what-are-prediction-markets', '/what-are-prediction-markets.html'),
+    'expected root config to route the English prediction-market guide',
+  );
+});
+
 test('all points app subroutes hard-refresh through the points SPA', () => {
   assert.ok(
     hasRule(vercelConfig.rewrites, '/points/:path*', '/points/'),
