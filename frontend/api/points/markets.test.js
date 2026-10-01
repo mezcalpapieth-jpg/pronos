@@ -16,7 +16,7 @@ test('points market payload keeps admin featured and tournament markets on home'
 });
 
 test('points public lists hide bulk-hidden active markets outside trophy overrides', () => {
-  assert.match(source, /points:markets:v11/);
+  assert.match(source, /points:markets:v12/);
   assert.match(source, /m\.hidden_from_home IS NOT TRUE[\s\S]*?OR m\.tournament_featured = true/);
   assert.match(source, /m\.featured = true AND m\.hidden_from_home = false[\s\S]*?OR m\.tournament_featured = true/);
 });
@@ -48,10 +48,9 @@ test('points market payload exposes featured and trending for parallel and unifi
   assert.match(detailSource, /imageUrl:\s*r\.image_url \|\| null/);
 });
 
-test('points market list sorts live first and then upcoming by close date', () => {
-  assert.match(source, /m\.start_time IS NOT NULL AND m\.start_time <= NOW\(\) AND m\.end_time > NOW\(\) THEN 0/);
-  assert.match(source, /WHEN m\.end_time > NOW\(\) THEN 1/);
-  assert.match(source, /WHEN m\.end_time IS NOT NULL THEN 2/);
+test('points market list sorts active markets by closest close date', () => {
+  assert.match(source, /CASE WHEN \$\{status\}::text = 'active' AND m\.end_time > NOW\(\) THEN 1 END/);
+  assert.doesNotMatch(source, /m\.start_time IS NOT NULL AND m\.start_time <= NOW\(\) AND m\.end_time > NOW\(\) THEN 0/);
   assert.match(source, /CASE WHEN m\.end_time > NOW\(\) THEN m\.end_time END ASC NULLS LAST/);
   assert.match(source, /CASE WHEN m\.end_time <= NOW\(\) THEN m\.end_time END DESC NULLS LAST/);
 });

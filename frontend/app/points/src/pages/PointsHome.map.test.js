@@ -39,7 +39,7 @@ test('points home keeps cards curated but feeds all active markets to the map', 
   assert.match(source, /function shouldShowOnHome[\s\S]*marketMatchesFeaturedTeam\(market, featuredTeamKeys\)/);
 });
 
-test('points home trending cards sort live first and then by closest deadline', () => {
+test('points home trending cards sort by closest deadline', () => {
   const mapMarketsIndex = source.indexOf('const mapMarkets');
   const filteredIndex = source.indexOf('const filtered');
   const carouselIndex = source.indexOf('const carouselMarkets');

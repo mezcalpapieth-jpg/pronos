@@ -161,7 +161,7 @@ export default async function handler(req, res) {
     const tournamentOnly = !category && featuredParam === 'tournament';
     const featuredOnly = !category && !tournamentOnly && featuredParam !== 'all';
     const cacheKey = [
-      'points:markets:v11',
+      'points:markets:v12',
       status,
       category || 'all',
       modeFilter || 'all-modes',
@@ -274,12 +274,7 @@ export default async function handler(req, res) {
           )
         ORDER BY
           CASE WHEN ${status}::text = 'resolved' THEN m.resolved_at END DESC NULLS LAST,
-          CASE
-            WHEN m.start_time IS NOT NULL AND m.start_time <= NOW() AND m.end_time > NOW() THEN 0
-            WHEN m.end_time > NOW() THEN 1
-            WHEN m.end_time IS NOT NULL THEN 2
-            ELSE 3
-          END,
+          CASE WHEN ${status}::text = 'active' AND m.end_time > NOW() THEN 1 END,
           CASE WHEN m.end_time > NOW() THEN m.end_time END ASC NULLS LAST,
           CASE WHEN m.end_time <= NOW() THEN m.end_time END DESC NULLS LAST,
           m.id ASC

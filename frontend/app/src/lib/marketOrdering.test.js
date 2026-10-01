@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import { sortMarketsByLiveThenEndDate } from './marketOrdering.js';
 
-test('trending market ordering puts live first, then upcoming by close date', () => {
+test('trending market ordering puts upcoming markets by closest close date', () => {
   const now = new Date('2026-10-01T15:00:00.000Z').getTime();
   const rows = [
     { id: 'november', status: 'active', endTime: '2026-11-01T06:59:00.000Z' },
@@ -16,11 +16,11 @@ test('trending market ordering puts live first, then upcoming by close date', ()
 
   assert.deepEqual(
     sortMarketsByLiveThenEndDate(rows, now).map(row => row.id),
-    ['live', 'tonight', 'tomorrow', 'november', 'overdue', 'undated'],
+    ['tonight', 'tomorrow', 'live', 'november', 'overdue', 'undated'],
   );
 });
 
-test('trending market ordering does not let tournament markets outrank earlier deadlines', () => {
+test('trending market ordering does not let tournament or live markets outrank earlier deadlines', () => {
   const now = new Date('2026-10-01T15:00:00.000Z').getTime();
   const rows = [
     { id: 'fed', status: 'active', tournamentFeatured: true, endTime: '2026-10-28T18:00:00.000Z' },
@@ -32,6 +32,6 @@ test('trending market ordering does not let tournament markets outrank earlier d
 
   assert.deepEqual(
     sortMarketsByLiveThenEndDate(rows, now).map(row => row.id),
-    ['live-show', 'soccer-tonight', 'sports-tomorrow', 'fed', 'gdp'],
+    ['soccer-tonight', 'sports-tomorrow', 'live-show', 'fed', 'gdp'],
   );
 });

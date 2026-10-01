@@ -14,6 +14,7 @@ test('generateAicm48hMarkets targets the coming Thursday and Friday', async () =
   assert.equal(market.source_event_id, 'aicm:MEX:departure:48h:2026-08-20');
   assert.equal(market.amm_mode, 'parallel');
   assert.equal(market.category, 'infraestructura');
+  assert.notEqual(market.is_test_market, true);
 });
 
 test('the counted window never includes the day the market opens', async () => {

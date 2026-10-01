@@ -6,14 +6,10 @@ function timeMs(value) {
 
 function marketDateRank(market, nowMs) {
   const status = String(market?.status || 'active').toLowerCase();
-  const startMs = timeMs(market?.startTime);
   const endMs = timeMs(market?.endTime);
-  const live = market?.live === true
-    || market?._live === true
-    || (status === 'active' && startMs <= nowMs && endMs > nowMs);
-  if (live) return 0;
   if (Number.isFinite(endMs) && endMs > nowMs) return 1;
   if (Number.isFinite(endMs)) return 2;
+  if (status === 'resolved') return 2;
   return 3;
 }
 

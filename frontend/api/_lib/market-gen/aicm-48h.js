@@ -105,10 +105,6 @@ export async function generateAicm48hMarkets({
     outcomes: buckets.map(bucket => bucket.label),
     seed_liquidity: seedLiquidity,
     end_time: end.toISOString(),
-    // First market resolved from the live timetable rather than the archive:
-    // the method has not been reconciled against flightsHistory yet, and
-    // traders should see that before committing points.
-    is_test_market: true,
     amm_mode: 'parallel',
     resolver_type: 'aicm_delay_minutes_live',
     resolver_config: {
