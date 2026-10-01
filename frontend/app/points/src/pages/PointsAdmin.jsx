@@ -9,7 +9,7 @@
  * Auth: the backend enforces `POINTS_ADMIN_USERNAMES`. The UI hides the
  * nav link for non-admins but the endpoints would 403 anyway.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DeckAdminPanel from '../components/DeckAdminPanel.jsx';
 import AdminInterestPanel from '@app/components/AdminInterestPanel.jsx';
@@ -429,7 +429,7 @@ export default function PointsAdmin({ isAdmin }) {
     if (typeof window === 'undefined') return 'create';
     const sp = new URLSearchParams(window.location.search);
     const t = sp.get('tab');
-    return ['create', 'markets', 'stats', 'pending', 'social', 'support', 'deck', 'cycles', 'risk', 'api'].includes(t) ? t : 'create';
+    return ['create', 'markets', 'stats', 'pending', 'social', 'support', 'deck', 'cycles', 'risk', 'api', 'launch', 'strategies'].includes(t) ? t : 'create';
   })();
   const createPrefill = (() => {
     if (typeof window === 'undefined') return null;
@@ -509,6 +509,7 @@ export default function PointsAdmin({ isAdmin }) {
           { id: 'markets', label: 'Mercados' },
           { id: 'support', label: 'Soporte' },
           { id: 'social',  label: 'Tareas sociales' },
+          { id: 'strategies', label: 'Estrategias' },
           { id: 'risk',    label: 'Riesgo' },
           { id: 'api',     label: 'API' },
           { id: 'deck',    label: 'Deck' },
@@ -566,6 +567,7 @@ export default function PointsAdmin({ isAdmin }) {
         />
       )}
       {tab === 'social' && <SocialTasksQueue onQueueChange={refreshAdminTaskCounts} />}
+      {tab === 'strategies' && <StrategiesPanel />}
       {tab === 'risk' && <RiskPanel />}
       {tab === 'api' && <ApiUsagePanel />}
       {tab === 'support' && <SupportTicketsQueue onQueueChange={refreshAdminTaskCounts} />}
@@ -7589,6 +7591,358 @@ function StatCard({ label, value }) {
         {value}
       </div>
     </div>
+  );
+}
+
+function AdminAuditHeader({ title, subtitle, right }) {
+  return (
+    <div style={{
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      gap: 12,
+      marginBottom: 16,
+      flexWrap: 'wrap',
+    }}>
+      <div>
+        <h2 style={{
+          fontFamily: 'var(--font-display)',
+          fontSize: 22,
+          color: 'var(--text-primary)',
+          margin: 0,
+          letterSpacing: '0.03em',
+        }}>
+          {title}
+        </h2>
+        {subtitle && (
+          <div style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            color: 'var(--text-muted)',
+            marginTop: 4,
+            letterSpacing: '0.04em',
+            lineHeight: 1.5,
+          }}>
+            {subtitle}
+          </div>
+        )}
+      </div>
+      {right}
+    </div>
+  );
+}
+
+function StrategyStatusPill({ status }) {
+  const normalized = String(status || 'open').toLowerCase();
+  const color = normalized === 'won' ? 'var(--green)'
+    : normalized === 'lost' ? 'var(--red)'
+      : normalized === 'void' ? 'var(--yellow)'
+        : 'var(--orange)';
+  const label = {
+    open: 'Abierta',
+    won: 'Ganada',
+    lost: 'Perdida',
+    void: 'Anulada',
+  }[normalized] || normalized;
+  return (
+    <span style={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      padding: '5px 8px',
+      borderRadius: 999,
+      border: `1px solid ${color}`,
+      color,
+      fontFamily: 'var(--font-mono)',
+      fontSize: 10,
+      letterSpacing: '0.08em',
+      textTransform: 'uppercase',
+      whiteSpace: 'nowrap',
+    }}>
+      {label}
+    </span>
+  );
+}
+
+function StrategiesPanel() {
+  const [data, setData] = useState(null);
+  const [cycleId, setCycleId] = useState('');
+  const [err, setErr] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async (nextCycleId = cycleId) => {
+    setLoading(true);
+    setErr(null);
+    try {
+      const q = new URLSearchParams({
+        ticketLimit: '80',
+        longHoldLimit: '40',
+      });
+      if (nextCycleId) q.set('cycleId', String(nextCycleId));
+      const payload = await getJson(`/api/points/admin/strategies?${q.toString()}`);
+      setData(payload);
+      if (!nextCycleId && payload?.cycle?.id) setCycleId(String(payload.cycle.id));
+    } catch (e) {
+      setErr(e?.message || 'strategies_failed');
+    } finally {
+      setLoading(false);
+    }
+  }, [cycleId]);
+
+  useEffect(() => {
+    load('');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const summary = data?.parlay?.summary || {};
+  const tickets = data?.parlay?.tickets || [];
+  const longHoldRows = data?.longHold?.rows || [];
+  const cycleOptions = data?.cycles || (data?.cycle ? [data.cycle] : []);
+
+  return (
+    <section style={{
+      padding: 20,
+      border: '1px solid var(--border)',
+      borderRadius: 14,
+      background: 'var(--surface1)',
+    }}>
+      <AdminAuditHeader
+        title="Combinadas / Long Hold"
+        subtitle="Auditoría de estrategias del torneo: tickets, multiplicadores, PnL y bonos por mantener posición."
+        right={(
+          <button className="btn-secondary" onClick={() => load(cycleId)} disabled={loading}>
+            Actualizar
+          </button>
+        )}
+      />
+
+      {err && (
+        <p style={{ color: 'var(--red)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+          Error: {err}
+        </p>
+      )}
+
+      <div style={{ display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap', marginBottom: 16 }}>
+        <Field label="Ciclo">
+          <select
+            value={cycleId}
+            onChange={(e) => {
+              const next = e.target.value;
+              setCycleId(next);
+              load(next);
+            }}
+            style={{ ...inputStyle, minWidth: 240 }}
+          >
+            {cycleOptions.map(cycle => (
+              <option key={cycle.id} value={cycle.id}>
+                {cycle.label || `Ciclo #${cycle.id}`} · {cycle.status}
+              </option>
+            ))}
+          </select>
+        </Field>
+        {data?.cycle && (
+          <div style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            color: 'var(--text-muted)',
+            paddingBottom: 16,
+          }}>
+            {adminDateTime(data.cycle.startedAt)} → {adminDateTime(data.cycle.endsAt)}
+            {data.longHold?.source === 'cycle_snapshot' ? ' · snapshot cerrado' : ' · leaderboard en vivo'}
+          </div>
+        )}
+      </div>
+
+      {loading && !data ? (
+        <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Cargando…</p>
+      ) : (
+        <>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+            gap: 12,
+            marginBottom: 22,
+          }}>
+            <StatCard label="Combinadas" value={adminNumber(summary.count)} />
+            <StatCard label="Stake total" value={adminMxnp(summary.stake)} />
+            <StatCard label="Pago potencial" value={adminMxnp(summary.potentialPayout)} />
+            <StatCard label="PnL realizado" value={adminSignedMxnp(summary.realizedPnl)} />
+          </div>
+
+          <div style={{ marginBottom: 26 }}>
+            <AdminAuditHeader
+              title="Combinadas"
+              subtitle={`${summary.open || 0} abiertas · ${summary.won || 0} ganadas · ${summary.lost || 0} perdidas · ${summary.void || 0} anuladas`}
+            />
+            {tickets.length === 0 ? (
+              <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+                Todavía no hay combinadas en este ciclo.
+              </p>
+            ) : (
+              <div style={{ display: 'grid', gap: 12 }}>
+                {tickets.map(ticket => (
+                  <div key={ticket.id} style={{
+                    padding: 14,
+                    borderRadius: 12,
+                    border: '1px solid var(--border)',
+                    background: 'var(--surface2)',
+                  }}>
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      gap: 12,
+                      flexWrap: 'wrap',
+                      marginBottom: 10,
+                    }}>
+                      <div>
+                        <div style={{ fontFamily: 'var(--font-display)', color: 'var(--text-primary)', fontSize: 19 }}>
+                          #{ticket.id} · @{ticket.username}
+                        </div>
+                        <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontSize: 11, marginTop: 3 }}>
+                          {adminDateTime(ticket.submittedAt)} · {ticket.legs?.length || 0} mercados · x{Number(ticket.multiplier || 0).toFixed(2)}
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <StrategyStatusPill status={ticket.derivedStatus} />
+                        <div style={{
+                          marginTop: 8,
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: 12,
+                          color: Number(ticket.realizedPnl || 0) >= 0 ? 'var(--green)' : 'var(--red)',
+                        }}>
+                          Realizado {adminSignedMxnp(ticket.realizedPnl)}
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
+                      gap: 8,
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 11,
+                      color: 'var(--text-secondary)',
+                      marginBottom: 10,
+                    }}>
+                      <div>Stake: <strong style={{ color: 'var(--text-primary)' }}>{adminMxnp(ticket.stake)}</strong></div>
+                      <div>Potencial: <strong style={{ color: 'var(--text-primary)' }}>{adminMxnp(ticket.potentialPayout)}</strong></div>
+                      <div>Upside: <strong style={{ color: 'var(--green)' }}>{adminSignedMxnp(ticket.potentialPnl)}</strong></div>
+                    </div>
+                    <div style={{ display: 'grid', gap: 6 }}>
+                      {(ticket.legs || []).map(leg => (
+                        <div key={leg.id} style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'minmax(0, 1fr) auto',
+                          gap: 10,
+                          alignItems: 'center',
+                          padding: '8px 10px',
+                          borderRadius: 8,
+                          background: 'rgba(255,255,255,0.03)',
+                          border: '1px solid rgba(255,255,255,0.06)',
+                        }}>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{
+                              color: 'var(--text-primary)',
+                              fontSize: 12,
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}>
+                              {leg.question || `Mercado #${leg.marketId}`}
+                            </div>
+                            <div style={{
+                              fontFamily: 'var(--font-mono)',
+                              color: 'var(--text-muted)',
+                              fontSize: 10,
+                              marginTop: 2,
+                            }}>
+                              Eligió: {leg.outcomeLabel || `Opción ${Number(leg.outcomeIndex || 0) + 1}`} · cierre {adminDateTime(leg.marketEndTime)}
+                            </div>
+                          </div>
+                          <StrategyStatusPill status={leg.derivedStatus} />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <AdminAuditHeader
+              title="Long Hold"
+              subtitle="Bonos de convicción calculados con la misma lógica del leaderboard."
+            />
+            {longHoldRows.length === 0 ? (
+              <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+                Todavía no hay bonos long hold en este ciclo.
+              </p>
+            ) : (
+              <div style={{ display: 'grid', gap: 12 }}>
+                {longHoldRows.map(row => (
+                  <div key={row.username} style={{
+                    padding: 14,
+                    borderRadius: 12,
+                    border: '1px solid var(--border)',
+                    background: 'var(--surface2)',
+                  }}>
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      gap: 12,
+                      flexWrap: 'wrap',
+                      marginBottom: 8,
+                    }}>
+                      <div>
+                        <div style={{ fontFamily: 'var(--font-display)', color: 'var(--text-primary)', fontSize: 19 }}>
+                          @{row.username}
+                          {row.rank ? <span style={{ color: 'var(--text-muted)', fontSize: 13 }}> · rank #{row.rank}</span> : null}
+                        </div>
+                        <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontSize: 11, marginTop: 3 }}>
+                          {row.convictionMarkets || 0} mercados · {row.convictionLots || 0} lotes elegibles
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right', fontFamily: 'var(--font-mono)' }}>
+                        <div style={{ color: 'var(--green)', fontSize: 14, fontWeight: 800 }}>{adminSignedMxnp(row.holdBonus)}</div>
+                        <div style={{ color: 'var(--text-muted)', fontSize: 10 }}>bonus long hold</div>
+                      </div>
+                    </div>
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+                      gap: 8,
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 11,
+                      color: 'var(--text-secondary)',
+                      marginBottom: (row.breakdown || []).length > 0 ? 10 : 0,
+                    }}>
+                      <div>PnL mercado: <strong style={{ color: 'var(--text-primary)' }}>{adminSignedMxnp(row.marketPnl)}</strong></div>
+                      <div>Profit elegible: <strong style={{ color: 'var(--text-primary)' }}>{adminMxnp(row.convictionEligibleProfit)}</strong></div>
+                      <div>Cap aplicado: <strong style={{ color: 'var(--orange)' }}>{adminMxnp(row.convictionBonusCapApplied)}</strong></div>
+                    </div>
+                    {(row.breakdown || []).slice(0, 5).map(item => (
+                      <div key={`${row.username}-${item.marketId}`} style={{
+                        padding: '8px 10px',
+                        borderRadius: 8,
+                        background: 'rgba(255,255,255,0.03)',
+                        border: '1px solid rgba(255,255,255,0.06)',
+                        marginTop: 6,
+                      }}>
+                        <div style={{ fontSize: 12, color: 'var(--text-primary)' }}>
+                          {item.question || `Mercado #${item.marketId}`}
+                        </div>
+                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
+                          x{Number(item.averageMultiplier || 1).toFixed(2)} promedio · {item.eligibleLots || 0} lotes · bonus {adminSignedMxnp(item.bonus)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </section>
   );
 }
 

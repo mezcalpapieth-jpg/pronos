@@ -8,7 +8,7 @@ const apiSource = await readFile(new URL('../lib/pointsApi.js', import.meta.url)
 test('Points admin exposes a risk review tab', () => {
   assert.match(source, /adminListRisk/);
   assert.match(source, /adminUpdateRiskReview/);
-  assert.match(source, /\['create', 'markets', 'stats', 'pending', 'social', 'support', 'deck', 'cycles', 'risk', 'api'\]/);
+  assert.match(source, /\['create', 'markets', 'stats', 'pending', 'social', 'support', 'deck', 'cycles', 'risk', 'api', 'launch', 'strategies'\]/);
   assert.match(source, /\{ id: 'risk',\s+label: 'Riesgo' \}/);
   assert.match(source, /\{tab === 'risk' && <RiskPanel \/>\}/);
   assert.match(source, /function RiskPanel\(\)/);
