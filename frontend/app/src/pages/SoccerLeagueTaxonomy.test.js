@@ -11,8 +11,12 @@ const i18n = await readFile(new URL('../lib/i18n.js', import.meta.url), 'utf8');
 test('points and MVP soccer sidebars expose the new continental leagues', () => {
   for (const source of [mvpCategory, pointsCategory]) {
     assert.match(source, /key:\s*'copa-libertadores'/);
+    assert.match(source, /key:\s*'uefa-nations-league'/);
+    assert.match(source, /key:\s*'eurocopa'/);
     assert.match(source, /key:\s*'uefa-europa-league'/);
     assert.match(source, /key:\s*'uefa-conference-league'/);
+    assert.match(source, /key:\s*'conmebol'/);
+    assert.match(source, /key:\s*'concacaf'/);
     assert.match(source, /key:\s*'leagues-cup'/);
     assert.match(source, /key:\s*'international'/);
     assert.match(source, /key:\s*'club-friendlies'/);
@@ -33,8 +37,12 @@ test('Copa Libertadores sits below Bundesliga in soccer league sidebars', () => 
 test('admin soccer league filters and creation options expose the new continental leagues', () => {
   for (const source of [mvpAdminFilters, pointsAdminFilters]) {
     assert.match(source, /key:\s*'copa-libertadores'/);
+    assert.match(source, /key:\s*'uefa-nations-league'/);
+    assert.match(source, /key:\s*'eurocopa'/);
     assert.match(source, /key:\s*'uefa-europa-league'/);
     assert.match(source, /key:\s*'uefa-conference-league'/);
+    assert.match(source, /key:\s*'conmebol'/);
+    assert.match(source, /key:\s*'concacaf'/);
     assert.match(source, /key:\s*'leagues-cup'/);
     assert.match(source, /key:\s*'international'/);
     assert.match(source, /key:\s*'club-friendlies'/);
@@ -43,6 +51,10 @@ test('admin soccer league filters and creation options expose the new continenta
 
 test('points translations include the new soccer league labels', () => {
   assert.match(i18n, /points\.league\.libertadores/);
+  assert.match(i18n, /points\.league\.nationsLeague/);
+  assert.match(i18n, /points\.league\.eurocopa/);
+  assert.match(i18n, /points\.league\.conmebol/);
+  assert.match(i18n, /points\.league\.concacaf/);
   assert.match(i18n, /points\.league\.europa/);
   assert.match(i18n, /points\.league\.conference/);
   assert.match(i18n, /points\.league\.leaguesCup/);

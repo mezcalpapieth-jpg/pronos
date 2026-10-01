@@ -9,9 +9,10 @@ function normalizedSlug(value) {
 }
 
 function isLatamSportsFallback(market) {
+  const league = normalizedSlug(market?.league);
   return normalizedSlug(market?.category) === 'deportes'
     && normalizedSlug(market?.sport) === 'soccer'
-    && normalizedSlug(market?.league) === 'copa-libertadores';
+    && (league === 'copa-libertadores' || league === 'conmebol' || league === 'concacaf');
 }
 
 export const MVP_PUBLIC_GEO_FILTERS = [

@@ -48,3 +48,33 @@ test('MVP public filters treat legacy Copa Libertadores markets as Latam sports'
   assert.equal(marketInGeo(libertadoresMarket, 'latam'), true);
   assert.equal(marketInTopic(libertadoresMarket, 'deportes'), true);
 });
+
+test('MVP public filters treat CONMEBOL markets as Latam sports', () => {
+  const conmebolMarket = {
+    category: 'deportes',
+    sport: 'soccer',
+    league: 'conmebol',
+    categoryTags: [],
+    geoTags: [],
+    topicTags: [],
+  };
+
+  assert.equal(marketInCategory(conmebolMarket, 'mexico'), true);
+  assert.equal(marketInGeo(conmebolMarket, 'latam'), true);
+  assert.equal(marketInTopic(conmebolMarket, 'deportes'), true);
+});
+
+test('MVP public filters treat CONCACAF markets as Latam sports', () => {
+  const concacafMarket = {
+    category: 'deportes',
+    sport: 'soccer',
+    league: 'concacaf',
+    categoryTags: [],
+    geoTags: [],
+    topicTags: [],
+  };
+
+  assert.equal(marketInCategory(concacafMarket, 'mexico'), true);
+  assert.equal(marketInGeo(concacafMarket, 'latam'), true);
+  assert.equal(marketInTopic(concacafMarket, 'deportes'), true);
+});

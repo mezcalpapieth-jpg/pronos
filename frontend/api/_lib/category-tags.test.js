@@ -91,6 +91,36 @@ test('derives Latam membership for Copa Libertadores sports markets', () => {
   assert.equal(matchesMarketTaxonomy({ ...tags, category: 'deportes' }, { category: 'mexico', geo: 'latam', topic: 'deportes' }), true);
 });
 
+test('derives Latam membership for CONMEBOL sports markets', () => {
+  const tags = deriveMarketTags({
+    category: 'deportes',
+    sport: 'soccer',
+    league: 'conmebol',
+    question: '¿Argentina gana en eliminatorias CONMEBOL?',
+  });
+
+  assert.deepEqual(tags.categoryTags, ['deportes', 'mexico']);
+  assert.deepEqual(tags.geoTags, ['latam']);
+  assert.deepEqual(tags.topicTags, ['deportes']);
+
+  assert.equal(matchesMarketTaxonomy({ ...tags, category: 'deportes' }, { category: 'mexico', geo: 'latam', topic: 'deportes' }), true);
+});
+
+test('derives Latam membership for CONCACAF sports markets', () => {
+  const tags = deriveMarketTags({
+    category: 'deportes',
+    sport: 'soccer',
+    league: 'concacaf',
+    question: '¿Canadá gana en CONCACAF Nations League?',
+  });
+
+  assert.deepEqual(tags.categoryTags, ['deportes', 'mexico']);
+  assert.deepEqual(tags.geoTags, ['latam']);
+  assert.deepEqual(tags.topicTags, ['deportes']);
+
+  assert.equal(matchesMarketTaxonomy({ ...tags, category: 'deportes' }, { category: 'mexico', geo: 'latam', topic: 'deportes' }), true);
+});
+
 test('keeps BTC and ETH 5-minute markets only in crypto despite CDMX wording', () => {
   const tags = deriveMarketTags({
     category: 'crypto',

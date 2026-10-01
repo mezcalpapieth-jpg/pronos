@@ -21,7 +21,7 @@ const ISOLATED_CATEGORY_KEYS = new Set(['crypto', 'world-cup']);
 const FLEXIBLE_TOPIC_CATEGORY_KEYS = new Set(['general', 'mexico', 'musica', 'infraestructura']);
 
 const MEXICO_LEAGUES = new Set(['liga-mx', 'lmb', 'lmp']);
-const LATAM_LEAGUES = new Set(['copa-libertadores']);
+const LATAM_LEAGUES = new Set(['copa-libertadores', 'conmebol', 'concacaf']);
 const MEXICO_SPORT_KEYWORDS = [
   'cruz azul',
   'chivas',

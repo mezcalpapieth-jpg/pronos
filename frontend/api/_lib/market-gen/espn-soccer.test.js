@@ -101,6 +101,36 @@ test('UEFA Europa and Conference ESPN events become tournament draw markets', ()
   assert.deepEqual(conferenceSpec.outcomes, ['Crystal Palace', 'Empate', 'Rayo Vallecano']);
 });
 
+test('international tournament ESPN feeds become auto-resolving tournament markets', () => {
+  const cases = [
+    ['uefa.nations', 'uefa-nations-league', 'soccer/uefa.nations', 'uefa.nations:401999001', 'UEFA Nations League'],
+    ['uefa.euro', 'eurocopa', 'soccer/uefa.euro', 'uefa.euro:401999002', 'Eurocopa'],
+    ['fifa.worldq.conmebol', 'conmebol', 'soccer/fifa.worldq.conmebol', 'fifa.worldq.conmebol:401999003', 'Eliminatorias CONMEBOL'],
+    ['conmebol.sudamericana', 'conmebol', 'soccer/conmebol.sudamericana', 'conmebol.sudamericana:401999004', 'CONMEBOL Sudamericana'],
+    ['conmebol.america', 'conmebol', 'soccer/conmebol.america', 'conmebol.america:401999005', 'Copa América'],
+    ['concacaf.nations.league', 'concacaf', 'soccer/concacaf.nations.league', 'concacaf.nations.league:401999006', 'CONCACAF Nations League'],
+    ['concacaf.gold', 'concacaf', 'soccer/concacaf.gold', 'concacaf.gold:401999007', 'CONCACAF Gold Cup'],
+    ['concacaf.champions', 'concacaf', 'soccer/concacaf.champions', 'concacaf.champions:401999008', 'CONCACAF Champions Cup'],
+  ];
+
+  for (const [leagueCode, league, leaguePath, sourceEventId, leagueLabel] of cases) {
+    const config = _internal.ESPN_SOCCER_LEAGUES.find(c => c.leagueCode === leagueCode);
+    const spec = _internal.eventToSpec(espnEvent({
+      id: sourceEventId.split(':').at(-1),
+      homeName: 'Mexico',
+      awayName: 'Canada',
+    }), config);
+
+    assert.equal(spec.league, league);
+    assert.equal(spec.resolver_config.leaguePath, leaguePath);
+    assert.equal(spec.resolver_config.shape, 'draw3');
+    assert.equal(spec.source_event_id, sourceEventId);
+    assert.equal(spec.source_data.leagueLabel, leagueLabel);
+    assert.equal(spec.source_data.matchTypeLabel, 'TORNEO');
+    assert.deepEqual(spec.outcomes, ['Mexico', 'Empate', 'Canada']);
+  }
+});
+
 test('club friendly feed is limited to the summer break while MLS stays year-round', () => {
   const mls = _internal.ESPN_SOCCER_LEAGUES.find(c => c.league === 'mls');
   const clubFriendly = _internal.ESPN_SOCCER_LEAGUES.find(c => c.league === 'club-friendlies');
@@ -127,6 +157,14 @@ test('generator does not fetch club friendlies outside the summer break', async 
   assert.ok(requestedLeagueCodes.includes('concacaf.leagues.cup'));
   assert.ok(requestedLeagueCodes.includes('uefa.europa'));
   assert.ok(requestedLeagueCodes.includes('uefa.europa.conf'));
+  assert.ok(requestedLeagueCodes.includes('uefa.nations'));
+  assert.ok(requestedLeagueCodes.includes('uefa.euro'));
+  assert.ok(requestedLeagueCodes.includes('fifa.worldq.conmebol'));
+  assert.ok(requestedLeagueCodes.includes('conmebol.sudamericana'));
+  assert.ok(requestedLeagueCodes.includes('conmebol.america'));
+  assert.ok(requestedLeagueCodes.includes('concacaf.nations.league'));
+  assert.ok(requestedLeagueCodes.includes('concacaf.gold'));
+  assert.ok(requestedLeagueCodes.includes('concacaf.champions'));
   assert.ok(requestedLeagueCodes.includes('fifa.friendly'));
   assert.equal(requestedLeagueCodes.includes('club.friendly'), false);
 });

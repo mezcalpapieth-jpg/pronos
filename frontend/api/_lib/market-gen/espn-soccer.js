@@ -1,7 +1,8 @@
 /**
  * ESPN-backed soccer generator for Liga MX, MLS, Leagues Cup,
- * UEFA Europa League, UEFA Conference League, international friendlies,
- * and summer-break club friendlies.
+ * UEFA Europa League, UEFA Conference League, UEFA Nations League,
+ * Eurocopa, CONMEBOL feeds, CONCACAF feeds,
+ * international friendlies, and summer-break club friendlies.
  *
  * Why not football-data.org: Liga MX and MLS are both paywalled on
  * their free tier, and the user specifically wants Liga MX/MLS coverage.
@@ -16,6 +17,12 @@
  *   - `uefa.europa.conf` (UECL): all scheduled games, with a longer
  *      lookahead because this competition can start later than the
  *      standard two-week soccer window
+ *   - `uefa.nations` (UEFA Nations League): all scheduled games
+ *   - `uefa.euro` (Eurocopa): all scheduled games
+ *   - `fifa.worldq.conmebol`, `conmebol.sudamericana`, `conmebol.america`
+ *      (CONMEBOL feeds): all scheduled games
+ *   - `concacaf.nations.league`, `concacaf.gold`, `concacaf.champions`
+ *      (CONCACAF feeds): all scheduled games
  *   - `fifa.friendly` (international friendlies): all scheduled games
  *   - `club.friendly` (club friendlies): summer-break games only
  *
@@ -121,6 +128,62 @@ const ESPN_SOCCER_LEAGUES = [
     outcomeShape: 'draw3',
     matchTypeLabel: 'TORNEO',
     horizonDays: 45,
+  },
+  {
+    leagueCode: 'uefa.nations',
+    league: 'uefa-nations-league',
+    leagueLabel: 'UEFA Nations League',
+    outcomeShape: 'draw3',
+    matchTypeLabel: 'TORNEO',
+  },
+  {
+    leagueCode: 'uefa.euro',
+    league: 'eurocopa',
+    leagueLabel: 'Eurocopa',
+    outcomeShape: 'draw3',
+    matchTypeLabel: 'TORNEO',
+  },
+  {
+    leagueCode: 'fifa.worldq.conmebol',
+    league: 'conmebol',
+    leagueLabel: 'Eliminatorias CONMEBOL',
+    outcomeShape: 'draw3',
+    matchTypeLabel: 'TORNEO',
+  },
+  {
+    leagueCode: 'conmebol.sudamericana',
+    league: 'conmebol',
+    leagueLabel: 'CONMEBOL Sudamericana',
+    outcomeShape: 'draw3',
+    matchTypeLabel: 'TORNEO',
+  },
+  {
+    leagueCode: 'conmebol.america',
+    league: 'conmebol',
+    leagueLabel: 'Copa América',
+    outcomeShape: 'draw3',
+    matchTypeLabel: 'TORNEO',
+  },
+  {
+    leagueCode: 'concacaf.nations.league',
+    league: 'concacaf',
+    leagueLabel: 'CONCACAF Nations League',
+    outcomeShape: 'draw3',
+    matchTypeLabel: 'TORNEO',
+  },
+  {
+    leagueCode: 'concacaf.gold',
+    league: 'concacaf',
+    leagueLabel: 'CONCACAF Gold Cup',
+    outcomeShape: 'draw3',
+    matchTypeLabel: 'TORNEO',
+  },
+  {
+    leagueCode: 'concacaf.champions',
+    league: 'concacaf',
+    leagueLabel: 'CONCACAF Champions Cup',
+    outcomeShape: 'draw3',
+    matchTypeLabel: 'TORNEO',
   },
   {
     leagueCode: 'fifa.friendly',
