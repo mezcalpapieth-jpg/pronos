@@ -120,6 +120,22 @@ test('Points pending queue has a mobile-first review card layout', () => {
   assert.match(pointsCss, /@media \(max-width: 720px\)[\s\S]*\.points-admin-pending-meta\s*\{[\s\S]*display: none/);
 });
 
+test('Points markets table has a mobile-first admin card layout', () => {
+  const marketsTableSource = sourceForFunction('MarketsTable');
+  assert.match(marketsTableSource, /points-admin-market-card/);
+  assert.match(marketsTableSource, /points-admin-market-title/);
+  assert.match(marketsTableSource, /points-admin-market-toggles/);
+  assert.match(marketsTableSource, /points-admin-market-actions/);
+  assert.match(marketsTableSource, /points-admin-market-meta/);
+  assert.match(source, /function MarketAdminMeta/);
+  assert.match(source, /<MarketAdminMeta market=\{market\} \/>/);
+  assert.match(pointsCss, /\.points-admin-market-card/);
+  assert.match(pointsCss, /\.points-admin-market-actions/);
+  assert.match(pointsCss, /@media \(max-width: 720px\)[\s\S]*\.points-admin-market-card\s*\{[\s\S]*flex-direction: column/);
+  assert.match(pointsCss, /@media \(max-width: 720px\)[\s\S]*\.points-admin-market-meta\s*\{[\s\S]*display: none/);
+  assert.match(pointsCss, /@media \(max-width: 720px\)[\s\S]*\.points-admin-market-actions\s*\{[\s\S]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+});
+
 test('Points admin tabs show pending-work badges outside the active tab', () => {
   assert.match(source, /adminTaskCounts/);
   assert.match(source, /adminListTaskCounts\(\)/);

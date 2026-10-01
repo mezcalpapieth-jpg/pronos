@@ -114,6 +114,18 @@ test('parallel carousel charts draw leg histories without adopting a child ident
   assert.match(carousel, /remapHistoryByParent\(priceResults, priceHistoryRequest\)/);
 });
 
+test('carousel draws two-line charts for binary rival markets', () => {
+  assert.match(carousel, /function isBinaryYesNoOutcomes\(outcomes\)/);
+  assert.match(carousel, /chartStyle !== 'rivals'/);
+  assert.match(carousel, /chartStyle === 'single' \|\| isBinaryYesNoOutcomes\(outcomes\)/);
+  assert.match(carousel, /const isOutcomePairChart = mOutcomes\.length === 2/);
+  assert.match(carousel, /chartStyleOverride === 'rivals' \|\| !isBinaryYesNoOutcomes\(mOutcomes\)/);
+  assert.match(carousel, /const isMultiChart = isParallel \|\| mOutcomes\.length > 2 \|\| isOutcomePairChart/);
+  assert.match(carousel, /function chartColorForOutcome\(index, totalOutcomes\)/);
+  assert.match(carousel, /totalOutcomes === 2/);
+  assert.match(carousel, /color: chartColorForOutcome\(entry\.index, mOutcomes\.length\)/);
+});
+
 test('carousel uses localized market titles and outcome labels', () => {
   assert.match(carousel, /import \{ localizedOutcomeLabels, localizedTitle, useLang, useT \} from '@app\/lib\/i18n\.js'/);
   assert.match(carousel, /const lang = useLang\(\)/);

@@ -3457,6 +3457,31 @@ function convertParallelToBinaryErrorDetail(error) {
   return error?.detail || error?.code || error?.message || 'Error desconocido';
 }
 
+function MarketAdminMeta({ market }) {
+  const m = market || {};
+  return (
+    <>
+      #{m.id} · {m.category} · {m.tradeCount} trades · seed {m.seedLiquidity} MXNP
+      {m.sport && <> · {m.sport}</>}
+      {m.league && <>/{m.league}</>}
+      {m.crypto5min && (
+        <> · {Number(m.cryptoIntervalMinutes || m.cryptoWindowMinutes || 5) === 1440
+          ? '24h'
+          : Number(m.cryptoIntervalMinutes || m.cryptoWindowMinutes || 5) === 720
+            ? '12h'
+            : Number(m.cryptoIntervalMinutes || m.cryptoWindowMinutes || 5) === 60
+              ? '1h'
+              : `${Number(m.cryptoIntervalMinutes || m.cryptoWindowMinutes || 5)}min`}</>
+      )}
+      {m.seriesMeta?.subtitle && <> · {m.seriesMeta.subtitle}</>}
+      {m.source && <> · {m.source}</>}
+      {(m.resolverConfig?.eventId || m.sourceEventId) && <> · event {m.resolverConfig?.eventId || m.sourceEventId}</>}
+      {m.resolverConfig?.dateYmd && <> · fecha {m.resolverConfig.dateYmd}</>}
+      {m.endTime && <> · cierra {formatAdminMarketDate(m.endTime)}</>}
+    </>
+  );
+}
+
 // ─── Markets table ───────────────────────────────────────────────────────────
 function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
   const [markets, setMarkets] = useState(null);
@@ -4202,11 +4227,8 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
       )}
 
       {!loading && markets?.map(m => (
-        <div key={m.id} style={{
-          background: 'var(--surface1)', border: '1px solid var(--border)',
-          borderRadius: 10, padding: '14px 18px', marginBottom: 10,
-          display: 'flex', alignItems: 'center', gap: 12,
-        }}>
+        <div key={m.id} className="points-admin-market-card">
+          <div className="points-admin-market-toggles">
           {/* 🔥 Featured toggle — controls whether this market appears
               on home Trending in addition to its category page. */}
           <button
@@ -4284,27 +4306,12 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
           >
             🧪
           </button>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', marginBottom: 4 }}>
-              #{m.id} · {m.category} · {m.tradeCount} trades · seed {m.seedLiquidity} MXNP
-              {m.sport && <> · {m.sport}</>}
-              {m.league && <>/{m.league}</>}
-              {m.crypto5min && (
-                <> · {Number(m.cryptoIntervalMinutes || m.cryptoWindowMinutes || 5) === 1440
-                  ? '24h'
-                  : Number(m.cryptoIntervalMinutes || m.cryptoWindowMinutes || 5) === 720
-                    ? '12h'
-                    : Number(m.cryptoIntervalMinutes || m.cryptoWindowMinutes || 5) === 60
-                      ? '1h'
-                      : `${Number(m.cryptoIntervalMinutes || m.cryptoWindowMinutes || 5)}min`}</>
-              )}
-              {m.seriesMeta?.subtitle && <> · {m.seriesMeta.subtitle}</>}
-              {m.source && <> · {m.source}</>}
-              {(m.resolverConfig?.eventId || m.sourceEventId) && <> · event {m.resolverConfig?.eventId || m.sourceEventId}</>}
-              {m.resolverConfig?.dateYmd && <> · fecha {m.resolverConfig.dateYmd}</>}
-              {m.endTime && <> · cierra {formatAdminMarketDate(m.endTime)}</>}
+          </div>
+          <div className="points-admin-market-main">
+            <div className="points-admin-market-meta">
+              <MarketAdminMeta market={m} />
             </div>
-            <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.3 }}>
+            <div className="points-admin-market-title">
               {m.question}
             </div>
             {m.resolutionCandidate && (
@@ -4321,6 +4328,7 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
               />
             )}
           </div>
+          <div className="points-admin-market-actions">
           {m.status === 'active' ? (
             <>
               <button
@@ -4483,6 +4491,7 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
               />
             </div>
           )}
+          </div>
         </div>
       ))}
 
@@ -4917,6 +4926,9 @@ function EditMarketModal({ market, onClose, onSaved, onCancel }) {
         <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, marginTop: 0, marginBottom: 20 }}>
           {market.question}
         </h3>
+        <div className="points-admin-edit-meta">
+          <span><MarketAdminMeta market={market} /></span>
+        </div>
 
         <label style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>
           Pregunta

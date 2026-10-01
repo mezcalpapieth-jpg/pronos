@@ -2560,6 +2560,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
   const cryptoSequenceSig = market?.cryptoMeta
     ? cryptoMarketSequenceSignature(buildCryptoMarketSequence(market))
     : '';
+  const marketLiveSig = useMemo(() => marketLiveSignature(market), [market]);
   const leagueTableTeams = useMemo(() => leagueTableTeamsForMarket(market), [market]);
   const tradeTapeIds = useMemo(() => tradeTapeIdsForMarket(market), [market]);
   const tradeTapeIdsKey = tradeTapeIds.join(',');
@@ -2757,6 +2758,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
     market?.outcome,
     market?.resolvedAt,
     market?.status,
+    marketLiveSig,
     orderBookRefresh,
   ]);
 

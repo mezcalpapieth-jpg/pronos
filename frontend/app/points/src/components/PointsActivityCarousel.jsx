@@ -364,6 +364,17 @@ function openingPctForMarket(m) {
   return 100 / outcomeCount;
 }
 
+function isBinaryYesNoOutcomes(outcomes) {
+  if (!Array.isArray(outcomes) || outcomes.length !== 2) return false;
+  const [a, b] = outcomes.map(o => String(o || '').trim().toLowerCase());
+  return (a === 'sí' || a === 'si' || a === 'yes') && b === 'no';
+}
+
+function chartColorForOutcome(index, totalOutcomes) {
+  if (totalOutcomes === 2) return index === 0 ? OUTCOME_COLORS[0] : OUTCOME_COLORS[2];
+  return OUTCOME_COLORS[index % OUTCOME_COLORS.length];
+}
+
 function chartSeriesForOutcome(m, entry, rawSeries) {
   const targetPct = Math.round((entry?.price || 0) * 100);
   const series = Array.isArray(rawSeries)
@@ -451,7 +462,14 @@ function outcomeEntriesForMarket(m, limit = 4, displayOutcomes = null) {
 
 function chartEntriesForMarket(m, displayOutcomes = null) {
   const rawOutcomes = Array.isArray(m?.outcomes) ? m.outcomes : ['Sí', 'No'];
-  if (m?.ammMode !== 'parallel' && rawOutcomes.length <= 2) {
+  const outcomes = Array.isArray(displayOutcomes) && displayOutcomes.length === rawOutcomes.length
+    ? displayOutcomes
+    : rawOutcomes;
+  const chartStyle = rawOutcomes.length === 2 ? m?.chartStyle : null;
+  if (m?.ammMode !== 'parallel'
+    && rawOutcomes.length <= 2
+    && chartStyle !== 'rivals'
+    && (chartStyle === 'single' || isBinaryYesNoOutcomes(outcomes))) {
     return outcomeEntriesForMarket(m, 1, displayOutcomes);
   }
   return outcomeEntriesForMarket(m, CHART_OUTCOME_LIMIT, displayOutcomes);
@@ -1036,7 +1054,11 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
             const marketTitle = localizedTitle(m, lang) || m.question || '';
             const mPrices = Array.isArray(m.prices) ? m.prices : [];
             const isParallel = m.ammMode === 'parallel';
-            const isMultiChart = isParallel || mOutcomes.length > 2;
+            const chartStyleOverride = mOutcomes.length === 2 ? m.chartStyle : null;
+            const isOutcomePairChart = mOutcomes.length === 2
+              && chartStyleOverride !== 'single'
+              && (chartStyleOverride === 'rivals' || !isBinaryYesNoOutcomes(mOutcomes));
+            const isMultiChart = isParallel || mOutcomes.length > 2 || isOutcomePairChart;
             const mOutcomeSeries = seriesForSlide(m, history);
             const mSeries = Array.isArray(mOutcomeSeries?.[0]) ? mOutcomeSeries[0] : [];
             const mLeader = isMultiChart ? leadingOutcomeForMarket(m, t('points.activity.tied'), mOutcomes) : null;
@@ -1140,8 +1162,8 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                       {marketTitle}
                     </h3>
 
-                    {/* Chart. Binary markets show outcome 0 price history.
-                        Multi and parallel parents draw the leading outcome
+                    {/* Chart. Sí/No binary markets show the outcome 0 mirror.
+                        Team/rival binaries, multi, and parallel parents draw the leading outcome
                         lines on one shared axis; the right panel keeps the
                         parent-level money flow. */}
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 4 }}>
@@ -1187,7 +1209,7 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                         series={mChartEntries.map(entry => ({
                           key: `opt-${entry.index}`,
                           label: entry.label,
-                          color: OUTCOME_COLORS[entry.index % OUTCOME_COLORS.length],
+                          color: chartColorForOutcome(entry.index, mOutcomes.length),
                           data: chartSeriesForOutcome(m, entry, mOutcomeSeries?.[entry.index]),
                           targetPct: Math.round((entry.price || 0) * 100),
                         }))}

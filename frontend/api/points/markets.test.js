@@ -16,7 +16,7 @@ test('points market payload keeps admin featured and tournament markets on home'
 });
 
 test('points public lists hide bulk-hidden active markets outside trophy overrides', () => {
-  assert.match(source, /points:markets:v10/);
+  assert.match(source, /points:markets:v11/);
   assert.match(source, /m\.hidden_from_home IS NOT TRUE[\s\S]*?OR m\.tournament_featured = true/);
   assert.match(source, /m\.featured = true AND m\.hidden_from_home = false[\s\S]*?OR m\.tournament_featured = true/);
 });
@@ -80,9 +80,11 @@ test('public market odds use averaged book-only bursts without replacing resolve
   for (const text of [source, detailSource]) {
     assert.match(text, /pricesFromReserves\(reserves, outcomes\.length\)/);
     assert.match(text, /display_trade_is_book/);
+    assert.match(text, /display_trade_outcomes/);
     assert.match(text, /reserves_before IS NOT NULL AND reserves_after IS NOT NULL AND reserves_before = reserves_after/);
     assert.match(text, /SUM\(ABS\(collateral\)\) \/ SUM\(shares\)/);
     assert.match(text, /binaryPricesWithBookTrade\(/);
+    assert.match(text, /pricesWithBookTrades\(/);
     assert.doesNotMatch(text, /function binaryPricesWithLatestTrade/);
   }
   assert.match(source, /return binaryPricesWithBookTrade\(basePrices, \{/);

@@ -175,8 +175,10 @@ test('chart range copy is translated', () => {
 
 test('points surfaces refresh live after trades, claims, and remote market movement', () => {
   assert.match(detailSource, /function marketLiveSignature/);
+  assert.match(detailSource, /const marketLiveSig = useMemo\(\(\) => marketLiveSignature\(market\), \[market\]\)/);
   assert.match(detailSource, /prices\.map\(p => signatureNumber\(p\)\)/);
   assert.match(detailSource, /reserves\.map\(r => signatureNumber\(r, 2\)\)/);
+  assert.match(detailSource, /marketLiveSig,/);
   assert.match(detailSource, /window\.setInterval\(\(\) => \{/);
   assert.match(detailSource, /15_000/);
   assert.match(detailSource, /setOrderBookRefresh\(v => v \+ 1\)/);

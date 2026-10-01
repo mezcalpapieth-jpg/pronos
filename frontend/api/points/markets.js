@@ -15,7 +15,7 @@ import { cachedJson, createApiTimer, setCacheHeaders } from '../_lib/api-perform
 import { PRONOS_TREASURY_USERNAME } from '../_lib/points-limit-orders.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 import { publicMarketTranslationFields } from '../_lib/market-translations.js';
-import { binaryPricesWithBookTrade } from '../_lib/points-display-prices.js';
+import { binaryPricesWithBookTrade, pricesWithBookTrades } from '../_lib/points-display-prices.js';
 
 // Lazy neon client init — defer until the first request so a missing
 // DATABASE_URL at module-load time surfaces as a structured JSON error
@@ -161,7 +161,7 @@ export default async function handler(req, res) {
     const tournamentOnly = !category && featuredParam === 'tournament';
     const featuredOnly = !category && !tournamentOnly && featuredParam !== 'all';
     const cacheKey = [
-      'points:markets:v10',
+      'points:markets:v11',
       status,
       category || 'all',
       modeFilter || 'all-modes',
@@ -199,7 +199,8 @@ export default async function handler(req, res) {
           (SELECT COALESCE(SUM(ABS(collateral)), 0) FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME}) AS trade_volume,
           dt.outcome_index AS display_trade_outcome_index,
           dt.price_at_trade AS display_trade_price,
-          dt.is_book_trade AS display_trade_is_book
+          dt.is_book_trade AS display_trade_is_book,
+          dt.per_outcome AS display_trade_outcomes
         FROM points_markets m
         LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
         LEFT JOIN LATERAL (
@@ -211,9 +212,9 @@ export default async function handler(req, res) {
             WHERE t.market_id = m.id
               AND t.username <> ${PRONOS_TREASURY_USERNAME}
               AND t.price_at_trade IS NOT NULL
-              AND t.outcome_index IN (0, 1)
+              AND t.outcome_index >= 0
             ORDER BY t.created_at DESC, t.id DESC
-            LIMIT 24
+            LIMIT 80
           ),
           grouped AS (
             SELECT
@@ -227,11 +228,30 @@ export default async function handler(req, res) {
               MAX(id) AS last_id
             FROM recent
             GROUP BY market_id, username, side, outcome_index, execution_bucket
-            ORDER BY MAX(created_at) DESC, MAX(id) DESC
-            LIMIT 1
+          ),
+          latest_by_outcome AS (
+            SELECT DISTINCT ON (outcome_index)
+              outcome_index,
+              price_at_trade,
+              is_book_trade,
+              last_at,
+              last_id
+            FROM grouped
+            ORDER BY outcome_index ASC, last_at DESC, last_id DESC
           )
-          SELECT outcome_index, price_at_trade, is_book_trade
-          FROM grouped
+          SELECT
+            (SELECT outcome_index FROM grouped ORDER BY last_at DESC, last_id DESC LIMIT 1) AS outcome_index,
+            (SELECT price_at_trade FROM grouped ORDER BY last_at DESC, last_id DESC LIMIT 1) AS price_at_trade,
+            (SELECT is_book_trade FROM grouped ORDER BY last_at DESC, last_id DESC LIMIT 1) AS is_book_trade,
+            COALESCE((
+              SELECT jsonb_agg(jsonb_build_object(
+                'outcomeIndex', outcome_index,
+                'price', price_at_trade,
+                'isBookTrade', is_book_trade,
+                'lastAtMs', EXTRACT(EPOCH FROM last_at) * 1000
+              ) ORDER BY outcome_index ASC)
+              FROM latest_by_outcome
+            ), '[]'::jsonb) AS per_outcome
         ) dt ON true
         WHERE m.status = ${status}
           AND m.parent_id IS NULL
@@ -447,12 +467,19 @@ export default async function handler(req, res) {
           }
 
           const reserves = parseJsonb(r.reserves, []).map(Number);
-          const prices = binaryPricesWithBookTrade(pricesFromReserves(reserves, outcomes.length), {
-            status: r.status,
-            outcomeIndex: r.display_trade_outcome_index,
-            price: r.display_trade_price,
-            isBookTrade: r.display_trade_is_book,
-          });
+          const basePrices = pricesFromReserves(reserves, outcomes.length);
+          const displayTrades = parseJsonb(r.display_trade_outcomes, []);
+          const prices = outcomes.length === 2
+            ? binaryPricesWithBookTrade(basePrices, {
+              status: r.status,
+              outcomeIndex: r.display_trade_outcome_index,
+              price: r.display_trade_price,
+              isBookTrade: r.display_trade_is_book,
+            })
+            : pricesWithBookTrades(basePrices, {
+              status: r.status,
+              trades: displayTrades,
+            });
           // "Live" is the red EN VIVO pill — only for fixed-window sports
           // events. Two defenses against open-ended prediction markets
           // accidentally showing live:
