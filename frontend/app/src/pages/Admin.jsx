@@ -133,6 +133,150 @@ function Notice({ notice }) {
   );
 }
 
+function pendingPricing(row) {
+  return row?.suggestedPricing || row?.sourceData?.suggestedPricing || null;
+}
+
+function currentPendingSeedValues(row) {
+  const outcomes = Array.isArray(row?.outcomes) ? row.outcomes : [];
+  const pricing = pendingPricing(row);
+  const fromSeed = Array.isArray(row?.seedLiquidities) ? row.seedLiquidities : null;
+  const fromPricing = Array.isArray(pricing?.seedLiquidities) ? pricing.seedLiquidities : null;
+  const source = fromSeed?.length === outcomes.length
+    ? fromSeed
+    : fromPricing?.length === outcomes.length
+      ? fromPricing
+      : null;
+  if (source) {
+    return source.map(v => Number(v)).map(v => (
+      Number.isFinite(v) && v > 0 ? v : Number(row?.seedLiquidity || 1000)
+    ));
+  }
+  return outcomes.map(() => Number(row?.seedLiquidity || 1000));
+}
+
+function formatProbabilityPct(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '—';
+  const pct = n <= 1 ? n * 100 : n;
+  return `${Math.round(pct * 10) / 10}%`;
+}
+
+function PendingLiquidityEditor({ row, onSaved, onNotice }) {
+  const outcomes = Array.isArray(row?.outcomes) ? row.outcomes : [];
+  const [values, setValues] = useState(() => currentPendingSeedValues(row).map(v => String(v)));
+  const [saving, setSaving] = useState(false);
+  const pricing = pendingPricing(row);
+  const pricingPct = Array.isArray(pricing?.probabilityPct)
+    ? pricing.probabilityPct
+    : Array.isArray(pricing?.probabilities)
+      ? pricing.probabilities
+      : null;
+  const isBinary = outcomes.length === 2;
+
+  useEffect(() => {
+    setValues(currentPendingSeedValues(row).map(v => String(v)));
+  }, [row]);
+
+  if (!isBinary) return null;
+
+  function setBalanced() {
+    const numeric = values.map(Number).filter(Number.isFinite);
+    const fallback = Number(row?.seedLiquidity || 1000);
+    const avg = numeric.length > 0
+      ? Math.round((numeric.reduce((sum, v) => sum + v, 0) / numeric.length) * 100) / 100
+      : fallback;
+    const next = String(Number.isFinite(avg) && avg >= 100 ? avg : fallback);
+    setValues(outcomes.map(() => next));
+  }
+
+  async function saveBalanced() {
+    const numeric = values.map(Number);
+    if (numeric.some(v => !Number.isFinite(v) || v < 100)) {
+      onNotice?.({ type: 'error', msg: 'La liquidez debe ser de al menos 100 por lado.' });
+      return;
+    }
+    setSaving(true);
+    try {
+      const equalSeed = Math.round((numeric.reduce((sum, v) => sum + v, 0) / numeric.length) * 100) / 100;
+      const seedLiquidities = outcomes.map(() => equalSeed);
+      const { ok, data } = await postJson('/api/protocol/admin/pending-markets', {
+        id: row.id,
+        action: 'edit',
+        note: 'admin-liquidity-edit',
+        patch: {
+          seedLiquidity: equalSeed,
+          seedLiquidities,
+          pricingMode: 'uniform',
+        },
+      });
+      if (!ok) throw new Error(data?.error ? `${data.error}${data.detail ? ` · ${data.detail}` : ''}` : 'edit_failed');
+      onSaved?.(data?.pending || {});
+      setValues(seedLiquidities.map(v => String(v)));
+      onNotice?.({ type: 'success', msg: `Pendiente ${row.id} guardado 50/50.` });
+    } catch (e) {
+      onNotice?.({ type: 'error', msg: e?.message || 'edit_failed' });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div style={{
+      marginTop: 10,
+      padding: 10,
+      borderRadius: 8,
+      border: '1px solid rgba(255,87,34,0.22)',
+      background: 'rgba(255,87,34,0.04)',
+    }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
+        <span style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10,
+          color: 'var(--orange)',
+          letterSpacing: '0.1em',
+          textTransform: 'uppercase',
+        }}>
+          Odds / liquidez inicial
+        </span>
+        {pricing?.source && (
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)' }}>
+            fuente: {pricing.source}
+          </span>
+        )}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8, marginBottom: 8 }}>
+        {outcomes.map((outcome, index) => (
+          <label key={`${row.id}:seed:${index}`} style={{ display: 'grid', gap: 4 }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)' }}>
+              {outcome}{pricingPct?.[index] != null ? ` · ${formatProbabilityPct(pricingPct[index])}` : ''}
+            </span>
+            <input
+              type="number"
+              min={100}
+              step="1"
+              value={values[index] || ''}
+              onChange={e => setValues(prev => prev.map((v, i) => i === index ? e.target.value : v))}
+              style={inputStyle}
+            />
+          </label>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <button type="button" onClick={setBalanced} className="btn-ghost" style={{ fontSize: 11, padding: '6px 10px' }}>
+          Poner 50/50
+        </button>
+        <button type="button" onClick={saveBalanced} disabled={saving} className="btn-primary" style={{ fontSize: 11, padding: '6px 10px' }}>
+          {saving ? 'Guardando…' : 'Guardar 50/50'}
+        </button>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)' }}>
+          On-chain binario usa seed uniforme; para sesgos reales habría que recrear con contrato que soporte reservas por outcome.
+        </span>
+      </div>
+    </div>
+  );
+}
+
 // ═══ Onchain wiring status panel ═══════════════════════════════════════════
 // Pre-flight check on the auto-deploy plumbing. Hits
 // /api/protocol/admin/onchain-status which probes env vars + factory.owner()
@@ -805,6 +949,15 @@ function PendingMarketsSection({ onQueueChange }) {
                   {r.reviewedAt && <span>rechazado {new Date(r.reviewedAt).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })}</span>}
                   {r.adminNote && <span>nota: {r.adminNote}</span>}
                 </div>
+                {isPending && (
+                  <PendingLiquidityEditor
+                    row={r}
+                    onSaved={(patch) => {
+                      setRows(prev => prev.map(row => row.id === r.id ? { ...row, ...patch } : row));
+                    }}
+                    onNotice={setNotice}
+                  />
+                )}
               </div>
               <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                 {openId !== r.id && isPending && (

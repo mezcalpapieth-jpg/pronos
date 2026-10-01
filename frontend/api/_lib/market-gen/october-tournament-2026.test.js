@@ -138,23 +138,34 @@ test('October tournament generator emits bilingual auto and review specs when co
   assert.deepEqual(fed.source_data.translations.en.outcomes, ['Cut', 'Hold', 'Hike']);
 
   const tortilla = byEventId['october-2026:tortilla-national-tortilleria-close'];
-  assert.equal(tortilla.resolver_type, 'manual_review');
+  assert.equal(tortilla.resolver_type, 'api_price');
+  assert.equal(tortilla.resolver_config.source, 'sniim-food-price');
+  assert.equal(tortilla.resolver_config.commodity, 'tortilla');
+  assert.equal(tortilla.resolver_config.targetMonth, 10);
+  assert.equal(tortilla.resolver_config.shape, 'price-bucket');
   assert.equal(tortilla.source_data.kind, 'october_tournament_food_price');
   assert.equal(tortilla.source_data.translations.en.question, 'Corn tortilla: national tortilleria price at October 2026 close');
   assert.equal(tortilla.source_data.buckets[0].max, 23);
   assert.match(tortilla.resolver_config.criteria, /SNIIM/);
 
   const avocado = byEventId['october-2026:avocado-hass-cdmx-wholesale-close'];
-  assert.equal(avocado.resolver_type, 'manual_review');
+  assert.equal(avocado.resolver_type, 'api_price');
+  assert.equal(avocado.resolver_config.source, 'sniim-food-price');
+  assert.equal(avocado.resolver_config.commodity, 'aguacate_hass');
+  assert.equal(avocado.resolver_config.dateEndYmd, '2026-10-31');
   assert.equal(avocado.source_data.translations.en.question, 'Hass avocado: Mexico City wholesale price at October 2026 close');
   assert.equal(avocado.source_data.market, 'Central de Abasto CDMX');
   assert.equal(avocado.source_data.bucketTieRule, 'upper_bucket');
 
   const whiteCorn = byEventId['october-2026:white-corn-wholesale-close'];
-  assert.equal(whiteCorn.resolver_type, 'manual_review');
+  assert.equal(whiteCorn.resolver_type, 'api_price');
+  assert.equal(whiteCorn.resolver_config.source, 'sniim-food-price');
+  assert.equal(whiteCorn.resolver_config.commodity, 'maiz_blanco');
+  assert.equal(whiteCorn.resolver_config.destinoId, 100);
   assert.equal(whiteCorn.source_data.translations.en.question, 'White corn: wholesale price at October 2026 close');
   assert.equal(whiteCorn.source_data.unit, 'MXN/t');
-  assert.equal(whiteCorn.source_data.evidence.length, 2);
+  assert.equal(whiteCorn.source_data.rawUnit, 'MXN/kg');
+  assert.equal(whiteCorn.source_data.evidence.length, 1);
 
   const nobel = byEventId['october-2026:nobel-peace-prize'];
   assert.equal(nobel.outcomes.length, 7);

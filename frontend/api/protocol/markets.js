@@ -127,13 +127,19 @@ export default async function handler(req, res) {
          WHERE (${category}::text IS NULL OR LOWER(m.category) = ${category})
            AND (${chainId}::int IS NULL OR m.chain_id = ${chainId})
          ORDER BY
-           -- Live markets first (kickoff has passed, deadline hasn't).
-           -- start_time is NULL for non-sports markets so they fall
-           -- through to the created_at ordering below.
-           CASE WHEN m.start_time IS NOT NULL
-                 AND m.start_time <= NOW()
-                 AND m.end_time > NOW() THEN 0 ELSE 1 END,
-           m.created_at DESC
+           -- Live markets first, then upcoming markets by the closest
+           -- deadline. Overdue active rows stay behind future inventory
+           -- while they wait for resolution.
+           CASE
+             WHEN m.start_time IS NOT NULL AND m.start_time <= NOW() AND m.end_time > NOW() THEN 0
+             WHEN m.end_time > NOW() THEN 1
+             WHEN m.end_time IS NOT NULL THEN 2
+             ELSE 3
+           END,
+           CASE WHEN m.end_time > NOW() THEN m.end_time END ASC NULLS LAST,
+           CASE WHEN m.end_time <= NOW() THEN m.end_time END DESC NULLS LAST,
+           m.created_at DESC,
+           m.id ASC
          LIMIT ${limit}
       `;
     } else {
@@ -212,13 +218,19 @@ export default async function handler(req, res) {
            AND (${category}::text IS NULL OR LOWER(m.category) = ${category})
            AND (${chainId}::int IS NULL OR m.chain_id = ${chainId})
          ORDER BY
-           -- Live markets first (kickoff has passed, deadline hasn't).
-           -- start_time is NULL for non-sports markets so they fall
-           -- through to the created_at ordering below.
-           CASE WHEN m.start_time IS NOT NULL
-                 AND m.start_time <= NOW()
-                 AND m.end_time > NOW() THEN 0 ELSE 1 END,
-           m.created_at DESC
+           -- Live markets first, then upcoming markets by the closest
+           -- deadline. Overdue active rows stay behind future inventory
+           -- while they wait for resolution.
+           CASE
+             WHEN m.start_time IS NOT NULL AND m.start_time <= NOW() AND m.end_time > NOW() THEN 0
+             WHEN m.end_time > NOW() THEN 1
+             WHEN m.end_time IS NOT NULL THEN 2
+             ELSE 3
+           END,
+           CASE WHEN m.end_time > NOW() THEN m.end_time END ASC NULLS LAST,
+           CASE WHEN m.end_time <= NOW() THEN m.end_time END DESC NULLS LAST,
+           m.created_at DESC,
+           m.id ASC
          LIMIT ${limit}
       `;
     }

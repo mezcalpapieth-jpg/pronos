@@ -100,7 +100,8 @@ test('MVP admin market filters are emoji-free and expose category subfilters', (
   assert.match(marketsList, /topicFilter/);
   assert.match(marketsList, /showMexicoFilters/);
   assert.match(marketsList, /ADMIN_GEO_FILTERS\.map/);
-  assert.match(marketsList, /ADMIN_MEXICO_TOPIC_FILTERS\.map/);
+  assert.match(marketsList, /activeTopicFilters\.map/);
+  assert.match(marketsList, /ADMIN_MEXICO_TOPIC_FILTERS/);
   assert.match(marketsList, /filterProtocolAdminMarkets/);
   assert.doesNotMatch(marketsList, /\{tab\.icon\}\s*\{tab\.label\}/);
 });
@@ -117,13 +118,17 @@ test('MVP generated queue can inspect and re-add rejected markets', () => {
 test('MVP generated market review uses protocol-owned queue endpoints', () => {
   const generatorsSection = section('function GeneratorsSection', '// ═══ Pending-markets review');
   const pendingSection = section('function PendingMarketsSection', '// ═══ Create-market form');
+  const pendingLiquidityEditor = section('function PendingLiquidityEditor', '// ═══ Onchain wiring status panel');
   const approveForm = section('function ApproveOnchainForm', 'function PendingMarketsSection');
 
   assert.match(generatorsSection, /\/api\/protocol\/admin\/run-generators/);
   assert.match(pendingSection, /\/api\/protocol\/admin\/pending-markets/);
+  assert.match(pendingLiquidityEditor, /\/api\/protocol\/admin\/pending-markets/);
+  assert.match(pendingLiquidityEditor, /pricingMode:\s*'uniform'/);
   assert.match(approveForm, /\/api\/protocol\/admin\/pending-markets/);
   assert.doesNotMatch(generatorsSection, /\/api\/points\/admin\/run-generators/);
   assert.doesNotMatch(pendingSection, /\/api\/points\/admin\/pending-markets/);
+  assert.doesNotMatch(pendingLiquidityEditor, /\/api\/points\/admin\/pending-markets/);
   assert.doesNotMatch(approveForm, /\/api\/points\/admin\/pending-markets/);
 });
 

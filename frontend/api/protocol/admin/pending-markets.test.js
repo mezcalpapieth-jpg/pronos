@@ -32,10 +32,19 @@ test('protocol generator endpoint upserts into protocol pending markets', () => 
 test('protocol pending review endpoint never writes points markets', () => {
   assert.match(pendingSource, /protocol_pending_markets/);
   assert.match(pendingSource, /protocol_markets/);
-  assert.match(pendingSource, /action !== 'approve' && action !== 'reject' && action !== 'readd'/);
+  assert.match(pendingSource, /action !== 'approve' && action !== 'reject' && action !== 'readd' && action !== 'edit'/);
   assert.match(pendingSource, /deployMarketOnChain/);
   assert.doesNotMatch(pendingSource, /points_pending_markets/);
   assert.doesNotMatch(pendingSource, /points_markets/);
+});
+
+test('protocol pending edit can neutralize binary pricing before approval', () => {
+  assert.match(pendingSource, /async function editPending/);
+  assert.match(pendingSource, /normalizeSeedLiquidities/);
+  assert.match(pendingSource, /protocol_uniform_seed_required/);
+  assert.match(pendingSource, /uniformSuggestedPricing/);
+  assert.match(pendingSource, /source:\s*'admin-uniform'/);
+  assert.match(pendingSource, /action === 'edit'/);
 });
 
 test('protocol readd keeps human-overridden rows pending through auto-reject cleanup', () => {

@@ -223,6 +223,60 @@ test('auto resolver core settles Banxico price buckets with upper-boundary ties'
   assert.equal(decision.finalScore, 'banxico-fix · 17.25');
 });
 
+test('auto resolver core settles SNIIM food price bucket markets', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  globalThis.fetch = async (url) => {
+    assert.match(String(url), /ResultadosConsultaFechaFrutasYHortalizas\.aspx/);
+    return htmlResponse(`
+      <table>
+        <tr><th>Fecha</th><th>Presentacion</th><th>Origen</th><th>Destino</th><th>Min</th><th>Max</th><th>Precio Frec</th></tr>
+        <tr><td>28/10/2026</td><td>Caja de 9 kg.</td><td>Michoacan</td><td>DF: Central de Abasto de Iztapalapa DF</td><td>32.22</td><td>38.89</td><td>36.67</td></tr>
+        <tr><td>30/10/2026</td><td>Caja de 9 kg.</td><td>Michoacan</td><td>DF: Central de Abasto de Iztapalapa DF</td><td>50.00</td><td>60.00</td><td>55.50</td></tr>
+      </table>
+    `);
+  };
+
+  const decision = await resolveAutoResolverCandidate({
+    resolver_type: 'api_price',
+    resolver_config: {
+      source: 'sniim-food-price',
+      shape: 'price-bucket',
+      commodity: 'aguacate_hass',
+      dateStartYmd: '2026-10-26',
+      dateEndYmd: '2026-10-31',
+      resolveAt: '2026-01-01T00:00:00.000Z',
+      buckets: [
+        { label: 'Menos de $35 MXN/kg', max: 35 },
+        { label: '$35 a $45 MXN/kg', min: 35, max: 45 },
+        { label: '$45 a $55 MXN/kg', min: 45, max: 55 },
+        { label: '$55 a $65 MXN/kg', min: 55, max: 65 },
+        { label: '$65 MXN/kg o mas', min: 65 },
+      ],
+    },
+    outcomes: [
+      'Menos de $35 MXN/kg',
+      '$35 a $45 MXN/kg',
+      '$45 a $55 MXN/kg',
+      '$55 a $65 MXN/kg',
+      '$65 MXN/kg o mas',
+    ],
+  });
+
+  assert.equal(decision.winningIdx, 3);
+  assert.equal(decision.resolverInfo.priceAtResolve, 55.5);
+  assert.equal(decision.resolverInfo.source, 'sniim-food-price');
+  assert.equal(decision.resolverInfo.commodity, 'aguacate_hass');
+  assert.equal(decision.resolverInfo.dateYmd, '2026-10-30');
+  assert.equal(decision.resolverInfo.bucketLabel, '$55 a $65 MXN/kg');
+  assert.equal(decision.resolverConfigPatch.closePrice, 55.5);
+  assert.equal(decision.resolverConfigPatch.resolvedBucketIndex, 3);
+  assert.equal(decision.finalScore, 'sniim-food-price · 55.5');
+});
+
 test('auto resolver core settles Frankfurter FX pairs by target date', async (t) => {
   const originalFetch = globalThis.fetch;
   t.after(() => {

@@ -41,3 +41,10 @@ test('MVP trending map loads the same shared news and market feed as the news gl
   assert.match(loaderBlock, /setMapNewsItems\(enrichNewsItemsWithGeo\(items\)\)/);
   assert.match(loaderBlock, /setSharedMapMarkets/);
 });
+
+test('MVP trending cards sort live markets first and upcoming markets by deadline', () => {
+  const filteredBlock = source.slice(source.indexOf('const filtered'), source.indexOf('const mapMarkets'));
+  assert.match(source, /sortMarketsByLiveThenEndDate/);
+  assert.match(filteredBlock, /activeFilter === 'trending'/);
+  assert.match(filteredBlock, /sortMarketsByLiveThenEndDate\(prioritizeFeaturedMarkets\(out, featuredTeamKeys\)\)/);
+});

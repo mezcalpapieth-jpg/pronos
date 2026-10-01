@@ -22,6 +22,7 @@ import {
   parallelLegQuestion,
   upsertProtocolMarketMetadata,
 } from '../../_lib/protocol-market-admin.js';
+import { normalizeSeedLiquidities } from '../../_lib/market-liquidity.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 const readSql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
@@ -140,6 +141,8 @@ async function list(req, res) {
       source: r.source,
       sourceEventId: r.source_event_id,
       sourceData: parseJsonb(r.source_data, {}),
+      suggestedPricing: parseJsonb(r.source_data, {})?.suggestedPricing || null,
+      pricingSearch: parseJsonb(r.source_data, {})?.pricingSearch || null,
       question: r.question,
       category: r.category,
       icon: null,
@@ -201,6 +204,122 @@ function validatePendingRow(r) {
     throw err;
   }
   return { outcomes, seed, endDate };
+}
+
+function uniformSuggestedPricing(sourceData, outcomes, seed, reviewer) {
+  const count = Array.isArray(outcomes) ? outcomes.length : 0;
+  const probability = count > 0 ? 1 / count : 0;
+  const probabilities = Array.from({ length: count }, () => probability);
+  const seedLiquidities = Array.from({ length: count }, () => seed);
+  return {
+    ...(sourceData && typeof sourceData === 'object' ? sourceData : {}),
+    suggestedPricing: {
+      source: 'admin-uniform',
+      probabilities,
+      probabilityPct: probabilities.map(p => Math.round(p * 1000) / 10),
+      seedLiquidities,
+      rationale: 'Admin ajustó el pending para abrir balanceado antes de aprobación.',
+      evidence: [],
+    },
+    adminPricingOverride: {
+      type: 'uniform',
+      seedLiquidity: seed,
+      at: new Date().toISOString(),
+      by: reviewer || 'admin',
+    },
+  };
+}
+
+async function editPending(pid, reviewer, patch = {}, note = null) {
+  return withTransaction(async (client) => {
+    const rowRes = await client.query(
+      `SELECT * FROM protocol_pending_markets WHERE id = $1 FOR UPDATE`,
+      [pid],
+    );
+    if (rowRes.rows.length === 0) {
+      const err = new Error('pending_not_found'); err.status = 404; throw err;
+    }
+    const r = rowRes.rows[0];
+    if (r.status !== 'pending') {
+      const err = new Error('already_reviewed'); err.status = 400;
+      err.detail = `status=${r.status}`;
+      throw err;
+    }
+
+    const outcomes = parseJsonb(r.outcomes, []);
+    if (!Array.isArray(outcomes) || outcomes.length < 2 || outcomes.length > 8) {
+      const err = new Error('invalid_outcomes'); err.status = 400; throw err;
+    }
+
+    const has = key => Object.prototype.hasOwnProperty.call(patch, key);
+    let seed = Number(has('seedLiquidity') ? patch.seedLiquidity : r.seed_liquidity);
+    if (!Number.isFinite(seed) || seed < 100) {
+      const err = new Error('seed_too_small'); err.status = 400; throw err;
+    }
+    if (seed > 10_000_000) {
+      const err = new Error('seed_too_large'); err.status = 400; throw err;
+    }
+
+    let seedValues = Array.from({ length: outcomes.length }, () => seed);
+    if (has('seedLiquidities')) {
+      const normalized = normalizeSeedLiquidities({
+        outcomes,
+        seedLiquidity: seed,
+        seedLiquidities: patch.seedLiquidities,
+      });
+      if (normalized.error) {
+        const err = new Error(normalized.error); err.status = 400; throw err;
+      }
+      seedValues = normalized.values;
+      if (!normalized.uniform) {
+        const err = new Error('protocol_uniform_seed_required'); err.status = 400;
+        err.detail = 'Los contratos on-chain actuales solo aceptan un seed uniforme por mercado. Usa valores iguales para abrir 50/50.';
+        throw err;
+      }
+      seed = seedValues[0];
+    }
+
+    const sourceData = parseJsonb(r.source_data, {});
+    const pricingMode = String(patch.pricingMode || '').trim().toLowerCase();
+    const nextSourceData = pricingMode === 'uniform' || has('seedLiquidities')
+      ? uniformSuggestedPricing(sourceData, outcomes, seed, reviewer)
+      : sourceData;
+
+    const updated = await client.query(
+      `UPDATE protocol_pending_markets
+          SET seed_liquidity = $1,
+              source_data = $2::jsonb,
+              admin_note = COALESCE(NULLIF($3, ''), admin_note),
+              reviewer = $4,
+              reviewed_at = NOW()
+        WHERE id = $5
+        RETURNING *`,
+      [
+        seed,
+        JSON.stringify(nextSourceData),
+        note || null,
+        reviewer,
+        pid,
+      ],
+    );
+
+    const row = updated.rows[0];
+    const rowSourceData = parseJsonb(row.source_data, {});
+    return {
+      ok: true,
+      action: 'edit',
+      pending: {
+        id: row.id,
+        sourceData: rowSourceData,
+        suggestedPricing: rowSourceData?.suggestedPricing || null,
+        pricingSearch: rowSourceData?.pricingSearch || null,
+        seedLiquidity: Number(row.seed_liquidity),
+        adminNote: row.admin_note,
+        reviewer: row.reviewer,
+        reviewedAt: row.reviewed_at,
+      },
+    };
+  });
 }
 
 async function readPendingForApproval(pid) {
@@ -338,15 +457,20 @@ async function approveOne(pid, reviewer, note) {
 }
 
 async function review(req, res, admin) {
-  const { id, action, note } = req.body || {};
+  const { id, action, note, patch } = req.body || {};
   await ensureProtocolSchema(schemaSql);
 
   const pid = parseInt(id, 10);
   if (!Number.isInteger(pid) || pid <= 0) {
     return res.status(400).json({ error: 'invalid_id' });
   }
-  if (action !== 'approve' && action !== 'reject' && action !== 'readd') {
+  if (action !== 'approve' && action !== 'reject' && action !== 'readd' && action !== 'edit') {
     return res.status(400).json({ error: 'invalid_action' });
+  }
+
+  if (action === 'edit') {
+    const result = await editPending(pid, admin.username || admin.sub || 'admin', patch || {}, note);
+    return res.status(200).json(result);
   }
 
   if (action === 'readd') {

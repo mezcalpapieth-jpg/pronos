@@ -45,6 +45,7 @@ import { readFinnhubQuote } from '../_lib/stockprice.js';
 import { banxicoFechaToYmd, banxicoFixTargetDateYmd, readBanxicoLatest } from '../_lib/banxico.js';
 import { FRANKFURTER_SOURCE, frankfurterTargetDateYmd, readFrankfurterRate } from '../_lib/frankfurter.js';
 import { readCreAverageFor } from '../_lib/fuel.js';
+import { readSniimFoodPrice, SNIIM_FOOD_PRICE_SOURCE } from '../_lib/sniim-food-prices.js';
 import { deferUntilResolveAt, priceBucketIndexFor } from '../_lib/price-buckets.js';
 import {
   COINGECKO_TOKEN_MCAP_SOURCE,
@@ -2067,6 +2068,24 @@ export async function runAutoResolve({ dry = false } = {}) {
             const r = await readCreAverageFor(cfg.fuelType);
             price = r.value;
             readerInfo = { fuelType: cfg.fuelType, sampleSize: r.sampleSize };
+          } else if (cfg.source === SNIIM_FOOD_PRICE_SOURCE) {
+            const r = await readSniimFoodPrice(cfg);
+            price = r.value;
+            readerInfo = {
+              commodity: r.commodity,
+              unit: r.unit,
+              rawValuePerKg: r.rawValuePerKg,
+              rawUnit: r.rawUnit,
+              market: r.market,
+              origin: r.origin,
+              presentation: r.presentation,
+              fecha: r.fecha,
+              dateYmd: r.dateYmd,
+              targetYear: r.targetYear,
+              targetMonth: r.targetMonth,
+              week: r.week,
+              sourceUrl: r.sourceUrl,
+            };
           } else if (cfg.source === COINGECKO_TOKEN_MCAP_SOURCE) {
             const resolved = await resolveSolanaTokenMcapOutcome({
               sql: readSql,

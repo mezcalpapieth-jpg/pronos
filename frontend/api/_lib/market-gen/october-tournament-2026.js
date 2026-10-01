@@ -3,6 +3,7 @@ import { BANXICO_FIX_RESOLUTION_CRITERIA, readBanxicoLatest, SERIES } from '../b
 import { readCreAverages, fuelLabel } from '../fuel.js';
 import { attachSuggestedPricing } from '../market-pricing.js';
 import { IBTRACS_PRODUCT_PAGE } from '../hurricanes.js';
+import { SNIIM_FOOD_PRICE_SOURCE } from '../sniim-food-prices.js';
 import { dateAtMexicoCityTime } from './mexico-time.js';
 
 const SOURCE = 'october-tournament-2026';
@@ -150,7 +151,6 @@ const EVIDENCE = Object.freeze({
   ibtracs: IBTRACS_PRODUCT_PAGE,
   sniimTortilla: 'https://www.economia-sniim.gob.mx/Tortilla.asp',
   sniimNationalMarkets: 'https://www.economia-sniim.gob.mx/e_MenNal.asp',
-  siapWhiteCorn: 'https://nube.agricultura.gob.mx/Balanza/MaizGranoBlanco/index.php',
 });
 
 const DEFAULT_NOBEL_PEACE_CANDIDATES_ES = Object.freeze([
@@ -280,6 +280,7 @@ function buildPriceBucketSpec({
   resolverConfig,
   evidence,
   resolutionCriteria,
+  kind = 'october_tournament_price_bucket',
   extraSourceData = {},
 }) {
   return pricedSpec({
@@ -303,7 +304,7 @@ function buildPriceBucketSpec({
       rationale: resolutionCriteria,
     },
     source_data: sourceDataBase({
-      kind: 'october_tournament_price_bucket',
+      kind,
       translations: {
         es: { question: questionEs, outcomes: outcomesEs },
         en: { question: questionEn, outcomes: outcomesEn },
@@ -843,7 +844,7 @@ function manualMarkets(env = process.env) {
     '$26.00 to $27.00 MXN/kg',
     '$27.00 MXN/kg or higher',
   ];
-  specs.push(buildManualSpec({
+  specs.push(buildPriceBucketSpec({
     key: 'tortilla-national-tortilleria-close',
     questionEs: 'Tortilla de maíz: precio nacional en tortillería al cierre de octubre 2026',
     questionEn: 'Corn tortilla: national tortilleria price at October 2026 close',
@@ -852,17 +853,33 @@ function manualMarkets(env = process.env) {
     icon: 'SNIIM',
     outcomesEs: tortillaOutcomesEs,
     outcomesEn: tortillaOutcomesEn,
-    closeIso: TOURNAMENT_END_ISO,
-    resolveIso: FOOD_PRICE_RESOLVE_ISO,
-    criteriaEs: 'Se resuelve con el precio nacional de tortilla en tortillerías publicado por SNIIM, usando el último dato oficial publicado en día hábil hasta el 31 de octubre de 2026. No cuenta autoservicio. Si el dato cae exactamente en un límite, gana el bucket superior.',
-    criteriaEn: 'Resolve from the national tortilleria corn-tortilla price published by SNIIM, using the latest official business-day datapoint published through October 31, 2026. Supermarket prices do not count. If the value lands exactly on a boundary, the upper bucket wins.',
+    buckets: [
+      { label: tortillaOutcomesEs[0], labelEn: tortillaOutcomesEn[0], min: null, max: 23 },
+      { label: tortillaOutcomesEs[1], labelEn: tortillaOutcomesEn[1], min: 23, max: 24 },
+      { label: tortillaOutcomesEs[2], labelEn: tortillaOutcomesEn[2], min: 24, max: 25 },
+      { label: tortillaOutcomesEs[3], labelEn: tortillaOutcomesEn[3], min: 25, max: 26 },
+      { label: tortillaOutcomesEs[4], labelEn: tortillaOutcomesEn[4], min: 26, max: 27 },
+      { label: tortillaOutcomesEs[5], labelEn: tortillaOutcomesEn[5], min: 27, max: null },
+    ],
+    endTime: TOURNAMENT_END_ISO,
+    resolverType: 'api_price',
+    resolverConfig: {
+      source: SNIIM_FOOD_PRICE_SOURCE,
+      commodity: 'tortilla',
+      targetYear: 2026,
+      targetMonth: 10,
+      resolveAt: FOOD_PRICE_RESOLVE_ISO,
+    },
+    resolutionCriteria: 'Se resuelve con el precio nacional de tortilla en tortillerías publicado por SNIIM, usando el último dato oficial publicado en día hábil hasta el 31 de octubre de 2026. No cuenta autoservicio. Si el dato cae exactamente en un límite, gana el bucket superior.',
     evidence: [{ title: 'SNIIM tortilla prices', url: EVIDENCE.sniimTortilla }],
     kind: 'october_tournament_food_price',
     extraSourceData: {
       commodity: 'tortilla',
       unit: 'MXN/kg',
       sourceTitle: 'SNIIM tortilla nacional en tortillería',
-      bucketTieRule: 'upper_bucket',
+      sourceReader: SNIIM_FOOD_PRICE_SOURCE,
+      targetMonth: '2026-10',
+      resolutionCriteriaEn: 'Resolve from the national tortilleria corn-tortilla price published by SNIIM, using the latest official business-day datapoint published through October 31, 2026. Supermarket prices do not count. If the value lands exactly on a boundary, the upper bucket wins.',
       buckets: bucketMetadata(tortillaOutcomesEs, tortillaOutcomesEn, [
         { min: null, max: 23 },
         { min: 23, max: 24 },
@@ -890,7 +907,7 @@ function manualMarkets(env = process.env) {
     '$65 to $75 MXN/kg',
     '$75 MXN/kg or higher',
   ];
-  specs.push(buildManualSpec({
+  specs.push(buildPriceBucketSpec({
     key: 'avocado-hass-cdmx-wholesale-close',
     questionEs: 'Aguacate Hass: precio mayoreo CDMX al cierre de octubre 2026',
     questionEn: 'Hass avocado: Mexico City wholesale price at October 2026 close',
@@ -899,10 +916,26 @@ function manualMarkets(env = process.env) {
     icon: 'SNIIM',
     outcomesEs: avocadoOutcomesEs,
     outcomesEn: avocadoOutcomesEn,
-    closeIso: TOURNAMENT_END_ISO,
-    resolveIso: FOOD_PRICE_RESOLVE_ISO,
-    criteriaEs: 'Se resuelve con el precio mayoreo de Aguacate Hass en SNIIM para Central de Abasto CDMX, usando el último dato oficial publicado hasta el 31 de octubre de 2026. Si SNIIM muestra mínimo y máximo sin precio medio, se usa el punto medio aritmético. Si el dato cae exactamente en un límite, gana el bucket superior.',
-    criteriaEn: 'Resolve from the SNIIM wholesale Hass avocado price for Mexico City Central de Abasto, using the latest official datapoint published through October 31, 2026. If SNIIM shows only min/max prices, use their arithmetic midpoint. If the value lands exactly on a boundary, the upper bucket wins.',
+    buckets: [
+      { label: avocadoOutcomesEs[0], labelEn: avocadoOutcomesEn[0], min: null, max: 35 },
+      { label: avocadoOutcomesEs[1], labelEn: avocadoOutcomesEn[1], min: 35, max: 45 },
+      { label: avocadoOutcomesEs[2], labelEn: avocadoOutcomesEn[2], min: 45, max: 55 },
+      { label: avocadoOutcomesEs[3], labelEn: avocadoOutcomesEn[3], min: 55, max: 65 },
+      { label: avocadoOutcomesEs[4], labelEn: avocadoOutcomesEn[4], min: 65, max: 75 },
+      { label: avocadoOutcomesEs[5], labelEn: avocadoOutcomesEn[5], min: 75, max: null },
+    ],
+    endTime: TOURNAMENT_END_ISO,
+    resolverType: 'api_price',
+    resolverConfig: {
+      source: SNIIM_FOOD_PRICE_SOURCE,
+      commodity: 'aguacate_hass',
+      dateStartYmd: '2026-10-26',
+      dateEndYmd: '2026-10-31',
+      productoId: 133,
+      destinoIncludes: 'Central de Abasto de Iztapalapa',
+      resolveAt: FOOD_PRICE_RESOLVE_ISO,
+    },
+    resolutionCriteria: 'Se resuelve con el precio mayoreo de Aguacate Hass en SNIIM para Central de Abasto CDMX, usando el último dato oficial publicado hasta el 31 de octubre de 2026. Si SNIIM muestra mínimo y máximo sin precio medio, se usa el punto medio aritmético. Si el dato cae exactamente en un límite, gana el bucket superior.',
     evidence: [{ title: 'SNIIM national market prices', url: EVIDENCE.sniimNationalMarkets }],
     kind: 'october_tournament_food_price',
     extraSourceData: {
@@ -910,7 +943,9 @@ function manualMarkets(env = process.env) {
       unit: 'MXN/kg',
       market: 'Central de Abasto CDMX',
       sourceTitle: 'SNIIM Aguacate Hass',
-      bucketTieRule: 'upper_bucket',
+      sourceReader: SNIIM_FOOD_PRICE_SOURCE,
+      targetWindow: '2026-10-26/2026-10-31',
+      resolutionCriteriaEn: 'Resolve from the SNIIM wholesale Hass avocado price for Mexico City Central de Abasto, using the latest official datapoint published through October 31, 2026. If SNIIM shows only min/max prices, use their arithmetic midpoint. If the value lands exactly on a boundary, the upper bucket wins.',
       buckets: bucketMetadata(avocadoOutcomesEs, avocadoOutcomesEn, [
         { min: null, max: 35 },
         { min: 35, max: 45 },
@@ -938,29 +973,46 @@ function manualMarkets(env = process.env) {
     '$6,500 to $7,000 MXN/t',
     '$7,000 MXN/t or higher',
   ];
-  specs.push(buildManualSpec({
+  specs.push(buildPriceBucketSpec({
     key: 'white-corn-wholesale-close',
     questionEs: 'Maíz blanco: precio mayoreo al cierre de octubre 2026',
     questionEn: 'White corn: wholesale price at October 2026 close',
     category: 'mexico',
     tags: { categoryTags: ['mexico', 'finanzas'], geoTags: ['mexico'], topicTags: ['alimentos', 'commodities'] },
-    icon: 'SIAP',
+    icon: 'SNIIM',
     outcomesEs: whiteCornOutcomesEs,
     outcomesEn: whiteCornOutcomesEn,
-    closeIso: TOURNAMENT_END_ISO,
-    resolveIso: FOOD_PRICE_RESOLVE_ISO,
-    criteriaEs: 'Se resuelve con el precio mayoreo de maíz blanco publicado por SNIIM para el último día hábil disponible hasta el 31 de octubre de 2026. Si SNIIM no tiene dato utilizable, se usa la publicación oficial SIAP/SADER más reciente disponible para maíz blanco y se documenta la fuente en la resolución. Si el dato cae exactamente en un límite, gana el bucket superior.',
-    criteriaEn: 'Resolve from the SNIIM wholesale white-corn price for the latest available business day through October 31, 2026. If SNIIM has no usable datapoint, use the latest official SIAP/SADER white-corn publication and document the source in the resolution. If the value lands exactly on a boundary, the upper bucket wins.',
-    evidence: [
-      { title: 'SNIIM national market prices', url: EVIDENCE.sniimNationalMarkets },
-      { title: 'SIAP white corn balance', url: EVIDENCE.siapWhiteCorn },
+    buckets: [
+      { label: whiteCornOutcomesEs[0], labelEn: whiteCornOutcomesEn[0], min: null, max: 5000 },
+      { label: whiteCornOutcomesEs[1], labelEn: whiteCornOutcomesEn[1], min: 5000, max: 5500 },
+      { label: whiteCornOutcomesEs[2], labelEn: whiteCornOutcomesEn[2], min: 5500, max: 6000 },
+      { label: whiteCornOutcomesEs[3], labelEn: whiteCornOutcomesEn[3], min: 6000, max: 6500 },
+      { label: whiteCornOutcomesEs[4], labelEn: whiteCornOutcomesEn[4], min: 6500, max: 7000 },
+      { label: whiteCornOutcomesEs[5], labelEn: whiteCornOutcomesEn[5], min: 7000, max: null },
     ],
+    endTime: TOURNAMENT_END_ISO,
+    resolverType: 'api_price',
+    resolverConfig: {
+      source: SNIIM_FOOD_PRICE_SOURCE,
+      commodity: 'maiz_blanco',
+      targetYear: 2026,
+      targetMonth: 10,
+      destinoId: 100,
+      mercadoDestino: 'DF: Central de Abasto de Iztapalapa DF',
+      resolveAt: FOOD_PRICE_RESOLVE_ISO,
+    },
+    resolutionCriteria: 'Se resuelve con el precio mayoreo de maíz blanco publicado por SNIIM para Central de Abasto de Iztapalapa DF, usando la última semana oficial disponible de octubre de 2026 y convirtiendo MXN/kg a MXN/t. Si el dato cae exactamente en un límite, gana el bucket superior.',
+    evidence: [{ title: 'SNIIM national market prices', url: EVIDENCE.sniimNationalMarkets }],
     kind: 'october_tournament_food_price',
     extraSourceData: {
       commodity: 'maiz_blanco',
       unit: 'MXN/t',
-      sourceTitle: 'SNIIM/SIAP Maiz blanco',
-      bucketTieRule: 'upper_bucket',
+      rawUnit: 'MXN/kg',
+      market: 'Central de Abasto de Iztapalapa DF',
+      sourceTitle: 'SNIIM Maiz blanco',
+      sourceReader: SNIIM_FOOD_PRICE_SOURCE,
+      targetMonth: '2026-10',
+      resolutionCriteriaEn: 'Resolve from the SNIIM wholesale white-corn price for Mexico City Central de Abasto de Iztapalapa DF, using the latest official weekly datapoint available for October 2026 and converting MXN/kg to MXN/t. If the value lands exactly on a boundary, the upper bucket wins.',
       buckets: bucketMetadata(whiteCornOutcomesEs, whiteCornOutcomesEn, [
         { min: null, max: 5000 },
         { min: 5000, max: 5500 },

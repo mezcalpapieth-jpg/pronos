@@ -207,9 +207,8 @@ export default function Hero({ onOpenLogin }) {
     let cancelled = false;
     (async () => {
       try {
-        // TODO: re-introduce ?featured=true once protocol_markets has
-        // a featured column + admin toggle. Until then we surface the
-        // most recently-deployed active markets sorted by created_at DESC.
+        // Surface active markets in the same order as the grid: live first,
+        // then the closest upcoming deadlines.
         const res = await fetch(
           `/api/protocol/markets?status=active&chainId=${CHAIN_ID}`,
           { credentials: 'include' },

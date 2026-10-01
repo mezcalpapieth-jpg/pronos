@@ -25,6 +25,7 @@ import {
   prioritizeFeaturedMarkets,
   useFeaturedTeamKeys,
 } from '../lib/featuredTeams.js';
+import { sortMarketsByLiveThenEndDate } from '../lib/marketOrdering.js';
 
 const CHAIN_ID = Number(import.meta.env.VITE_ONCHAIN_CHAIN_ID || 42161);
 const GRID_CACHE_KEY = 'pronos-protocol-grid-cache-v1';
@@ -130,7 +131,7 @@ export default function MarketsGrid({ activeFilter, onOpenLogin }) {
     if (!activeFilter || activeFilter === 'todos') return prioritizeFeaturedMarkets(out, featuredTeamKeys);
     if (activeFilter === 'trending') {
       out = out.filter(m => m.trending || marketMatchesFeaturedTeam(m, featuredTeamKeys));
-      return prioritizeFeaturedMarkets(out, featuredTeamKeys);
+      return sortMarketsByLiveThenEndDate(prioritizeFeaturedMarkets(out, featuredTeamKeys));
     }
     out = out.filter(m => m.category === activeFilter);
     return prioritizeFeaturedMarkets(out, featuredTeamKeys);

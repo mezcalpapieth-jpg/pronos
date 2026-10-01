@@ -254,10 +254,14 @@ export default async function handler(req, res) {
           )
         ORDER BY
           CASE WHEN ${status}::text = 'resolved' THEN m.resolved_at END DESC NULLS LAST,
-          CASE WHEN m.start_time IS NOT NULL
-                AND m.start_time <= NOW()
-                AND m.end_time > NOW() THEN 0 ELSE 1 END,
-          m.end_time ASC,
+          CASE
+            WHEN m.start_time IS NOT NULL AND m.start_time <= NOW() AND m.end_time > NOW() THEN 0
+            WHEN m.end_time > NOW() THEN 1
+            WHEN m.end_time IS NOT NULL THEN 2
+            ELSE 3
+          END,
+          CASE WHEN m.end_time > NOW() THEN m.end_time END ASC NULLS LAST,
+          CASE WHEN m.end_time <= NOW() THEN m.end_time END DESC NULLS LAST,
           m.id ASC
         LIMIT ${limit}
       `);

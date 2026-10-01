@@ -48,6 +48,14 @@ test('points market payload exposes featured and trending for parallel and unifi
   assert.match(detailSource, /imageUrl:\s*r\.image_url \|\| null/);
 });
 
+test('points market list sorts live first and then upcoming by close date', () => {
+  assert.match(source, /m\.start_time IS NOT NULL AND m\.start_time <= NOW\(\) AND m\.end_time > NOW\(\) THEN 0/);
+  assert.match(source, /WHEN m\.end_time > NOW\(\) THEN 1/);
+  assert.match(source, /WHEN m\.end_time IS NOT NULL THEN 2/);
+  assert.match(source, /CASE WHEN m\.end_time > NOW\(\) THEN m\.end_time END ASC NULLS LAST/);
+  assert.match(source, /CASE WHEN m\.end_time <= NOW\(\) THEN m\.end_time END DESC NULLS LAST/);
+});
+
 test('parallel payload prices resolved loser legs as zero instead of stale AMM odds', () => {
   for (const text of [source, detailSource]) {
     assert.match(text, /function binaryLegPricesFromRow/);
