@@ -18,7 +18,7 @@
  */
 
 import { extractEspnSeriesMeta } from '../series-markets.js';
-import { fetchEspnScoreboardData, formatEspnDateCompact } from './espn-scoreboard.js';
+import { fetchEspnScoreboardData, formatEspnDateCompact, formatEspnVenue } from './espn-scoreboard.js';
 
 const BASE = 'https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard';
 const BASE_HORIZON_DAYS = 3;
@@ -134,7 +134,7 @@ export async function generateMlbMarkets() {
         league: 'MLB',
         home: { id: home?.team?.id, name: home.team.displayName, abbr: home.team.abbreviation },
         away: { id: away?.team?.id, name: away.team.displayName, abbr: away.team.abbreviation },
-        venue: comp?.venue?.fullName || null,
+        venue: formatEspnVenue(comp?.venue),
         ...(seriesMeta ? { series: seriesMeta } : {}),
       },
     });

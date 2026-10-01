@@ -78,3 +78,40 @@ test('Checo vs Bottas head-to-head has local portraits without upstream images',
     '/f1-headshots/valtteri-bottas-face.png',
   ]);
 });
+
+test('F1 race venue normalizes Jolpica circuit location for globe geotags', () => {
+  const venue = _internal.f1RaceVenue({
+    raceName: 'Dutch Grand Prix',
+    Circuit: {
+      circuitName: 'Circuit Zandvoort',
+      Location: {
+        lat: '52.3888',
+        long: '4.5409',
+        locality: 'Zandvoort',
+        country: 'Netherlands',
+      },
+    },
+  });
+
+  assert.deepEqual(venue, {
+    name: 'Circuit Zandvoort',
+    fullName: 'Circuit Zandvoort',
+    city: 'Zandvoort',
+    state: null,
+    country: 'Netherlands',
+    latitude: 52.3888,
+    longitude: 4.5409,
+  });
+
+  const sideMarkets = _internal.buildDutchGpSideMarkets({
+    season: '2026',
+    round: '12',
+    raceName: 'Dutch Grand Prix',
+    startTime: '2026-08-23T13:00:00.000Z',
+    endTime: '2026-08-23T15:00:00.000Z',
+    venue,
+  });
+
+  assert.equal(sideMarkets[0].source_data.venue.fullName, 'Circuit Zandvoort');
+  assert.equal(sideMarkets[0].source_data.venue.country, 'Netherlands');
+});

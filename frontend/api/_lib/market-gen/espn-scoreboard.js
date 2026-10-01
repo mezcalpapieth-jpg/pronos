@@ -6,6 +6,27 @@ export function formatEspnDateCompact(date) {
   return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}`;
 }
 
+export function formatEspnVenue(venue) {
+  if (!venue || typeof venue !== 'object') return venue || null;
+  const address = venue.address && typeof venue.address === 'object' ? venue.address : {};
+  const name = venue.fullName || venue.name || null;
+  const city = venue.city || address.city || null;
+  const state = venue.state || address.state || null;
+  const country = venue.country || address.country || null;
+  const latitude = venue.latitude ?? venue.geoCoordinates?.latitude ?? venue.geoCoordinates?.lat ?? null;
+  const longitude = venue.longitude ?? venue.geoCoordinates?.longitude ?? venue.geoCoordinates?.lng ?? null;
+  const formatted = {
+    name,
+    fullName: venue.fullName || name,
+    city,
+    state,
+    country,
+    latitude: latitude != null ? Number(latitude) : null,
+    longitude: longitude != null ? Number(longitude) : null,
+  };
+  return Object.values(formatted).some(value => value != null && value !== '') ? formatted : null;
+}
+
 function parseCompactDate(value) {
   const text = String(value || '').trim();
   if (!/^\d{8}$/.test(text)) return null;

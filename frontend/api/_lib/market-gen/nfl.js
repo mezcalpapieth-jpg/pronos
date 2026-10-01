@@ -7,7 +7,7 @@
  * settle them once ESPN marks the event completed.
  */
 
-import { fetchEspnScoreboardData, formatEspnDateCompact } from './espn-scoreboard.js';
+import { fetchEspnScoreboardData, formatEspnDateCompact, formatEspnVenue } from './espn-scoreboard.js';
 
 const BASE = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard';
 const HORIZON_DAYS = 7;
@@ -101,7 +101,7 @@ export async function generateNflMarkets({
         week: ev?.week?.number ?? data?.week?.number ?? null,
         home: { id: home?.team?.id, name: home.team.displayName, abbr: home.team.abbreviation },
         away: { id: away?.team?.id, name: away.team.displayName, abbr: away.team.abbreviation },
-        venue: comp?.venue?.fullName || null,
+        venue: formatEspnVenue(comp?.venue),
       },
     });
   }

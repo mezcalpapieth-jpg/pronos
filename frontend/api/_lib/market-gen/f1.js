@@ -67,12 +67,34 @@ function isDutchGrandPrix(raceName) {
   return /dutch|netherlands|pa[ií]ses bajos/i.test(String(raceName || ''));
 }
 
+function numberOrNull(value) {
+  if (value == null || value === '') return null;
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+}
+
+function f1RaceVenue(race) {
+  const circuit = race?.Circuit || {};
+  const location = circuit.Location || {};
+  const venue = {
+    name: circuit.circuitName || null,
+    fullName: circuit.circuitName || null,
+    city: location.locality || null,
+    state: null,
+    country: location.country || null,
+    latitude: numberOrNull(location.lat),
+    longitude: numberOrNull(location.long ?? location.lng),
+  };
+  return Object.values(venue).some(value => value != null && value !== '') ? venue : null;
+}
+
 function f1BinaryMarket({
   season,
   round,
   raceName,
   startTime,
   endTime,
+  venue = null,
   suffix,
   question,
   resolverConfig,
@@ -112,6 +134,7 @@ function f1BinaryMarket({
       season,
       round,
       raceName,
+      venue,
       marketKind: suffix,
       marketStyle: normalizedOutcomes[0] === 'Sí' && normalizedOutcomes[1] === 'No'
         ? 'binary'
@@ -126,6 +149,7 @@ function buildDutchGpSideMarkets({
   raceName,
   startTime,
   endTime,
+  venue = null,
   imageByDriverId = new Map(),
   portraitByDriverId = new Map(),
   imageByTeamKey = new Map(),
@@ -150,6 +174,7 @@ function buildDutchGpSideMarkets({
       raceName,
       startTime,
       endTime,
+      venue,
       suffix: 'perez-ahead-bottas',
       question: '¿Quién terminará delante en la carrera del Dutch GP 2026: Checo Pérez o Valtteri Bottas?',
       outcomes: ['Checo Pérez', 'Valtteri Bottas'],
@@ -168,6 +193,7 @@ function buildDutchGpSideMarkets({
       raceName,
       startTime,
       endTime,
+      venue,
       suffix: 'verstappen-first-win-home',
       question: '¿Max Verstappen gana su primera carrera de la temporada en casa?',
       outcomeImage: imageByDriverId.get('max_verstappen') || imageByTeamKey.get('red-bull') || null,
@@ -183,6 +209,7 @@ function buildDutchGpSideMarkets({
       raceName,
       startTime,
       endTime,
+      venue,
       suffix: 'perez-first-points',
       question: '¿Checo Pérez suma sus primeros puntos de la temporada en la carrera del Dutch GP 2026?',
       outcomeImage: imageByDriverId.get('perez') || imageByTeamKey.get('cadillac') || null,
@@ -223,6 +250,7 @@ export async function generateF1Markets() {
   const raceName = race.raceName || `GP ${race.round}`;
   const season = race.season;
   const round = race.round;
+  const venue = f1RaceVenue(race);
 
   // Wikipedia logo lookup, cached by teamKey so each team is hit
   // at most once per generator run (11 fetches instead of 22).
@@ -284,6 +312,7 @@ export async function generateF1Markets() {
       raceName,
       startIso: race._startIso,
       circuitName: race?.Circuit?.circuitName,
+      venue,
       drivers: gridDrivers.map((d, i) => ({
         id: d.id,
         code: d.code,
@@ -304,6 +333,7 @@ export async function generateF1Markets() {
       raceName,
       startTime,
       endTime,
+      venue,
       imageByDriverId,
       portraitByDriverId,
       imageByTeamKey,
@@ -314,5 +344,6 @@ export async function generateF1Markets() {
 export const _internal = {
   buildDutchGpSideMarkets,
   f1BinaryMarket,
+  f1RaceVenue,
   isDutchGrandPrix,
 };

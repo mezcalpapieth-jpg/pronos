@@ -44,10 +44,12 @@ function atpEvent({
   state = 'pre',
   date = futureIso(10),
   endDate = futureIso(18),
+  venue = null,
 } = {}) {
   return {
     id,
     name,
+    venue,
     date,
     endDate,
     status: {
@@ -83,6 +85,7 @@ test('ATP generator uses confirmed draw entrants, not the static ranking list', 
     const specs = await generateTennisMarkets();
     assert.equal(specs.length, 1);
     assert.equal(specs[0].source_data.fieldSource, 'espn-mens-singles-draw');
+    assert.equal(specs[0].source_data.venue, null);
     assert.equal(specs[0].source_data.confirmedFieldSize, players.length);
     assert.equal(specs[0].source_data.rankingFallbackDisabled, true);
     assert.equal(specs[0].outcomes.includes('Carlos Alcaraz'), false);
@@ -108,6 +111,10 @@ test('ATP generator emits bounded head-to-head markets for top-tier draws only',
     {
       id: 'match-1',
       date: matchDate,
+      venue: {
+        fullName: 'Lindner Family Tennis Center',
+        address: { city: 'Cincinnati', state: 'OH', country: 'USA' },
+      },
       round: { displayName: 'Round of 32' },
       status: { type: { state: 'pre' } },
       competitors: [
@@ -158,6 +165,15 @@ test('ATP generator emits bounded head-to-head markets for top-tier draws only',
     assert.equal(specs[0].source, 'espn-atp-tournament');
     assert.equal(h2h.length, 4);
     assert.equal(h2h[0].amm_mode, 'unified');
+    assert.deepEqual(h2h[0].source_data.venue, {
+      name: 'Lindner Family Tennis Center',
+      fullName: 'Lindner Family Tennis Center',
+      city: 'Cincinnati',
+      state: 'OH',
+      country: 'USA',
+      latitude: null,
+      longitude: null,
+    });
     assert.equal(h2h[0].resolver_config.source, 'espn-atp-match');
     assert.equal(h2h[0].resolver_config.matchId, 'match-1');
     assert.deepEqual(h2h[0].outcomes, ['Alexander Zverev', 'Taylor Fritz']);

@@ -14,6 +14,8 @@
  * wins fall through to the "Otro" catchall leg.
  */
 
+import { formatEspnVenue } from './espn-scoreboard.js';
+
 const PGA = 'https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard';
 
 const MAX_FIELD_OUTCOMES = 40;
@@ -150,6 +152,18 @@ function sortEntrants(a, b) {
     || (a.rank ?? 9999) - (b.rank ?? 9999)
     || (a.order ?? 9999) - (b.order ?? 9999)
     || String(a.name || '').localeCompare(String(b.name || ''));
+}
+
+function eventVenue(event) {
+  const candidates = [
+    event?.venue,
+    ...(Array.isArray(event?.competitions) ? event.competitions.map(comp => comp?.venue) : []),
+  ];
+  for (const candidate of candidates) {
+    const venue = formatEspnVenue(candidate);
+    if (venue) return venue;
+  }
+  return null;
 }
 
 function heuristicTournamentProbabilities(field, fullFieldSize) {
@@ -304,6 +318,7 @@ export async function generateGolfMarkets() {
     source_data: {
       eventId: ev.id,
       tournamentName: ev.name,
+      venue: eventVenue(ev),
       startDateIso: ev.date,
       isMajor: isMajorEvent(ev.name),
       confirmedFieldSize: fullField.length,

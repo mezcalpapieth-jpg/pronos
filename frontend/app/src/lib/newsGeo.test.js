@@ -318,3 +318,137 @@ test('locates market countries from known venues and South American club aliases
   assert.equal(boca[0].name, 'Argentina');
   assert.equal(boca[0].region, 'latam');
 });
+
+test('locates US and Mexico sports markets by venue or home-team subdivision', () => {
+  const nflAtMarket = extractMarketLocations({
+    question: 'Denver Broncos @ Atlanta Falcons',
+    sport: 'nfl',
+    league: 'nfl',
+    outcomes: ['Atlanta Falcons', 'Denver Broncos'],
+  });
+
+  assert.equal(nflAtMarket[0].id, 'us-georgia');
+  assert.equal(nflAtMarket[0].country, 'US');
+  assert.equal(nflAtMarket[0].granularity, 'state');
+
+  const mlbAtMarket = extractMarketLocations({
+    question: 'Los Angeles Dodgers @ New York Yankees',
+    sport: 'baseball',
+    league: 'mlb',
+    outcomes: ['New York Yankees', 'Los Angeles Dodgers'],
+  });
+
+  assert.equal(mlbAtMarket[0].id, 'us-new-york');
+  assert.equal(mlbAtMarket[0].country, 'US');
+
+  const ligaMxHomeMarket = extractMarketLocations({
+    question: 'Guadalajara vs América',
+    sport: 'soccer',
+    league: 'liga-mx',
+    outcomes: ['Guadalajara', 'Empate', 'América'],
+  });
+
+  assert.equal(ligaMxHomeMarket[0].id, 'mx-jalisco');
+  assert.equal(ligaMxHomeMarket[0].country, 'MX');
+
+  const neutralVenueMarket = extractMarketLocations({
+    question: 'Atlanta Falcons vs Denver Broncos',
+    sport: 'nfl',
+    league: 'nfl',
+    outcomes: ['Atlanta Falcons', 'Denver Broncos'],
+    sourceData: {
+      venue: {
+        fullName: 'AT&T Stadium',
+        city: 'Arlington',
+        state: 'TX',
+        country: 'USA',
+      },
+    },
+  });
+
+  assert.equal(neutralVenueMarket[0].id, 'us-texas');
+  assert.equal(neutralVenueMarket[0].country, 'US');
+});
+
+test('locates international soccer markets by the home country name', () => {
+  const locations = extractMarketLocations({
+    question: 'Mexico vs Argentina',
+    sport: 'soccer',
+    league: 'international-friendly',
+    outcomes: ['Mexico', 'Empate', 'Argentina'],
+  });
+
+  assert.equal(locations[0].id, 'mexico');
+  assert.equal(locations[0].country, 'MX');
+  assert.equal(locations[0].granularity, 'country');
+});
+
+test('locates F1, tennis, and golf markets by event venue or tournament fallback', () => {
+  const f1Venue = extractMarketLocations({
+    question: '¿Quién gana el Dutch Grand Prix 2026?',
+    sport: 'f1',
+    league: 'formula-1',
+    sourceData: {
+      raceName: 'Dutch Grand Prix',
+      venue: {
+        fullName: 'Circuit Zandvoort',
+        city: 'Zandvoort',
+        country: 'Netherlands',
+        latitude: 52.3888,
+        longitude: 4.5409,
+      },
+    },
+  });
+
+  assert.equal(f1Venue[0].name, 'Circuit Zandvoort');
+  assert.equal(f1Venue[0].country, 'NL');
+  assert.equal(f1Venue[0].region, 'europe');
+  assert.equal(f1Venue[0].render, 'point');
+
+  const tennisFallback = extractMarketLocations({
+    question: '¿Quién gana Wimbledon?',
+    sport: 'tennis',
+    league: 'atp',
+    sourceData: {
+      tournamentName: 'Wimbledon',
+    },
+  });
+
+  assert.equal(tennisFallback[0].name, 'Londres');
+  assert.equal(tennisFallback[0].country, 'GB');
+
+  const golfVenue = extractMarketLocations({
+    question: '¿Quién gana el Masters Tournament?',
+    sport: 'golf',
+    league: 'pga',
+    sourceData: {
+      tournamentName: 'Masters Tournament',
+      venue: {
+        fullName: 'Augusta National Golf Club',
+        city: 'Augusta',
+        state: 'GA',
+        country: 'USA',
+      },
+    },
+  });
+
+  assert.equal(golfVenue[0].id, 'us-georgia');
+  assert.equal(golfVenue[0].country, 'US');
+});
+
+test('locates combat markets by fighter nationalities instead of event venue', () => {
+  const locations = extractMarketLocations({
+    question: '¿Quién gana Brandon Moreno vs Alexandre Pantoja?',
+    sport: 'combate',
+    league: 'ufc',
+    sourceData: {
+      fighters: [
+        { name: 'Brandon Moreno', flag: 'Mexico Flag' },
+        { name: 'Alexandre Pantoja', flag: 'Brazil Flag' },
+      ],
+    },
+  });
+
+  assert.deepEqual(locations.map(location => location.country), ['MX', 'BR']);
+  assert.deepEqual(locations.map(location => location.region), ['mexico', 'latam']);
+});

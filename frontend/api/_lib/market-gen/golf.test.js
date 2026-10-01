@@ -22,10 +22,11 @@ function golfer(id, name, order) {
   };
 }
 
-function golfEvent({ id = 'pga-event', name = 'National Bank Open', competitors = [] } = {}) {
+function golfEvent({ id = 'pga-event', name = 'National Bank Open', competitors = [], venue = null } = {}) {
   return {
     id,
     name,
+    venue,
     date: futureIso(10),
     status: {
       type: {
@@ -55,13 +56,30 @@ test('PGA generator uses confirmed ESPN competitors, not the static ranking list
 
   globalThis.fetch = async () => ({
     ok: true,
-    json: async () => ({ events: [golfEvent({ competitors })] }),
+    json: async () => ({
+      events: [golfEvent({
+        competitors,
+        venue: {
+          fullName: 'Augusta National Golf Club',
+          address: { city: 'Augusta', state: 'GA', country: 'USA' },
+        },
+      })],
+    }),
   });
 
   try {
     const specs = await generateGolfMarkets();
     assert.equal(specs.length, 1);
     assert.equal(specs[0].source_data.fieldSource, 'espn-scoreboard-competitors');
+    assert.deepEqual(specs[0].source_data.venue, {
+      name: 'Augusta National Golf Club',
+      fullName: 'Augusta National Golf Club',
+      city: 'Augusta',
+      state: 'GA',
+      country: 'USA',
+      latitude: null,
+      longitude: null,
+    });
     assert.equal(specs[0].source_data.confirmedFieldSize, competitors.length);
     assert.equal(specs[0].source_data.rankingFallbackDisabled, true);
     assert.equal(specs[0].source_data.listedFieldSize, competitors.length);

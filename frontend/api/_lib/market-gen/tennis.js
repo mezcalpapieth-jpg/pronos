@@ -18,6 +18,8 @@
  * alone puts injured/skipping players in markets and reads broken.
  */
 
+import { formatEspnVenue } from './espn-scoreboard.js';
+
 const ESPN = 'https://site.api.espn.com/apis/site/v2/sports/tennis/atp/scoreboard';
 
 const MAX_FIELD_OUTCOMES = 32;
@@ -173,6 +175,20 @@ function eventCompetitions(event) {
   return Array.isArray(mens?.competitions) ? mens.competitions : [];
 }
 
+function eventVenue(event, competition = null) {
+  const candidates = [
+    competition?.venue,
+    event?.venue,
+    ...(Array.isArray(event?.competitions) ? event.competitions.map(comp => comp?.venue) : []),
+    ...eventCompetitions(event).map(comp => comp?.venue),
+  ];
+  for (const candidate of candidates) {
+    const venue = formatEspnVenue(candidate);
+    if (venue) return venue;
+  }
+  return null;
+}
+
 function statusState(item) {
   return String(item?.status?.type?.state || '').trim().toLowerCase();
 }
@@ -284,6 +300,7 @@ function buildHeadToHeadMarket(event, competition, players) {
       eventId,
       matchId,
       tournamentName: event.name,
+      venue: eventVenue(event, competition),
       roundLabel,
       startDateIso: startTime,
       tier: event?.major === true ? 'grand-slam' : 'atp-500-plus',
@@ -366,6 +383,7 @@ function buildTournamentMarket(event, field, {
     source_data: {
       eventId: event.id,
       tournamentName: event.name,
+      venue: eventVenue(event),
       startDateIso: event.date,
       endDateIso: event.endDate || null,
       isMajor: event.major === true,

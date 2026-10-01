@@ -31,7 +31,7 @@
  * produce a winner.
  */
 
-import { fetchEspnScoreboardData, formatEspnDateCompact } from './espn-scoreboard.js';
+import { fetchEspnScoreboardData, formatEspnDateCompact, formatEspnVenue } from './espn-scoreboard.js';
 
 const BASE = 'https://site.api.espn.com/apis/site/v2/sports/soccer';
 const HORIZON_DAYS = 14;
@@ -322,7 +322,7 @@ function eventToSpec(ev, {
       kickoffUtc: kickoff,
       home: { id: home?.team?.id, name: homeName, abbr: home?.team?.abbreviation },
       away: { id: away?.team?.id, name: awayName, abbr: away?.team?.abbreviation },
-      venue: comp?.venue?.fullName || null,
+      venue: formatEspnVenue(comp?.venue),
     },
   };
 }
