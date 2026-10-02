@@ -175,6 +175,14 @@ const BADGE_THEMES = Object.freeze({
     text: '#f8ffff',
     muted: '#ccfbf1',
   },
+  commodityOrange: {
+    bg: '#2a1307',
+    bg2: '#f97316',
+    accent: '#fbbf24',
+    accent2: '#fff7ed',
+    text: '#fff7ed',
+    muted: '#ffedd5',
+  },
   mexico: {
     bg: '#102018',
     bg2: '#117847',
@@ -220,7 +228,7 @@ const SPORTS_LEAGUE_BADGES = Object.freeze([
 ]);
 
 const SPORT_BADGES = Object.freeze([
-  { key: 'sport:soccer', label: 'FUTBOL', eyebrow: 'Partido', theme: 'soccer', aliases: ['soccer', 'football', 'futbol'] },
+  { key: 'sport:soccer', label: 'FUTBOL', eyebrow: 'Partido', theme: 'soccer', aliases: ['soccer', 'football', 'futbol', 'balon de oro', 'ballon dor', 'ballon d or', 'ballon-dor'] },
   { key: 'sport:basketball', label: 'BASKET', eyebrow: 'Partido', theme: 'basketball', aliases: ['basketball', 'basquetbol'] },
   { key: 'sport:baseball', label: 'BEISBOL', eyebrow: 'Juego', theme: 'baseball', aliases: ['baseball', 'beisbol', 'mlb'] },
   { key: 'sport:f1', label: 'F1', eyebrow: 'Racing', theme: 'racing', aliases: ['f1', 'formula-1', 'formula-one'] },
@@ -252,6 +260,8 @@ const ENTERTAINMENT_BADGES = Object.freeze([
 ]);
 
 const FINANCE_BADGES = Object.freeze([
+  { key: 'commodity:gold', label: 'GOLD', eyebrow: 'XAU/USD', theme: 'commodityOrange', aliases: ['xau', 'xau-usd', 'xauusd', 'gold', 'oro'] },
+  { key: 'commodity:oil', label: 'OIL', eyebrow: 'WTI/USD', theme: 'commodityOrange', aliases: ['wti', 'wti-usd', 'wtiusd', 'oil', 'petroleo', 'petroleo-wti', 'crude'] },
   { key: 'source:banxico', label: 'BANXICO', eyebrow: 'MXN', theme: 'finance', aliases: ['banxico', 'banxico-fix', 'fix'] },
   { key: 'source:fx', label: 'FX', eyebrow: 'Divisas', theme: 'finance', aliases: ['frankfurter', 'usd-mxn', 'usdmxn', 'eur-mxn', 'eurmxn', 'dolar', 'dolares', 'peso'] },
   { key: 'source:stocks', label: 'STOCK', eyebrow: 'Bolsa', theme: 'finance', aliases: ['finnhub', 'stock', 'stocks', 'equity', 'acciones', 'nasdaq', 'nyse'] },

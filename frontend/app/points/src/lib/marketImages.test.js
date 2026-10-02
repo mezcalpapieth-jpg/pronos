@@ -66,6 +66,14 @@ test('sports markets render league-specific badge art when league metadata is pr
   };
   assert.equal(marketPlaceholderKey(nfl), 'league:nfl');
   assert.match(decodedBadgeSvg(marketPlaceholderImageSrc(nfl)), />NFL</);
+
+  const ballonDor = {
+    category: 'deportes',
+    question: '¿Quién gana el Balón de Oro masculino 2026?',
+    sourceEventId: 'october-2026:ballon-dor-men',
+  };
+  assert.equal(marketPlaceholderKey(ballonDor), 'sport:soccer');
+  assert.match(decodedBadgeSvg(marketPlaceholderImageSrc(ballonDor)), />FUTBOL</);
 });
 
 test('crypto markets render coin-specific badge art from resolver metadata', () => {
@@ -112,6 +120,16 @@ test('special and finance markets render sharper source badges without overridin
   const banxico = { category: 'finanzas', resolverConfig: { source: 'banxico-fix', symbol: 'USD/MXN' } };
   assert.equal(marketPlaceholderKey(banxico), 'source:banxico');
   assert.match(decodedBadgeSvg(marketPlaceholderImageSrc(banxico)), />BANXICO</);
+
+  const gold = { category: 'finanzas', question: 'Oro (XAU/USD): cierre mensual de octubre 2026', resolver: { symbol: 'XAU/USD' } };
+  assert.equal(marketPlaceholderKey(gold), 'commodity:gold');
+  assert.match(decodedBadgeSvg(marketPlaceholderImageSrc(gold)), />GOLD</);
+  assert.match(decodedBadgeSvg(marketPlaceholderImageSrc(gold)), />XAU\/USD</);
+
+  const oil = { category: 'finanzas', question: 'Petróleo WTI (WTI/USD): cierre mensual de octubre 2026', resolver: { symbol: 'WTI/USD' } };
+  assert.equal(marketPlaceholderKey(oil), 'commodity:oil');
+  assert.match(decodedBadgeSvg(marketPlaceholderImageSrc(oil)), />OIL</);
+  assert.match(decodedBadgeSvg(marketPlaceholderImageSrc(oil)), />WTI\/USD</);
 
   assert.equal(
     marketImageSrc({ imageUrl: 'https://example.com/custom.png', category: 'deportes', league: 'nba' }),
