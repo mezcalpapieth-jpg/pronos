@@ -132,6 +132,15 @@ function validSeriesWins(value) {
   };
 }
 
+function plausibleSeriesWinsForGame(value, gameNumber) {
+  const wins = validSeriesWins(value);
+  if (!wins) return null;
+  const game = validGameNumber(gameNumber);
+  if (!game) return wins;
+  const totalWins = wins.homeWins + wins.awayWins;
+  return totalWins <= game - 1 ? wins : null;
+}
+
 export function buildSeriesKey({ leaguePath, seasonYear, round, homeTeam, awayTeam } = {}) {
   const home = teamId(homeTeam);
   const away = teamId(awayTeam);
@@ -200,7 +209,10 @@ export function extractEspnSeriesMeta(ev, {
     homeTeam,
     awayTeam,
     teams: [homeTeam, awayTeam],
-    espnSeriesWins: seriesWinsFromSeriesObject(series, home, away),
+    espnSeriesWins: plausibleSeriesWinsForGame(
+      seriesWinsFromSeriesObject(series, home, away),
+      gameNumber,
+    ),
   };
 }
 
@@ -243,7 +255,7 @@ export function normalizeSeriesMeta({ resolverConfig, sourceData, row } = {}) {
     homeTeam: home,
     awayTeam: away,
     teams: [home, away],
-    espnSeriesWins: validSeriesWins(series?.espnSeriesWins),
+    espnSeriesWins: plausibleSeriesWinsForGame(series?.espnSeriesWins, gameNumber),
   };
 }
 
@@ -309,7 +321,7 @@ export function seriesGameGate({ bestOf, gameNumber, teamAWins = 0, teamBWins = 
 export function applySeriesGateToMarket(market, seriesMeta = market?.seriesMeta) {
   if (!market || market.status === 'resolved') return market;
   const gameNumber = validGameNumber(seriesMeta?.gameNumber || market.gameNumber);
-  const wins = validSeriesWins(seriesMeta?.espnSeriesWins);
+  const wins = plausibleSeriesWinsForGame(seriesMeta?.espnSeriesWins, gameNumber);
   if (!gameNumber) return market;
   if (gameNumber <= (seriesMeta?.guaranteedGames || (seriesMeta?.bestOf === 5 ? 3 : 4))) return market;
   const resolvedWins = wins || { homeWins: 0, awayWins: 0 };
@@ -447,7 +459,7 @@ function setsOverlap(a, b) {
 }
 
 function officialWinsForTeams(candidateMeta, teamAKeys, teamBKeys) {
-  const wins = validSeriesWins(candidateMeta?.espnSeriesWins);
+  const wins = plausibleSeriesWinsForGame(candidateMeta?.espnSeriesWins, candidateMeta?.gameNumber);
   if (!wins) return null;
   const homeKeys = teamKeySet(candidateMeta?.homeTeam);
   const awayKeys = teamKeySet(candidateMeta?.awayTeam);

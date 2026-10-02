@@ -282,6 +282,86 @@ test('buildSeriesDetail uses ESPN series wins to keep missing prior games from l
   ]);
 });
 
+test('buildSeriesDetail ignores impossible ESPN wins before game one', () => {
+  const meta = {
+    key: 'baseball-mlb:2026:division:nyy-tb',
+    leaguePath: 'baseball/mlb',
+    league: 'mlb',
+    sport: 'baseball',
+    gameNumber: 1,
+    bestOf: 7,
+    winTarget: 4,
+    guaranteedGames: 4,
+    round: 'Division Series',
+    seasonYear: 2026,
+    homeTeam: { id: '30', name: 'Tampa Bay Rays', shortName: 'Rays', abbreviation: 'TB' },
+    awayTeam: { id: '10', name: 'New York Yankees', shortName: 'Yankees', abbreviation: 'NYY' },
+    teams: [
+      { id: '30', name: 'Tampa Bay Rays', shortName: 'Rays', abbreviation: 'TB' },
+      { id: '10', name: 'New York Yankees', shortName: 'Yankees', abbreviation: 'NYY' },
+    ],
+    espnSeriesWins: { homeWins: 1, awayWins: 1 },
+  };
+
+  const detail = buildSeriesDetail(meta, [
+    {
+      id: 701,
+      question: 'Game 1',
+      status: 'active',
+      outcome: null,
+      outcomes: ['Tampa Bay Rays', 'New York Yankees'],
+      startTime: '2026-10-02T23:00:00Z',
+      seriesMeta: meta,
+    },
+  ]);
+
+  assert.equal(detail.teamAWins, 0);
+  assert.equal(detail.teamBWins, 0);
+  assert.equal(detail.summary, 'Serie empatada 0-0');
+  assert.equal(detail.subtitle, 'Juego 1 · Serie empatada 0-0');
+  assert.equal(detail.sequence[0].subtitle, 'Juego 1 · Serie empatada 0-0');
+});
+
+test('buildSeriesDetail ignores impossible ESPN leaders before game one', () => {
+  const meta = {
+    key: 'baseball-mlb:2026:division:atl-lad',
+    leaguePath: 'baseball/mlb',
+    league: 'mlb',
+    sport: 'baseball',
+    gameNumber: 1,
+    bestOf: 7,
+    winTarget: 4,
+    guaranteedGames: 4,
+    round: 'Division Series',
+    seasonYear: 2026,
+    homeTeam: { id: '19', name: 'Los Angeles Dodgers', shortName: 'Dodgers', abbreviation: 'LAD' },
+    awayTeam: { id: '15', name: 'Atlanta Braves', shortName: 'Braves', abbreviation: 'ATL' },
+    teams: [
+      { id: '19', name: 'Los Angeles Dodgers', shortName: 'Dodgers', abbreviation: 'LAD' },
+      { id: '15', name: 'Atlanta Braves', shortName: 'Braves', abbreviation: 'ATL' },
+    ],
+    espnSeriesWins: { homeWins: 0, awayWins: 3 },
+  };
+
+  const detail = buildSeriesDetail(meta, [
+    {
+      id: 702,
+      question: 'Game 1',
+      status: 'active',
+      outcome: null,
+      outcomes: ['Los Angeles Dodgers', 'Atlanta Braves'],
+      startTime: '2026-10-02T23:00:00Z',
+      seriesMeta: meta,
+    },
+  ]);
+
+  assert.equal(detail.teamAWins, 0);
+  assert.equal(detail.teamBWins, 0);
+  assert.equal(detail.summary, 'Serie empatada 0-0');
+  assert.equal(detail.subtitle, 'Juego 1 · Serie empatada 0-0');
+  assert.equal(detail.sequence[0].subtitle, 'Juego 1 · Serie empatada 0-0');
+});
+
 test('buildSeriesDetail locks approved optional best-of-seven games until the score requires them', () => {
   const meta = {
     key: 'basketball-nba:2026:west-first-round:24-25',
