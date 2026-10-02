@@ -13,6 +13,10 @@ test('tournament rules place new tournament features below the base rules', () =
   assert.match(source, /Puntaje = PnL de mercados \+ convicción \+ liquidez \+ combinadas liquidadas - inactividad/);
   assert.match(source, /Winning tournament lots bought at/);
   assert.match(source, /Los lotes ganadores comprados a/);
+  assert.match(source, /\+\$\{dailyBonusRate\}% of profit per day held/);
+  assert.match(source, /\+\$\{dailyBonusRate\}% de ganancia por día mantenido/);
+  assert.match(source, /after \$\{maxHoldDays\} days/);
+  assert.match(source, /después de \$\{maxHoldDays\} días/);
   assert.match(source, /Create them from the Combinada button/);
   assert.match(source, /Se arman desde el botón Combinada/);
   assert.match(source, /recompensa por dar liquidez/);

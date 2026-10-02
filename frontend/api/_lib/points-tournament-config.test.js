@@ -7,7 +7,9 @@ import {
   NEXT_TOURNAMENT_START_ISO,
   TOURNAMENT_CYCLE_LABEL,
   TOURNAMENT_CONVICTION_BONUS_RATE,
+  TOURNAMENT_CONVICTION_DAILY_BONUS_RATE,
   TOURNAMENT_CONVICTION_MAX_ENTRY_PRICE,
+  TOURNAMENT_CONVICTION_MAX_HOLD_DAYS,
   TOURNAMENT_CONVICTION_MAX_MULTIPLIER,
   TOURNAMENT_CONVICTION_MIN_MARKET_ENTRY_MXNP,
   TOURNAMENT_CONVICTION_NET_PNL_CAP_RATE,
@@ -37,12 +39,16 @@ test('points tournament requires ten qualifying markets', () => {
 test('points tournament exposes conviction multiplier and parlay rules', () => {
   const rules = tournamentRulesPayload();
   assert.equal(TOURNAMENT_CONVICTION_BONUS_RATE, 0.5);
+  assert.equal(TOURNAMENT_CONVICTION_DAILY_BONUS_RATE, 0.10);
+  assert.equal(TOURNAMENT_CONVICTION_MAX_HOLD_DAYS, 5);
   assert.equal(TOURNAMENT_CONVICTION_MAX_MULTIPLIER, 1.5);
   assert.equal(TOURNAMENT_CONVICTION_MAX_ENTRY_PRICE, 0.85);
   assert.equal(TOURNAMENT_CONVICTION_NET_PNL_CAP_RATE, 0.5);
   assert.equal(TOURNAMENT_CONVICTION_MIN_MARKET_ENTRY_MXNP, 100);
   assert.deepEqual(rules.convictionMultiplier, {
     bonusRate: 0.5,
+    dailyBonusRate: 0.10,
+    maxHoldDays: 5,
     maxMultiplier: 1.5,
     maxEntryPrice: 0.85,
     netPnlCapRate: 0.5,

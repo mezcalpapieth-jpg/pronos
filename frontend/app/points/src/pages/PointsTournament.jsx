@@ -17,6 +17,8 @@ const DEFAULT_RULES = {
   inactivityPenalty: 50,
   convictionMultiplier: {
     bonusRate: 0.5,
+    dailyBonusRate: 0.10,
+    maxHoldDays: 5,
     maxMultiplier: 1.5,
     maxEntryPrice: 0.85,
     netPnlCapRate: 0.5,
@@ -811,17 +813,19 @@ function ScoreFormulaPanel({ lang, rules }) {
   const r = rules || DEFAULT_RULES;
   const conviction = r.convictionMultiplier || DEFAULT_RULES.convictionMultiplier;
   const maxEntryPrice = Number(conviction.maxEntryPrice || DEFAULT_RULES.convictionMultiplier.maxEntryPrice).toFixed(2);
+  const dailyBonusRate = fmtInteger(Number(conviction.dailyBonusRate || DEFAULT_RULES.convictionMultiplier.dailyBonusRate) * 100);
+  const maxHoldDays = fmtInteger(conviction.maxHoldDays || DEFAULT_RULES.convictionMultiplier.maxHoldDays);
   const capRate = fmtInteger(Number(conviction.netPnlCapRate || DEFAULT_RULES.convictionMultiplier.netPnlCapRate) * 100);
   const inactivityPenalty = fmtInteger(r.inactivityPenalty);
   const rows = lang === 'en' ? [
     ['Market PnL', 'Realized market performance is the base of your score. Signup, streak, social, and referral bonuses only fund your wallet.'],
-    ['Conviction', `Winning tournament lots bought at ${maxEntryPrice} or less and held through resolution add a capped bonus. The bonus cannot exceed ${capRate}% of your net PnL in that market.`],
+    ['Conviction', `Winning tournament lots bought at ${maxEntryPrice} or less earn +${dailyBonusRate}% of profit per day held until resolution, capped after ${maxHoldDays} days. The bonus cannot exceed ${capRate}% of your net PnL in that market.`],
     ['Liquidity', 'Maker rewards count when your qualifying limit orders stay near the live price and follow the tournament reward caps.'],
     ['Combos', 'Only settled combo-slip PnL counts, so open slips do not move the leaderboard until they resolve.'],
     ['Inactivity', `${inactivityPenalty} MXNP is subtracted for each inactive day in the cycle.`],
   ] : [
     ['PnL de mercados', 'El desempeño realizado en mercados es la base del puntaje. Los bonos de registro, racha, redes y referidos solo fondean tu wallet.'],
-    ['Convicción', `Los lotes ganadores comprados a ${maxEntryPrice} o menos y mantenidos hasta la resolución suman un bono con tope. El bono no puede pasar de ${capRate}% de tu PnL neto en ese mercado.`],
+    ['Convicción', `Los lotes ganadores comprados a ${maxEntryPrice} o menos suman +${dailyBonusRate}% de ganancia por día mantenido hasta la resolución, con tope después de ${maxHoldDays} días. El bono no puede pasar de ${capRate}% de tu PnL neto en ese mercado.`],
     ['Liquidez', 'Las recompensas maker cuentan cuando tus órdenes límite califican cerca del precio vivo y respetan los topes del torneo.'],
     ['Combinadas', 'Solo cuenta el PnL de combinadas liquidadas; las combinadas abiertas no mueven el leaderboard hasta resolverse.'],
     ['Inactividad', `Se restan ${inactivityPenalty} MXNP por cada día inactivo del ciclo.`],
@@ -874,6 +878,8 @@ function NewFeatureList({ lang, rules }) {
   const conviction = r.convictionMultiplier || DEFAULT_RULES.convictionMultiplier;
   const maxEntryPrice = Number(conviction.maxEntryPrice || DEFAULT_RULES.convictionMultiplier.maxEntryPrice).toFixed(2);
   const maxMultiplier = Number(conviction.maxMultiplier || DEFAULT_RULES.convictionMultiplier.maxMultiplier).toFixed(1);
+  const dailyBonusRate = fmtInteger(Number(conviction.dailyBonusRate || DEFAULT_RULES.convictionMultiplier.dailyBonusRate) * 100);
+  const maxHoldDays = fmtInteger(conviction.maxHoldDays || DEFAULT_RULES.convictionMultiplier.maxHoldDays);
   const capRate = fmtInteger(Number(conviction.netPnlCapRate || DEFAULT_RULES.convictionMultiplier.netPnlCapRate) * 100);
   const liquidityRate = fmtInteger(Number(r.liquidityReward?.weeklyRate || DEFAULT_RULES.liquidityReward.weeklyRate) * 100);
   const liquidityDailyCap = fmtInteger(r.liquidityReward?.maxDailyPerUser || DEFAULT_RULES.liquidityReward.maxDailyPerUser);
@@ -884,7 +890,7 @@ function NewFeatureList({ lang, rules }) {
   const rows = lang === 'en' ? [
     [
       'Conviction multiplier',
-      `Winning lots bought at ${maxEntryPrice} or below and held until resolution can earn up to ${maxMultiplier}x on their profit. The bonus is capped at ${capRate}% of your net PnL in that market.`,
+      `Winning lots bought at ${maxEntryPrice} or below earn +${dailyBonusRate}% of profit per day held until resolution, capped at ${maxMultiplier}x after ${maxHoldDays} days. The bonus is capped at ${capRate}% of your net PnL in that market.`,
     ],
     [
       'Combinadas',
@@ -897,7 +903,7 @@ function NewFeatureList({ lang, rules }) {
   ] : [
     [
       'Multiplicador de convicción',
-      `Los lotes ganadores comprados a ${maxEntryPrice} o menos y mantenidos hasta la resolución pueden sumar hasta ${maxMultiplier}x sobre su ganancia. El bono se limita a ${capRate}% de tu PnL neto en ese mercado.`,
+      `Los lotes ganadores comprados a ${maxEntryPrice} o menos suman +${dailyBonusRate}% de ganancia por día mantenido hasta la resolución, con tope de ${maxMultiplier}x después de ${maxHoldDays} días. El bono se limita a ${capRate}% de tu PnL neto en ese mercado.`,
     ],
     [
       'Combinadas',

@@ -1,7 +1,9 @@
 import { binaryPrices, multiPrices } from './amm-math.js';
 import {
   TOURNAMENT_CONVICTION_BONUS_RATE,
+  TOURNAMENT_CONVICTION_DAILY_BONUS_RATE,
   TOURNAMENT_CONVICTION_MAX_ENTRY_PRICE,
+  TOURNAMENT_CONVICTION_MAX_HOLD_DAYS,
   TOURNAMENT_CONVICTION_MAX_MULTIPLIER,
   TOURNAMENT_CONVICTION_MIN_MARKET_ENTRY_MXNP,
   TOURNAMENT_CONVICTION_NET_PNL_CAP_RATE,
@@ -185,6 +187,7 @@ function buildPenalty({ user, activity, now, window }) {
 }
 
 const CONVICTION_LOT_EPSILON = 0.000001;
+const CONVICTION_DAY_MS = 24 * 60 * 60 * 1000;
 
 function dateMs(value) {
   if (!value) return null;
@@ -258,16 +261,25 @@ export function tournamentConvictionMultiplierForLot(boughtAt, marketOpenAt, mar
   const openMs = dateMs(marketOpenAt);
   const closeMs = dateMs(marketCloseAt);
   if (boughtMs == null || openMs == null || closeMs == null || closeMs <= openMs) {
-    return { heldRatio: 0, multiplier: 1 };
+    return { heldRatio: 0, heldDays: 0, cappedHeldDays: 0, bonusRate: 0, multiplier: 1 };
   }
 
   const effectiveBuyMs = Math.min(Math.max(boughtMs, openMs), closeMs);
-  const heldRatio = Math.max(0, Math.min(1, (closeMs - effectiveBuyMs) / (closeMs - openMs)));
+  const heldMs = Math.max(0, closeMs - effectiveBuyMs);
+  const heldDays = heldMs / CONVICTION_DAY_MS;
+  const cappedHeldDays = Math.min(TOURNAMENT_CONVICTION_MAX_HOLD_DAYS, heldDays);
+  const bonusRate = Math.min(
+    TOURNAMENT_CONVICTION_BONUS_RATE,
+    TOURNAMENT_CONVICTION_DAILY_BONUS_RATE * cappedHeldDays,
+  );
+  const heldRatio = TOURNAMENT_CONVICTION_MAX_HOLD_DAYS > 0
+    ? Math.max(0, Math.min(1, cappedHeldDays / TOURNAMENT_CONVICTION_MAX_HOLD_DAYS))
+    : 0;
   const multiplier = Math.min(
     TOURNAMENT_CONVICTION_MAX_MULTIPLIER,
-    1 + TOURNAMENT_CONVICTION_BONUS_RATE * heldRatio,
+    1 + bonusRate,
   );
-  return { heldRatio, multiplier };
+  return { heldRatio, heldDays, cappedHeldDays, bonusRate, multiplier };
 }
 
 function consumeConvictionLots(lots = [], sharesToRemove) {

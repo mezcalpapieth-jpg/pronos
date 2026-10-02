@@ -54,7 +54,29 @@ function build(rows, marketPnl = 400) {
 test('conviction multiplier reaches 1.5x for a lot bought at market open', () => {
   const result = tournamentConvictionMultiplierForLot(OPEN, OPEN, CLOSE);
   assert.equal(result.heldRatio, 1);
+  assert.equal(result.cappedHeldDays, 5);
   assert.equal(result.multiplier, 1.5);
+});
+
+test('conviction multiplier grows 10 percent per elapsed holding day', () => {
+  const oneDayClose = '2026-10-02T06:00:00.000Z';
+  const result = tournamentConvictionMultiplierForLot(OPEN, OPEN, oneDayClose);
+  assert.equal(result.heldDays, 1);
+  assert.equal(result.cappedHeldDays, 1);
+  assert.equal(result.bonusRate, 0.10);
+  assert.equal(result.multiplier, 1.1);
+});
+
+test('conviction bonus pays one day of growth for one-day markets', () => {
+  const { bonusByUser, statsByUser, marketBreakdownByUser } = build([
+    trade({
+      market_end_time: '2026-10-02T06:00:00.000Z',
+      market_resolved_at: '2026-10-02T06:05:00.000Z',
+    }),
+  ]);
+  approxEqual(bonusByUser.get('ana'), 40);
+  approxEqual(statsByUser.get('ana').convictionBonusGross, 40);
+  approxEqual(marketBreakdownByUser.get('ana')[0].averageMultiplier, 1.1);
 });
 
 test('conviction bonus pays winning held lots and exposes audit stats', () => {
@@ -96,7 +118,7 @@ test('conviction bonus removes sold shares FIFO and ignores post-resolution rede
     }),
   ], 1000);
 
-  approxEqual(bonusByUser.get('ana'), 200);
+  approxEqual(bonusByUser.get('ana'), 300);
 });
 
 test('conviction FIFO sells consume ineligible older lots before eligible later lots', () => {
@@ -125,7 +147,7 @@ test('conviction FIFO sells consume ineligible older lots before eligible later 
     }),
   ], 1000);
 
-  approxEqual(bonusByUser.get('ana'), 400 * 0.5 * (29 / 30));
+  approxEqual(bonusByUser.get('ana'), 200);
 });
 
 test('conviction bonus requires price eligibility, resolved winner, and minimum market stake', () => {
