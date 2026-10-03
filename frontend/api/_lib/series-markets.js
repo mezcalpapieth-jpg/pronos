@@ -221,7 +221,7 @@ export function normalizeSeriesMeta({ resolverConfig, sourceData, row } = {}) {
   const sd = parseJsonMaybe(sourceData, sourceData || null);
   const series = cfg?.series || sd?.series || null;
   const leaguePath = cfg?.leaguePath || series?.leaguePath || null;
-  if (!series && !ESPN_SERIES_LEAGUES.has(leaguePath)) return null;
+  if (!series || !ESPN_SERIES_LEAGUES.has(leaguePath)) return null;
 
   const outcomes = parseJsonMaybe(row?.outcomes, row?.outcomes || []);
   const home = series?.homeTeam || sd?.home || {
@@ -458,8 +458,8 @@ function setsOverlap(a, b) {
   return false;
 }
 
-function officialWinsForTeams(candidateMeta, teamAKeys, teamBKeys) {
-  const wins = plausibleSeriesWinsForGame(candidateMeta?.espnSeriesWins, candidateMeta?.gameNumber);
+function officialWinsForTeams(candidateMeta, teamAKeys, teamBKeys, currentGameNumber = candidateMeta?.gameNumber) {
+  const wins = plausibleSeriesWinsForGame(candidateMeta?.espnSeriesWins, currentGameNumber);
   if (!wins) return null;
   const homeKeys = teamKeySet(candidateMeta?.homeTeam);
   const awayKeys = teamKeySet(candidateMeta?.awayTeam);
@@ -543,7 +543,7 @@ export function buildSeriesDetail(meta, markets = []) {
   const officialCandidates = [meta, ...normalizedMarkets.map(market => market.seriesMeta)].filter(Boolean);
   let officialWins = null;
   for (const candidate of officialCandidates) {
-    const candidateWins = officialWinsForTeams(candidate, teamAKeys, teamBKeys);
+    const candidateWins = officialWinsForTeams(candidate, teamAKeys, teamBKeys, meta.gameNumber);
     if (!candidateWins) continue;
     if (!officialWins || (candidateWins.teamAWins + candidateWins.teamBWins) >= (officialWins.teamAWins + officialWins.teamBWins)) {
       officialWins = candidateWins;

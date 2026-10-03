@@ -362,6 +362,137 @@ test('buildSeriesDetail ignores impossible ESPN leaders before game one', () => 
   assert.equal(detail.sequence[0].subtitle, 'Juego 1 · Serie empatada 0-0');
 });
 
+test('buildSeriesDetail ignores future stale official scores for the current game', () => {
+  const meta = {
+    key: 'baseball-mlb:2026:division:15-19',
+    leaguePath: 'baseball/mlb',
+    league: 'mlb',
+    sport: 'baseball',
+    gameNumber: 2,
+    bestOf: 5,
+    winTarget: 3,
+    guaranteedGames: 3,
+    round: 'Division Series',
+    seasonYear: 2026,
+    homeTeam: { id: '19', name: 'Los Angeles Dodgers', shortName: 'Dodgers', abbreviation: 'LAD' },
+    awayTeam: { id: '15', name: 'Atlanta Braves', shortName: 'Braves', abbreviation: 'ATL' },
+    teams: [
+      { id: '19', name: 'Los Angeles Dodgers', shortName: 'Dodgers', abbreviation: 'LAD' },
+      { id: '15', name: 'Atlanta Braves', shortName: 'Braves', abbreviation: 'ATL' },
+    ],
+    espnSeriesWins: { homeWins: 0, awayWins: 0 },
+  };
+  const outcomes = ['Los Angeles Dodgers', 'Atlanta Braves'];
+
+  const detail = buildSeriesDetail(meta, [
+    {
+      id: 703,
+      question: 'Game 1',
+      status: 'active',
+      outcome: null,
+      outcomes,
+      startTime: '2026-10-03T20:00:00Z',
+      seriesMeta: { ...meta, gameNumber: 1, espnSeriesWins: { homeWins: 0, awayWins: 0 } },
+    },
+    {
+      id: 704,
+      question: 'Game 2',
+      status: 'active',
+      outcome: null,
+      outcomes,
+      startTime: '2026-10-05T00:00:00Z',
+      seriesMeta: meta,
+    },
+    {
+      id: null,
+      pendingId: 705,
+      question: 'Game 4',
+      status: 'pending',
+      outcome: null,
+      outcomes,
+      startTime: '2026-10-07T22:00:00Z',
+      seriesMeta: { ...meta, gameNumber: 4, espnSeriesWins: { homeWins: 0, awayWins: 3 } },
+    },
+  ]);
+
+  assert.equal(detail.teamAWins, 0);
+  assert.equal(detail.teamBWins, 0);
+  assert.equal(detail.summary, 'Serie empatada 0-0');
+  assert.equal(detail.subtitle, 'Juego 2 · Serie empatada 0-0');
+  assert.equal(detail.sequence.find((item) => item.id === 704)?.subtitle, 'Juego 2 · Serie empatada 0-0');
+});
+
+test('buildSeriesDetail ignores same-team rows without stored series metadata', () => {
+  const meta = {
+    key: 'baseball-mlb:2026:series:15-19',
+    leaguePath: 'baseball/mlb',
+    league: 'mlb',
+    sport: 'baseball',
+    gameNumber: 2,
+    bestOf: 5,
+    winTarget: 3,
+    guaranteedGames: 3,
+    round: null,
+    seasonYear: 2026,
+    homeTeam: { id: '19', name: 'Los Angeles Dodgers', shortName: 'Dodgers', abbreviation: 'LAD' },
+    awayTeam: { id: '15', name: 'Atlanta Braves', shortName: 'Braves', abbreviation: 'ATL' },
+    teams: [
+      { id: '19', name: 'Los Angeles Dodgers', shortName: 'Dodgers', abbreviation: 'LAD' },
+      { id: '15', name: 'Atlanta Braves', shortName: 'Braves', abbreviation: 'ATL' },
+    ],
+    espnSeriesWins: { homeWins: 0, awayWins: 0 },
+  };
+  const playoffOutcomes = ['Los Angeles Dodgers', 'Atlanta Braves'];
+  const regularSeasonOutcomes = ['Atlanta Braves', 'Los Angeles Dodgers'];
+  const regularSeasonConfig = {
+    source: 'espn',
+    leaguePath: 'baseball/mlb',
+  };
+
+  const detail = buildSeriesDetail(meta, [
+    {
+      id: 105763,
+      question: 'Los Angeles Dodgers @ Atlanta Braves',
+      status: 'resolved',
+      outcome: 0,
+      outcomes: regularSeasonOutcomes,
+      startTime: '2026-08-25T23:15:00Z',
+      resolverConfig: regularSeasonConfig,
+    },
+    {
+      id: 111573,
+      question: 'Los Angeles Dodgers @ Atlanta Braves',
+      status: 'resolved',
+      outcome: 0,
+      outcomes: regularSeasonOutcomes,
+      startTime: '2026-08-26T23:15:00Z',
+      resolverConfig: regularSeasonConfig,
+    },
+    {
+      id: 317665,
+      question: 'Game 1',
+      status: 'active',
+      outcome: null,
+      outcomes: playoffOutcomes,
+      startTime: '2026-10-03T20:00:00Z',
+      seriesMeta: { ...meta, gameNumber: 1 },
+    },
+    {
+      id: 320583,
+      question: 'Game 2',
+      status: 'active',
+      outcome: null,
+      outcomes: playoffOutcomes,
+      startTime: '2026-10-05T00:00:00Z',
+      seriesMeta: meta,
+    },
+  ]);
+
+  assert.equal(detail.summary, 'Serie empatada 0-0');
+  assert.equal(detail.subtitle, 'Juego 2 · Serie empatada 0-0');
+  assert.deepEqual(detail.sequence.map((item) => item.id), [317665, 320583, null, null, null]);
+});
+
 test('buildSeriesDetail locks approved optional best-of-seven games until the score requires them', () => {
   const meta = {
     key: 'basketball-nba:2026:west-first-round:24-25',
