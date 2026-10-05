@@ -58,6 +58,7 @@ test('delegated policy allowlist includes guarded AMM min-output selectors', () 
   const selector = (signature) => ethers.utils.id(signature).slice(0, 10);
 
   for (const signature of [
+    'setApprovalForAll(address,bool)',
     'buy(bool,uint256,uint256)',
     'sell(bool,uint256,uint256)',
     'buy(uint8,uint256,uint256)',
@@ -76,6 +77,10 @@ test('delegation target builder includes active protocol pools without duplicate
       marketFactoryV1: '0x1111111111111111111111111111111111111111',
       marketFactoryV2: '0x2222222222222222222222222222222222222222',
       collateralToken: '0x3333333333333333333333333333333333333333',
+      shareTokens: [
+        '0x4444444444444444444444444444444444444444',
+        '0x5555555555555555555555555555555555555555',
+      ],
       marketPools: ['0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'],
     },
     extraMarketPools: [
@@ -89,6 +94,8 @@ test('delegation target builder includes active protocol pools without duplicate
     '0x1111111111111111111111111111111111111111',
     '0x2222222222222222222222222222222222222222',
     '0x3333333333333333333333333333333333333333',
+    '0x4444444444444444444444444444444444444444',
+    '0x5555555555555555555555555555555555555555',
     '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
     '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
   ]);

@@ -6,7 +6,7 @@
  * on-chain trades transparently — zero wallet popups per trade.
  *
  * Policy scope (locked in /memory/onchain_turnkey_delegation.md):
- *   - Allowed selectors: buy / sell / redeem / MXNB.approve
+ *   - Allowed selectors: buy / sell / redeem / MXNB.approve / ERC1155.setApprovalForAll
  *   - Allowed contracts: MarketFactory + every Market it deploys
  *   - Daily cap: 200,000 MXNB per user (MXN-pegged; ~$10k USD)
  *   - Lifetime: 180 days, then re-auth via email OTP
@@ -15,8 +15,8 @@
  *
  * The actual Turnkey `createPolicy` call is gated behind
  * `TURNKEY_POLICIES_ENABLED`. In production, policy targets are the
- * factories, collateral token, env-configured pools, plus the currently
- * indexed protocol pools passed by the authorize endpoint.
+ * factories, collateral token, share-token contracts, env-configured pools,
+ * plus the currently indexed protocol pools passed by the authorize endpoint.
  */
 
 import {
@@ -36,6 +36,7 @@ export const DELEGATION_DAILY_CAP_MXNB = 200_000;
 // eth.tx.data[0..10] (0x + 8 hex chars).
 export const DELEGATION_ALLOWED_SELECTORS = Object.freeze([
   '0x095ea7b3', // ERC20.approve(address,uint256)
+  '0xa22cb465', // ERC1155.setApprovalForAll(address,bool)
   '0xe24c469b', // PronosAMM.buy(bool,uint256)
   '0xf571c5f3', // PronosAMM.sell(bool,uint256)
   '0x01a9812c', // PronosAMM.buy(bool,uint256,uint256)
@@ -66,6 +67,12 @@ function onchainConfig() {
     marketFactoryV1: process.env.ONCHAIN_MARKET_FACTORY_ADDRESS || null,
     marketFactoryV2: process.env.ONCHAIN_MARKET_FACTORY_V2_ADDRESS || null,
     collateralToken: process.env.ONCHAIN_COLLATERAL_ADDRESS || process.env.ONCHAIN_MXNB_ADDRESS || null,
+    shareTokens: [
+      process.env.ONCHAIN_SHARE_TOKEN_ADDRESS,
+      process.env.ONCHAIN_SHARE_TOKEN_V2_ADDRESS,
+      process.env.VITE_PRONOS_ARBITRUM_TOKEN,
+      process.env.VITE_PRONOS_ARBITRUM_TOKEN_V2,
+    ],
     marketPools: [
       ...parseAddressList(process.env.ONCHAIN_MARKET_POOL_ADDRESSES),
       ...parseAddressList(process.env.ONCHAIN_AMM_ADDRESSES),
@@ -78,6 +85,7 @@ export function buildDelegationAllowedTargets({ cfg = onchainConfig(), extraMark
     cfg.marketFactoryV1,
     cfg.marketFactoryV2,
     cfg.collateralToken,
+    ...(Array.isArray(cfg.shareTokens) ? cfg.shareTokens : []),
     ...(Array.isArray(cfg.marketPools) ? cfg.marketPools : []),
     ...(Array.isArray(extraMarketPools) ? extraMarketPools : []),
   ];

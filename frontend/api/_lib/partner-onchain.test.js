@@ -6,6 +6,7 @@ import {
   buildProtocolBuyTransaction,
   buildProtocolRedeemTransaction,
   buildProtocolSellTransaction,
+  buildProtocolShareApprovalTransaction,
 } from './onchain-trader.js';
 import {
   normalizeAction,
@@ -106,6 +107,10 @@ test('protocol calldata builders return wallet-signable transaction requests', (
       shares: 10,
       minCollateralOut: 8,
     });
+    const shareApproval = buildProtocolShareApprovalTransaction({
+      tokenAddress: '0x0000000000000000000000000000000000000002',
+      operator: market.chain_address,
+    });
     const redeem = buildProtocolRedeemTransaction({ market, amount: 5 });
 
     assert.equal(approval.type, 'erc20_approval');
@@ -116,6 +121,8 @@ test('protocol calldata builders return wallet-signable transaction requests', (
     assert.equal(buy.collateral, '25.0');
     assert.equal(sell.type, 'market_sell');
     assert.equal(sell.outcomeIndex, 1);
+    assert.equal(shareApproval.type, 'erc1155_operator_approval');
+    assert.match(shareApproval.data, /^0xa22cb465/);
     assert.equal(redeem.type, 'market_redeem');
     assert.equal(redeem.amount, '5.0');
   } finally {

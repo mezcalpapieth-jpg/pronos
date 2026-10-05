@@ -35,6 +35,7 @@ import {
 // ── Config + ABI ────────────────────────────────────────────────────
 
 const BINARY_AMM_ABI = [
+  'function token() view returns (address)',
   'function buy(bool buyYes, uint256 collateralAmount) external returns (uint256)',
   'function buy(bool buyYes, uint256 collateralAmount, uint256 minSharesOut) external returns (uint256)',
   'function sell(bool sellYes, uint256 sharesAmount) external returns (uint256)',
@@ -50,6 +51,7 @@ const BINARY_AMM_ABI = [
 ];
 
 const MULTI_AMM_ABI = [
+  'function token() view returns (address)',
   'function buy(uint8 outcomeIndex, uint256 collateralAmount) external returns (uint256)',
   'function buy(uint8 outcomeIndex, uint256 collateralAmount, uint256 minSharesOut) external returns (uint256)',
   'function sell(uint8 outcomeIndex, uint256 sharesAmount) external returns (uint256)',
@@ -69,6 +71,11 @@ const ERC20_ABI = [
   'function allowance(address owner, address spender) view returns (uint256)',
   'function balanceOf(address owner) view returns (uint256)',
   'function decimals() view returns (uint8)',
+];
+
+const ERC1155_ABI = [
+  'function setApprovalForAll(address operator, bool approved) external',
+  'function isApprovedForAll(address account, address operator) view returns (bool)',
 ];
 
 // MarketFactory ABIs — match contracts/src/{MarketFactory,MarketFactoryV2}.sol.
@@ -250,6 +257,26 @@ async function ensureCollateralAllowance({
     to: collateralAddr,
     data,
     gasLimit: ethers.BigNumber.from(100_000),
+  });
+  return receipt.transactionHash;
+}
+
+async function ensureShareOperatorApproval({
+  suborgId, ownerAddr, ammAddress, tokenAddr,
+}) {
+  const prov = provider();
+  const token = new ethers.Contract(tokenAddr, ERC1155_ABI, prov);
+  const approved = await token.isApprovedForAll(ownerAddr, ammAddress);
+  if (approved) return null;
+
+  const iface = new ethers.utils.Interface(ERC1155_ABI);
+  const data = iface.encodeFunctionData('setApprovalForAll', [ammAddress, true]);
+  const receipt = await signAndBroadcast({
+    suborgId,
+    from: ownerAddr,
+    to: tokenAddr,
+    data,
+    gasLimit: ethers.BigNumber.from(120_000),
   });
   return receipt.transactionHash;
 }
@@ -458,6 +485,24 @@ export function buildProtocolApprovalTransaction({ spender, amount = 'max' } = {
       spender: spenderAddr,
       amount: amount === 'max' ? 'max' : formatCollateral(units),
       amountRaw: units.toString(),
+    },
+  });
+}
+
+export function buildProtocolShareApprovalTransaction({ tokenAddress, operator, approved = true } = {}) {
+  const tokenAddr = requireEvmAddress(tokenAddress, 'tokenAddress');
+  const operatorAddr = requireEvmAddress(operator, 'operator');
+  const data = new ethers.utils.Interface(ERC1155_ABI)
+    .encodeFunctionData('setApprovalForAll', [operatorAddr, approved === true]);
+  return transactionRequest({
+    to: tokenAddr,
+    data,
+    type: 'erc1155_operator_approval',
+    gasLimit: ethers.BigNumber.from(120_000),
+    metadata: {
+      tokenAddress: tokenAddr,
+      operator: operatorAddr,
+      approved: approved === true,
     },
   });
 }
@@ -676,10 +721,20 @@ export async function sellOnChain({
   if (!market?.chain_address) throw new Error('market missing chain_address');
 
   const ammAddr = market.chain_address;
+  const amm = new ethers.Contract(
+    ammAddr,
+    isBinary(market) ? BINARY_AMM_ABI : MULTI_AMM_ABI,
+    provider(),
+  );
+  const tokenAddr = await amm.token();
   const sharesUnits = parseCollateralUnits(shares);
   const minCollateralUnits = minCollateralOut != null
     ? parseCollateralUnits(minCollateralOut)
     : ethers.constants.Zero;
+
+  await ensureShareOperatorApproval({
+    suborgId, ownerAddr, ammAddress: ammAddr, tokenAddr,
+  });
 
   const data = encodeSellWithMinOut(market, outcomeIndex, sharesUnits, minCollateralUnits);
   const receipt = await signAndBroadcast({

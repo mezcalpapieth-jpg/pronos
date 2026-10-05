@@ -35,3 +35,12 @@ test('V2 deploy script mirrors V1 Safe aliases and automatic market creator setu
   assert.notEqual(transferOwner, -1, 'V2 should transfer ownership to the Safe/admin');
   assert.ok(setCreator < transferOwner, 'marketCreator must be set before ownership leaves the deployer');
 });
+
+test('tournament MXNP deploy script emits controlled collateral env', () => {
+  const source = read('./DeployTournamentMXNP.s.sol');
+
+  assert.match(source, /TOURNAMENT_MXNP_OWNER/, 'script should support explicit token owner');
+  assert.match(source, /new TournamentMXNP\(owner\)/, 'script should deploy with configured owner');
+  assert.match(source, /ONCHAIN_COLLATERAL_ADDRESS=/, 'script should print collateral env');
+  assert.doesNotMatch(source, /faucet\(/, 'tournament token deploy path must not expose a faucet');
+});
