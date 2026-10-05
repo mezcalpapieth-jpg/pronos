@@ -134,6 +134,61 @@ function buildPeriods({ sport, home, away }) {
   }));
 }
 
+function playTeamSide(play, home, away) {
+  const playTeam = play?.team || play?.teamInfo || {};
+  const playIds = [playTeam.id, playTeam.uid, playTeam.abbreviation, playTeam.shortDisplayName, playTeam.displayName, playTeam.name]
+    .map(cleanString)
+    .filter(Boolean);
+  const homeNames = competitorNames(home);
+  const awayNames = competitorNames(away);
+  const homeIds = [home?.id, home?.team?.id, home?.uid, home?.team?.uid, ...homeNames]
+    .map(cleanString)
+    .filter(Boolean);
+  const awayIds = [away?.id, away?.team?.id, away?.uid, away?.team?.uid, ...awayNames]
+    .map(cleanString)
+    .filter(Boolean);
+  if (playIds.some(id => homeIds.some(homeId => id === homeId || namesMatch(id, homeId)))) return 'home';
+  if (playIds.some(id => awayIds.some(awayId => id === awayId || namesMatch(id, awayId)))) return 'away';
+  return null;
+}
+
+function normalizeScoringPlayType(value) {
+  const text = String(value || '').toLowerCase();
+  if (!text) return null;
+  if (/field\s*goal|\bfg\b/.test(text)) return 'field_goal';
+  if (/touchdown|\btd\b/.test(text)) return 'touchdown';
+  if (/home\s*run|homered|\bhr\b/.test(text)) return 'home_run';
+  if (/goal/.test(text)) return 'goal';
+  if (/safety/.test(text)) return 'safety';
+  return null;
+}
+
+function buildScoringPlays({ sport, summary, home, away }) {
+  const rows = Array.isArray(summary?.scoringPlays) ? summary.scoringPlays : [];
+  return rows.map((play, index) => {
+    const typeText = cleanString(play?.scoringType?.displayName)
+      || cleanString(play?.scoringType?.name)
+      || cleanString(play?.type?.text)
+      || cleanString(play?.type?.abbreviation)
+      || cleanString(play?.text)
+      || cleanString(play?.shortText);
+    const side = playTeamSide(play, home, away);
+    if (!side) return null;
+    return {
+      id: String(play?.id || play?.sequenceNumber || index),
+      sport,
+      side,
+      type: normalizeScoringPlayType(typeText || play?.text || play?.shortText),
+      typeText,
+      text: cleanString(play?.text) || cleanString(play?.shortText) || null,
+      period: Number.isFinite(Number(play?.period?.number ?? play?.period)) ? Number(play?.period?.number ?? play?.period) : null,
+      clock: cleanString(play?.clock?.displayValue) || cleanString(play?.clock) || null,
+      homeScore: scoreNumber(play?.homeScore),
+      awayScore: scoreNumber(play?.awayScore),
+    };
+  }).filter(Boolean);
+}
+
 function statusLabelFor({ sport, status }) {
   const type = status?.type || {};
   const state = cleanString(type.state);
@@ -184,7 +239,7 @@ function eventMatchesTeams(event, homeName, awayName) {
   );
 }
 
-export function normalizeEspnLiveScore({ leaguePath, event }) {
+export function normalizeEspnLiveScore({ leaguePath, event, summary = null }) {
   if (!event) return null;
   const comp = pickCompetition(event);
   if (!comp) return null;
@@ -218,7 +273,16 @@ export function normalizeEspnLiveScore({ leaguePath, event }) {
       logo: competitorLogo(away),
     },
     periods: buildPeriods({ sport, home, away }),
+    scoringPlays: buildScoringPlays({ sport, summary, home, away }),
   };
+}
+
+async function readEspnSummary({ leaguePath, eventId }) {
+  if (!eventId) return null;
+  const summaryUrl = `${ESPN_BASE}/${leaguePath}/summary?event=${encodeURIComponent(eventId)}`;
+  const summaryRes = await fetch(summaryUrl, { headers: { Accept: 'application/json' } });
+  if (!summaryRes.ok) return null;
+  return summaryRes.json();
 }
 
 function dateYmdFromValue(value) {
@@ -281,7 +345,10 @@ export async function readEspnLiveScore({ leaguePath, eventId, dateYmd, homeName
     const event = eventId
       ? events.find(e => String(e.id) === String(eventId))
       : events.find(e => eventMatchesTeams(e, homeName, awayName));
-    if (event) return normalizeEspnLiveScore({ leaguePath, event });
+    if (event) {
+      const summary = await readEspnSummary({ leaguePath, eventId: event.id || eventId }).catch(() => null);
+      return normalizeEspnLiveScore({ leaguePath, event, summary });
+    }
     if (!eventId) return null;
   }
   if (!eventId) {
@@ -289,15 +356,13 @@ export async function readEspnLiveScore({ leaguePath, eventId, dateYmd, homeName
     return null;
   }
 
-  const summaryUrl = `${ESPN_BASE}/${leaguePath}/summary?event=${encodeURIComponent(eventId)}`;
-  const summaryRes = await fetch(summaryUrl, { headers: { Accept: 'application/json' } });
-  if (!summaryRes.ok) {
+  const summary = await readEspnSummary({ leaguePath, eventId });
+  if (!summary) {
     if (!sawScoreboard && lastScoreboardError) throw lastScoreboardError;
-    throw new Error(`espn-live-score-summary: HTTP ${summaryRes.status}`);
+    throw new Error('espn-live-score-summary: unavailable');
   }
-  const summary = await summaryRes.json();
   const summaryEvent = summary?.header?.id && String(summary.header.id) === String(eventId)
     ? summary.header
     : null;
-  return summaryEvent ? normalizeEspnLiveScore({ leaguePath, event: summaryEvent }) : null;
+  return summaryEvent ? normalizeEspnLiveScore({ leaguePath, event: summaryEvent, summary }) : null;
 }

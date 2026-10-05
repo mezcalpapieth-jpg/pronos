@@ -718,6 +718,8 @@ const STRINGS = {
   // Top holders
   'points.top.title':              { es: 'Top holders',         en: 'Top holders' },
   'points.top.loading':            { es: 'Cargando…',           en: 'Loading…' },
+  'points.marketNews.title':       { es: 'Noticias del mercado', en: 'Market news' },
+  'points.marketNews.loading':     { es: 'Cargando noticias…',  en: 'Loading news…' },
 
   // Category labels: kept free of decorative symbols so the points app
   // matches the MVP's clean text-only treatment.

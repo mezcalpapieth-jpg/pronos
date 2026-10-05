@@ -50,7 +50,9 @@ test('tournament page shows current leaderboard, past leaderboards, countdown an
   assert.match(pageSource, /row\?\.inactivityPenalty/);
   assert.match(pageSource, /row\?\.qualifyingMarkets/);
   assert.match(pageSource, /200 MXNP agregados al inicio/);
-  assert.match(pageSource, /50 MXNP por persona referida, máximo 10 referidos/);
+  assert.match(pageSource, /rewards\.referrerReward/);
+  assert.match(pageSource, /rewards\.referralCycleCap/);
+  assert.match(pageSource, /para quien invita/);
   assert.match(pageSource, /premios aprobados de Instagram, TikTok, X y campañas/);
   assert.match(pageSource, /nextTournamentMarketDropIso/);
   assert.match(pageSource, /America\/Mexico_City/);
@@ -85,6 +87,22 @@ test('tournament page shows current leaderboard, past leaderboards, countdown an
   assert.match(pageSource, /PnL significa ganancia o pérdida/);
   assert.match(pageSource, /What does PnL mean\?/);
   assert.match(pageSource, /qualifyingMarkets:\s*10/);
+});
+
+test('tournament page promotes hidden social post tasks with countdown and saved-account guidance', () => {
+  assert.match(pageSource, /TournamentSocialTaskSpotlight/);
+  assert.match(pageSource, /fetchSocialTaskCatalog\(null, \{ surface: 'tournament' \}\)/);
+  assert.match(pageSource, /task\?\.source === 'campaign' && task\?\.hidden/);
+  assert.match(pageSource, /submitSocialTask\(task\.key, task\.url \|\| ''\)/);
+  assert.match(pageSource, /Tiempo restante/);
+  assert.match(pageSource, /Tarea social del torneo/);
+  assert.match(pageSource, /Perfil \/ Ganar/);
+  assert.match(pageSource, /Cuenta guardada/);
+  assert.match(navSource, /fetchSocialTaskCatalog/);
+  assert.match(navSource, /surface: 'tournament'/);
+  assert.match(navSource, /tournamentTaskCount/);
+  assert.match(navSource, /points-nav-alert-badge/);
+  assert.match(apiSource, /options\?\.surface/);
 });
 
 test('points app records authenticated site-time pulses from the router', () => {

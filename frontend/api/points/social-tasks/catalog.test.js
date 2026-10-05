@@ -46,12 +46,14 @@ test('X follow task points at pronos_io and stays in manual review', () => {
   assert.doesNotMatch(source, /twitter\.com\/pronos_io/);
 });
 
-test('hidden campaign tasks require an exact expiring task link', () => {
+test('hidden campaign tasks require an exact expiring task link or tournament surface', () => {
   assert.match(source, /requestedTaskKey/);
   assert.match(source, /req\.query\.task/);
+  assert.match(source, /surface = String\(req\.query\.surface/);
+  assert.match(source, /includeTournamentHidden = surface === 'tournament'/);
   assert.match(source, /social_task_campaigns/);
   assert.match(source, /expires_at > NOW\(\)/);
-  assert.match(source, /hidden = FALSE OR task_key = \$\{requestedTaskKey \|\| null\}/);
+  assert.match(source, /hidden = FALSE OR task_key = \$\{requestedTaskKey \|\| null\} OR \$\{includeTournamentHidden\} = TRUE/);
   assert.match(source, /requestedTaskKey \? \[\.\.\.campaignTasks, \.\.\.STATIC_TASK_CATALOG\]/);
 });
 

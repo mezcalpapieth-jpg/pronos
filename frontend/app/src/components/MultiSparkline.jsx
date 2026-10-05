@@ -18,6 +18,8 @@ import { priceDomain } from './Sparkline.jsx';
  * @param {{key?:string,label:string,color:string,data:{t:number,p:number}[],targetPct:number}[]} series
  * @param {{t:number,count?:number,volume?:number,buyVolume?:number,sellVolume?:number}[][]} activity
  *        One activity array per series; merged into a single band.
+ * @param {{t:number,seriesKey?:string,outcomeIndex?:number,label:string}[]} annotations
+ *        Timed events pinned to the line's held value at that instant.
  */
 
 const MONTHS_SHORT = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
@@ -79,6 +81,7 @@ export default function MultiSparkline({
   emptySubLabel = 'El precio se moverá con el primer trade.',
   showEmptyState = true,
   legendNote = null,
+  annotations = [],
   domainMin,
   domainMax,
   timeMin,
@@ -276,6 +279,42 @@ export default function MultiSparkline({
   };
 
   const drawn = lines.map(line => ({ line, ...pathFor(line) }));
+
+  const eventAnnotations = useMemo(() => {
+    if (useMovementAxis || !timeBounds || !Array.isArray(annotations)) return [];
+    return annotations
+      .map((event, i) => {
+        const t = Number(event?.t);
+        if (!Number.isFinite(t) || t < timeBounds.min || t > timeBounds.max) return null;
+        const seriesKey = event?.seriesKey != null
+          ? String(event.seriesKey)
+          : (Number.isInteger(event?.outcomeIndex) ? `opt-${event.outcomeIndex}` : null);
+        const drawnLine = drawn.find(({ line }) => String(line.key) === seriesKey);
+        if (!drawnLine?.line?.hasHistory) return null;
+        const value = valueAt(drawnLine.line.points, t);
+        if (value == null) return null;
+        const label = String(event?.label || '').trim();
+        if (!label) return null;
+        const x = xForTime(t);
+        const y = yForValue(value);
+        const width = Math.min(58, Math.max(26, label.length * 5.8 + 14));
+        const labelX = Math.max(padX + 2, Math.min(plotRight - width - 2, x - width / 2));
+        const labelY = Math.max(2, y - 22 - ((i % 2) * 11));
+        return {
+          key: event?.key || `${seriesKey}-${t}-${i}`,
+          label,
+          color: drawnLine.line.color,
+          x,
+          y,
+          labelX,
+          labelY,
+          width,
+        };
+      })
+      .filter(Boolean)
+      .slice(0, 10);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [annotations, drawn, timeBounds, useMovementAxis]);
 
   // Every outcome's trades belong to the same market, so one merged
   // volume band reads better than four overlapping ones.
@@ -478,6 +517,51 @@ export default function MultiSparkline({
               vectorEffect="non-scaling-stroke"
               opacity={line.hasHistory ? 1 : 0.35}
             />
+          ))}
+
+          {eventAnnotations.map((event) => (
+            <g key={`event-${event.key}`} pointerEvents="none">
+              <line
+                x1={event.x}
+                y1={event.y - 1}
+                x2={event.x}
+                y2={event.labelY + 17}
+                stroke={event.color}
+                strokeWidth={0.6}
+                strokeDasharray="1.5,3"
+                opacity={0.35}
+              />
+              <circle
+                cx={event.x}
+                cy={event.y}
+                r={3}
+                fill={event.color}
+                stroke="var(--surface1)"
+                strokeWidth={1.4}
+              />
+              <rect
+                x={event.labelX}
+                y={event.labelY}
+                width={event.width}
+                height={16}
+                rx={3}
+                fill="var(--surface2)"
+                stroke={event.color}
+                strokeWidth={0.8}
+                opacity={0.92}
+              />
+              <text
+                x={event.labelX + event.width / 2}
+                y={event.labelY + 11}
+                fill="var(--text-primary)"
+                fontFamily="var(--font-mono)"
+                fontSize="8"
+                fontWeight="700"
+                textAnchor="middle"
+              >
+                {event.label}
+              </text>
+            </g>
           ))}
 
           {hoverX != null && (

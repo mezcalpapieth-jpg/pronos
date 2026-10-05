@@ -18,6 +18,8 @@ const marketCardSource = await readFile(new URL('../components/PointsMarketCard.
 const multiSource = await readFile(new URL('../../../src/components/MultiSparkline.jsx', import.meta.url), 'utf8');
 const tradeTapeSource = await readFile(new URL('../../../../api/points/trade-tape.js', import.meta.url), 'utf8');
 const activityTapeSource = await readFile(new URL('../components/PointsActivityTape.jsx', import.meta.url), 'utf8');
+const marketNewsSource = await readFile(new URL('../components/MarketNews.jsx', import.meta.url), 'utf8');
+const marketNewsApiSource = await readFile(new URL('../../../../api/points/market-news.js', import.meta.url), 'utf8');
 
 test('points market detail overlays real activity and range controls on the chart', () => {
   assert.match(detailSource, /fetchTradeActivity/);
@@ -69,6 +71,32 @@ test('multi-outcome markets draw every line on one shared axis', () => {
   // Legend replaces per-row labels and doubles as the hover readout.
   assert.match(multiSource, /hoverReadouts/);
   assert.doesNotMatch(multiSource, /Math\.random/);
+});
+
+test('live sports score changes can annotate the matching team line', () => {
+  assert.match(detailSource, /const \[liveScore, setLiveScore\] = useState\(null\)/);
+  assert.match(detailSource, /<LiveScorePanel market=\{market\} onScoreUpdate=\{setLiveScore\}/);
+  assert.match(detailSource, /function liveScoreGraphAnnotations/);
+  assert.match(detailSource, /\['soccer', 'football', 'baseball'\]\.includes\(sport\)/);
+  assert.match(detailSource, /function liveScorePeriodOffsetSeconds/);
+  assert.match(detailSource, /function liveScorePlayOffsetSeconds/);
+  assert.match(detailSource, /function liveScoreCompactEventLabel/);
+  assert.match(detailSource, /sport === 'football'/);
+  assert.match(detailSource, /sport === 'baseball'/);
+  assert.match(detailSource, /type === 'home_run'\) return 'HR'/);
+  assert.match(detailSource, /type === 'field_goal'\) return 'FG'/);
+  assert.match(detailSource, /type === 'touchdown'\) return 'TD'/);
+  assert.match(detailSource, /points > 1 \? `\$\{points\} Runs` : 'Run'/);
+  assert.match(detailSource, /scoringPlays\.length > 0/);
+  assert.match(detailSource, /seriesKey: `opt-\$\{outcomeIndex\}`/);
+  assert.match(detailSource, /annotations=\{liveScoreAnnotations\}/);
+  assert.match(multiSource, /annotations = \[\]/);
+  assert.match(multiSource, /eventAnnotations/);
+  assert.match(multiSource, /valueAt\(drawnLine\.line\.points, t\)/);
+  assert.match(multiSource, /key=\{`event-\$\{event\.key\}`\}/);
+  assert.match(multiSource, /Math\.min\(58, Math\.max\(26, label\.length \* 5\.8 \+ 14\)\)/);
+  assert.match(multiSource, /fontSize="8"/);
+  assert.match(multiSource, /textAnchor="middle"/);
 });
 
 test('active charts append the live executable price as their tail', () => {
@@ -185,6 +213,14 @@ test('points surfaces refresh live after trades, claims, and remote market movem
   assert.match(detailSource, /setPositionRefreshNonce\(v => v \+ 1\)/);
   assert.match(detailSource, /emitPointsRefresh\(\{ source: didResolve \? 'resolved' : 'market_poll'/);
   assert.match(detailSource, /<TopHolders marketId=\{market\.id\} refreshKey=\{orderBookRefresh\}/);
+  assert.match(detailSource, /<MarketNews marketId=\{market\.id\} \/>/);
+  assert.match(apiSource, /fetchMarketNews/);
+  assert.match(marketNewsSource, /fetchMarketNews\(marketId, \{ limit: 6 \}\)/);
+  assert.match(marketNewsSource, /points\.marketNews\.title/);
+  assert.match(marketNewsApiSource, /FROM points_news_links nl/);
+  assert.match(marketNewsApiSource, /WHERE nl\.market_id = \$\{marketId\}/);
+  assert.match(marketNewsApiSource, /ORDER BY nl\.created_at DESC, nl\.id DESC/);
+  assert.match(i18nSource, /'points\.marketNews\.title':\s+\{ es: 'Noticias del mercado'/);
 
   assert.match(navSource, /onPointsRefresh/);
   assert.match(navSource, /window\.setInterval\(loadClaimableCount, 20000\)/);

@@ -4,7 +4,7 @@
  * Returns available social tasks plus the caller's status for each
  * (pending / approved / rejected / not_submitted). Admin-created post
  * tasks are hidden unless the caller opens their expiring ?task=<key>
- * link.
+ * link, or the tournament surface asks to promote active hidden posts.
  */
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../../_lib/cors.js';
@@ -94,6 +94,8 @@ export default async function handler(req, res) {
 
   const session = readSession(req, res);
   const requestedTaskKey = String(req.query.task || '').trim();
+  const surface = String(req.query.surface || '').trim().toLowerCase();
+  const includeTournamentHidden = surface === 'tournament';
 
   let submissions = {};
   let socialHandles = {};
@@ -108,7 +110,7 @@ export default async function handler(req, res) {
       FROM social_task_campaigns
       WHERE active = TRUE
         AND expires_at > NOW()
-        AND (hidden = FALSE OR task_key = ${requestedTaskKey || null})
+        AND (hidden = FALSE OR task_key = ${requestedTaskKey || null} OR ${includeTournamentHidden} = TRUE)
       ORDER BY created_at DESC
       LIMIT 50
     `;

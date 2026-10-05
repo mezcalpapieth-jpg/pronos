@@ -1,6 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchCurrentCycle, fetchCycleHistory, fetchLeaderboard } from '../lib/pointsApi.js';
+import {
+  fetchCurrentCycle,
+  fetchCycleHistory,
+  fetchLeaderboard,
+  fetchSocialTaskCatalog,
+  publicErrorMessage,
+  submitSocialTask,
+} from '../lib/pointsApi.js';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { useLang } from '@app/lib/i18n.js';
 import { useIsMobile } from '@app/lib/useIsMobile.js';
@@ -1170,15 +1177,262 @@ function PersonalScoreBreakdown({ row, rules, loading, lang = 'es' }) {
   );
 }
 
+function socialTaskNetworkLabel(task, lang) {
+  const network = String(task?.network || '').toLowerCase();
+  if (network === 'x' || network === 'twitter') return 'X';
+  if (network === 'instagram') return 'Instagram';
+  if (network === 'tiktok') return 'TikTok';
+  return lang === 'en' ? 'Social post' : 'Post social';
+}
+
+function tournamentSocialStatusCopy(task, lang) {
+  const status = String(task?.status || 'not_submitted');
+  if (status === 'approved') return lang === 'en' ? 'Approved' : 'Aprobada';
+  if (status === 'pending') return lang === 'en' ? 'Under review' : 'En revision';
+  if (status === 'rejected') return lang === 'en' ? 'Rejected, send again' : 'Rechazada, vuelve a enviarla';
+  return lang === 'en' ? 'Available now' : 'Disponible ahora';
+}
+
+function TournamentSocialTaskSpotlight({
+  tasks,
+  loading,
+  lang,
+  tick,
+  authenticated,
+  onSubmit,
+  submittingKey,
+  message,
+  error,
+}) {
+  const task = Array.isArray(tasks) ? tasks[0] : null;
+  if (!task && !loading) return null;
+  const expiresMs = task?.expiresAt ? new Date(task.expiresAt).getTime() : NaN;
+  const secondsLeft = Number.isFinite(expiresMs)
+    ? Math.max(0, Math.floor((expiresMs - Date.now()) / 1000))
+    : null;
+  const timer = task
+    ? (secondsLeft == null ? (lang === 'en' ? 'Limited time' : 'Tiempo limitado') : formatCountdown(secondsLeft, lang))
+    : (lang === 'en' ? 'Loading' : 'Cargando');
+  const status = String(task?.status || 'not_submitted');
+  const canSubmit = Boolean(task?.key) && authenticated && status !== 'pending' && status !== 'approved';
+  const networkLabel = socialTaskNetworkLabel(task, lang);
+  const extraCount = Math.max(0, (Array.isArray(tasks) ? tasks.length : 0) - 1);
+  void tick;
+
+  return (
+    <section style={{
+      marginBottom: 18,
+      padding: '18px clamp(16px, 3vw, 24px)',
+      border: '1px solid rgba(0,232,122,0.42)',
+      borderRadius: 10,
+      background: 'linear-gradient(135deg, rgba(0,232,122,0.12), var(--surface1) 58%)',
+      boxShadow: '0 18px 48px rgba(0,0,0,0.18)',
+    }}>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))',
+        gap: 16,
+        alignItems: 'start',
+      }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 8,
+            alignItems: 'center',
+            marginBottom: 10,
+          }}>
+            <span style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 10,
+              letterSpacing: '0.12em',
+              textTransform: 'uppercase',
+              color: 'var(--green)',
+              fontWeight: 800,
+            }}>
+              {lang === 'en' ? 'Tournament social task' : 'Tarea social del torneo'}
+            </span>
+            {task && (
+              <span style={{
+                border: '1px solid rgba(0,232,122,0.38)',
+                borderRadius: 999,
+                padding: '4px 8px',
+                color: 'var(--text-primary)',
+                background: 'rgba(0,232,122,0.09)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+              }}>
+                {tournamentSocialStatusCopy(task, lang)}
+              </span>
+            )}
+          </div>
+          <h2 style={{
+            margin: 0,
+            color: 'var(--text-primary)',
+            fontFamily: 'var(--font-display)',
+            fontSize: 'clamp(24px, 3vw, 36px)',
+            lineHeight: 1.05,
+            textTransform: 'uppercase',
+          }}>
+            {task?.label || (lang === 'en' ? 'New social post bonus' : 'Nuevo bonus por post social')}
+          </h2>
+          <p style={{
+            margin: '10px 0 0',
+            maxWidth: 760,
+            color: 'var(--text-secondary)',
+            fontFamily: 'var(--font-body)',
+            fontSize: 14,
+            lineHeight: 1.55,
+          }}>
+            {task?.description || (lang === 'en'
+              ? 'Open the post, complete the requested social action, then send it for review.'
+              : 'Abre el post, completa la accion social solicitada y marcala para revision.')}
+          </p>
+          <p style={{
+            margin: '10px 0 0',
+            color: 'var(--text-muted)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            lineHeight: 1.5,
+          }}>
+            {lang === 'en'
+              ? 'Save your social account in the Profile / Earn tab before sending, so the team knows it was you.'
+              : 'Guarda tu cuenta social en la pestana Perfil / Ganar antes de enviarla, para que sepamos que fuiste tu.'}
+          </p>
+          {task && (
+            <div style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 10,
+              marginTop: 14,
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11,
+              color: 'var(--text-secondary)',
+            }}>
+              <span>{networkLabel}</span>
+              <span style={{ color: 'var(--green)', fontWeight: 800 }}>+{fmtInteger(task.reward || 0)} MXNP</span>
+              <span>
+                {task.socialAccount
+                  ? (lang === 'en' ? `Saved account: ${task.socialAccount}` : `Cuenta guardada: ${task.socialAccount}`)
+                  : (lang === 'en' ? 'No saved account yet' : 'Sin cuenta guardada todavia')}
+              </span>
+              {extraCount > 0 && <span>{lang === 'en' ? `+${extraCount} more` : `+${extraCount} mas`}</span>}
+            </div>
+          )}
+          {(message || error) && (
+            <div style={{
+              marginTop: 12,
+              color: error ? 'var(--danger)' : 'var(--green)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11,
+              lineHeight: 1.5,
+            }}>
+              {error || message}
+            </div>
+          )}
+        </div>
+
+        <div style={{
+          minWidth: 154,
+          display: 'grid',
+          justifyItems: 'end',
+          gap: 10,
+        }}>
+          <div style={{
+            width: '100%',
+            border: '1px solid rgba(0,232,122,0.34)',
+            borderRadius: 8,
+            padding: '10px 12px',
+            background: 'rgba(0,0,0,0.18)',
+            textAlign: 'right',
+          }}>
+            <div style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 9,
+              color: 'var(--text-muted)',
+              letterSpacing: '0.1em',
+              textTransform: 'uppercase',
+              marginBottom: 5,
+            }}>
+              {lang === 'en' ? 'Time left' : 'Tiempo restante'}
+            </div>
+            <strong style={{
+              fontFamily: 'var(--font-display)',
+              fontSize: 22,
+              color: 'var(--green)',
+              lineHeight: 1,
+            }}>
+              {timer}
+            </strong>
+          </div>
+          {task?.url && (
+            <a href={task.url} target="_blank" rel="noopener noreferrer" style={socialActionStyle}>
+              {lang === 'en' ? 'Open post' : 'Abrir post'}
+            </a>
+          )}
+          {canSubmit ? (
+            <button
+              type="button"
+              onClick={() => onSubmit(task)}
+              disabled={submittingKey === task.key}
+              style={{
+                ...socialActionStyle,
+                background: 'var(--green)',
+                color: 'var(--btn-text)',
+                borderColor: 'var(--green)',
+                opacity: submittingKey === task.key ? 0.62 : 1,
+              }}
+            >
+              {submittingKey === task.key
+                ? (lang === 'en' ? 'Sending...' : 'Enviando...')
+                : (lang === 'en' ? 'Send for review' : 'Enviar revision')}
+            </button>
+          ) : !authenticated ? (
+            <Link to="/earn" style={socialActionStyle}>
+              {lang === 'en' ? 'Add account' : 'Agregar cuenta'}
+            </Link>
+          ) : null}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+const socialActionStyle = {
+  width: '100%',
+  minHeight: 36,
+  borderRadius: 8,
+  border: '1px solid var(--border)',
+  background: 'var(--surface2)',
+  color: 'var(--text-primary)',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: '8px 12px',
+  fontFamily: 'var(--font-mono)',
+  fontSize: 11,
+  fontWeight: 800,
+  letterSpacing: '0.06em',
+  textTransform: 'uppercase',
+  textDecoration: 'none',
+  cursor: 'pointer',
+  boxSizing: 'border-box',
+};
+
 export default function PointsTournament() {
   const lang = useLang();
-  const { user } = usePointsAuth();
+  const { authenticated, user } = usePointsAuth();
   const isMobile = useIsMobile();
   const [cycle, setCycle] = useState(null);
   const [leaderboard, setLeaderboard] = useState(null);
   const [history, setHistory] = useState(null);
   const [startNoticeOpen, setStartNoticeOpen] = useState(false);
   const [tick, setTick] = useState(0);
+  const [socialTasks, setSocialTasks] = useState([]);
+  const [socialTasksLoading, setSocialTasksLoading] = useState(true);
+  const [socialSubmittingKey, setSocialSubmittingKey] = useState(null);
+  const [socialMessage, setSocialMessage] = useState(null);
+  const [socialError, setSocialError] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -1231,6 +1485,63 @@ export default function PointsTournament() {
     }
     setStartNoticeOpen(true);
   }, [cycle?.id, cycle?.paused, cycle?.scheduled, cycle?.status]);
+
+  async function loadTournamentSocialTasks() {
+    setSocialTasksLoading(true);
+    try {
+      const data = await fetchSocialTaskCatalog(null, { surface: 'tournament' });
+      const tasks = (Array.isArray(data?.tasks) ? data.tasks : [])
+        .filter(task => task?.source === 'campaign' && task?.hidden && task?.status !== 'approved');
+      setSocialTasks(tasks);
+    } catch {
+      setSocialTasks([]);
+    } finally {
+      setSocialTasksLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    setSocialTasksLoading(true);
+    fetchSocialTaskCatalog(null, { surface: 'tournament' })
+      .then((data) => {
+        if (cancelled) return;
+        const tasks = (Array.isArray(data?.tasks) ? data.tasks : [])
+          .filter(task => task?.source === 'campaign' && task?.hidden && task?.status !== 'approved');
+        setSocialTasks(tasks);
+      })
+      .catch(() => {
+        if (!cancelled) setSocialTasks([]);
+      })
+      .finally(() => {
+        if (!cancelled) setSocialTasksLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [authenticated, user?.username]);
+
+  async function handleSubmitTournamentSocialTask(task) {
+    if (!authenticated) {
+      setSocialError(publicErrorMessage('not_authenticated', lang));
+      setSocialMessage(null);
+      return;
+    }
+    setSocialSubmittingKey(task.key);
+    setSocialError(null);
+    setSocialMessage(null);
+    try {
+      await submitSocialTask(task.key, task.url || '');
+      setSocialMessage(lang === 'en'
+        ? 'Sent for review. We will match it to your saved social account.'
+        : 'Enviada a revision. La vamos a revisar contra tu cuenta social guardada.');
+      await loadTournamentSocialTasks();
+    } catch (error) {
+      setSocialError(publicErrorMessage(error, lang));
+    } finally {
+      setSocialSubmittingKey(null);
+    }
+  }
 
   function closeStartNotice() {
     if (cycle?.id) {
@@ -1387,6 +1698,18 @@ export default function PointsTournament() {
           <RewardEligibilityNotice lang={lang} />
         </TournamentCard>
       </div>
+
+      <TournamentSocialTaskSpotlight
+        tasks={socialTasks}
+        loading={socialTasksLoading}
+        lang={lang}
+        tick={tick}
+        authenticated={authenticated}
+        onSubmit={handleSubmitTournamentSocialTask}
+        submittingKey={socialSubmittingKey}
+        message={socialMessage}
+        error={socialError}
+      />
 
       {winnersCycle && (
         <WinnerPodium
