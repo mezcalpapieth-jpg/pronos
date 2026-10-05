@@ -8,6 +8,7 @@ import {
   TOURNAMENT_PARLAY_MIN_STAKE_MXNP,
   TOURNAMENT_PARLAY_PRICE_CEILING,
   TOURNAMENT_PARLAY_PRICE_FLOOR,
+  TOURNAMENT_APPROVED_MARKET_START_ISO,
   roundTournamentAmount,
   tournamentRulesPayload,
 } from './points-tournament-config.js';
@@ -127,13 +128,18 @@ async function readParlayMarkets(db, marketIds, { lock = false } = {}) {
     SELECT m.id, m.question, m.status, m.outcome, m.outcomes, m.reserves,
            m.end_time, m.parent_id,
            COALESCE(m.parent_id, m.id) AS exposure_group_id,
-           COALESCE(m.tournament_featured, p.tournament_featured, false) AS tournament_featured
+           (
+             m.tournament_featured IS TRUE
+             OR p.tournament_featured IS TRUE
+             OR COALESCE(pm.reviewed_at, p.created_at, m.created_at) >= $2::timestamptz
+           ) AS tournament_featured
     FROM points_markets m
     LEFT JOIN points_markets p ON p.id = m.parent_id
+    LEFT JOIN points_pending_markets pm ON pm.approved_market_id = COALESCE(m.parent_id, m.id)
     WHERE m.id = ANY($1::int[])
     ORDER BY m.id ASC
     ${lockClause}
-  `, [marketIds]);
+  `, [marketIds, TOURNAMENT_APPROVED_MARKET_START_ISO]);
 }
 
 function activeScoringWindow(scoringWindow, now) {

@@ -7,6 +7,7 @@ import {
   TOURNAMENT_CONVICTION_MAX_MULTIPLIER,
   TOURNAMENT_CONVICTION_MIN_MARKET_ENTRY_MXNP,
   TOURNAMENT_CONVICTION_NET_PNL_CAP_RATE,
+  TOURNAMENT_APPROVED_MARKET_START_ISO,
   TOURNAMENT_INACTIVITY_PENALTY,
   TOURNAMENT_MIN_ENTRY_MXNP,
   TOURNAMENT_OPERATION_CLOSE_ISO,
@@ -527,11 +528,16 @@ async function readParlayScoreRows(db, startIso, cutoffIso) {
           FROM points_parlay_legs l
           JOIN points_markets m ON m.id = l.market_id
           LEFT JOIN points_markets parent ON parent.id = m.parent_id
+          LEFT JOIN points_pending_markets pm ON pm.approved_market_id = COALESCE(m.parent_id, m.id)
           WHERE l.ticket_id = t.id
-            AND COALESCE(m.tournament_featured, parent.tournament_featured, false) IS NOT TRUE
+            AND NOT (
+              m.tournament_featured IS TRUE
+              OR parent.tournament_featured IS TRUE
+              OR COALESCE(pm.reviewed_at, parent.created_at, m.created_at) >= $3::timestamptz
+            )
         )
       GROUP BY t.username
-    `, [startIso, cutoffIso]);
+    `, [startIso, cutoffIso, TOURNAMENT_APPROVED_MARKET_START_ISO]);
   } catch (error) {
     if (error?.code === '42P01') return [];
     throw error;
@@ -546,12 +552,17 @@ async function readLiquidityRewardRows(db, startIso, cutoffIso) {
       FROM points_distributions d
       JOIN points_markets m ON m.id = d.reference_id
       LEFT JOIN points_markets parent ON parent.id = m.parent_id
+      LEFT JOIN points_pending_markets pm ON pm.approved_market_id = COALESCE(m.parent_id, m.id)
       WHERE d.kind = 'limit_maker_reward'
         AND d.created_at >= $1
         AND d.created_at <= $2
-        AND COALESCE(m.tournament_featured, parent.tournament_featured, false) IS TRUE
+        AND (
+          m.tournament_featured IS TRUE
+          OR parent.tournament_featured IS TRUE
+          OR COALESCE(pm.reviewed_at, parent.created_at, m.created_at) >= $3::timestamptz
+        )
       GROUP BY d.username
-    `, [startIso, cutoffIso]);
+    `, [startIso, cutoffIso, TOURNAMENT_APPROVED_MARKET_START_ISO]);
   } catch (error) {
     if (error?.code === '42P01') return [];
     throw error;
@@ -594,21 +605,35 @@ export async function buildTournamentLeaderboardRows(
     FROM points_trades t
     JOIN points_markets m ON m.id = t.market_id
     LEFT JOIN points_markets parent ON parent.id = m.parent_id
+    LEFT JOIN points_pending_markets pm ON pm.approved_market_id = COALESCE(m.parent_id, m.id)
     WHERE t.created_at >= $1
       AND t.created_at <= $2
-      AND COALESCE(m.tournament_featured, parent.tournament_featured, false) IS TRUE
+      AND (
+        m.tournament_featured IS TRUE
+        OR parent.tournament_featured IS TRUE
+        OR COALESCE(pm.reviewed_at, parent.created_at, m.created_at) >= $4::timestamptz
+      )
     GROUP BY t.username
-  `, [startIso, cutoffIso, qualifyingMinimum]);
+  `, [startIso, cutoffIso, qualifyingMinimum, TOURNAMENT_APPROVED_MARKET_START_ISO]);
 
   const positionRows = await queryRows(db, `
     SELECT p.username, p.market_id, p.outcome_index, p.shares, p.cost_basis, p.realized_pnl,
            m.status, m.outcome, m.reserves, m.outcomes,
            COALESCE(m.parent_id, m.id) AS exposure_group_id,
-           COALESCE(m.tournament_featured, parent.tournament_featured, false) AS tournament_featured
+           (
+             m.tournament_featured IS TRUE
+             OR parent.tournament_featured IS TRUE
+             OR COALESCE(pm.reviewed_at, parent.created_at, m.created_at) >= $3::timestamptz
+           ) AS tournament_featured
     FROM points_positions p
     JOIN points_markets m ON m.id = p.market_id
     LEFT JOIN points_markets parent ON parent.id = m.parent_id
-    WHERE COALESCE(m.tournament_featured, parent.tournament_featured, false) IS TRUE
+    LEFT JOIN points_pending_markets pm ON pm.approved_market_id = COALESCE(m.parent_id, m.id)
+    WHERE (
+        m.tournament_featured IS TRUE
+        OR parent.tournament_featured IS TRUE
+        OR COALESCE(pm.reviewed_at, parent.created_at, m.created_at) >= $3::timestamptz
+      )
       AND EXISTS (
       SELECT 1
       FROM points_trades t
@@ -617,7 +642,7 @@ export async function buildTournamentLeaderboardRows(
         AND t.created_at >= $1
         AND t.created_at <= $2
       )
-  `, [startIso, cutoffIso]);
+  `, [startIso, cutoffIso, TOURNAMENT_APPROVED_MARKET_START_ISO]);
 
   const holdTradeRows = await queryRows(db, `
     SELECT t.id, t.username, t.market_id, t.outcome_index, t.side,
@@ -629,7 +654,11 @@ export async function buildTournamentLeaderboardRows(
            COALESCE(m.resolver_config, parent.resolver_config) AS resolver_config,
            pm.source_data AS pending_source_data,
            COALESCE(m.parent_id, m.id) AS exposure_group_id,
-           COALESCE(m.tournament_featured, parent.tournament_featured, false) AS tournament_featured
+           (
+             m.tournament_featured IS TRUE
+             OR parent.tournament_featured IS TRUE
+             OR COALESCE(pm.reviewed_at, parent.created_at, m.created_at) >= $3::timestamptz
+           ) AS tournament_featured
     FROM points_trades t
     JOIN points_markets m ON m.id = t.market_id
     LEFT JOIN points_markets parent ON parent.id = m.parent_id
@@ -637,9 +666,13 @@ export async function buildTournamentLeaderboardRows(
     WHERE t.created_at >= $1
       AND t.created_at <= $2
       AND t.side IN ('buy', 'sell', 'redeem')
-      AND COALESCE(m.tournament_featured, parent.tournament_featured, false) IS TRUE
+      AND (
+        m.tournament_featured IS TRUE
+        OR parent.tournament_featured IS TRUE
+        OR COALESCE(pm.reviewed_at, parent.created_at, m.created_at) >= $3::timestamptz
+      )
     ORDER BY t.created_at ASC, t.id ASC
-  `, [startIso, cutoffIso]);
+  `, [startIso, cutoffIso, TOURNAMENT_APPROVED_MARKET_START_ISO]);
 
   const activityByUser = new Map(activityRows.map(row => [row.username, row]));
   const pnlByUser = new Map();

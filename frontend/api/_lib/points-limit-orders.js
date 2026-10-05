@@ -10,6 +10,7 @@ import { buildMockMakerDepth, AMM_DEPTH_LEVELS } from './amm-depth.js';
 import { bestEffortInsertPointsPriceSnapshot } from './points-price-snapshots.js';
 import { assertCryptoTradeAllowed, cryptoTradeLock } from './points-crypto-trade-guard.js';
 import {
+  TOURNAMENT_APPROVED_MARKET_START_ISO,
   TOURNAMENT_LIQUIDITY_REWARD_MAX_DAILY_PER_USER,
   TOURNAMENT_LIQUIDITY_REWARD_WEEKLY_RATE,
   TOURNAMENT_MAX_SHARES_PER_MARKET,
@@ -294,12 +295,17 @@ async function lockMarket(client, marketId) {
   const result = await client.query(
     `SELECT m.id, m.question, m.status, m.reserves, m.outcomes, m.end_time, m.resolver_config,
             m.amm_mode, m.parent_id,
-            COALESCE(m.tournament_featured, p.tournament_featured, false) AS tournament_featured
+            (
+              m.tournament_featured IS TRUE
+              OR p.tournament_featured IS TRUE
+              OR COALESCE(pm.reviewed_at, p.created_at, m.created_at) >= $2::timestamptz
+            ) AS tournament_featured
        FROM points_markets m
        LEFT JOIN points_markets p ON p.id = m.parent_id
+       LEFT JOIN points_pending_markets pm ON pm.approved_market_id = COALESCE(m.parent_id, m.id)
       WHERE m.id = $1
       FOR UPDATE OF m`,
-    [marketId],
+    [marketId, TOURNAMENT_APPROVED_MARKET_START_ISO],
   );
   if (result.rows.length === 0) {
     const err = new Error('market_not_found'); err.status = 404; throw err;

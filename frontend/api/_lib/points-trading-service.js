@@ -24,6 +24,7 @@ import {
 } from './points-display-prices.js';
 import { assertCryptoTradeAllowed } from './points-crypto-trade-guard.js';
 import {
+  TOURNAMENT_APPROVED_MARKET_START_ISO,
   TOURNAMENT_MAX_SHARES_PER_MARKET,
   tournamentRulesActive,
 } from './points-tournament-config.js';
@@ -170,12 +171,17 @@ export async function executePointsBuy(client, {
     `SELECT m.id, m.question, m.status, m.reserves, m.outcomes, m.start_time, m.end_time,
             m.created_at, m.resolver_type, m.resolver_config, m.sport, m.league,
             m.seed_liquidity, m.seed_liquidities, m.amm_mode, m.parent_id,
-            COALESCE(m.tournament_featured, p.tournament_featured, false) AS tournament_featured
+            (
+              m.tournament_featured IS TRUE
+              OR p.tournament_featured IS TRUE
+              OR COALESCE(pm.reviewed_at, p.created_at, m.created_at) >= $2::timestamptz
+            ) AS tournament_featured
        FROM points_markets m
        LEFT JOIN points_markets p ON p.id = m.parent_id
+       LEFT JOIN points_pending_markets pm ON pm.approved_market_id = COALESCE(m.parent_id, m.id)
       WHERE m.id = $1
       FOR UPDATE OF m`,
-    [mid],
+    [mid, TOURNAMENT_APPROVED_MARKET_START_ISO],
   );
   if (marketResult.rows.length === 0) throw apiError('market_not_found', 404);
   const market = marketResult.rows[0];
@@ -379,12 +385,17 @@ export async function executePointsSell(client, {
   const marketResult = await client.query(
     `SELECT m.id, m.status, m.reserves, m.end_time, m.resolver_config,
             m.seed_liquidity, m.seed_liquidities,
-            COALESCE(m.tournament_featured, p.tournament_featured, false) AS tournament_featured
+            (
+              m.tournament_featured IS TRUE
+              OR p.tournament_featured IS TRUE
+              OR COALESCE(pm.reviewed_at, p.created_at, m.created_at) >= $2::timestamptz
+            ) AS tournament_featured
        FROM points_markets m
        LEFT JOIN points_markets p ON p.id = m.parent_id
+       LEFT JOIN points_pending_markets pm ON pm.approved_market_id = COALESCE(m.parent_id, m.id)
       WHERE m.id = $1
       FOR UPDATE OF m`,
-    [mid],
+    [mid, TOURNAMENT_APPROVED_MARKET_START_ISO],
   );
   if (marketResult.rows.length === 0) throw apiError('market_not_found', 404);
   const market = marketResult.rows[0];

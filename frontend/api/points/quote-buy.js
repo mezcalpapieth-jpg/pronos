@@ -17,6 +17,7 @@ import {
   tournamentCutoffSnapshotLock,
   tournamentSettlementLock,
 } from '../_lib/points-tournament-entry.js';
+import { TOURNAMENT_APPROVED_MARKET_START_ISO } from '../_lib/points-tournament-config.js';
 import {
   combineBuyOrderbookMatches,
   makerUsageFromRows,
@@ -102,9 +103,14 @@ export default async function handler(req, res) {
       SELECT m.id, m.question, m.status, m.reserves, m.outcomes, m.start_time, m.end_time,
              m.created_at, m.resolver_type, m.resolver_config, m.sport, m.league,
              m.seed_liquidity, m.seed_liquidities,
-             COALESCE(m.tournament_featured, p.tournament_featured, false) AS tournament_featured
+             (
+               m.tournament_featured IS TRUE
+               OR p.tournament_featured IS TRUE
+               OR COALESCE(pm.reviewed_at, p.created_at, m.created_at) >= ${TOURNAMENT_APPROVED_MARKET_START_ISO}::timestamptz
+             ) AS tournament_featured
       FROM points_markets m
       LEFT JOIN points_markets p ON p.id = m.parent_id
+      LEFT JOIN points_pending_markets pm ON pm.approved_market_id = COALESCE(m.parent_id, m.id)
       WHERE m.id = ${mid}
       LIMIT 1
     `;

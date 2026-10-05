@@ -8,6 +8,7 @@ import {
   settleOpenParlayTickets,
 } from './points-parlays.js';
 
+const parlaySource = await readFile(new URL('./points-parlays.js', import.meta.url), 'utf8');
 const parlayRouteSource = await readFile(new URL('../points/parlays/index.js', import.meta.url), 'utf8');
 
 function makeMarket(id, overrides = {}) {
@@ -145,6 +146,12 @@ test('parlay multiplier discounts fair odds with configured factor', () => {
 test('parlay multiplier caps tiny-price combinations', () => {
   const quote = calculateParlayMultiplier([0.01, 0.01, 0.01, 0.01, 0.01, 0.01]);
   assert.equal(quote.multiplier, 25);
+});
+
+test('parlay market eligibility inherits tournament approvals', () => {
+  assert.match(parlaySource, /TOURNAMENT_APPROVED_MARKET_START_ISO/);
+  assert.match(parlaySource, /LEFT JOIN points_pending_markets pm/);
+  assert.match(parlaySource, /COALESCE\(pm\.reviewed_at, p\.created_at, m\.created_at\)/);
 });
 
 test('parlay legs must be 3 to 6 distinct markets', () => {

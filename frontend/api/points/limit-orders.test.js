@@ -118,7 +118,9 @@ test('tournament minimum applies only before a market is covered', () => {
   assert.match(entrySource, /if \(await hasCoveredTournamentMarket\(client, \{ market, username \}\)\) return/);
   assert.match(entrySource, /primera entrada/);
   assert.match(helperSource, /assertTournamentMinimumEntry/);
-  assert.match(helperSource, /COALESCE\(m\.tournament_featured, p\.tournament_featured, false\) AS tournament_featured/);
+  assert.match(helperSource, /TOURNAMENT_APPROVED_MARKET_START_ISO/);
+  assert.match(helperSource, /COALESCE\(pm\.reviewed_at, p\.created_at, m\.created_at\)/);
+  assert.match(helperSource, /m\.tournament_featured IS TRUE[\s\S]*?p\.tournament_featured IS TRUE[\s\S]*?pm\.reviewed_at/);
   assert.match(helperSource, /FOR UPDATE OF m/);
   assert.match(helperSource, /await assertTournamentMinimumEntry\(client, \{\s*market,\s*username,\s*amount: qty,\s*\}\)/s);
   assert.doesNotMatch(helperSource, /qty < TOURNAMENT_MIN_ENTRY_MXNP/);
@@ -126,7 +128,9 @@ test('tournament minimum applies only before a market is covered', () => {
   assert.match(tradeServiceSource, /assertTournamentCutoffSnapshotReady/);
   assert.match(tradeServiceSource, /assertTournamentSettlementAllowed/);
   assert.match(tradeServiceSource, /m\.seed_liquidity, m\.seed_liquidities, m\.amm_mode, m\.parent_id/);
-  assert.match(tradeServiceSource, /COALESCE\(m\.tournament_featured, p\.tournament_featured, false\) AS tournament_featured/);
+  assert.match(tradeServiceSource, /TOURNAMENT_APPROVED_MARKET_START_ISO/);
+  assert.match(tradeServiceSource, /COALESCE\(pm\.reviewed_at, p\.created_at, m\.created_at\)/);
+  assert.match(tradeServiceSource, /m\.tournament_featured IS TRUE[\s\S]*?p\.tournament_featured IS TRUE[\s\S]*?pm\.reviewed_at/);
   assert.match(tradeServiceSource, /assertTournamentSettlementAllowed\(market\)/);
   assert.match(tradeServiceSource, /await assertTournamentCutoffSnapshotReady\(client, \{ market \}\)/);
   assert.match(tradeServiceSource, /await assertTournamentMinimumEntry\(client, \{\s*market,\s*username,\s*amount: amt,\s*\}\)/s);
@@ -136,6 +140,10 @@ test('tournament minimum applies only before a market is covered', () => {
   assert.match(quoteBuySource, /tournamentSettlementLock/);
   assert.match(quoteBuySource, /tournamentCutoffSnapshotLock/);
   assert.match(quoteSellSource, /tournamentCutoffSnapshotLock/);
+  for (const readOnlySource of [orderbookSource, quoteBuySource, quoteSellSource]) {
+    assert.match(readOnlySource, /TOURNAMENT_APPROVED_MARKET_START_ISO/);
+    assert.match(readOnlySource, /COALESCE\(pm\.reviewed_at, p\.created_at, m\.created_at\)/);
+  }
 });
 
 test('liquidity rewards accrue after resting near the current price with no per-order cap', () => {

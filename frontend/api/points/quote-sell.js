@@ -18,6 +18,7 @@ import {
   PRONOS_TREASURY_USERNAME,
 } from '../_lib/points-limit-orders.js';
 import { tournamentCutoffSnapshotLock } from '../_lib/points-tournament-entry.js';
+import { TOURNAMENT_APPROVED_MARKET_START_ISO } from '../_lib/points-tournament-config.js';
 import { monotonicSellDisplayPrice } from '../_lib/points-display-prices.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
@@ -71,9 +72,14 @@ export default async function handler(req, res) {
     const rows = await sql`
       SELECT m.status, m.reserves, m.end_time, m.resolver_config,
              m.seed_liquidity, m.seed_liquidities,
-             COALESCE(m.tournament_featured, p.tournament_featured, false) AS tournament_featured
+             (
+               m.tournament_featured IS TRUE
+               OR p.tournament_featured IS TRUE
+               OR COALESCE(pm.reviewed_at, p.created_at, m.created_at) >= ${TOURNAMENT_APPROVED_MARKET_START_ISO}::timestamptz
+             ) AS tournament_featured
       FROM points_markets m
       LEFT JOIN points_markets p ON p.id = m.parent_id
+      LEFT JOIN points_pending_markets pm ON pm.approved_market_id = COALESCE(m.parent_id, m.id)
       WHERE m.id = ${mid}
       LIMIT 1
     `;

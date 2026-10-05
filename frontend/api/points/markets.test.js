@@ -11,14 +11,15 @@ test('points market payload keeps admin featured and tournament markets on home'
   assert.match(pointsHome, /shouldShowOnHome\(m,\s*featuredTeamKeys\)/);
   assert.match(source, /featured:\s*r\.featured === true/);
   assert.match(source, /hiddenFromHome:\s*r\.hidden_from_home === true/);
-  assert.match(source, /tournamentFeatured:\s*r\.tournament_featured === true/);
-  assert.match(source, /m\.tournament_featured = true/);
+  assert.match(source, /tournamentFeatured:\s*r\.effective_tournament_featured === true/);
+  assert.match(source, /TOURNAMENT_APPROVED_MARKET_START_ISO/);
+  assert.match(source, /COALESCE\(pm\.reviewed_at, m\.created_at\)/);
 });
 
 test('points public lists hide bulk-hidden active markets outside trophy overrides', () => {
-  assert.match(source, /points:markets:v12/);
-  assert.match(source, /m\.hidden_from_home IS NOT TRUE[\s\S]*?OR m\.tournament_featured = true/);
-  assert.match(source, /m\.featured = true AND m\.hidden_from_home = false[\s\S]*?OR m\.tournament_featured = true/);
+  assert.match(source, /points:markets:v13/);
+  assert.match(source, /m\.hidden_from_home IS NOT TRUE[\s\S]*?OR m\.tournament_featured = true[\s\S]*?pm\.reviewed_at/);
+  assert.match(source, /m\.featured = true AND m\.hidden_from_home = false[\s\S]*?OR m\.tournament_featured = true[\s\S]*?pm\.reviewed_at/);
 });
 
 test('public market read endpoints have gentle abuse rate limits', () => {
@@ -32,13 +33,13 @@ test('points market list supports trophy shelf independent of category', () => {
   assert.match(source, /publicCategoryAlias\(req\.query\.category\)/);
   assert.match(source, /featuredParam === 'tournament'/);
   assert.match(source, /tournamentOnly \? 'tournament-featured'/);
-  assert.match(source, /\$\{tournamentOnly\}::boolean = false OR m\.tournament_featured = true/);
+  assert.match(source, /tournamentOnly\}::boolean = false[\s\S]*?pm\.reviewed_at/);
 });
 
 test('points market payload exposes featured and trending for parallel and unified markets', () => {
   const featuredMatches = source.match(/featured:\s*r\.featured === true/g) || [];
-  const trendingMatches = source.match(/trending:\s*r\.tournament_featured === true \|\| \(r\.hidden_from_home !== true && \(r\.featured === true \|\| live\)\)/g) || [];
-  const tournamentMatches = source.match(/tournamentFeatured:\s*r\.tournament_featured === true/g) || [];
+  const trendingMatches = source.match(/trending:\s*r\.effective_tournament_featured === true \|\| \(r\.hidden_from_home !== true && \(r\.featured === true \|\| live\)\)/g) || [];
+  const tournamentMatches = source.match(/tournamentFeatured:\s*r\.effective_tournament_featured === true/g) || [];
   assert.equal(featuredMatches.length, 2);
   assert.equal(trendingMatches.length, 2);
   assert.equal(tournamentMatches.length, 2);

@@ -16,6 +16,7 @@ import { PRONOS_TREASURY_USERNAME } from '../_lib/points-limit-orders.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 import { publicMarketTranslationFields } from '../_lib/market-translations.js';
 import { binaryPricesWithBookTrade, pricesWithBookTrades } from '../_lib/points-display-prices.js';
+import { TOURNAMENT_APPROVED_MARKET_START_ISO } from '../_lib/points-tournament-config.js';
 
 // Lazy neon client init — defer until the first request so a missing
 // DATABASE_URL at module-load time surfaces as a structured JSON error
@@ -161,7 +162,7 @@ export default async function handler(req, res) {
     const tournamentOnly = !category && featuredParam === 'tournament';
     const featuredOnly = !category && !tournamentOnly && featuredParam !== 'all';
     const cacheKey = [
-      'points:markets:v12',
+      'points:markets:v13',
       status,
       category || 'all',
       modeFilter || 'all-modes',
@@ -192,6 +193,10 @@ export default async function handler(req, res) {
           m.chain_id, m.chain_market_id, m.chain_address, m.category_tags,
           m.geo_tags, m.topic_tags, m.amm_mode, m.start_time, m.sport, m.league,
           m.outcome_images, m.featured, m.hidden_from_home, m.tournament_featured,
+          (
+            m.tournament_featured IS TRUE
+            OR COALESCE(pm.reviewed_at, m.created_at) >= ${TOURNAMENT_APPROVED_MARKET_START_ISO}::timestamptz
+          ) AS effective_tournament_featured,
           m.is_test_market,
           m.source, m.source_event_id, m.final_score, m.resolver_type,
           m.resolver_config,
@@ -259,11 +264,16 @@ export default async function handler(req, res) {
           AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
           AND (${chainIdFilter}::integer IS NULL OR m.chain_id = ${chainIdFilter}::integer)
           AND m.archived_at IS NULL
-          AND (${tournamentOnly}::boolean = false OR m.tournament_featured = true)
+          AND (
+            ${tournamentOnly}::boolean = false
+            OR m.tournament_featured = true
+            OR COALESCE(pm.reviewed_at, m.created_at) >= ${TOURNAMENT_APPROVED_MARKET_START_ISO}::timestamptz
+          )
           AND (
             ${featuredOnly}::boolean = false
             OR (m.featured = true AND m.hidden_from_home = false)
             OR m.tournament_featured = true
+            OR COALESCE(pm.reviewed_at, m.created_at) >= ${TOURNAMENT_APPROVED_MARKET_START_ISO}::timestamptz
           )
           AND (
             ${tournamentOnly}::boolean = true
@@ -271,6 +281,7 @@ export default async function handler(req, res) {
             OR ${status}::text <> 'active'
             OR m.hidden_from_home IS NOT TRUE
             OR m.tournament_featured = true
+            OR COALESCE(pm.reviewed_at, m.created_at) >= ${TOURNAMENT_APPROVED_MARKET_START_ISO}::timestamptz
           )
         ORDER BY
           CASE WHEN ${status}::text = 'resolved' THEN m.resolved_at END DESC NULLS LAST,
@@ -432,9 +443,9 @@ export default async function handler(req, res) {
               live,
               featured: r.featured === true,
               hiddenFromHome: r.hidden_from_home === true,
-              tournamentFeatured: r.tournament_featured === true,
+              tournamentFeatured: r.effective_tournament_featured === true,
               isTestMarket: r.is_test_market === true,
-              trending: r.tournament_featured === true || (r.hidden_from_home !== true && (r.featured === true || live)),
+              trending: r.effective_tournament_featured === true || (r.hidden_from_home !== true && (r.featured === true || live)),
               status: r.status,
               outcome: r.outcome,
               resolvedAt: r.resolved_at,
@@ -515,9 +526,9 @@ export default async function handler(req, res) {
             live,
             featured: r.featured === true,
             hiddenFromHome: r.hidden_from_home === true,
-            tournamentFeatured: r.tournament_featured === true,
+            tournamentFeatured: r.effective_tournament_featured === true,
             isTestMarket: r.is_test_market === true,
-            trending: r.tournament_featured === true || (r.hidden_from_home !== true && (r.featured === true || live)),
+            trending: r.effective_tournament_featured === true || (r.hidden_from_home !== true && (r.featured === true || live)),
             crypto5min,
             cryptoIntervalMinutes,
             cryptoWindowMinutes: cryptoIntervalMinutes,

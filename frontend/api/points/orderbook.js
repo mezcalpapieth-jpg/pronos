@@ -19,6 +19,7 @@ import {
 } from '../_lib/points-limit-orders.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 import { cachedJson, createApiTimer, setCacheHeaders } from '../_lib/api-performance.js';
+import { TOURNAMENT_APPROVED_MARKET_START_ISO } from '../_lib/points-tournament-config.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -73,9 +74,14 @@ export default async function handler(req, res) {
       const rows = await timer.time('db_market', () => sql`
         SELECT m.id, m.parent_id, m.leg_label, m.question, m.status, m.outcomes, m.reserves,
                m.seed_liquidity, m.seed_liquidities,
-               COALESCE(m.tournament_featured, p.tournament_featured, false) AS tournament_featured
+               (
+                 m.tournament_featured IS TRUE
+                 OR p.tournament_featured IS TRUE
+                 OR COALESCE(pm.reviewed_at, p.created_at, m.created_at) >= ${TOURNAMENT_APPROVED_MARKET_START_ISO}::timestamptz
+               ) AS tournament_featured
         FROM points_markets m
         LEFT JOIN points_markets p ON p.id = m.parent_id
+        LEFT JOIN points_pending_markets pm ON pm.approved_market_id = COALESCE(m.parent_id, m.id)
         WHERE m.id = ${marketId}
         LIMIT 1
       `);

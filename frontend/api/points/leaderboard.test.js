@@ -33,7 +33,9 @@ test('points tournament leaderboard scores against the active cycle window', () 
   assert.match(tournamentSource, /buildNeutralLeaderboardRows/);
   assert.match(tournamentSource, /const startIso = tournamentScoringStartsAt\(scoringWindow\)/);
   assert.match(tournamentSource, /const cutoffIso = scoringWindow\.rankingCutoffAt/);
-  assert.match(tournamentSource, /COALESCE\(m\.tournament_featured, parent\.tournament_featured, false\) IS TRUE/);
+  assert.match(tournamentSource, /TOURNAMENT_APPROVED_MARKET_START_ISO/);
+  assert.match(tournamentSource, /COALESCE\(pm\.reviewed_at, parent\.created_at, m\.created_at\)/);
+  assert.match(tournamentSource, /m\.tournament_featured IS TRUE[\s\S]*?parent\.tournament_featured IS TRUE[\s\S]*?pm\.reviewed_at/);
   assert.match(tournamentSource, /COUNT\(DISTINCT COALESCE\(m\.parent_id, m\.id\)\)/);
   assert.match(tournamentSource, /readLiquidityRewardRows/);
   assert.match(tournamentSource, /kind = 'limit_maker_reward'/);
