@@ -475,6 +475,14 @@ function officialWinsForTeams(candidateMeta, teamAKeys, teamBKeys, currentGameNu
   return { teamAWins, teamBWins };
 }
 
+function seriesScoreLimitGame(meta, markets) {
+  const currentGame = validGameNumber(meta?.gameNumber);
+  if (!currentGame) return Infinity;
+  const currentRows = markets.filter((market) => Number(market.gameNumber) === currentGame);
+  const currentResolved = currentRows.length > 0 && currentRows.every((market) => market.status === 'resolved');
+  return currentResolved ? currentGame : currentGame - 1;
+}
+
 function compareSeriesTime(a, b) {
   const at = new Date(a.startTime || a.start_time || a.endTime || a.end_time || 0).getTime();
   const bt = new Date(b.startTime || b.start_time || b.endTime || b.end_time || 0).getTime();
@@ -532,9 +540,14 @@ export function buildSeriesDetail(meta, markets = []) {
   const teamB = meta.teams?.[1] || meta.awayTeam || {};
   const teamAKeys = teamKeySet(teamA);
   const teamBKeys = teamKeySet(teamB);
+  const scoreLimitGame = seriesScoreLimitGame(meta, normalizedMarkets);
   let teamAWins = 0;
   let teamBWins = 0;
   for (const market of normalizedMarkets) {
+    if (Number.isFinite(scoreLimitGame)) {
+      const marketGame = validGameNumber(market.gameNumber);
+      if (!marketGame || marketGame > scoreLimitGame) continue;
+    }
     const winner = winnerTeamKey(market);
     if (!winner) continue;
     if (teamAKeys.has(winner)) teamAWins += 1;
@@ -542,8 +555,11 @@ export function buildSeriesDetail(meta, markets = []) {
   }
   const officialCandidates = [meta, ...normalizedMarkets.map(market => market.seriesMeta)].filter(Boolean);
   let officialWins = null;
+  const officialReferenceGame = Number.isFinite(scoreLimitGame)
+    ? scoreLimitGame + 1
+    : meta.gameNumber;
   for (const candidate of officialCandidates) {
-    const candidateWins = officialWinsForTeams(candidate, teamAKeys, teamBKeys, meta.gameNumber);
+    const candidateWins = officialWinsForTeams(candidate, teamAKeys, teamBKeys, officialReferenceGame);
     if (!candidateWins) continue;
     if (!officialWins || (candidateWins.teamAWins + candidateWins.teamBWins) >= (officialWins.teamAWins + officialWins.teamBWins)) {
       officialWins = candidateWins;

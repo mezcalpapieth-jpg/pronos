@@ -493,6 +493,73 @@ test('buildSeriesDetail ignores same-team rows without stored series metadata', 
   assert.deepEqual(detail.sequence.map((item) => item.id), [317665, 320583, null, null, null]);
 });
 
+test('buildSeriesDetail ignores future resolved siblings when summarizing an active game', () => {
+  const meta = {
+    key: 'baseball-mlb:2026:division:10-30',
+    leaguePath: 'baseball/mlb',
+    league: 'mlb',
+    sport: 'baseball',
+    gameNumber: 2,
+    bestOf: 5,
+    winTarget: 3,
+    guaranteedGames: 3,
+    round: 'Division Series',
+    seasonYear: 2026,
+    homeTeam: { id: '30', name: 'Tampa Bay Rays', shortName: 'Rays', abbreviation: 'TB' },
+    awayTeam: { id: '10', name: 'New York Yankees', shortName: 'Yankees', abbreviation: 'NYY' },
+    teams: [
+      { id: '30', name: 'Tampa Bay Rays', shortName: 'Rays', abbreviation: 'TB' },
+      { id: '10', name: 'New York Yankees', shortName: 'Yankees', abbreviation: 'NYY' },
+    ],
+  };
+  const outcomes = ['Tampa Bay Rays', 'New York Yankees'];
+
+  const detail = buildSeriesDetail(meta, [
+    {
+      id: 317666,
+      question: 'Game 1',
+      status: 'resolved',
+      outcome: 0,
+      outcomes,
+      startTime: '2026-10-03T21:30:00Z',
+      seriesMeta: { ...meta, gameNumber: 1 },
+    },
+    {
+      id: 320600,
+      question: 'Game 2',
+      status: 'active',
+      outcome: null,
+      outcomes,
+      startTime: '2026-10-05T21:30:00Z',
+      seriesMeta: meta,
+    },
+    {
+      id: 320601,
+      question: 'Stale future Game 3',
+      status: 'resolved',
+      outcome: 1,
+      outcomes,
+      startTime: '2026-10-07T21:30:00Z',
+      seriesMeta: { ...meta, gameNumber: 3 },
+    },
+    {
+      id: 320602,
+      question: 'Stale future Game 4',
+      status: 'resolved',
+      outcome: 0,
+      outcomes,
+      startTime: '2026-10-09T21:30:00Z',
+      seriesMeta: { ...meta, gameNumber: 4, espnSeriesWins: { homeWins: 2, awayWins: 1 } },
+    },
+  ]);
+
+  assert.equal(detail.teamAWins, 1);
+  assert.equal(detail.teamBWins, 0);
+  assert.equal(detail.summary, 'Rays lidera 1-0');
+  assert.equal(detail.subtitle, 'Juego 2 · Rays lidera 1-0');
+  assert.equal(detail.sequence.find((item) => item.id === 320600)?.subtitle, 'Juego 2 · Rays lidera 1-0');
+});
+
 test('buildSeriesDetail locks approved optional best-of-seven games until the score requires them', () => {
   const meta = {
     key: 'basketball-nba:2026:west-first-round:24-25',
