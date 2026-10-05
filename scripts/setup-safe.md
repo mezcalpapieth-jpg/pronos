@@ -1,9 +1,9 @@
 # Safe Multisig Setup Guide for Pronos
 
 ## Overview
-For Arbitrum Sepolia testnet we keep operations simple and use the admin wallet directly. Safe UI does not support Arbitrum Sepolia as a hosted network, so the real Safe setup is reserved for Arbitrum One mainnet.
+For Base Sepolia testnet we keep operations simple and use the admin wallet directly. The real Safe setup is reserved for the final production chain once ownership and resolver operations are ready.
 
-## Testnet: Arbitrum Sepolia EOA Admin
+## Testnet: Base Sepolia EOA Admin
 
 Use the deployer/admin wallet as both `ADMIN_ADDRESS` and `RESOLVER_ADDRESS`.
 
@@ -19,18 +19,18 @@ export RESOLVER_ADDRESS=0xa8eE70541d537389ed287d204efC5297569321d5
 Deploy with `DeployProtocol.s.sol`. The deploy script will transfer owner and resolver roles to the wallet above during deployment:
 
 ```bash
-forge script script/DeployProtocol.s.sol --rpc-url arbitrum_sepolia --broadcast
+forge script script/DeployProtocol.s.sol --rpc-url base_sepolia --broadcast
 ```
 
 ### Step 3: Verify
 
 ```bash
 # Check owner
-cast call $FACTORY "owner()(address)" --rpc-url $ARB_SEPOLIA_RPC
+cast call $FACTORY "owner()(address)" --rpc-url $BASE_SEPOLIA_RPC
 # Should return: 0xa8eE70541d537389ed287d204efC5297569321d5
 
 # Check resolver
-cast call $FACTORY "resolver()(address)" --rpc-url $ARB_SEPOLIA_RPC
+cast call $FACTORY "resolver()(address)" --rpc-url $BASE_SEPOLIA_RPC
 # Should return: 0xa8eE70541d537389ed287d204efC5297569321d5
 ```
 
@@ -57,8 +57,8 @@ Mainnet creation steps:
 6. Set the factory resolver to `RESOLVER_SAFE`
 
 ## Notes
-- Testnet: use the direct admin wallet so we can move fast on Arbitrum Sepolia.
+- Testnet: use the direct admin wallet so we can move fast on Base Sepolia.
 - Mainnet: keep separate 3/5 admin and 2/3 resolver Safes.
-- Arbitrum Sepolia: use `DeployMockMXNB.s.sol` and never point mainnet env vars at a mock.
+- Base Sepolia: use `DeployMockMXNB.s.sol` only for rehearsals and never point mainnet env vars at a mock.
 - Arbitrum One MXNB: `0xF197FFC28c23E0309B5559e7a166f2c6164C80aA`
 - Market creation/resolution still costs native ETH from the signer wallet unless a relayer/paymaster layer is added.

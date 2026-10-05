@@ -2,11 +2,11 @@
 
 Branch: `onchain-sepolia`
 
-Status: design + first backend approval-gap fix started. This branch must stay hidden behind flags until the next tournament reset.
+Status: design + first backend/token/readiness/reset dry-run groundwork started. This branch must stay hidden behind flags until the next tournament reset.
 
 ## Goal
 
-Run the next Points tournament with tournament money represented by a testnet ERC20 on Arbitrum Sepolia, while keeping the product feeling exactly like Points:
+Run the next Points tournament with tournament money represented by a testnet ERC20 on Base Sepolia, while keeping the product feeling exactly like Points:
 
 - Users still press `Comprar`, `Vender`, or `Cobrar`.
 - Users do not see wallet addresses, gas, approvals, chain IDs, or explorer links in the normal flow.
@@ -14,7 +14,7 @@ Run the next Points tournament with tournament money represented by a testnet ER
 - No live Points balances or active markets are migrated on this branch.
 - The tournament reset creates a fresh on-chain cycle, funds eligible wallets, and starts scoring from zero.
 
-For this roadmap, "Sepolia" means Arbitrum Sepolia because the current contracts, scripts, and env naming are already Arbitrum-oriented. If we decide to use Ethereum Sepolia instead, the same plan applies but the chain IDs, RPCs, deployments, and indexer settings change.
+For this roadmap, "Sepolia" now means Base Sepolia. The existing contracts are EVM-compatible, but chain IDs, RPCs, deploy scripts, frontend aliases, indexer settings, and reset checks must use Base Sepolia instead of Arbitrum Sepolia.
 
 ## Non-Negotiables
 
@@ -51,6 +51,8 @@ Started on this branch:
 - Added share token addresses to delegation policy targets.
 - Added backend sell-time share operator approval so sell can stay invisible to the user.
 - Added `TournamentMXNP`, an owner-minted 6-decimal testnet token with no public faucet.
+- Added a Sepolia readiness profile so tournament rehearsals do not require mainnet Juno/Bitso checks.
+- Added a dry-run reset/funding planner for Base Sepolia that audits eligible wallets, env blockers, delegation gaps, duplicate wallet mappings, and the exact 500 MXNP allocation before any DB or chain writes exist.
 
 ## Key Product Decision
 
@@ -78,7 +80,7 @@ points_pending_markets row
 For the next tournament, approval should produce one `points_markets` row with:
 
 - `mode = 'onchain'`
-- `chain_id = 421614` for Arbitrum Sepolia
+- `chain_id = 84532` for Base Sepolia
 - `chain_market_id = protocol market id`
 - `chain_address = deployed AMM pool address`
 - normal `featured`, `tournament_featured`, resolver, image, tag, and deadline metadata
@@ -102,7 +104,7 @@ Recommended launch token for this tournament:
 - Name: `Tournament MXNP`
 - Symbol: `MXNP`
 - Decimals: `6`
-- Network: Arbitrum Sepolia
+- Network: Base Sepolia
 - Minting: owner/operator only, no public faucet
 - Reset funding: mint or transfer exactly the tournament allocation to eligible wallets
 
@@ -151,10 +153,10 @@ Longer-term optimization:
 
 Tasks:
 
-- Decide final testnet: Arbitrum Sepolia unless changed explicitly.
+- Final testnet: Base Sepolia.
 - Add controlled `TournamentMXNP` or `MockMXNP` ERC20 with 6 decimals and owner-only mint.
 - Keep `MockMXNB` only for local/dry-run faucet testing.
-- Deploy collateral token to Arbitrum Sepolia.
+- Deploy collateral token to Base Sepolia.
 - Deploy V1 binary token/factory/pool stack with tournament collateral.
 - Deploy V2 multi-outcome token/factory/pool stack with tournament collateral.
 - Configure factory owner, market creator, resolver, treasury, liquidity reserve, emergency reserve.
@@ -254,7 +256,7 @@ Tasks:
 
 Tasks:
 
-- Configure indexer for Arbitrum Sepolia chain ID `421614`.
+- Configure indexer for Base Sepolia chain ID `84532`.
 - Track both factory versions.
 - Track deployed pools as markets are approved.
 - Ingest:
@@ -326,7 +328,7 @@ Local/unit:
 
 Integration:
 
-- Deploy token + factories on Arbitrum Sepolia.
+- Deploy token + factories on Base Sepolia.
 - Create three test users.
 - Fund 500 MXNP + gas.
 - Approve two pending markets as on-chain:
@@ -436,8 +438,8 @@ Days 24-25: launch prep
 
 ## Immediate Next Tasks
 
-1. Finish and test the hidden ERC1155 sell approval patch.
-2. Finish and test `TournamentMXNP` with owner-only mint and deployment script.
-3. Add Sepolia-specific readiness profile instead of mainnet-only readiness checks.
-4. Add reset/funding script skeleton with dry-run mode.
-5. Wire admin pending approval to a branch-only on-chain default flag.
+1. Done: finish and test the hidden ERC1155 sell approval patch.
+2. Done: finish and test `TournamentMXNP` with owner-only mint and deployment script.
+3. Done: add Sepolia-specific readiness profile instead of mainnet-only readiness checks.
+4. Done: add reset/funding script skeleton with dry-run mode.
+5. Next: wire admin pending approval to a branch-only on-chain default flag.

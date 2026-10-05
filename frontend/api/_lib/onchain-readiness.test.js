@@ -9,6 +9,8 @@ const ADDR = {
   collateral: '0x3333333333333333333333333333333333333333',
   deployer: '0x4444444444444444444444444444444444444444',
   resolver: '0x5555555555555555555555555555555555555555',
+  shareTokenV1: '0x9999999999999999999999999999999999999999',
+  shareTokenV2: '0x1212121212121212121212121212121212121212',
   poolA: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
   poolB: '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
 };
@@ -28,6 +30,8 @@ function completeEnv(overrides = {}) {
     FACTORY_V2_ADDRESS: ADDR.factoryV2,
     PRONOS_FACTORY_V2_ADDRESS: ADDR.factoryV2,
     ONCHAIN_COLLATERAL_ADDRESS: ADDR.collateral,
+    ONCHAIN_SHARE_TOKEN_ADDRESS: ADDR.shareTokenV1,
+    ONCHAIN_SHARE_TOKEN_V2_ADDRESS: ADDR.shareTokenV2,
     ONCHAIN_DEPLOYER_SUBORG_ID: 'deployer-suborg',
     ONCHAIN_DEPLOYER_ADDRESS: ADDR.deployer,
     ONCHAIN_RESOLVER_SUBORG_ID: 'resolver-suborg',
@@ -105,6 +109,7 @@ test('collectOnchainReadiness returns grouped mainnet launch blockers and review
 
   assert.equal(result.launch.ready, false);
   assert.ok(blockerIds.includes('turnkey_policies_disabled'));
+  assert.ok(blockerIds.includes('share_tokens_missing'));
   assert.ok(blockerIds.includes('resolver_wallet_missing'));
   assert.ok(blockerIds.includes('juno_provider_missing'));
   assert.ok(blockerIds.includes('owner_controls_missing'));
@@ -135,7 +140,7 @@ test('collectOnchainReadiness includes Juno funding readiness', () => {
 test('collectOnchainReadiness catches deployment alias mismatches', () => {
   const result = collectOnchainReadiness({
     env: completeEnv({
-      VITE_ONCHAIN_CHAIN_ID: '421614',
+      VITE_ONCHAIN_CHAIN_ID: '84532',
       FACTORY_ADDRESS: '0xffffffffffffffffffffffffffffffffffffffff',
       VITE_PRONOS_ARBITRUM_FACTORY_V2: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
       VITE_PRONOS_ARBITRUM_TOKEN: '0xdddddddddddddddddddddddddddddddddddddddd',
@@ -145,10 +150,59 @@ test('collectOnchainReadiness catches deployment alias mismatches', () => {
   const warnings = result.warnings.join('\n');
 
   assert.equal(result.ok, false);
-  assert.match(warnings, /VITE_ONCHAIN_CHAIN_ID=421614 does not match ONCHAIN_CHAIN_ID=42161/);
+  assert.match(warnings, /VITE_ONCHAIN_CHAIN_ID=84532 does not match ONCHAIN_CHAIN_ID=42161/);
   assert.match(warnings, /FACTORY_ADDRESS does not match ONCHAIN_MARKET_FACTORY_ADDRESS/);
   assert.match(warnings, /VITE_PRONOS_ARBITRUM_FACTORY_V2 does not match ONCHAIN_MARKET_FACTORY_V2_ADDRESS/);
   assert.match(warnings, /VITE_PRONOS_ARBITRUM_TOKEN does not match ONCHAIN_COLLATERAL_ADDRESS/);
+});
+
+test('collectOnchainReadiness supports Base Sepolia without mainnet provider blockers', () => {
+  const result = collectOnchainReadiness({
+    env: completeEnv({
+      ONCHAIN_READINESS_PROFILE: 'sepolia',
+      ONCHAIN_RPC_URL: 'https://sepolia.base.org',
+      ONCHAIN_CHAIN_ID: '84532',
+      CHAIN_ID: '84532',
+      PROTOCOL_CHAIN_ID: '84532',
+      VITE_ONCHAIN_CHAIN_ID: '84532',
+      ARB_RPC_URL: '',
+      BASE_SEPOLIA_RPC: 'https://sepolia.base.org',
+      FACTORY_ADDRESS: '',
+      PRONOS_FACTORY_ADDRESS: '',
+      FACTORY_V2_ADDRESS: '',
+      PRONOS_FACTORY_V2_ADDRESS: '',
+      VITE_PRONOS_ARBITRUM_FACTORY: '',
+      VITE_PRONOS_ARBITRUM_FACTORY_V2: '',
+      VITE_PRONOS_ARBITRUM_TOKEN: '',
+      VITE_PRONOS_BASE_SEPOLIA_FACTORY: ADDR.factoryV1,
+      VITE_PRONOS_BASE_SEPOLIA_FACTORY_V2: ADDR.factoryV2,
+      VITE_PRONOS_BASE_SEPOLIA_TOKEN: ADDR.collateral,
+      VITE_PRONOS_BASE_SEPOLIA_ADMIN_SAFE: '0x6666666666666666666666666666666666666666',
+      VITE_PRONOS_BASE_SEPOLIA_RESOLVER_SAFE: '0x7777777777777777777777777777777777777777',
+      JUNO_API_KEY: '',
+      JUNO_API_SECRET: '',
+      JUNO_BEARER_TOKEN: '',
+      JUNO_API_BASE_URL: '',
+      JUNO_WEBHOOK_SECRET: '',
+      JUNO_CARD_CHECKOUT_ENABLED: 'false',
+      JUNO_APPLE_PAY_ENABLED: 'false',
+      JUNO_WITHDRAWALS_ENABLED: 'false',
+    }),
+    protocolPools: [ADDR.poolA],
+  });
+  const warnings = result.warnings.join('\n');
+  const blockerIds = result.launch.blockers.map(b => b.id);
+
+  assert.equal(result.deployment.profile, 'sepolia');
+  assert.equal(result.deployment.expectedChainId, 84532);
+  assert.equal(result.deployment.networkName, 'Base Sepolia');
+  assert.equal(result.launch.ready, true);
+  assert.equal(result.deployment.indexerFactoryV1, ADDR.factoryV1);
+  assert.equal(result.deployment.clientFactoryV1, ADDR.factoryV1);
+  assert.doesNotMatch(warnings, /not Arbitrum One/);
+  assert.doesNotMatch(warnings, /JUNO_API_KEY missing/);
+  assert.doesNotMatch(warnings, /VITE_PRONOS_ARBITRUM_FACTORY missing/);
+  assert.ok(!blockerIds.includes('juno_provider_missing'));
 });
 
 test('collectOnchainReadiness reports env pool gaps without failing DB-backed policy autofill', () => {

@@ -28,8 +28,8 @@ const DEFAULT_RPCS = {
   // Arbitrum One — Chainlink publishes BTC/USD, ETH/USD, and several
   // stock + FX feeds here. Keyless public RPC.
   42161: 'https://arb1.arbitrum.io/rpc',
-  // Arbitrum Sepolia — feeds are mock / non-market values.
-  421614: 'https://sepolia-rollup.arbitrum.io/rpc',
+  // Base Sepolia — testnet resolver rehearsals.
+  84532: 'https://sepolia.base.org',
   // Ethereum mainnet fallback.
   1: 'https://eth.llamarpc.com',
   // BNB Chain — useful for commodity feeds that are not on Arbitrum.

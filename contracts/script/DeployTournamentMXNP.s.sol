@@ -11,7 +11,7 @@ import {TournamentMXNP} from "../src/TournamentMXNP.sol";
  *
  * Usage:
  *   forge script script/DeployTournamentMXNP.s.sol \
- *     --rpc-url arbitrum_sepolia --broadcast --verify
+ *     --rpc-url base_sepolia --broadcast --verify
  *
  * Env vars:
  *   DEPLOYER_PRIVATE_KEY      - deployer's secp256k1 hex key

@@ -14,9 +14,9 @@ optimizer_runs   = 200
 
 # Chain config
 [profile.default.rpc_endpoints]
-arbitrum_sepolia = "${ARB_SEPOLIA_RPC}"
+base_sepolia     = "${BASE_SEPOLIA_RPC}"
 arbitrum         = "https://arb1.arbitrum.io/rpc"
 
 [profile.default.etherscan]
-arbitrum_sepolia = { key = "${ARBISCAN_API_KEY}", url = "https://api-sepolia.arbiscan.io/api" }
+base_sepolia     = { key = "${BASESCAN_API_KEY}", url = "https://api-sepolia.basescan.org/api" }
 arbitrum         = { key = "${ARBISCAN_API_KEY}", url = "https://api.arbiscan.io/api" }

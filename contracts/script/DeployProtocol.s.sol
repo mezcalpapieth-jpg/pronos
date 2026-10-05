@@ -107,11 +107,14 @@ contract DeployProtocol is Script {
         console.log("ONCHAIN_CHAIN_ID=42161");
         console.log("ONCHAIN_COLLATERAL_ADDRESS=", collateral);
         console.log("ONCHAIN_MARKET_FACTORY_ADDRESS=", address(factory));
+        console.log("ONCHAIN_SHARE_TOKEN_ADDRESS=", address(token));
         console.log("MARKET_CREATOR_ADDRESS=", marketCreator);
         console.log("ONCHAIN_DEPLOYER_ADDRESS=", marketCreator);
         console.log("VITE_ONCHAIN_CHAIN_ID=42161");
         console.log("VITE_PRONOS_ARBITRUM_FACTORY=", address(factory));
         console.log("VITE_PRONOS_ARBITRUM_TOKEN=", address(token));
+        console.log("VITE_PRONOS_BASE_SEPOLIA_FACTORY=", address(factory));
+        console.log("VITE_PRONOS_BASE_SEPOLIA_TOKEN=", address(token));
         console.log("FACTORY_ADDRESS=", address(factory));
         console.log("PRONOS_FACTORY_ADDRESS=", address(factory));
         console.log("Next steps:");

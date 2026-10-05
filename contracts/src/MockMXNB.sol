@@ -5,7 +5,7 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 /**
  * @title MockMXNB
- * @notice Test-only ERC-20 that mimics Bitso/Juno MXNB on Arbitrum Sepolia.
+ * @notice Test-only ERC-20 that mimics Bitso/Juno MXNB on EVM testnets.
  *         Real MXNB is mainnet-only; this token lets us exercise the full
  *         buy/sell/redeem/seed flow with MXNB-branded collateral on testnet.
  *

@@ -1,4 +1,33 @@
 const ARBITRUM_ONE_CHAIN_ID = 42161;
+const BASE_SEPOLIA_CHAIN_ID = 84532;
+
+const MAINNET_PROFILE = Object.freeze({
+  key: 'mainnet',
+  networkName: 'Arbitrum One',
+  expectedChainId: ARBITRUM_ONE_CHAIN_ID,
+  testnet: false,
+  junoRequired: true,
+  rpcEnvHints: ['ARB_RPC_URL', 'ARB_MAINNET_RPC', 'ARBITRUM_RPC_URL'],
+  clientFactoryV1Env: ['VITE_PRONOS_ARBITRUM_FACTORY'],
+  clientFactoryV2Env: ['VITE_PRONOS_ARBITRUM_FACTORY_V2'],
+  clientTokenEnv: ['VITE_PRONOS_ARBITRUM_TOKEN'],
+  adminSafeEnv: ['ADMIN_SAFE_ADDRESS', 'VITE_PRONOS_ARBITRUM_ADMIN_SAFE'],
+  resolverSafeEnv: ['RESOLVER_SAFE_ADDRESS', 'VITE_PRONOS_ARBITRUM_RESOLVER_SAFE'],
+});
+
+const SEPOLIA_PROFILE = Object.freeze({
+  key: 'sepolia',
+  networkName: 'Base Sepolia',
+  expectedChainId: BASE_SEPOLIA_CHAIN_ID,
+  testnet: true,
+  junoRequired: false,
+  rpcEnvHints: ['BASE_SEPOLIA_RPC', 'BASE_SEPOLIA_RPC_URL'],
+  clientFactoryV1Env: ['VITE_PRONOS_BASE_SEPOLIA_FACTORY'],
+  clientFactoryV2Env: ['VITE_PRONOS_BASE_SEPOLIA_FACTORY_V2'],
+  clientTokenEnv: ['VITE_PRONOS_BASE_SEPOLIA_TOKEN'],
+  adminSafeEnv: ['ADMIN_SAFE_ADDRESS', 'VITE_PRONOS_BASE_SEPOLIA_ADMIN_SAFE'],
+  resolverSafeEnv: ['RESOLVER_SAFE_ADDRESS', 'VITE_PRONOS_BASE_SEPOLIA_RESOLVER_SAFE'],
+});
 
 function hasEnv(env, name) {
   return typeof env?.[name] === 'string' && env[name].trim() !== '';
@@ -20,6 +49,19 @@ function sameAddress(a, b) {
   return Boolean(left && right && left === right);
 }
 
+function onchainProfile(env, chainId) {
+  const requested = String(env.ONCHAIN_READINESS_PROFILE || env.ONCHAIN_NETWORK || '')
+    .trim()
+    .toLowerCase();
+  if (['sepolia', 'base-sepolia', 'base_sepolia', 'testnet'].includes(requested)) {
+    return SEPOLIA_PROFILE;
+  }
+  if (['mainnet', 'arbitrum-one', 'production'].includes(requested)) {
+    return MAINNET_PROFILE;
+  }
+  return chainId === BASE_SEPOLIA_CHAIN_ID ? SEPOLIA_PROFILE : MAINNET_PROFILE;
+}
+
 export function parseOnchainAddressList(value) {
   return String(value || '')
     .split(/[,\s]+/)
@@ -32,6 +74,10 @@ function firstEnv(env, names) {
     if (hasEnv(env, name)) return env[name].trim();
   }
   return null;
+}
+
+function hasAnyEnv(env, names) {
+  return names.some(name => hasEnv(env, name));
 }
 
 function warnMissing(warnings, env, name) {
@@ -81,6 +127,7 @@ export function collectOnchainReadiness({
 } = {}) {
   const warnings = [];
   const chainId = intEnv(env, 'ONCHAIN_CHAIN_ID');
+  const profile = onchainProfile(env, chainId);
   const clientChainId = intEnv(env, 'VITE_ONCHAIN_CHAIN_ID');
   const indexerChainId = intEnv(env, 'CHAIN_ID');
   const protocolChainId = intEnv(env, 'PROTOCOL_CHAIN_ID');
@@ -96,18 +143,14 @@ export function collectOnchainReadiness({
   const indexerFactoryV1 = firstEnv(env, [
     'FACTORY_ADDRESS',
     'PRONOS_FACTORY_ADDRESS',
-    chainId === 421614 ? 'VITE_PRONOS_ARB_SEPOLIA_FACTORY' : 'VITE_PRONOS_ARBITRUM_FACTORY',
+    ...profile.clientFactoryV1Env,
   ]);
   const indexerFactoryV2 = firstEnv(env, [
     'FACTORY_V2_ADDRESS',
     'PRONOS_FACTORY_V2_ADDRESS',
-    chainId === 421614 ? 'VITE_PRONOS_ARB_SEPOLIA_FACTORY_V2' : 'VITE_PRONOS_ARBITRUM_FACTORY_V2',
+    ...profile.clientFactoryV2Env,
   ]);
-  const indexerRpc = firstEnv(env, [
-    'ARB_RPC_URL',
-    chainId === 421614 ? 'ARB_SEPOLIA_RPC' : 'ARB_MAINNET_RPC',
-    chainId === 421614 ? 'ARBITRUM_SEPOLIA_RPC_URL' : 'ARBITRUM_RPC_URL',
-  ]);
+  const indexerRpc = firstEnv(env, profile.rpcEnvHints);
 
   const runtimeEnv = {
     rpc: hasEnv(env, 'ONCHAIN_RPC_URL'),
@@ -115,6 +158,12 @@ export function collectOnchainReadiness({
     factoryV1,
     factoryV2,
     collateral,
+    shareTokenV1: hasEnv(env, 'ONCHAIN_SHARE_TOKEN_ADDRESS')
+      ? env.ONCHAIN_SHARE_TOKEN_ADDRESS.trim()
+      : null,
+    shareTokenV2: hasEnv(env, 'ONCHAIN_SHARE_TOKEN_V2_ADDRESS')
+      ? env.ONCHAIN_SHARE_TOKEN_V2_ADDRESS.trim()
+      : null,
     deployerSuborgId: hasEnv(env, 'ONCHAIN_DEPLOYER_SUBORG_ID'),
     deployerAddress: hasEnv(env, 'ONCHAIN_DEPLOYER_ADDRESS')
       ? env.ONCHAIN_DEPLOYER_ADDRESS.trim()
@@ -130,8 +179,8 @@ export function collectOnchainReadiness({
     cronSecret: hasEnv(env, 'CRON_SECRET'),
   };
   const ownerControls = {
-    adminSafe: firstEnv(env, ['ADMIN_SAFE_ADDRESS', 'VITE_PRONOS_ARBITRUM_ADMIN_SAFE']),
-    resolverSafe: firstEnv(env, ['RESOLVER_SAFE_ADDRESS', 'VITE_PRONOS_ARBITRUM_RESOLVER_SAFE']),
+    adminSafe: firstEnv(env, profile.adminSafeEnv),
+    resolverSafe: firstEnv(env, profile.resolverSafeEnv),
     ownerSuborgId: hasEnv(env, 'ONCHAIN_OWNER_SUBORG_ID'),
     ownerAddress: hasEnv(env, 'ONCHAIN_OWNER_ADDRESS')
       ? env.ONCHAIN_OWNER_ADDRESS.trim()
@@ -194,6 +243,10 @@ export function collectOnchainReadiness({
   };
 
   const deployment = {
+    profile: profile.key,
+    networkName: profile.networkName,
+    testnet: profile.testnet,
+    expectedChainId: profile.expectedChainId,
     expectedMainnetChainId: ARBITRUM_ONE_CHAIN_ID,
     clientChainId,
     indexerChainId,
@@ -201,15 +254,9 @@ export function collectOnchainReadiness({
     indexerRpc: Boolean(indexerRpc),
     indexerFactoryV1,
     indexerFactoryV2,
-    clientFactoryV1: hasEnv(env, 'VITE_PRONOS_ARBITRUM_FACTORY')
-      ? env.VITE_PRONOS_ARBITRUM_FACTORY.trim()
-      : null,
-    clientFactoryV2: hasEnv(env, 'VITE_PRONOS_ARBITRUM_FACTORY_V2')
-      ? env.VITE_PRONOS_ARBITRUM_FACTORY_V2.trim()
-      : null,
-    clientCollateral: hasEnv(env, 'VITE_PRONOS_ARBITRUM_TOKEN')
-      ? env.VITE_PRONOS_ARBITRUM_TOKEN.trim()
-      : null,
+    clientFactoryV1: firstEnv(env, profile.clientFactoryV1Env),
+    clientFactoryV2: firstEnv(env, profile.clientFactoryV2Env),
+    clientCollateral: firstEnv(env, profile.clientTokenEnv),
   };
   const cre = {
     webhookSecret: hasEnv(env, 'CRE_RESOLUTION_WEBHOOK_SECRET'),
@@ -224,9 +271,9 @@ export function collectOnchainReadiness({
   pushIfMissing(blockers, env, 'DATABASE_URL', 'database_missing', 'Base de datos sin configurar', 'El API no puede crear usuarios, mercados ni historial.');
   pushIfMissing(blockers, env, 'ONCHAIN_RPC_URL', 'rpc_missing', 'RPC on-chain faltante', 'No podemos leer balances ni enviar transacciones.');
   if (!chainId) {
-    blockers.push(launchItem('chain_id_missing', 'Chain ID faltante', 'El backend no sabe en qué red operar.', 'Set ONCHAIN_CHAIN_ID=42161'));
-  } else if (chainId !== ARBITRUM_ONE_CHAIN_ID) {
-    blockers.push(launchItem('chain_id_not_mainnet', 'Chain ID no es Arbitrum One', `ONCHAIN_CHAIN_ID=${chainId}; mainnet requiere ${ARBITRUM_ONE_CHAIN_ID}.`, 'Set ONCHAIN_CHAIN_ID=42161'));
+    blockers.push(launchItem('chain_id_missing', 'Chain ID faltante', 'El backend no sabe en qué red operar.', `Set ONCHAIN_CHAIN_ID=${profile.expectedChainId}`));
+  } else if (chainId !== profile.expectedChainId) {
+    blockers.push(launchItem('chain_id_unexpected', 'Chain ID inesperado', `ONCHAIN_CHAIN_ID=${chainId}; ${profile.networkName} requiere ${profile.expectedChainId}.`, `Set ONCHAIN_CHAIN_ID=${profile.expectedChainId}`));
   }
   pushIfAnyMissing(
     blockers,
@@ -237,6 +284,14 @@ export function collectOnchainReadiness({
     'Sin V1/V2 no podemos crear mercados binarios y multi-outcome.',
   );
   pushIfMissing(blockers, env, 'ONCHAIN_COLLATERAL_ADDRESS', 'collateral_missing', 'MXNB no configurado', 'El protocolo no sabe qué token usar como colateral.');
+  pushIfAnyMissing(
+    blockers,
+    env,
+    ['ONCHAIN_SHARE_TOKEN_ADDRESS', 'ONCHAIN_SHARE_TOKEN_V2_ADDRESS'],
+    'share_tokens_missing',
+    'Share tokens no configurados',
+    'La venta invisible necesita permitir los ERC1155 de V1 y V2 en la política Turnkey.',
+  );
   pushIfAnyMissing(
     blockers,
     env,
@@ -277,14 +332,16 @@ export function collectOnchainReadiness({
     'Llaves operativas faltantes',
     'Cron/indexer no deben quedar abiertos ni inoperables en mainnet.',
   );
-  pushIfAnyMissing(
-    blockers,
-    env,
-    ['JUNO_API_KEY', 'JUNO_API_SECRET', 'JUNO_BEARER_TOKEN', 'JUNO_API_BASE_URL', 'JUNO_WEBHOOK_SECRET'],
-    'juno_provider_missing',
-    'Juno / Bitso incompleto',
-    'El fondeo y los webhooks KYC/onramp no están listos.',
-  );
+  if (profile.junoRequired) {
+    pushIfAnyMissing(
+      blockers,
+      env,
+      ['JUNO_API_KEY', 'JUNO_API_SECRET', 'JUNO_BEARER_TOKEN', 'JUNO_API_BASE_URL', 'JUNO_WEBHOOK_SECRET'],
+      'juno_provider_missing',
+      'Juno / Bitso incompleto',
+      'El fondeo y los webhooks KYC/onramp no están listos.',
+    );
+  }
   if (!ownerControls.configured) {
     blockers.push(launchItem(
       'owner_controls_missing',
@@ -295,7 +352,7 @@ export function collectOnchainReadiness({
   }
 
   const reviews = [];
-  if (!juno.withdrawalsEnabled) {
+  if (profile.junoRequired && !juno.withdrawalsEnabled) {
     reviews.push(launchItem(
       'juno_withdrawals_manual_queue',
       'Retiros quedan en cola manual',
@@ -303,7 +360,7 @@ export function collectOnchainReadiness({
       'Set JUNO_WITHDRAWALS_ENABLED=true after provider approval',
     ));
   }
-  if (!juno.cardCheckoutEnabled && !juno.applePayEnabled) {
+  if (profile.junoRequired && !juno.cardCheckoutEnabled && !juno.applePayEnabled) {
     reviews.push(launchItem(
       'juno_checkout_optional_off',
       'Card / Apple Pay apagado',
@@ -323,7 +380,7 @@ export function collectOnchainReadiness({
     reviews.push(launchItem(
       'gas_sponsorship_unset',
       'Gas sponsorship no configurado',
-      'Turnkey quita popups, pero no cubre ETH de Arbitrum para el usuario.',
+      `Turnkey quita popups, pero no cubre gas de ${profile.networkName} para el usuario.`,
       'Set GAS_SPONSORSHIP_ENABLED=true only after relayer/paymaster/funded-wallet support exists',
     ));
   }
@@ -331,12 +388,14 @@ export function collectOnchainReadiness({
   warnMissing(warnings, env, 'DATABASE_URL');
   warnMissing(warnings, env, 'ONCHAIN_RPC_URL');
   if (!chainId) warnings.push('ONCHAIN_CHAIN_ID missing or 0');
-  if (chainId && chainId !== ARBITRUM_ONE_CHAIN_ID) {
-    warnings.push(`ONCHAIN_CHAIN_ID=${chainId} is not Arbitrum One (${ARBITRUM_ONE_CHAIN_ID})`);
+  if (chainId && chainId !== profile.expectedChainId) {
+    warnings.push(`ONCHAIN_CHAIN_ID=${chainId} does not match ${profile.networkName} (${profile.expectedChainId})`);
   }
   warnMissing(warnings, env, 'ONCHAIN_MARKET_FACTORY_ADDRESS');
   warnMissing(warnings, env, 'ONCHAIN_MARKET_FACTORY_V2_ADDRESS');
   warnMissing(warnings, env, 'ONCHAIN_COLLATERAL_ADDRESS');
+  warnMissing(warnings, env, 'ONCHAIN_SHARE_TOKEN_ADDRESS');
+  warnMissing(warnings, env, 'ONCHAIN_SHARE_TOKEN_V2_ADDRESS');
   warnMissing(warnings, env, 'ONCHAIN_DEPLOYER_SUBORG_ID');
   warnMissing(warnings, env, 'ONCHAIN_DEPLOYER_ADDRESS');
   warnMissing(warnings, env, 'ONCHAIN_RESOLVER_SUBORG_ID');
@@ -350,14 +409,16 @@ export function collectOnchainReadiness({
   warnMissing(warnings, env, 'VITE_TURNKEY_ORGANIZATION_ID');
   warnMissing(warnings, env, 'INDEXER_KEY');
   warnMissing(warnings, env, 'CRON_SECRET');
-  warnMissing(warnings, env, 'JUNO_API_KEY');
-  warnMissing(warnings, env, 'JUNO_API_SECRET');
-  warnMissing(warnings, env, 'JUNO_BEARER_TOKEN');
-  warnMissing(warnings, env, 'JUNO_API_BASE_URL');
-  warnMissing(warnings, env, 'JUNO_WEBHOOK_SECRET');
+  if (profile.junoRequired) {
+    warnMissing(warnings, env, 'JUNO_API_KEY');
+    warnMissing(warnings, env, 'JUNO_API_SECRET');
+    warnMissing(warnings, env, 'JUNO_BEARER_TOKEN');
+    warnMissing(warnings, env, 'JUNO_API_BASE_URL');
+    warnMissing(warnings, env, 'JUNO_WEBHOOK_SECRET');
+  }
 
   if (!indexerRpc) {
-    warnings.push('Indexer RPC missing - set ARB_RPC_URL or ARB_MAINNET_RPC');
+    warnings.push(`Indexer RPC missing - set ${profile.rpcEnvHints.join(' or ')}`);
   }
   if (factoryV1 && !indexerFactoryV1) {
     warnings.push('Indexer V1 factory alias missing - set FACTORY_ADDRESS or PRONOS_FACTORY_ADDRESS');
@@ -368,14 +429,14 @@ export function collectOnchainReadiness({
   if (!hasEnv(env, 'VITE_ONCHAIN_CHAIN_ID')) {
     warnings.push('VITE_ONCHAIN_CHAIN_ID missing');
   }
-  if (factoryV1 && !hasEnv(env, 'VITE_PRONOS_ARBITRUM_FACTORY')) {
-    warnings.push('VITE_PRONOS_ARBITRUM_FACTORY missing');
+  if (factoryV1 && !hasAnyEnv(env, profile.clientFactoryV1Env)) {
+    warnings.push(`${profile.clientFactoryV1Env[0]} missing`);
   }
-  if (factoryV2 && !hasEnv(env, 'VITE_PRONOS_ARBITRUM_FACTORY_V2')) {
-    warnings.push('VITE_PRONOS_ARBITRUM_FACTORY_V2 missing');
+  if (factoryV2 && !hasAnyEnv(env, profile.clientFactoryV2Env)) {
+    warnings.push(`${profile.clientFactoryV2Env[0]} missing`);
   }
-  if (collateral && !hasEnv(env, 'VITE_PRONOS_ARBITRUM_TOKEN')) {
-    warnings.push('VITE_PRONOS_ARBITRUM_TOKEN missing');
+  if (collateral && !hasAnyEnv(env, profile.clientTokenEnv)) {
+    warnings.push(`${profile.clientTokenEnv[0]} missing`);
   }
 
   warnChainMismatch(warnings, env, 'VITE_ONCHAIN_CHAIN_ID', chainId, 'ONCHAIN_CHAIN_ID');
@@ -383,11 +444,17 @@ export function collectOnchainReadiness({
   warnChainMismatch(warnings, env, 'PROTOCOL_CHAIN_ID', chainId, 'ONCHAIN_CHAIN_ID');
   warnAddressMismatch(warnings, env, 'FACTORY_ADDRESS', factoryV1, 'ONCHAIN_MARKET_FACTORY_ADDRESS');
   warnAddressMismatch(warnings, env, 'PRONOS_FACTORY_ADDRESS', factoryV1, 'ONCHAIN_MARKET_FACTORY_ADDRESS');
-  warnAddressMismatch(warnings, env, 'VITE_PRONOS_ARBITRUM_FACTORY', factoryV1, 'ONCHAIN_MARKET_FACTORY_ADDRESS');
+  for (const name of profile.clientFactoryV1Env) {
+    warnAddressMismatch(warnings, env, name, factoryV1, 'ONCHAIN_MARKET_FACTORY_ADDRESS');
+  }
   warnAddressMismatch(warnings, env, 'FACTORY_V2_ADDRESS', factoryV2, 'ONCHAIN_MARKET_FACTORY_V2_ADDRESS');
   warnAddressMismatch(warnings, env, 'PRONOS_FACTORY_V2_ADDRESS', factoryV2, 'ONCHAIN_MARKET_FACTORY_V2_ADDRESS');
-  warnAddressMismatch(warnings, env, 'VITE_PRONOS_ARBITRUM_FACTORY_V2', factoryV2, 'ONCHAIN_MARKET_FACTORY_V2_ADDRESS');
-  warnAddressMismatch(warnings, env, 'VITE_PRONOS_ARBITRUM_TOKEN', collateral, 'ONCHAIN_COLLATERAL_ADDRESS');
+  for (const name of profile.clientFactoryV2Env) {
+    warnAddressMismatch(warnings, env, name, factoryV2, 'ONCHAIN_MARKET_FACTORY_V2_ADDRESS');
+  }
+  for (const name of profile.clientTokenEnv) {
+    warnAddressMismatch(warnings, env, name, collateral, 'ONCHAIN_COLLATERAL_ADDRESS');
+  }
 
   if (policy.coverageError) {
     warnings.push(`protocol pool coverage check failed: ${String(policy.coverageError).slice(0, 160)}`);
