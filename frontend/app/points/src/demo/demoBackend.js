@@ -409,6 +409,23 @@ function handleNews(state, params) {
   });
 }
 
+function handleMarketNews(state, params) {
+  const market = findMarket(state, params.get('marketId') || params.get('id'));
+  if (!market) return json({ ok: true, items: [] });
+  const rawLimit = parseInt(params.get('limit'), 10);
+  const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(12, rawLimit) : 6;
+  const items = buildDemoNewsItems(state)
+    .filter(item => Number(item.linkedMarket?.marketId) === Number(market.id))
+    .slice(0, limit)
+    .map(item => ({
+      url: item.url,
+      title: item.title,
+      source: item.sourceName,
+      linkedAt: item.publishedAt,
+    }));
+  return json({ ok: true, marketId: market.id, items });
+}
+
 // ─── Handlers ───────────────────────────────────────────────────────────────
 
 function handleMarkets(state, params) {
@@ -1451,6 +1468,7 @@ export function routeDemoRequest(url, method, body) {
       case '/api/points/history': return handleHistory(state);
       case '/api/points/pnl-history': return handlePnlHistory(state);
       case '/api/points/top-holders': return handleTopHolders(state, params);
+      case '/api/points/market-news': return handleMarketNews(state, params);
       case '/api/points/orderbook': return handleOrderbook(state, params);
       case '/api/points/comments': return handleComments(state, params);
       case '/api/points/aicm/overview': return handleAicmOverview();

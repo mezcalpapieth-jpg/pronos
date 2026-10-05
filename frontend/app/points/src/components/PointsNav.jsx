@@ -13,7 +13,12 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { useT, useLang, setLang } from '@app/lib/i18n.js';
-import { fetchMarkets, adminListTaskCounts, fetchClaimableSummary } from '../lib/pointsApi.js';
+import {
+  fetchMarkets,
+  adminListTaskCounts,
+  fetchClaimableSummary,
+  fetchSocialTaskCatalog,
+} from '../lib/pointsApi.js';
 import { onPointsRefresh } from '../lib/pointsLiveRefresh.js';
 
 // Public info pages on pronos.io that explain prediction markets.
@@ -62,6 +67,7 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
   const [theme, setTheme] = useState(getInitialTheme);
   const [adminTaskTotal, setAdminTaskTotal] = useState(0);
   const [claimableCount, setClaimableCount] = useState(0);
+  const [tournamentTaskCount, setTournamentTaskCount] = useState(0);
   const dropdownRef = useRef(null);
   const mobileMenuRef = useRef(null);
   const t = useT();
@@ -203,6 +209,32 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
       if (intervalId) window.clearInterval(intervalId);
     };
   }, [authenticated, user?.username, location.pathname]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadTournamentTaskCount() {
+      try {
+        const data = await fetchSocialTaskCatalog(null, { surface: 'tournament' });
+        const tasks = Array.isArray(data?.tasks) ? data.tasks : [];
+        const count = tasks.filter(task =>
+          task?.source === 'campaign'
+          && task?.hidden
+          && task?.status !== 'approved'
+        ).length;
+        if (!cancelled) setTournamentTaskCount(count);
+      } catch {
+        if (!cancelled) setTournamentTaskCount(0);
+      }
+    }
+
+    loadTournamentTaskCount();
+    const intervalId = window.setInterval(loadTournamentTaskCount, 60000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [authenticated, user?.username]);
 
   useEffect(() => {
     if (!authenticated || !refresh) return undefined;
@@ -436,7 +468,14 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
               </>
             )}
             {/* Public — see the desktop nav for why this one isn't gated. */}
-            <Link to="/torneo" onClick={closeMobileMenu}>{t('points.nav.tournament')}</Link>
+            <Link to="/torneo" onClick={closeMobileMenu} className="points-mobile-menu-row">
+              <span>{t('points.nav.tournament')}</span>
+              {tournamentTaskCount > 0 && (
+                <span className="points-mobile-menu-badge">
+                  {tournamentTaskCount > 99 ? '99+' : tournamentTaskCount}
+                </span>
+              )}
+            </Link>
             <Link to="/support" onClick={closeMobileMenu}>
               {lang === 'en' ? 'Support' : 'Soporte'}
             </Link>
@@ -521,7 +560,14 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
             visitor with no way to find out what they'd be playing for.
             Portfolio and Earn stay gated: both are personal and require
             an account to do anything with. */}
-        <Link to="/torneo" style={navLinkStyle}>{t('points.nav.tournament')}</Link>
+        <Link to="/torneo" style={navLinkStyle} className="points-nav-link-alert">
+          <span>{t('points.nav.tournament')}</span>
+          {tournamentTaskCount > 0 && (
+            <span className="points-nav-alert-badge">
+              {tournamentTaskCount > 99 ? '99+' : tournamentTaskCount}
+            </span>
+          )}
+        </Link>
         <a
           href={howItWorksUrl}
           target="_blank"

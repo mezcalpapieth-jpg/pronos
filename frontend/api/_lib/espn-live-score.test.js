@@ -79,6 +79,19 @@ test('normalizeEspnLiveScore returns basketball period scores and current clock'
 test('normalizeEspnLiveScore keeps baseball inning linescores and total runs', () => {
   const live = normalizeEspnLiveScore({
     leaguePath: 'baseball/mlb',
+    summary: {
+      scoringPlays: [
+        {
+          id: 'hr-1',
+          text: 'Aaron Judge homered to left center.',
+          type: { text: 'Home Run' },
+          team: { shortDisplayName: 'Yankees' },
+          period: { number: 3 },
+          homeScore: 2,
+          awayScore: 1,
+        },
+      ],
+    },
     event: {
       id: '401696969',
       status: {
@@ -114,6 +127,86 @@ test('normalizeEspnLiveScore keeps baseball inning linescores and total runs', (
     { label: '3', home: 2, away: 0 },
   ]);
   assert.deepEqual(live.periods.at(-1), { label: '7', home: 2, away: null });
+  assert.deepEqual(live.scoringPlays, [{
+    id: 'hr-1',
+    sport: 'baseball',
+    side: 'home',
+    type: 'home_run',
+    typeText: 'Home Run',
+    text: 'Aaron Judge homered to left center.',
+    period: 3,
+    clock: null,
+    homeScore: 2,
+    awayScore: 1,
+  }]);
+});
+
+test('normalizeEspnLiveScore keeps football scoring play types for graph markers', () => {
+  const live = normalizeEspnLiveScore({
+    leaguePath: 'football/nfl',
+    summary: {
+      scoringPlays: [
+        {
+          id: 'td-1',
+          text: 'Touchdown pass.',
+          scoringType: { displayName: 'Touchdown' },
+          team: { id: '12' },
+          period: { number: 2 },
+          clock: { displayValue: '8:11' },
+          homeScore: 7,
+          awayScore: 3,
+        },
+        {
+          id: 'fg-1',
+          text: 'Field goal is good.',
+          scoringType: { displayName: 'Field Goal' },
+          team: { id: '34' },
+          period: { number: 3 },
+          clock: { displayValue: '1:04' },
+          homeScore: 7,
+          awayScore: 6,
+        },
+      ],
+    },
+    event: {
+      id: '401777777',
+      status: {
+        period: 3,
+        displayClock: '1:04',
+        type: { state: 'in', completed: false, shortDetail: 'Q3 - 1:04' },
+      },
+      competitions: [{
+        competitors: [
+          {
+            id: '12',
+            homeAway: 'home',
+            score: '7',
+            team: { id: '12', shortDisplayName: 'Cowboys' },
+            linescores: [{ value: 0 }, { value: 7 }, { value: 0 }],
+          },
+          {
+            id: '34',
+            homeAway: 'away',
+            score: '6',
+            team: { id: '34', shortDisplayName: 'Giants' },
+            linescores: [{ value: 3 }, { value: 0 }, { value: 3 }],
+          },
+        ],
+      }],
+    },
+  });
+
+  assert.equal(live.sport, 'football');
+  assert.deepEqual(live.scoringPlays.map(play => ({
+    id: play.id,
+    side: play.side,
+    type: play.type,
+    period: play.period,
+    clock: play.clock,
+  })), [
+    { id: 'td-1', side: 'home', type: 'touchdown', period: 2, clock: '8:11' },
+    { id: 'fg-1', side: 'away', type: 'field_goal', period: 3, clock: '1:04' },
+  ]);
 });
 
 test('buildEspnLiveScoreConfig exposes only the safe ESPN event lookup fields', () => {
@@ -205,6 +298,7 @@ test('readEspnLiveScore can find a soccer event by teams when no event id is sto
   t.after(() => { globalThis.fetch = originalFetch; });
 
   globalThis.fetch = async (url) => {
+    if (String(url).includes('/summary?event=401862911')) return jsonResponse({ scoringPlays: [] });
     assert.match(String(url), /soccer\/uefa\.europa\/scoreboard/);
     return {
       ok: true,
@@ -291,6 +385,7 @@ test('readEspnLiveScore matches display names when ESPN short names are abbrevia
   t.after(() => { globalThis.fetch = originalFetch; });
 
   globalThis.fetch = async (url) => {
+    if (String(url).includes('/summary?event=401865536')) return jsonResponse({ scoringPlays: [] });
     assert.match(String(url), /soccer\/conmebol\.libertadores\/scoreboard/);
     return {
       ok: true,

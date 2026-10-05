@@ -53,6 +53,7 @@ import PointsActivityTape from '../components/PointsActivityTape.jsx';
 import MarketComments from '../components/MarketComments.jsx';
 import Crypto5MinDetail from '../components/Crypto5MinDetail.jsx';
 import TopHolders from '../components/TopHolders.jsx';
+import MarketNews from '../components/MarketNews.jsx';
 import CombinadaSlipPanel from '../components/CombinadaSlipPanel.jsx';
 import CombinadaMarketPickerDrawer from '../components/CombinadaMarketPickerDrawer.jsx';
 import {
@@ -589,6 +590,146 @@ function isBinaryYesNoOutcomes(outcomes) {
 function chartColorFor(i, totalOutcomes) {
   if (totalOutcomes === 2) return i === 0 ? OUTCOME_COLORS[0] : OUTCOME_COLORS[2];
   return OUTCOME_COLORS[i % OUTCOME_COLORS.length];
+}
+
+function normalizeEventTeamName(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\b(fc|sc|cf|afc|ac|cd|club)\b/g, '')
+    .replace(/[^a-z0-9]+/g, '');
+}
+
+function isDrawOutcomeLabel(value) {
+  return /^(empate|draw|tie)$/i.test(String(value || '').trim());
+}
+
+function outcomeIndexForLiveTeam(teamName, outcomes, side) {
+  const needle = normalizeEventTeamName(teamName);
+  const labels = Array.isArray(outcomes) ? outcomes : [];
+  const matched = labels.findIndex((label) => {
+    if (isDrawOutcomeLabel(label)) return false;
+    const candidate = normalizeEventTeamName(label);
+    return candidate && needle && (candidate === needle || candidate.includes(needle) || needle.includes(candidate));
+  });
+  if (matched >= 0) return matched;
+  const candidates = labels
+    .map((label, i) => ({ label, i }))
+    .filter(row => !isDrawOutcomeLabel(row.label));
+  if (!candidates.length) return -1;
+  return side === 'away' ? candidates[candidates.length - 1].i : candidates[0].i;
+}
+
+function liveScorePeriodOffsetSeconds(sport, index) {
+  if (sport === 'football') return (index + 1) * 15 * 60;
+  if (sport === 'baseball') return (index + 1) * 20 * 60;
+  const soccerPeriods = [45 * 60, 90 * 60, 105 * 60, 120 * 60];
+  return soccerPeriods[index] || ((index + 1) * 45 * 60);
+}
+
+function clockRemainingSeconds(value) {
+  const match = String(value || '').match(/(\d{1,2}):(\d{2})/);
+  if (!match) return null;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function liveScorePlayOffsetSeconds(sport, play, fallbackIndex) {
+  const period = Number(play?.period);
+  if (sport === 'football' && Number.isFinite(period) && period > 0) {
+    const remaining = clockRemainingSeconds(play?.clock);
+    return (period - 1) * 15 * 60 + (remaining == null ? 15 * 60 : Math.max(0, 15 * 60 - remaining));
+  }
+  if (sport === 'soccer') {
+    const minute = Number(String(play?.clock || '').match(/\d+/)?.[0]);
+    if (Number.isFinite(minute) && minute > 0) return minute * 60;
+  }
+  if ((sport === 'baseball' || sport === 'soccer') && Number.isFinite(period) && period > 0) {
+    return liveScorePeriodOffsetSeconds(sport, period - 1);
+  }
+  return liveScorePeriodOffsetSeconds(sport, fallbackIndex);
+}
+
+function liveScorePeriodLabel(sport, period, index) {
+  const fallback = period?.label || String(index + 1);
+  if (sport === 'baseball' && /^\d+$/.test(String(fallback))) return `E${fallback}`;
+  return fallback;
+}
+
+function liveScoreCompactEventLabel(sport, points, type = null) {
+  if (type === 'home_run') return 'HR';
+  if (type === 'field_goal') return 'FG';
+  if (type === 'touchdown') return 'TD';
+  if (type === 'safety') return 'Safety';
+  if (type === 'goal') return 'Goal';
+  if (sport === 'soccer') {
+    return points > 1 ? `${points} Goals` : 'Goal';
+  }
+  if (sport === 'baseball') {
+    return points > 1 ? `${points} Runs` : 'Run';
+  }
+  if (sport === 'football') {
+    if (points === 3) return 'FG';
+    if (points === 6 || points === 7 || points === 8) return 'TD';
+    if (points === 2) return 'Safety';
+    return 'Score';
+  }
+  return 'Score';
+}
+
+function liveScoreGraphAnnotations({ score, market, displayOutcomes = [], chartWindowStart, chartWindowEnd }) {
+  const sport = String(score?.sport || '');
+  if (!['soccer', 'football', 'baseball'].includes(sport)) return [];
+  const periods = Array.isArray(score?.periods) ? score.periods : [];
+  const scoringPlays = Array.isArray(score?.scoringPlays) ? score.scoringPlays : [];
+  if (!periods.length && !scoringPlays.length) return [];
+  const startMs = new Date(score.startsAt || market?.startTime || '').getTime();
+  if (!Number.isFinite(startMs)) return [];
+  const startSec = Math.floor(startMs / 1000);
+  const homeOutcomeIndex = outcomeIndexForLiveTeam(score.home?.name, displayOutcomes, 'home');
+  const awayOutcomeIndex = outcomeIndexForLiveTeam(score.away?.name, displayOutcomes, 'away');
+  const out = [];
+  const add = ({ side, points, period, index, type = null, keyPrefix = sport }) => {
+    if (!Number.isFinite(points) || points <= 0) return;
+    const outcomeIndex = side === 'home' ? homeOutcomeIndex : awayOutcomeIndex;
+    if (outcomeIndex < 0) return;
+    const t = startSec + liveScorePeriodOffsetSeconds(sport, index);
+    if (Number.isFinite(chartWindowStart) && t < chartWindowStart) return;
+    if (Number.isFinite(chartWindowEnd) && t > chartWindowEnd) return;
+    const periodLabel = liveScorePeriodLabel(sport, period, index);
+    out.push({
+      key: `${keyPrefix}-${side}-${periodLabel}-${points}`,
+      t,
+      outcomeIndex,
+      seriesKey: `opt-${outcomeIndex}`,
+      label: liveScoreCompactEventLabel(sport, points, type),
+    });
+  };
+
+  if (scoringPlays.length > 0) {
+    scoringPlays.forEach((play, index) => {
+      const side = play?.side === 'home' || play?.side === 'away' ? play.side : null;
+      const outcomeIndex = side === 'home' ? homeOutcomeIndex : awayOutcomeIndex;
+      if (!side || outcomeIndex < 0) return;
+      const t = startSec + liveScorePlayOffsetSeconds(sport, play, index);
+      if (Number.isFinite(chartWindowStart) && t < chartWindowStart) return;
+      if (Number.isFinite(chartWindowEnd) && t > chartWindowEnd) return;
+      out.push({
+        key: `play-${play?.id || index}`,
+        t,
+        outcomeIndex,
+        seriesKey: `opt-${outcomeIndex}`,
+        label: liveScoreCompactEventLabel(sport, 1, play?.type),
+      });
+    });
+    return out.slice(-10);
+  }
+
+  periods.forEach((period, index) => {
+    add({ side: 'home', points: Number(period?.home || 0), period, index });
+    add({ side: 'away', points: Number(period?.away || 0), period, index });
+  });
+  return out;
 }
 
 // Map (resolver_type, resolver_config.source) → human-readable source
@@ -2528,6 +2669,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
   // outcome so the chart can render one line per option on multi markets.
   const [historyByOutcome, setHistoryByOutcome] = useState(null);
   const [activityByOutcome, setActivityByOutcome] = useState(null);
+  const [liveScore, setLiveScore] = useState(null);
   const [chartRange, setChartRange] = useState('1');
   const chartRangeTouchedRef = useRef(false);
   const [userPositions, setUserPositions] = useState([]);
@@ -3248,6 +3390,13 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
     return [{ t: anchorT, p: openingPct }, ...series];
   };
   const displayHistoryByOutcome = rawHistoryByOutcome.map(withOpeningBaseline);
+  const liveScoreAnnotations = liveScoreGraphAnnotations({
+    score: liveScore,
+    market,
+    displayOutcomes,
+    chartWindowStart,
+    chartWindowEnd,
+  });
 
   // Movement across the visible window, so the headline number carries
   // the same context the chart does.
@@ -3620,7 +3769,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
 
             <TeamMarketStrip market={market} outcomeImages={market.outcomeImages} />
             <TokenMarketStrip market={market} />
-            <LiveScorePanel market={market} />
+            <LiveScorePanel market={market} onScoreUpdate={setLiveScore} />
 
             {isCanceled && (
               <div style={{
@@ -3860,6 +4009,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
                           targetPct: pctFor(i),
                         }))}
                         activity={chartIndices.map(i => displayActivityByOutcome?.[i] || [])}
+                        annotations={liveScoreAnnotations}
                         emptyLabel="Sin actividad todavía"
                         emptySubLabel="El precio se moverá con el primer trade."
                         legendNote={displayOutcomes.length > 4 ? (
@@ -4268,6 +4418,8 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
           {/* Top holders — read-only social-proof panel. Refreshes after
               local trades and remote polling so it reflects live movement. */}
           <TopHolders marketId={market.id} refreshKey={orderBookRefresh} />
+
+          <MarketNews marketId={market.id} />
 
           {marketSupportsLeagueTable(market) && (
             <LeagueTablePanel

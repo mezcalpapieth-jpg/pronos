@@ -462,6 +462,12 @@ export async function fetchMarket(id) {
   return Array.isArray(legs) ? { ...market, legs } : market;
 }
 
+export async function fetchMarketNews(marketId, { limit = 6 } = {}) {
+  return getJson(
+    `/api/points/market-news?marketId=${encodeURIComponent(marketId)}&limit=${limit}`,
+  );
+}
+
 export async function fetchLeagueStandings({ league, home, away } = {}) {
   const q = new URLSearchParams();
   if (league) q.set('league', league);
@@ -698,9 +704,12 @@ export async function claimPendingReferral(referrer) {
 }
 
 // ─── Social tasks ───────────────────────────────────────────────────────────
-export async function fetchSocialTaskCatalog(taskKey = null) {
-  const q = taskKey ? `?task=${encodeURIComponent(taskKey)}` : '';
-  return getJson(`/api/points/social-tasks/catalog${q}`);
+export async function fetchSocialTaskCatalog(taskKey = null, options = {}) {
+  const q = new URLSearchParams();
+  if (taskKey) q.set('task', String(taskKey));
+  if (options?.surface) q.set('surface', String(options.surface));
+  const qs = q.toString();
+  return getJson(`/api/points/social-tasks/catalog${qs ? `?${qs}` : ''}`);
 }
 
 export async function submitSocialTask(taskKey, proofUrl) {

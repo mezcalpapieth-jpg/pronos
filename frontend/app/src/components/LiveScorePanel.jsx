@@ -167,7 +167,7 @@ const totalCellStyle = {
   fontWeight: 800,
 };
 
-export default function LiveScorePanel({ market }) {
+export default function LiveScorePanel({ market, onScoreUpdate }) {
   const t = useT();
   const [now, setNow] = useState(() => Date.now());
   const enabled = scoreWindowOpen(market, now);
@@ -187,6 +187,7 @@ export default function LiveScorePanel({ market }) {
     if (!url) {
       setScore(null);
       setError(null);
+      onScoreUpdate?.(null);
       return undefined;
     }
     let cancelled = false;
@@ -195,11 +196,16 @@ export default function LiveScorePanel({ market }) {
         .then(res => res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`)))
         .then(data => {
           if (cancelled) return;
-          setScore(data?.liveScore || null);
+          const nextScore = data?.liveScore || null;
+          setScore(nextScore);
+          onScoreUpdate?.(nextScore);
           setError(null);
         })
         .catch(() => {
-          if (!cancelled) setError('live_score_unavailable');
+          if (!cancelled) {
+            setError('live_score_unavailable');
+            onScoreUpdate?.(null);
+          }
         });
     };
     load();
@@ -208,7 +214,7 @@ export default function LiveScorePanel({ market }) {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [url]);
+  }, [url, onScoreUpdate]);
 
   if (!enabled || error || !score) return null;
 
