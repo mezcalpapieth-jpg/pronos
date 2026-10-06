@@ -72,6 +72,7 @@ import {
 import { marketInterestPayload, trackInterest } from '@app/lib/interest.js';
 import { pointsPublicAssetSrc } from '@app/lib/publicAssets.js';
 import { marketArtworkHidden, marketImageSrc, marketPlaceholderImageSrc } from '../lib/marketImages.js';
+import { isClosingSoonNonSportsMarket } from '../lib/marketStatus.js';
 import { emitPointsRefresh } from '../lib/pointsLiveRefresh.js';
 import { isVideoDemoActive, videoDemoPollMs } from '../demo/demoFlag.js';
 
@@ -3451,8 +3452,10 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
     && market.startTime
     && new Date(market.startTime) <= _now
     && (!market.endTime || new Date(market.endTime) > _now);
+  const isClosingSoon = isClosingSoonNonSportsMarket(market, _now);
+  const showLive = isLive && !isClosingSoon;
   const isPendingResolution = !isResolved
-    && !isLive
+    && !showLive
     && market.status === 'active'
     && market.endTime
     && new Date(market.endTime) < _now;
@@ -3709,7 +3712,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
               {isCanceled && (
                 <span style={{ color: 'var(--text-muted)' }}>ANULADO</span>
               )}
-              {isLive && (
+              {showLive && (
                 <span style={{
                   color: 'var(--danger)',
                   fontWeight: 700,
@@ -3719,7 +3722,16 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
                   · {t('points.card.live')}
                 </span>
               )}
-              {isPendingResolution && !isResolved && !isLive && (
+              {isClosingSoon && !isResolved && (
+                <span style={{
+                  color: 'var(--warning)',
+                  fontWeight: 700,
+                  letterSpacing: '0.08em',
+                }}>
+                  · {t('points.card.closingSoon')}
+                </span>
+              )}
+              {isPendingResolution && !isResolved && !showLive && !isClosingSoon && (
                 <span style={{ color: 'var(--warning)' }}>{t('points.detail.pendingBadge')}</span>
               )}
               {isTradingLocked && !isResolved && !isCanceled && (
@@ -4214,14 +4226,16 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
                 <div style={{
                   fontFamily: 'var(--font-mono)',
                   fontSize: 13,
-                  fontWeight: isLive ? 700 : 400,
+                  fontWeight: showLive || isClosingSoon ? 700 : 400,
                   color: isResolved ? 'var(--green)'
-                       : isLive ? 'var(--danger)'
+                       : showLive ? 'var(--danger)'
+                       : isClosingSoon ? 'var(--warning)'
                        : isPendingResolution ? 'var(--warning)'
                        : 'var(--text-primary)',
                 }}>
                   {isResolved ? t('points.detail.stateResolved')
-                   : isLive ? t('points.card.live')
+                   : showLive ? t('points.card.live')
+                   : isClosingSoon ? t('points.card.closingSoon')
                    : isPendingResolution ? t('points.detail.statePending')
                    : t('points.detail.stateActive')}
                 </div>

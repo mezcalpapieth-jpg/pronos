@@ -27,6 +27,7 @@ import { soccerMatchTypeLabel } from '@app/lib/soccerMarketType.js';
 import { pointsPublicAssetSrc } from '@app/lib/publicAssets.js';
 import { AICM_HUB_PATH, isAicmDelayMarket } from '../lib/aicmMarkets.js';
 import { marketArtworkHidden, marketImageSrc, marketPlaceholderImageSrc } from '../lib/marketImages.js';
+import { isClosingSoonNonSportsMarket } from '../lib/marketStatus.js';
 import PointsBuyModal from './PointsBuyModal.jsx';
 
 const STAKE_PREVIEW = 100; // MXNP reference stake for the card payout preview
@@ -211,8 +212,10 @@ export default function PointsMarketCard({ market, userPosition }) {
         && new Date(market.startTime) <= now
         && (!market.endTime || new Date(market.endTime) > now)
       );
+  const isClosingSoon = isClosingSoonNonSportsMarket(market, now);
+  const showLive = isLive && !isClosingSoon;
   const isPending = !isResolved
-    && !isLive
+    && !showLive
     && market.status === 'active'
     && market.endTime
     && new Date(market.endTime) < now;
@@ -336,7 +339,7 @@ export default function PointsMarketCard({ market, userPosition }) {
             {t('points.card.resolved')}
           </span>
         )}
-        {isLive && (
+        {showLive && (
           <span className="mock-card-badge" style={{
             background: 'rgba(220,38,38,0.18)',
             color: 'var(--danger)',
@@ -351,12 +354,26 @@ export default function PointsMarketCard({ market, userPosition }) {
             {t('points.card.live')}
           </span>
         )}
-        {isPending && !isResolved && !isLive && (
+        {isClosingSoon && !isResolved && (
+          <span className="mock-card-badge" style={{
+            background: 'rgba(245,158,11,0.14)',
+            color: 'var(--warning)',
+            padding: '2px 6px',
+            borderRadius: 4,
+            fontFamily: 'var(--font-mono)',
+            fontSize: 9,
+            fontWeight: 700,
+            letterSpacing: '0.08em',
+          }}>
+            {t('points.card.closingSoon')}
+          </span>
+        )}
+        {isPending && !isResolved && !showLive && !isClosingSoon && (
           <span className="mock-card-badge" style={{ background: 'rgba(245,158,11,0.12)', color: 'var(--warning)', padding: '2px 6px', borderRadius: 4, fontFamily: 'var(--font-mono)', fontSize: 9 }}>
             {t('points.card.pending')}
           </span>
         )}
-        {isSeriesPending && !isResolved && !isLive && (
+        {isSeriesPending && !isResolved && !showLive && (
           <span className="mock-card-badge" style={{ background: 'rgba(245,158,11,0.12)', color: 'var(--warning)', padding: '2px 6px', borderRadius: 4, fontFamily: 'var(--font-mono)', fontSize: 9 }}>
             {t('points.series.pending')}
           </span>
