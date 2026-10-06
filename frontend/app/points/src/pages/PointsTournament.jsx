@@ -15,6 +15,7 @@ import { LeaderboardSkeleton } from '../components/PointsSkeleton.jsx';
 import { pointsPublicAssetSrc } from '@app/lib/publicAssets.js';
 import { isVideoDemoActive, videoDemoPollMs } from '../demo/demoFlag.js';
 import { useFlipRows } from '../demo/useFlipRows.js';
+import { markTournamentSocialTaskSeen } from '../lib/tournamentSocialTaskNotice.js';
 
 const DEFAULT_RULES = {
   startingBalance: 500,
@@ -1200,6 +1201,7 @@ function TournamentSocialTaskSpotlight({
   tick,
   authenticated,
   onSubmit,
+  onAcknowledge,
   submittingKey,
   message,
   error,
@@ -1366,14 +1368,23 @@ function TournamentSocialTaskSpotlight({
             </strong>
           </div>
           {task?.url && (
-            <a href={task.url} target="_blank" rel="noopener noreferrer" style={socialActionStyle}>
+            <a
+              href={task.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => onAcknowledge?.(task)}
+              style={socialActionStyle}
+            >
               {lang === 'en' ? 'Open post' : 'Abrir post'}
             </a>
           )}
           {canSubmit ? (
             <button
               type="button"
-              onClick={() => onSubmit(task)}
+              onClick={() => {
+                onAcknowledge?.(task);
+                onSubmit(task);
+              }}
               disabled={submittingKey === task.key}
               style={{
                 ...socialActionStyle,
@@ -1388,7 +1399,11 @@ function TournamentSocialTaskSpotlight({
                 : (lang === 'en' ? 'Send for review' : 'Enviar revision')}
             </button>
           ) : !authenticated ? (
-            <Link to="/earn" style={socialActionStyle}>
+            <Link
+              to="/earn"
+              onClick={() => onAcknowledge?.(task)}
+              style={socialActionStyle}
+            >
               {lang === 'en' ? 'Add account' : 'Agregar cuenta'}
             </Link>
           ) : null}
@@ -1706,6 +1721,7 @@ export default function PointsTournament() {
         tick={tick}
         authenticated={authenticated}
         onSubmit={handleSubmitTournamentSocialTask}
+        onAcknowledge={markTournamentSocialTaskSeen}
         submittingKey={socialSubmittingKey}
         message={socialMessage}
         error={socialError}

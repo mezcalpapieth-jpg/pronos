@@ -7,6 +7,7 @@ const appSource = await readFile(new URL('../App.jsx', import.meta.url), 'utf8')
 const navSource = await readFile(new URL('../components/PointsNav.jsx', import.meta.url), 'utf8');
 const i18nSource = await readFile(new URL('../../../src/lib/i18n.js', import.meta.url), 'utf8');
 const apiSource = await readFile(new URL('../lib/pointsApi.js', import.meta.url), 'utf8');
+const noticeSource = await readFile(new URL('../lib/tournamentSocialTaskNotice.js', import.meta.url), 'utf8');
 
 test('points app exposes a Torneo Pronos page between portfolio and earn', () => {
   assert.match(appSource, /PointsTournament/);
@@ -103,6 +104,18 @@ test('tournament page promotes hidden social post tasks with countdown and saved
   assert.match(navSource, /tournamentTaskCount/);
   assert.match(navSource, /points-nav-alert-badge/);
   assert.match(apiSource, /options\?\.surface/);
+});
+
+test('tournament social task notification clears after task actions are clicked', () => {
+  assert.match(noticeSource, /points:tournament-social-task-seen:v1/);
+  assert.match(noticeSource, /markTournamentSocialTaskSeen/);
+  assert.match(noticeSource, /TOURNAMENT_SOCIAL_TASK_SEEN_EVENT/);
+  assert.match(pageSource, /onAcknowledge=\{markTournamentSocialTaskSeen\}/);
+  assert.match(pageSource, /onClick=\{\(\) => onAcknowledge\?\.\(task\)\}/);
+  assert.match(pageSource, /onAcknowledge\?\.\(task\);\s*onSubmit\(task\);/);
+  assert.match(navSource, /!isTournamentSocialTaskSeen\(task\)/);
+  assert.match(navSource, /onTournamentSocialTaskSeen/);
+  assert.match(navSource, /setTournamentTaskCount\(count => Math\.max\(0, count - 1\)\)/);
 });
 
 test('points app records authenticated site-time pulses from the router', () => {

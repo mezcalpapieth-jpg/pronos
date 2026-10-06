@@ -20,6 +20,10 @@ import {
   fetchSocialTaskCatalog,
 } from '../lib/pointsApi.js';
 import { onPointsRefresh } from '../lib/pointsLiveRefresh.js';
+import {
+  isTournamentSocialTaskSeen,
+  onTournamentSocialTaskSeen,
+} from '../lib/tournamentSocialTaskNotice.js';
 
 // Public info pages on pronos.io that explain prediction markets.
 const HOW_IT_WORKS_URLS = {
@@ -68,6 +72,7 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
   const [adminTaskTotal, setAdminTaskTotal] = useState(0);
   const [claimableCount, setClaimableCount] = useState(0);
   const [tournamentTaskCount, setTournamentTaskCount] = useState(0);
+  const [tournamentTaskNoticeVersion, setTournamentTaskNoticeVersion] = useState(0);
   const dropdownRef = useRef(null);
   const mobileMenuRef = useRef(null);
   const t = useT();
@@ -221,6 +226,7 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
           task?.source === 'campaign'
           && task?.hidden
           && task?.status !== 'approved'
+          && !isTournamentSocialTaskSeen(task)
         ).length;
         if (!cancelled) setTournamentTaskCount(count);
       } catch {
@@ -229,12 +235,18 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
     }
 
     loadTournamentTaskCount();
+    const removeSeenListener = onTournamentSocialTaskSeen(({ alreadySeen } = {}) => {
+      if (cancelled) return;
+      if (!alreadySeen) setTournamentTaskCount(count => Math.max(0, count - 1));
+      setTournamentTaskNoticeVersion(v => v + 1);
+    });
     const intervalId = window.setInterval(loadTournamentTaskCount, 60000);
     return () => {
       cancelled = true;
+      removeSeenListener();
       window.clearInterval(intervalId);
     };
-  }, [authenticated, user?.username]);
+  }, [authenticated, user?.username, tournamentTaskNoticeVersion]);
 
   useEffect(() => {
     if (!authenticated || !refresh) return undefined;
