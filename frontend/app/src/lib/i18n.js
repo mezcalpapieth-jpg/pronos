@@ -801,6 +801,7 @@ const STRINGS = {
   },
   'points.card.pending':      { es: 'PENDIENTE',             en: 'PENDING' },
   'points.card.live':         { es: 'EN VIVO',               en: 'LIVE' },
+  'points.card.closingSoon':  { es: 'CIERRA PRONTO',         en: 'CLOSING SOON' },
   'points.card.yourPos':      { es: 'Tu posición',           en: 'Your position' },
   'points.card.moreOptions':  { es: '+ {n} opciones más',    en: '+ {n} more options' },
   'points.card.ifYouWin':     { es: 'si ganas',              en: 'if you win' },

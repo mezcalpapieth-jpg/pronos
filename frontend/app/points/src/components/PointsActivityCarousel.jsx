@@ -36,6 +36,7 @@ import { localizedOutcomeLabels, localizedTitle, useLang, useT } from '@app/lib/
 import { ActivityCarouselSkeleton } from './PointsSkeleton.jsx';
 import PointsActivityTape from './PointsActivityTape.jsx';
 import { fetchCryptoHistory, fetchPriceHistory, fetchTradeActivity, fetchTradeTape } from '../lib/pointsApi.js';
+import { isClosingSoonNonSportsMarket } from '../lib/marketStatus.js';
 
 const SLIDE_MS = 8000;      // autoplay dwell per slide
 const TAPE_POLL_MS = 25_000; // how often the visible slide refetches its flow
@@ -1126,7 +1127,7 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                           : `#${i + 1} ${t('points.activity.rank')}`}
                       </span>
                       <span style={chipStyle}>{displayCategory(m.category)}</span>
-                      {m.live && (
+                      {m.live && !isClosingSoonNonSportsMarket(m) && (
                         <span style={{
                           ...chipStyle,
                           color: 'var(--danger)',
@@ -1135,6 +1136,16 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                           animation: 'pronos-live-pulse 1.4s ease-in-out infinite',
                         }}>
                           {t('points.card.live')}
+                        </span>
+                      )}
+                      {isClosingSoonNonSportsMarket(m) && (
+                        <span style={{
+                          ...chipStyle,
+                          color: 'var(--warning)',
+                          background: 'rgba(245,158,11,0.12)',
+                          borderColor: 'rgba(245,158,11,0.3)',
+                        }}>
+                          {t('points.card.closingSoon')}
                         </span>
                       )}
                     </div>
