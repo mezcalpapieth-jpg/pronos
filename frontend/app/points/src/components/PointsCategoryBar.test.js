@@ -12,6 +12,9 @@ test('points category bar shows Infrastructure while preserving the main categor
   const sportsIndex = source.indexOf("slug: 'deportes'");
   const financeIndex = source.indexOf("slug: 'finanzas'");
   const infrastructureIndex = source.indexOf("slug: 'infraestructura'");
+  const politicsIndex = source.indexOf("slug: 'politica'");
+  const aiIndex = source.indexOf("slug: 'ai'");
+  const cryptoIndex = source.indexOf("slug: 'crypto'");
   const pendingIndex = source.indexOf("slug: 'porresolver'");
 
   assert.ok(newMarketsIndex >= 0, 'New markets tab should exist');
@@ -21,11 +24,15 @@ test('points category bar shows Infrastructure while preserving the main categor
   assert.ok(sportsIndex >= 0, 'Sports tab should exist');
   assert.ok(financeIndex >= 0, 'Finance tab should exist');
   assert.ok(pendingIndex >= 0, 'Pending tab should exist');
+  assert.ok(aiIndex >= 0, 'AI tab should exist');
   assert.match(source, /points\.cat\.worldCup/);
+  assert.match(source, /points\.cat\.ai/);
   assert.ok(newMarketsIndex < mexicoIndex, 'Nuevos mercados should stay before Mexico & Latam');
   assert.ok(mexicoIndex < sportsIndex, 'Mexico & Latam should appear before Deportes');
   assert.ok(financeIndex < infrastructureIndex, 'Infrastructure should appear after Finanzas');
   assert.ok(infrastructureIndex < pendingIndex, 'Infrastructure should appear before Por resolver');
+  assert.ok(politicsIndex < aiIndex, 'AI should appear after Política Intl.');
+  assert.ok(aiIndex < cryptoIndex, 'AI should appear before Crypto');
 });
 
 test('points category bar gives Mexico and Latam a subtle text-only treatment', () => {

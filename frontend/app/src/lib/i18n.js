@@ -731,6 +731,7 @@ const STRINGS = {
   'points.cat.mexico':        { es: 'Mexico & Latam',         en: 'Mexico & Latam' },
   'points.cat.infraestructura': { es: 'Infraestructura',       en: 'Infrastructure' },
   'points.cat.politica':      { es: 'Política Intl.',         en: 'World Politics' },
+  'points.cat.ai':            { es: 'IA',                     en: 'AI' },
   'points.cat.crypto':        { es: 'Crypto',                 en: 'Crypto' },
   'points.cat.finanzas':      { es: 'Finanzas',               en: 'Finance' },
   'points.cat.porresolver':   { es: 'Por resolver',           en: 'To resolve' },

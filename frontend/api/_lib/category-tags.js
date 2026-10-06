@@ -1,4 +1,4 @@
-const CATEGORY_KEYS = new Set(['general', 'mexico', 'politica', 'deportes', 'finanzas', 'crypto', 'musica', 'world-cup', 'infraestructura']);
+const CATEGORY_KEYS = new Set(['general', 'mexico', 'politica', 'deportes', 'finanzas', 'crypto', 'musica', 'world-cup', 'infraestructura', 'ai']);
 const GEO_KEYS = new Set(['mexico', 'latam', 'world']);
 const TOPIC_KEYS = new Set([
   'general',
@@ -16,6 +16,7 @@ const TOPIC_KEYS = new Set([
   'trafico',
   'movilidad',
   'world-cup',
+  'ai',
 ]);
 const ISOLATED_CATEGORY_KEYS = new Set(['crypto', 'world-cup']);
 const FLEXIBLE_TOPIC_CATEGORY_KEYS = new Set(['general', 'mexico', 'musica', 'infraestructura']);

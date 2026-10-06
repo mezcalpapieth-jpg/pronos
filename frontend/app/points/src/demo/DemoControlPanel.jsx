@@ -27,7 +27,7 @@ const ORANGE = '#FF5500';
 const PANEL_BG = '#101013';
 const BORDER = '1px solid rgba(255,255,255,0.10)';
 
-const CATEGORIES = ['deportes', 'mexico', 'politica', 'finanzas', 'crypto', 'musica', 'world-cup', 'general'];
+const CATEGORIES = ['deportes', 'mexico', 'politica', 'ai', 'finanzas', 'crypto', 'musica', 'world-cup', 'general'];
 
 function Field({ label, children }) {
   return (

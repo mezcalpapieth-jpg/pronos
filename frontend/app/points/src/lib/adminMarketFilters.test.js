@@ -71,6 +71,7 @@ test('formats admin market dates without relying on component-local helpers', ()
 test('exposes Spanish admin labels for new markets, creation world region, and weather topic', () => {
   assert.ok(CATEGORIES.some(c => c.key === 'world-cup' && c.label === 'Nuevos mercados'));
   assert.ok(CATEGORIES.some(c => c.key === 'musica' && c.label === 'Entretenimiento'));
+  assert.ok(CATEGORIES.some(c => c.key === 'ai' && c.label === 'IA'));
   assert.ok(MARKET_CREATION_GEO_OPTIONS.some(c => c.key === 'world' && c.label === 'Mundo'));
   assert.ok(ADMIN_MEXICO_TOPIC_FILTERS.some(c => c.key === 'weather' && c.label === 'Clima'));
   assert.ok(ADMIN_ENTERTAINMENT_TOPIC_FILTERS.some(c => c.key === 'cine' && c.label === 'Cine'));
