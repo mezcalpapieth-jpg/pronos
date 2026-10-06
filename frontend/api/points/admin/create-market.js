@@ -42,7 +42,7 @@ import { neon } from '@neondatabase/serverless';
 const schemaSql = neon(process.env.DATABASE_URL);
 
 const ALLOWED_CATEGORIES = new Set([
-  'general', 'mexico', 'politica', 'deportes', 'finanzas', 'crypto', 'musica', 'world-cup',
+  'general', 'mexico', 'politica', 'deportes', 'finanzas', 'crypto', 'musica', 'world-cup', 'ai',
 ]);
 const ALLOWED_GEO_TAGS = new Set(['mexico', 'latam', 'world']);
 const ALLOWED_MANUAL_RESOLVERS = new Set(['manual', 'manual_review']);
@@ -59,6 +59,7 @@ const ALLOWED_TOPIC_TAGS = new Set([
   'farandula',
   'weather',
   'world-cup',
+  'ai',
 ]);
 
 function normalizeTagArray(value, allowed) {

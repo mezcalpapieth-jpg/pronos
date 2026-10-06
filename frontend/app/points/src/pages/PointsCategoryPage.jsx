@@ -45,6 +45,7 @@ const SLUG_TO_TITLE_KEY = {
   'nuevos-mercados': 'points.cat.worldCup',
   'world-cup':       'points.cat.worldCup',
   politica:    'points.cat.politica',
+  ai:          'points.cat.ai',
   crypto:      'points.cat.crypto',
   finanzas:    'points.cat.finanzas',
   porresolver: 'points.cat.porresolver',
@@ -126,6 +127,7 @@ const RESUELTOS_CATEGORIES = [
   { key: 'musica',   tKey: 'points.cat.musica'     },
   { key: 'mexico',   tKey: 'points.cat.mexico'     },
   { key: 'politica', tKey: 'points.cat.politica'   },
+  { key: 'ai',       tKey: 'points.cat.ai'          },
   { key: 'crypto',   tKey: 'points.cat.crypto'     },
   { key: 'finanzas', tKey: 'points.cat.finanzas'   },
   { key: 'infraestructura', tKey: 'points.cat.infraestructura' },
@@ -185,7 +187,7 @@ function canonicalCategorySlug(value) {
   return CATEGORY_SLUG_ALIASES[value] || value;
 }
 
-const GEO_FILTER_EXCLUDED_CATEGORIES = new Set(['all', 'crypto', 'world-cup', 'nuevos-mercados', 'porresolver', 'resueltos', 'noticias']);
+const GEO_FILTER_EXCLUDED_CATEGORIES = new Set(['all', 'crypto', 'ai', 'world-cup', 'nuevos-mercados', 'porresolver', 'resueltos', 'noticias']);
 
 function isPromotedAicmChildMarket(m) {
   return !isAicmDelayMarket(m)

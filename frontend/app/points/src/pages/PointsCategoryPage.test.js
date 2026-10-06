@@ -18,6 +18,12 @@ test('category page exposes the infrastructure taxonomy route and resolved chip'
   assert.match(source, /RESUELTOS_CATEGORIES[\s\S]*?\{ key:\s*'infraestructura'/);
 });
 
+test('category page exposes the AI taxonomy route and resolved chip', () => {
+  assert.match(source, /ai:\s*'points\.cat\.ai'/);
+  assert.match(source, /RESUELTOS_CATEGORIES[\s\S]*?\{ key:\s*'ai'/);
+  assert.match(source, /GEO_FILTER_EXCLUDED_CATEGORIES[\s\S]*?'ai'/);
+});
+
 test('infrastructure page renders AICM as a hub and gates child markets behind promotion', () => {
   assert.match(source, /AICM_HUB_PATH, isAicmDelayMarket/);
   assert.match(source, /function AicmInfrastructureHubCard/);

@@ -113,6 +113,11 @@ test('entertainment source markets render service and show badges', () => {
 });
 
 test('special and finance markets render sharper source badges without overriding explicit images', () => {
+  const ai = { category: 'ai', source: 'ai-benchmark', question: '¿Quién tendrá el mejor modelo de IA?' };
+  assert.equal(marketPlaceholderKey(ai), 'ai');
+  assert.match(decodedBadgeSvg(marketPlaceholderImageSrc(ai)), />AI</);
+  assert.match(decodedBadgeSvg(marketPlaceholderImageSrc(ai)), />Modelos</);
+
   const weather = { category: 'mexico', resolverType: 'weather_api', topicTags: ['weather'] };
   assert.equal(marketPlaceholderKey(weather), 'weather');
   assert.match(decodedBadgeSvg(marketPlaceholderImageSrc(weather)), />CLIMA</);

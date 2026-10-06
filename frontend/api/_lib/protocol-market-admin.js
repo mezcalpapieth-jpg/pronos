@@ -1,7 +1,7 @@
 import { deriveMarketTags } from './category-tags.js';
 
 export const ALLOWED_PROTOCOL_CATEGORIES = new Set([
-  'general', 'mexico', 'politica', 'deportes', 'finanzas', 'crypto', 'musica', 'world-cup',
+  'general', 'mexico', 'politica', 'deportes', 'finanzas', 'crypto', 'musica', 'world-cup', 'ai',
 ]);
 
 export function cleanOptionalText(value) {

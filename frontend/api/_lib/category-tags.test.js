@@ -153,6 +153,27 @@ test('keeps World Cup markets only in the World Cup category', () => {
   assert.equal(matchesMarketTaxonomy({ ...tags, category: 'world-cup' }, { category: 'mexico' }), false);
 });
 
+test('routes AI markets into the AI category and global topic', () => {
+  const tags = deriveMarketTags({
+    category: 'ai',
+    question: '¿OpenAI lanza un nuevo modelo público de IA este mes?',
+    source_data: {
+      categorization: {
+        categoryTags: ['ai'],
+        geoTags: ['world'],
+        topicTags: ['ai'],
+      },
+    },
+  });
+
+  assert.deepEqual(tags.categoryTags, ['ai']);
+  assert.deepEqual(tags.geoTags, ['world']);
+  assert.deepEqual(tags.topicTags, ['ai']);
+
+  assert.equal(matchesMarketTaxonomy({ ...tags, category: 'ai' }, { category: 'ai' }), true);
+  assert.equal(matchesMarketTaxonomy({ ...tags, category: 'ai' }, { category: 'mexico' }), false);
+});
+
 test('honors explicit world region without inferring Mexico from the question', () => {
   const tags = deriveMarketTags({
     category: 'politica',

@@ -31,6 +31,14 @@ const BADGE_THEMES = Object.freeze({
     text: '#f8fcff',
     muted: '#d7f5ff',
   },
+  ai: {
+    bg: '#111827',
+    bg2: '#2563eb',
+    accent: '#22d3ee',
+    accent2: '#a7f3d0',
+    text: '#f8fbff',
+    muted: '#dbeafe',
+  },
   basketball: {
     bg: '#241515',
     bg2: '#b45309',
@@ -272,6 +280,7 @@ const FINANCE_BADGES = Object.freeze([
 const SPECIAL_BADGES = Object.freeze([
   { key: 'aicm', label: 'AICM', eyebrow: 'Aeropuerto', theme: 'airport', aliases: ['aicm', 'mex-airport', 'airport-mex'] },
   { key: 'weather', label: 'CLIMA', eyebrow: 'Tiempo', theme: 'weather', aliases: ['weather', 'weather-api', 'temperatura', 'lluvia', 'clima', 'wind', 'viento'] },
+  { key: 'ai', label: 'AI', eyebrow: 'Modelos', theme: 'ai', aliases: ['ai', 'ia', 'openai', 'anthropic', 'google-deepmind', 'gemini', 'claude', 'artificial-analysis', 'benchmark'] },
   { key: 'politica', label: 'POL', eyebrow: 'Politica', theme: 'politics', aliases: ['politica', 'politics', 'election', 'eleccion', 'gobierno', 'presidente', 'congreso'] },
   { key: 'mexico', label: 'MX', eyebrow: 'Mexico', theme: 'mexico', aliases: ['mexico', 'cdmx', 'mexicano', 'mexicana'] },
 ]);

@@ -33,7 +33,7 @@ import { attachMarketTranslations } from '../../_lib/market-translations.js';
 const schemaSql = neon(process.env.DATABASE_URL);
 const readSql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const ALLOWED_CATEGORIES = new Set([
-  'general', 'mexico', 'politica', 'deportes', 'finanzas', 'crypto', 'musica', 'world-cup',
+  'general', 'mexico', 'politica', 'deportes', 'finanzas', 'crypto', 'musica', 'world-cup', 'ai',
 ]);
 const MAX_PENDING_OUTCOMES = 64;
 const PARALLEL_LEG_MIN_BINARY_RESERVE = Number.isFinite(Number(process.env.POINTS_PARALLEL_LEG_MIN_BINARY_RESERVE))

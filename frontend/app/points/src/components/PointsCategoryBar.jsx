@@ -32,6 +32,7 @@ export const CATEGORY_TABS = [
   { slug: 'deportes',    tKey: 'points.cat.deportes'    },
   { slug: 'musica',      tKey: 'points.cat.musica'      },
   { slug: 'politica',    tKey: 'points.cat.politica'    },
+  { slug: 'ai',          tKey: 'points.cat.ai'           },
   { slug: 'crypto',      tKey: 'points.cat.crypto'      },
   { slug: 'finanzas',    tKey: 'points.cat.finanzas'    },
   { slug: 'infraestructura', tKey: 'points.cat.infraestructura' },

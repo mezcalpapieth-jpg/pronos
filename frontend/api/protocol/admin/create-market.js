@@ -39,7 +39,7 @@ import { neon } from '@neondatabase/serverless';
 const sql = neon(process.env.DATABASE_URL);
 
 const TAG_ALLOWLISTS = {
-  categoryTags: new Set(['general', 'mexico', 'politica', 'deportes', 'finanzas', 'crypto', 'musica', 'world-cup']),
+  categoryTags: new Set(['general', 'mexico', 'politica', 'deportes', 'finanzas', 'crypto', 'musica', 'world-cup', 'ai']),
   geoTags: new Set(['mexico', 'latam', 'world']),
   topicTags: new Set([
     'general',
@@ -53,6 +53,7 @@ const TAG_ALLOWLISTS = {
     'farandula',
     'weather',
     'world-cup',
+    'ai',
   ]),
 };
 

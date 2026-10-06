@@ -35,7 +35,7 @@ import { withTransaction } from '../../_lib/db-tx.js';
 const sql = neon(process.env.DATABASE_URL);
 
 const ALLOWED_CATEGORIES = new Set([
-  'general', 'mexico', 'politica', 'deportes', 'finanzas', 'crypto', 'musica', 'world-cup',
+  'general', 'mexico', 'politica', 'deportes', 'finanzas', 'crypto', 'musica', 'world-cup', 'ai',
 ]);
 
 function parseJsonb(value, fallback) {
