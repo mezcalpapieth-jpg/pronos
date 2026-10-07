@@ -92,6 +92,14 @@ test('NFL generator emits preseason ESPN binary markets', async () => {
   assert.equal(specs[0].source_data.season, 'pretemporada NFL');
   assert.deepEqual(specs[0].outcomes, ['Atlanta Falcons', 'Denver Broncos']);
   assert.deepEqual(specs[0].outcome_images, ['atl.png', 'den.png']);
+  assert.deepEqual(specs[0].source_data.suggestedPricing, {
+    source: 'admin-config',
+    probabilities: [0.5, 0.5],
+    probabilityPct: [50, 50],
+    seedLiquidities: [1000, 1000],
+    rationale: 'NFL binary matchup markets open balanced for admin review.',
+    evidence: [],
+  });
   assert.deepEqual(specs[0].resolver_config, {
     source: 'espn',
     leaguePath: 'football/nfl',

@@ -57,13 +57,11 @@ import { generateGilbertoMoraTransfer2026Markets } from './market-gen/gilberto-m
 import { generateOctoberTournament2026Markets } from './market-gen/october-tournament-2026.js';
 import { generateAiMarkets }              from './market-gen/ai.js';
 import { deriveMarketTags }             from './category-tags.js';
-import { attachDefaultSuggestedPricing } from './market-pricing.js';
-import { tryAttachPolymarketPricing }    from './polymarket-pricing.js';
+import { attachUniformGeneratedPricing } from './market-pricing.js';
 import { attachMarketContextBlocks }      from './market-context-blocks.js';
 import { attachMarketTranslations }       from './market-translations.js';
 
 const MARKET_ICON = null;
-const PRICING_CONCURRENCY = 4;
 const APPROVED_SCHEDULE_SYNC_SOURCES = new Set([
   'espn-atp-match',
 ]);
@@ -104,23 +102,9 @@ export const GENERATORS = [
   { name: 'ai',             run: generateAiMarkets            },
 ];
 
-async function attachGeneratorPricing(specs, { concurrency = PRICING_CONCURRENCY } = {}) {
+async function attachGeneratorPricing(specs) {
   if (!Array.isArray(specs) || !specs.length) return [];
-  const priced = new Array(specs.length);
-  let nextIndex = 0;
-  const workerCount = Math.min(concurrency, specs.length);
-
-  async function worker() {
-    while (nextIndex < specs.length) {
-      const index = nextIndex;
-      nextIndex += 1;
-      const polymarketPriced = await tryAttachPolymarketPricing(specs[index]);
-      priced[index] = attachDefaultSuggestedPricing(polymarketPriced);
-    }
-  }
-
-  await Promise.all(Array.from({ length: workerCount }, worker));
-  return priced;
+  return specs.map(spec => attachUniformGeneratedPricing(spec));
 }
 
 export async function prepareGeneratedSpecs(specs) {

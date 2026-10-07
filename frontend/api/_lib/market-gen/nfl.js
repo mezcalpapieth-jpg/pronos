@@ -102,6 +102,14 @@ export async function generateNflMarkets({
         home: { id: home?.team?.id, name: home.team.displayName, abbr: home.team.abbreviation },
         away: { id: away?.team?.id, name: away.team.displayName, abbr: away.team.abbreviation },
         venue: formatEspnVenue(comp?.venue),
+        suggestedPricing: {
+          source: 'admin-config',
+          probabilities: [0.5, 0.5],
+          probabilityPct: [50, 50],
+          seedLiquidities: [1000, 1000],
+          rationale: 'NFL binary matchup markets open balanced for admin review.',
+          evidence: [],
+        },
       },
     });
   }

@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   attachDefaultSuggestedPricing,
   attachSuggestedPricing,
+  attachUniformGeneratedPricing,
   impliedProbabilitiesFromOdds,
   normalizeProbabilities,
   seedLiquiditiesFromProbabilities,
@@ -94,4 +95,27 @@ test('attachSuggestedPricing preserves per-leg probabilities for parallel market
   assert.deepEqual(spec.seed_liquidities, [1000, 1000, 1000]);
   assert.deepEqual(spec.source_data.suggestedPricing.legProbabilityPct, [32, 32, 32]);
   assert.equal(spec.source_data.suggestedPricing.source, 'parallel-default');
+});
+
+test('attachUniformGeneratedPricing opens generated parallel legs at 50/50', () => {
+  const spec = attachUniformGeneratedPricing({
+    source: 'test',
+    source_event_id: 'parallel-generated',
+    outcomes: ['A', 'B', 'C'],
+    seed_liquidity: 1000,
+    amm_mode: 'parallel',
+    source_data: {
+      suggestedPricing: {
+        source: 'source-signals:test',
+        probabilities: [0.7, 0.2, 0.1],
+        probabilityPct: [70, 20, 10],
+        legProbabilityPct: [70, 20, 10],
+      },
+    },
+  });
+
+  assert.deepEqual(spec.seed_liquidities, [1000, 1000, 1000]);
+  assert.deepEqual(spec.source_data.suggestedPricing.probabilityPct, [33.3, 33.3, 33.3]);
+  assert.deepEqual(spec.source_data.suggestedPricing.legProbabilityPct, [50, 50, 50]);
+  assert.equal(spec.source_data.suggestedPricing.source, 'uniform-generated');
 });
