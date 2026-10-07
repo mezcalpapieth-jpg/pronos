@@ -5,15 +5,12 @@ import { readFile } from 'node:fs/promises';
 const source = await readFile(new URL('./run-generators.js', import.meta.url), 'utf8');
 
 test('runAllGenerators attaches suggested pricing to generated specs before upsert', () => {
-  assert.match(source, /attachDefaultSuggestedPricing/);
-  assert.match(source, /tryAttachPolymarketPricing/);
+  assert.match(source, /attachUniformGeneratedPricing/);
   assert.match(source, /attachMarketContextBlocks/);
   assert.match(source, /attachMarketTranslations/);
   assert.match(source, /attachGeneratorPricing/);
   assert.match(source, /export async function prepareGeneratedSpecs/);
-  assert.match(source, /PRICING_CONCURRENCY/);
-  assert.match(source, /await tryAttachPolymarketPricing\(specs\[index\]\)/);
-  assert.match(source, /attachDefaultSuggestedPricing\(polymarketPriced\)/);
+  assert.match(source, /return specs\.map\(spec => attachUniformGeneratedPricing\(spec\)\)/);
   assert.match(source, /return pricedSpecs\.map\(spec => attachMarketTranslations\(attachMarketContextBlocks\(spec\)\)\)/);
   assert.match(source, /const contextualSpecs = await prepareGeneratedSpecs\(specs\)/);
 });

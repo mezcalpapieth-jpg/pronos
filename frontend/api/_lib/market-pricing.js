@@ -174,3 +174,38 @@ export function attachDefaultSuggestedPricing(spec = {}) {
     rationale: 'Sin odds externas disponibles; se abre balanceado para revisión admin.',
   });
 }
+
+export function attachUniformGeneratedPricing(spec = {}) {
+  const outcomes = Array.isArray(spec.outcomes) ? spec.outcomes : [];
+  if (outcomes.length < 2) return spec;
+
+  const probabilities = Array.from({ length: outcomes.length }, () => 1 / outcomes.length);
+  const priced = attachSuggestedPricing(spec, {
+    probabilities,
+    source: 'uniform-generated',
+    rationale: 'Mercado generado; se abre balanceado para revisión admin.',
+    evidence: [],
+  });
+
+  if (priced.amm_mode !== 'parallel') return priced;
+
+  const sourceData = priced.source_data && typeof priced.source_data === 'object'
+    ? { ...priced.source_data }
+    : {};
+  const suggestedPricing = sourceData.suggestedPricing && typeof sourceData.suggestedPricing === 'object'
+    ? { ...sourceData.suggestedPricing }
+    : {};
+  const legProbabilities = Array.from({ length: outcomes.length }, () => 0.5);
+  const legProbabilityPct = Array.from({ length: outcomes.length }, () => 50);
+
+  sourceData.suggestedPricing = {
+    ...suggestedPricing,
+    legProbabilities,
+    legProbabilityPct,
+  };
+
+  return {
+    ...priced,
+    source_data: sourceData,
+  };
+}
