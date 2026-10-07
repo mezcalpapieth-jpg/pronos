@@ -55,6 +55,16 @@ const TOPICS = [
   },
 ];
 
+const WEEKLY_TEMPLATE_TOPIC = {
+  slug: 'tema-editable-semanal',
+  phrase: 'seguridad',
+  threshold: 1,
+  probability: 0.66,
+  label: '"seguridad"',
+  topicLabel: 'tema editable',
+  rationale: 'Plantilla semanal editable antes de aprobar: cambiar phrase, question y criteria al tema elegido.',
+};
+
 function partsObject(formatter, date) {
   return Object.fromEntries(
     formatter
@@ -112,6 +122,33 @@ export function nextMananeraClose(now = new Date()) {
   }
 
   throw new Error('could_not_find_next_mananera_close');
+}
+
+export function nextMananeraWeek(now = new Date()) {
+  const local = mexicoDateTimeParts(now);
+  const minutes = local.hour * 60 + local.minute;
+  const afterMondayClose = local.weekday === 1 && minutes >= ((7 * 60) + 59);
+  let daysAhead = (1 - local.weekday + 7) % 7;
+  if (daysAhead === 0 && afterMondayClose) daysAhead = 7;
+  if (local.weekday >= 2 && local.weekday <= 6) daysAhead = 8 - local.weekday;
+
+  const monday = addDaysToDateParts(local, daysAhead);
+  const friday = addDaysToDateParts(monday, 4);
+  const dateYmds = Array.from({ length: 5 }, (_, i) => {
+    const day = addDaysToDateParts(monday, i);
+    const date = dateAtMexicoCityTime({ ...day, hour: 12, minute: 0, second: 0 });
+    return formatMexicoDateYmd(date);
+  });
+
+  return {
+    start: dateAtMexicoCityTime({ ...monday, hour: 7, minute: 59, second: 0 }),
+    resolveAt: dateAtMexicoCityTime({ ...friday, hour: 18, minute: 0, second: 0 }),
+    weekStartYmd: formatMexicoDateYmd(dateAtMexicoCityTime({ ...monday, hour: 12, minute: 0, second: 0 })),
+    weekEndYmd: formatMexicoDateYmd(dateAtMexicoCityTime({ ...friday, hour: 12, minute: 0, second: 0 })),
+    weekStartLabel: formatMexicoDateEs(dateAtMexicoCityTime({ ...monday, hour: 12, minute: 0, second: 0 })),
+    weekEndLabel: formatMexicoDateEs(dateAtMexicoCityTime({ ...friday, hour: 12, minute: 0, second: 0 })),
+    dateYmds,
+  };
 }
 
 function criteriaFor(topic, dateLabel) {
@@ -176,7 +213,95 @@ function buildSpec(topic, end) {
   });
 }
 
+function weeklyCriteriaFor(topic, week) {
+  const mentions = topic.threshold === 1
+    ? `contienen ${topic.label} al menos una vez en total`
+    : `contienen la frase "${topic.phrase}" ${topic.threshold} o más veces en total`;
+  return `las versiones estenográficas oficiales de gob.mx de las mañaneras de la semana del ${week.weekStartLabel} al ${week.weekEndLabel} ${mentions}; si gob.mx no está disponible para algún día, se usará la transcripción/captions del video oficial de YouTube de la conferencia de prensa matutina de ese día`;
+}
+
+function buildWeeklyTemplateSpec(now = new Date()) {
+  const topic = WEEKLY_TEMPLATE_TOPIC;
+  const week = nextMananeraWeek(now);
+  const question = `¿La presidenta mencionará ${topic.topicLabel} en alguna mañanera de la semana del ${week.weekStartLabel}?`;
+  const criteria = weeklyCriteriaFor(topic, week);
+
+  const base = {
+    source: 'mananera',
+    source_event_id: `mananera-weekly:${week.weekStartYmd}:${topic.slug}`,
+    question,
+    category: 'mexico',
+    outcomes: ['Sí', 'No'],
+    seed_liquidity: 1000,
+    end_time: week.start.toISOString(),
+    amm_mode: 'unified',
+    resolver_type: 'api_transcript',
+    resolver_config: {
+      source: MANANERA_TRANSCRIPT_SOURCE,
+      dateYmds: week.dateYmds,
+      fromDateYmd: week.weekStartYmd,
+      toDateYmd: week.weekEndYmd,
+      timezone: MEXICO_CITY_TZ,
+      phrase: topic.phrase,
+      op: 'gte',
+      threshold: topic.threshold,
+      yesOutcome: 0,
+      resolveAt: week.resolveAt.toISOString(),
+      evidenceUrl: MANANERA_OFFICIAL_BASE_URL,
+      youtubeFallback: true,
+      sourceUrls: [MANANERA_OFFICIAL_BASE_URL, 'https://www.youtube.com/'],
+      criteria,
+    },
+    source_data: {
+      kind: 'mananera_weekly_phrase',
+      generatedAt: new Date().toISOString(),
+      weekStartYmd: week.weekStartYmd,
+      weekEndYmd: week.weekEndYmd,
+      dateYmds: week.dateYmds,
+      phrase: topic.phrase,
+      threshold: topic.threshold,
+      editableTemplate: true,
+      approvalEditHints: {
+        fields: [
+          'question',
+          'resolver_config.phrase',
+          'resolver_config.threshold',
+          'resolver_config.criteria',
+          'source_data.phrase',
+          'source_data.topicLabel',
+        ],
+        note: 'Cambiar el tema/frase antes de aprobar; el resolver suma menciones en todas las mañaneras de la semana.',
+      },
+      topicLabel: topic.topicLabel,
+      closeLocalTime: 'lunes 07:59',
+      transcriptSource: 'gob.mx Presidencia; fallback YouTube oficial por día',
+      resolutionCriteria: criteria,
+      categorization: {
+        categoryTags: ['mexico'],
+        geoTags: ['mexico'],
+        topicTags: ['politica'],
+      },
+    },
+  };
+
+  return attachSuggestedPricing(base, {
+    probabilities: [topic.probability, 1 - topic.probability],
+    source: 'editorial-prior',
+    rationale: topic.rationale,
+    evidence: [{ title: 'Presidencia de la República', url: MANANERA_OFFICIAL_BASE_URL }],
+  });
+}
+
 export async function generateMananeraMarkets({ now = new Date() } = {}) {
   const end = nextMananeraClose(now);
-  return TOPICS.map(topic => buildSpec(topic, end));
+  return [
+    ...TOPICS.map(topic => buildSpec(topic, end)),
+    buildWeeklyTemplateSpec(now),
+  ];
 }
+
+export const _internal = {
+  WEEKLY_TEMPLATE_TOPIC,
+  buildWeeklyTemplateSpec,
+  weeklyCriteriaFor,
+};
