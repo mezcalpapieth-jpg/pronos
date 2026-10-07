@@ -128,6 +128,41 @@ export function formatSpanishLongDate(dateYmd) {
   return `${Number(day)} de ${monthName} de ${year}`;
 }
 
+function normalizeDateYmd(value) {
+  const text = String(value || '').trim().slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : null;
+}
+
+function dateYmdRange(fromDateYmd, toDateYmd) {
+  const from = normalizeDateYmd(fromDateYmd);
+  const to = normalizeDateYmd(toDateYmd);
+  if (!from || !to || from > to) return [];
+  const out = [];
+  for (let cursor = from; cursor <= to && out.length < 14; cursor = addDays(cursor, 1)) {
+    out.push(cursor);
+  }
+  return out;
+}
+
+function configuredTranscriptDates(cfg = {}) {
+  if (Array.isArray(cfg.dateYmds)) {
+    return uniqueValues(cfg.dateYmds.map(normalizeDateYmd).filter(Boolean));
+  }
+  if (cfg.fromDateYmd || cfg.toDateYmd) {
+    return dateYmdRange(cfg.fromDateYmd, cfg.toDateYmd);
+  }
+  const single = normalizeDateYmd(cfg.dateYmd);
+  return single ? [single] : [];
+}
+
+function storedTranscriptForDate(storedTranscripts, dateYmd) {
+  if (!storedTranscripts) return null;
+  if (Array.isArray(storedTranscripts)) {
+    return storedTranscripts.find(item => String(item?.dateYmd || '').slice(0, 10) === dateYmd) || null;
+  }
+  return storedTranscripts[dateYmd] || null;
+}
+
 function spanishMonthName(month) {
   return Object.keys(MONTHS_ES).find(name => MONTHS_ES[name] === String(month).padStart(2, '0')) || String(month);
 }
@@ -1346,26 +1381,124 @@ export async function readMananeraPhraseResult(cfg = {}, options = {}) {
   if (cfg.source !== MANANERA_TRANSCRIPT_SOURCE) {
     throw new Error(`unsupported transcript source: ${cfg.source}`);
   }
-  if (!cfg.dateYmd || !cfg.phrase || cfg.threshold == null || cfg.yesOutcome == null) {
+  const configuredDates = configuredTranscriptDates(cfg);
+  if (!configuredDates.length || !cfg.phrase || cfg.threshold == null || cfg.yesOutcome == null) {
     throw new Error('invalid api_transcript config');
+  }
+
+  if (configuredDates.length > 1) {
+    const results = [];
+    for (const dateYmd of configuredDates) {
+      const single = await readMananeraPhraseResult(
+        {
+          ...cfg,
+          dateYmd,
+          dateYmds: undefined,
+          fromDateYmd: undefined,
+          toDateYmd: undefined,
+        },
+        {
+          ...options,
+          storedTranscript: storedTranscriptForDate(options.storedTranscripts, dateYmd),
+        },
+      );
+      if (!single.ready) {
+        return {
+          ...single,
+          ready: false,
+          reason: single.reason || 'weekly_transcript_not_ready',
+          dateYmd,
+          dateYmds: configuredDates,
+          pendingDateYmd: dateYmd,
+        };
+      }
+      results.push(single);
+    }
+
+    const count = results.reduce((sum, item) => sum + (Number(item.count) || 0), 0);
+    const yes = compareTranscriptCount(count, cfg.op || 'gte', cfg.threshold);
+    const yesIdx = Number(cfg.yesOutcome);
+    const noIdx = yesIdx === 0 ? 1 : 0;
+    const matchTimestamps = results.flatMap(item => (
+      Array.isArray(item.matchTimestamps)
+        ? item.matchTimestamps.map(match => ({ ...match, dateYmd: item.dateYmd }))
+        : []
+    ));
+    const matchPositions = results.flatMap(item => (
+      Array.isArray(item.matchPositions)
+        ? item.matchPositions.map(match => ({ ...match, dateYmd: item.dateYmd }))
+        : []
+    ));
+    const requiredMatchTimestamps = requiredTimestampEvidence({
+      matchTimestamps,
+      count,
+      threshold: cfg.threshold,
+    });
+    const requiredMatchPositions = requiredTimestampEvidence({
+      matchTimestamps: matchPositions,
+      count,
+      threshold: cfg.threshold,
+    });
+    const firstMatch = matchTimestamps[0] || null;
+    const transcriptUrls = uniqueValues(results.map(item => item.transcriptUrl).filter(Boolean));
+    const transcriptTitles = uniqueValues(results.map(item => item.transcriptTitle).filter(Boolean));
+    const transcriptSources = uniqueValues(results.map(item => item.transcriptSource).filter(Boolean));
+
+    return {
+      ready: true,
+      yes,
+      outcomeIndex: yes ? yesIdx : noIdx,
+      count,
+      phrase: cfg.phrase,
+      op: cfg.op || 'gte',
+      threshold: Number(cfg.threshold),
+      dateYmds: configuredDates,
+      fromDateYmd: configuredDates[0],
+      toDateYmd: configuredDates[configuredDates.length - 1],
+      transcriptUrl: transcriptUrls[0] || null,
+      transcriptUrls,
+      transcriptTitle: transcriptTitles[0] || null,
+      transcriptTitles,
+      transcriptSource: transcriptSources[0] || MANANERA_TRANSCRIPT_SOURCE,
+      transcriptSources,
+      searchUrl: buildMananeraSearchUrl(configuredDates[0]),
+      matchTimestamps,
+      requiredMatchTimestamps,
+      matchPositions,
+      requiredMatchPositions,
+      timestampEvidenceUnavailableReason: count > 0 && matchTimestamps.length === 0
+        ? 'weekly_timed_caption_segments_not_found'
+        : null,
+      firstMatchSeconds: firstMatch?.seconds ?? null,
+      firstMatchTimestamp: firstMatch?.label || null,
+      firstMatchUrl: firstMatch?.url || null,
+      dailyCounts: results.map(item => ({
+        dateYmd: item.dateYmd,
+        count: item.count,
+        transcriptUrl: item.transcriptUrl,
+        transcriptSource: item.transcriptSource,
+      })),
+      observedAt: new Date().toISOString(),
+    };
   }
 
   const fetchImpl = options.fetchImpl || globalThis.fetch;
   const stored = options.storedTranscript || null;
-  let transcript = stored?.transcriptText && String(stored.dateYmd || '').slice(0, 10) === cfg.dateYmd
+  const dateYmd = configuredDates[0];
+  let transcript = stored?.transcriptText && String(stored.dateYmd || '').slice(0, 10) === dateYmd
     ? {
         ready: true,
         url: stored.url,
         title: stored.title || null,
         text: stored.transcriptText,
         source: stored.source || MANANERA_TRANSCRIPT_SOURCE,
-        searchUrl: buildMananeraSearchUrl(cfg.dateYmd),
+        searchUrl: buildMananeraSearchUrl(dateYmd),
       }
     : null;
 
   if (!transcript) {
     transcript = await findMananeraTranscript({
-      dateYmd: cfg.dateYmd,
+      dateYmd,
       transcriptUrl: cfg.transcriptUrl || null,
       fetchImpl,
     });
@@ -1373,7 +1506,7 @@ export async function readMananeraPhraseResult(cfg = {}, options = {}) {
 
   if (cfg.youtubeFallback !== false && (!transcript.ready || !transcriptHasTimedSegments(transcript))) {
     const youtubeTranscript = await findMananeraYouTubeTranscript({
-      dateYmd: cfg.dateYmd,
+      dateYmd,
       cfg,
       fetchImpl,
       youtubeApiKey: Object.prototype.hasOwnProperty.call(options, 'youtubeApiKey')
@@ -1387,7 +1520,7 @@ export async function readMananeraPhraseResult(cfg = {}, options = {}) {
         ...transcript,
         fallbackReason: youtubeTranscript.reason || null,
         officialFetchAttempts: transcript.officialFetchAttempts || [],
-        youtubeSearchUrl: youtubeTranscript.searchUrl || buildMananeraYouTubeSearchUrl(cfg.dateYmd),
+        youtubeSearchUrl: youtubeTranscript.searchUrl || buildMananeraYouTubeSearchUrl(dateYmd),
         youtubeVideoUrl: youtubeTranscript.videoUrl || null,
         youtubeTranscriptTitle: youtubeTranscript.transcriptTitle || null,
         youtubeCaptionAttempts: youtubeTranscript.captionAttempts || [],
@@ -1396,7 +1529,7 @@ export async function readMananeraPhraseResult(cfg = {}, options = {}) {
       transcript = {
         ...transcript,
         timestampEvidenceUnavailableReason: youtubeTranscript.reason || 'youtube_captions_not_found',
-        youtubeSearchUrl: youtubeTranscript.searchUrl || buildMananeraYouTubeSearchUrl(cfg.dateYmd),
+        youtubeSearchUrl: youtubeTranscript.searchUrl || buildMananeraYouTubeSearchUrl(dateYmd),
         youtubeVideoUrl: youtubeTranscript.videoUrl || null,
         youtubeTranscriptTitle: youtubeTranscript.transcriptTitle || null,
         youtubeCaptionAttempts: youtubeTranscript.captionAttempts || [],
@@ -1441,6 +1574,7 @@ export async function readMananeraPhraseResult(cfg = {}, options = {}) {
     outcomeIndex: yes ? yesIdx : noIdx,
     count,
     phrase: cfg.phrase,
+    dateYmd,
     op: cfg.op || 'gte',
     threshold: Number(cfg.threshold),
     transcriptUrl: transcript.url,

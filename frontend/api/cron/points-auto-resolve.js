@@ -2323,6 +2323,7 @@ export async function runAutoResolve({ dry = false } = {}) {
           resolverInfo = { source: cfg.source, ...readerEcho };
         } else if (resolverType === 'api_transcript') {
           let storedTranscript = null;
+          let storedTranscripts = null;
           if (cfg.dateYmd) {
             try {
               storedTranscript = await readStoredMananeraTranscript(readSql, cfg.dateYmd);
@@ -2333,14 +2334,30 @@ export async function runAutoResolve({ dry = false } = {}) {
                 code: cacheErr?.code,
               });
             }
+          } else if (Array.isArray(cfg.dateYmds) && cfg.dateYmds.length) {
+            storedTranscripts = {};
+            for (const dateYmd of cfg.dateYmds) {
+              try {
+                const stored = await readStoredMananeraTranscript(readSql, dateYmd);
+                if (stored?.transcriptText) storedTranscripts[dateYmd] = stored;
+              } catch (cacheErr) {
+                console.warn('[points-auto-resolve] weekly mañanera transcript cache read failed', {
+                  dateYmd,
+                  message: cacheErr?.message,
+                  code: cacheErr?.code,
+                });
+              }
+            }
           }
-          const transcript = await readMananeraPhraseResult(cfg, { storedTranscript });
+          const transcript = await readMananeraPhraseResult(cfg, { storedTranscript, storedTranscripts });
           if (!transcript.ready) {
             const err = new Error(transcript.reason || 'official_transcript_not_ready');
             err.benign = true;
             err.info = {
               source: cfg.source,
               dateYmd: cfg.dateYmd || null,
+              dateYmds: Array.isArray(cfg.dateYmds) ? cfg.dateYmds : null,
+              pendingDateYmd: transcript.pendingDateYmd || null,
               searchUrl: transcript.searchUrl || null,
               fallbackReason: transcript.fallbackReason || null,
               officialFetchAttempts: transcript.officialFetchAttempts || [],
@@ -2359,8 +2376,12 @@ export async function runAutoResolve({ dry = false } = {}) {
             matchCount: transcript.count,
             op: transcript.op,
             threshold: transcript.threshold,
+            dateYmds: transcript.dateYmds || null,
+            dailyCounts: transcript.dailyCounts || null,
             transcriptUrl: transcript.transcriptUrl,
+            transcriptUrls: transcript.transcriptUrls || [],
             transcriptTitle: transcript.transcriptTitle,
+            transcriptTitles: transcript.transcriptTitles || [],
             videoId: transcript.videoId || null,
             channelTitle: transcript.channelTitle || null,
             captionLanguage: transcript.captionLanguage || null,
@@ -2375,9 +2396,13 @@ export async function runAutoResolve({ dry = false } = {}) {
           };
           resolverConfigPatch = {
             transcriptUrl: transcript.transcriptUrl,
+            transcriptUrls: transcript.transcriptUrls || [],
             transcriptTitle: transcript.transcriptTitle,
+            transcriptTitles: transcript.transcriptTitles || [],
             transcriptSource: transcript.transcriptSource,
             transcriptMatchCount: transcript.count,
+            transcriptDailyCounts: transcript.dailyCounts || null,
+            transcriptDateYmds: transcript.dateYmds || null,
             transcriptObservedAt: transcript.observedAt,
             transcriptVideoId: transcript.videoId || null,
             transcriptChannelTitle: transcript.channelTitle || null,

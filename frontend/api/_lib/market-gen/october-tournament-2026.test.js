@@ -101,7 +101,7 @@ test('October tournament generator emits bilingual auto and review specs when co
     now: new Date('2026-10-01T15:30:00.000Z'),
   });
 
-  assert.equal(specs.length, 19);
+  assert.equal(specs.length, 21);
   const byEventId = Object.fromEntries(specs.map(spec => [spec.source_event_id, spec]));
   assert.equal(Object.values(byEventId).every(spec => spec.tournament_featured === true), true);
 
@@ -136,6 +136,24 @@ test('October tournament generator emits bilingual auto and review specs when co
   assert.equal(fed.resolver_type, 'manual_review');
   assert.deepEqual(fed.outcomes, ['Recorta', 'Mantiene', 'Sube']);
   assert.deepEqual(fed.source_data.translations.en.outcomes, ['Cut', 'Hold', 'Hike']);
+
+  const popocatepetl = byEventId['october-2026:popocatepetl-exhalations-2026-10-02'];
+  assert.equal(popocatepetl.resolver_type, 'manual_review');
+  assert.equal(popocatepetl.end_time, '2026-10-02T16:29:00.000Z');
+  assert.deepEqual(popocatepetl.outcomes, ['0 a 19', '20 a 49', '50 a 99', '100 o más']);
+  assert.equal(popocatepetl.source_data.targetDateYmd, '2026-10-02');
+  assert.match(popocatepetl.resolver_config.criteria, /CENAPRED/);
+  assert.match(popocatepetl.resolver_config.criteria, /exhalaciones/);
+  assert.equal(popocatepetl.source_data.buckets[3].min, 100);
+
+  const amilcar = byEventId['october-2026:amilcar-olan-official-investigation'];
+  assert.equal(amilcar.resolver_type, 'manual_review');
+  assert.equal(amilcar.end_time, '2026-10-31T05:59:00.000Z');
+  assert.deepEqual(amilcar.outcomes, ['Sí', 'No']);
+  assert.match(amilcar.resolver_config.criteria, /UIF\/SHCP/);
+  assert.match(amilcar.resolver_config.criteria, /FGR/);
+  assert.match(amilcar.resolver_config.criteria, /No cuentan/);
+  assert.deepEqual(amilcar.source_data.allowedAuthorities, ['UIF/SHCP', 'FGR/Fiscalía General de la República']);
 
   const tortilla = byEventId['october-2026:tortilla-national-tortilleria-close'];
   assert.equal(tortilla.resolver_type, 'api_price');

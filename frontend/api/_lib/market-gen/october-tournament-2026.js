@@ -4,7 +4,7 @@ import { readCreAverages, fuelLabel } from '../fuel.js';
 import { attachSuggestedPricing } from '../market-pricing.js';
 import { IBTRACS_PRODUCT_PAGE } from '../hurricanes.js';
 import { SNIIM_FOOD_PRICE_SOURCE } from '../sniim-food-prices.js';
-import { dateAtMexicoCityTime } from './mexico-time.js';
+import { dateAtMexicoCityTime, formatMexicoDateEs, formatMexicoDateYmd } from './mexico-time.js';
 
 const SOURCE = 'october-tournament-2026';
 const START_ISO = dateAtMexicoCityTime({
@@ -120,6 +120,13 @@ const GDP_RESOLVE_ISO = dateAtMexicoCityTime({
   hour: 8,
   minute: 0,
 }).toISOString();
+const AMILCAR_INVESTIGATION_DEADLINE_ISO = dateAtMexicoCityTime({
+  year: 2026,
+  month: 10,
+  day: 30,
+  hour: 23,
+  minute: 59,
+}).toISOString();
 const HURRICANE_RESOLVE_ISO = dateAtMexicoCityTime({
   year: 2026,
   month: 11,
@@ -152,6 +159,10 @@ const EVIDENCE = Object.freeze({
   sniimTortilla: 'https://www.economia-sniim.gob.mx/Tortilla.asp',
   sniimNationalMarkets: 'https://www.economia-sniim.gob.mx/e_MenNal.asp',
   sniimEgg: 'https://www.economia-sniim.gob.mx/SNIIM-Pecuarios-Nacionales/e_SelHue.asp',
+  cenapredPopocatepetlFaq: 'https://www.gob.mx/cenapred/articulos/preguntas-frecuentes-sobre-la-seccion-de-monitoreo-volcanico-popocatepetl?idiom=es',
+  cenapredPopocatepetlPdfBase: 'https://www.cenapred.gob.mx/es/PDF/',
+  fgr: 'https://www.gob.mx/fgr',
+  shcp: 'https://www.gob.mx/shcp',
 });
 
 const DEFAULT_NOBEL_PEACE_CANDIDATES_ES = Object.freeze([
@@ -373,6 +384,65 @@ function buildManualSpec({
         ...extraSourceData,
       },
     }),
+  });
+}
+
+function addDaysToYmd(ymd, days) {
+  const [year, month, day] = ymd.split('-').map(Number);
+  const shifted = new Date(Date.UTC(year, month - 1, day + days, 12, 0, 0, 0));
+  return {
+    year: shifted.getUTCFullYear(),
+    month: shifted.getUTCMonth() + 1,
+    day: shifted.getUTCDate(),
+  };
+}
+
+function ymdFromParts({ year, month, day }) {
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function popocatepetlExhalationsMarket(now = new Date()) {
+  const target = addDaysToYmd(formatMexicoDateYmd(now), 1);
+  const targetYmd = ymdFromParts(target);
+  const targetNoon = dateAtMexicoCityTime({ ...target, hour: 12, minute: 0 });
+  const targetDisplay = formatMexicoDateEs(targetNoon);
+  const closeIso = dateAtMexicoCityTime({ ...target, hour: 10, minute: 29 }).toISOString();
+  const resolveIso = dateAtMexicoCityTime({ ...target, hour: 13, minute: 0 }).toISOString();
+  const reportUrl = `${EVIDENCE.cenapredPopocatepetlPdfBase}${targetYmd}.pdf`;
+  const outcomesEs = ['0 a 19', '20 a 49', '50 a 99', '100 o más'];
+  const outcomesEn = ['0 to 19', '20 to 49', '50 to 99', '100 or more'];
+  const criteriaEs = `Se resuelve con el reporte diario oficial de monitoreo del Popocatépetl de CENAPRED correspondiente al ${targetDisplay}. Gana el bucket que contiene el número entero de exhalaciones reportado por CENAPRED. Solo cuenta el reporte oficial de CENAPRED; notas de prensa, redes sociales o lecturas parciales no cuentan. Si CENAPRED corrige el reporte el mismo día, se usa la última versión oficial publicada antes de las 23:59 CDMX.`;
+  const criteriaEn = `Resolve from CENAPRED's official daily Popocatepetl monitoring report for ${targetYmd}. The winning bucket is the one containing the integer number of exhalations reported by CENAPRED. Only the official CENAPRED report counts; press articles, social posts, or partial readings do not count. If CENAPRED corrects the report on the same day, use the latest official version published before 23:59 Mexico City time.`;
+
+  return buildManualSpec({
+    key: `popocatepetl-exhalations-${targetYmd}`,
+    questionEs: `¿Cuántas exhalaciones reporta el Popocatépetl el ${targetDisplay}?`,
+    questionEn: `How many exhalations will Popocatepetl report on ${targetYmd}?`,
+    category: 'mexico',
+    tags: { categoryTags: ['mexico', 'clima'], geoTags: ['mexico'], topicTags: ['clima', 'volcanes'] },
+    icon: 'CENAPRED',
+    outcomesEs,
+    outcomesEn,
+    closeIso,
+    resolveIso,
+    criteriaEs,
+    criteriaEn,
+    evidence: [
+      { title: 'CENAPRED Popocatépetl monitoring FAQ', url: EVIDENCE.cenapredPopocatepetlFaq },
+      { title: `CENAPRED daily report ${targetYmd}`, url: reportUrl },
+    ],
+    kind: 'october_tournament_popocatepetl',
+    extraSourceData: {
+      targetDateYmd: targetYmd,
+      reportUrl,
+      unit: 'exhalaciones',
+      buckets: [
+        { label: outcomesEs[0], labelEn: outcomesEn[0], min: 0, max: 19 },
+        { label: outcomesEs[1], labelEn: outcomesEn[1], min: 20, max: 49 },
+        { label: outcomesEs[2], labelEn: outcomesEn[2], min: 50, max: 99 },
+        { label: outcomesEs[3], labelEn: outcomesEn[3], min: 100, max: null },
+      ],
+    },
   });
 }
 
@@ -731,7 +801,7 @@ async function commodityChainlinkSpecs({
   return specs;
 }
 
-function manualMarkets(env = process.env) {
+function manualMarkets(env = process.env, { now = new Date() } = {}) {
   const specs = [];
 
   specs.push(buildManualSpec({
@@ -827,6 +897,33 @@ function manualMarkets(env = process.env) {
     criteriaEs: 'Solo cuenta el dato inicial de la Estimacion Oportuna del PIB Trimestral para Q3 2026, variacion anual. Revisiones posteriores no cuentan. Si el dato cae exactamente en un limite, gana el bucket superior.',
     criteriaEn: 'Only the initial Q3 2026 flash GDP estimate, annual change, counts. Later revisions do not count. If the value lands exactly on a boundary, the upper bucket wins.',
     evidence: [{ title: 'INEGI feeds', url: EVIDENCE.inegiFeeds }],
+  }));
+
+  specs.push(popocatepetlExhalationsMarket(now));
+
+  specs.push(buildManualSpec({
+    key: 'amilcar-olan-official-investigation',
+    questionEs: '¿La UIF o la FGR anuncian oficialmente una investigación de Amílcar Olán antes del 31 de octubre?',
+    questionEn: 'Will UIF or FGR officially announce an investigation of Amílcar Olán before October 31?',
+    category: 'politica',
+    tags: { categoryTags: ['politica', 'mexico'], geoTags: ['mexico'], topicTags: ['politica', 'justicia'] },
+    icon: 'FGR',
+    outcomesEs: ['Sí', 'No'],
+    outcomesEn: ['Yes', 'No'],
+    closeIso: AMILCAR_INVESTIGATION_DEADLINE_ISO,
+    resolveIso: AMILCAR_INVESTIGATION_DEADLINE_ISO,
+    criteriaEs: 'Gana Sí solo si la UIF/SHCP o la FGR/Fiscalía General de la República publican un comunicado, boletín, conferencia oficial o ficha institucional anunciando una investigación de Amílcar Olán antes del 31 de octubre de 2026, es decir, a más tardar el 30 de octubre de 2026 a las 23:59 CDMX. No cuentan columnas, filtraciones, dichos de terceros, solicitudes legislativas, notas que citen fuentes anónimas, ni investigaciones anunciadas por autoridades distintas a UIF/SHCP o FGR. Si no hay anuncio oficial que cumpla esos criterios antes del cierre, gana No.',
+    criteriaEn: 'Yes wins only if UIF/SHCP or FGR/Fiscalía General de la República publishes an official statement, bulletin, press conference, or institutional notice announcing an investigation of Amílcar Olán before October 31, 2026, meaning no later than October 30, 2026 at 23:59 Mexico City time. Columns, leaks, third-party statements, legislative requests, anonymous-source articles, and investigations announced by authorities other than UIF/SHCP or FGR do not count. If no qualifying official announcement exists before the deadline, No wins.',
+    evidence: [
+      { title: 'FGR official site', url: EVIDENCE.fgr },
+      { title: 'SHCP official site', url: EVIDENCE.shcp },
+    ],
+    kind: 'october_tournament_official_investigation',
+    extraSourceData: {
+      subject: 'Amílcar Olán',
+      allowedAuthorities: ['UIF/SHCP', 'FGR/Fiscalía General de la República'],
+      deadline: AMILCAR_INVESTIGATION_DEADLINE_ISO,
+    },
   }));
 
   const tortillaOutcomesEs = [
@@ -1244,7 +1341,7 @@ export async function generateOctoberTournament2026Markets({ env = process.env, 
     defaultChainId: 56,
   }));
   specs.push(hurricaneMarket());
-  specs.push(...manualMarkets(env));
+  specs.push(...manualMarkets(env, { now }));
   return specs;
 }
 
@@ -1256,5 +1353,6 @@ export const _internal = {
   candidateOutcomes,
   hurricaneMarket,
   manualMarkets,
+  popocatepetlExhalationsMarket,
   weeklyCommodityWindow,
 };
