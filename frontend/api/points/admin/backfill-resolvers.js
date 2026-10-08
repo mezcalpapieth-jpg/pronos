@@ -54,11 +54,15 @@ import { generateUfcMarkets }           from '../../_lib/market-gen/ufc.js';
 import { generateBoxingMarkets }        from '../../_lib/market-gen/boxing.js';
 import { generateNextOpponentMarkets }  from '../../_lib/market-gen/next-opponent.js';
 import { generateF1SeasonMarkets }      from '../../_lib/market-gen/f1-season.js';
+import { generateOctoberTournament2026Markets } from '../../_lib/market-gen/october-tournament-2026.js';
 import { fetchWikipediaImage }          from '../../_lib/wikipedia.js';
 import { LMB_TEAMS }                    from '../../_lib/lmb-2026.js';
 import { teamForDriver, CONSTRUCTORS_2026 } from '../../_lib/f1-grid-2026.js';
 
 const sql = neon(process.env.DATABASE_URL);
+const FORCE_RESOLVER_SYNC_SOURCE_EVENT_IDS = new Set([
+  'october-2026:inpc-first-half-october-annual-inflation',
+]);
 
 // Same registry as cron/generate-markets-pending.
 const GENERATORS = [
@@ -72,6 +76,7 @@ const GENERATORS = [
   generateLmbMarkets, generateTennisMarkets, generateGolfMarkets,
   generateLivMarkets, generateUfcMarkets, generateBoxingMarkets,
   generateNextOpponentMarkets, generateF1SeasonMarkets,
+  generateOctoberTournament2026Markets,
 ];
 
 function parseJsonb(value, fallback) {
@@ -91,6 +96,10 @@ function translatedSourceDataForPending(row) {
     sport: row.sport || null,
     league: row.league || null,
   }).source_data;
+}
+
+function shouldForceResolverSync(spec) {
+  return FORCE_RESOLVER_SYNC_SOURCE_EVENT_IDS.has(String(spec?.source_event_id || ''));
 }
 
 async function backfillPendingMarketTranslations({ dryRun = false } = {}) {
@@ -228,9 +237,11 @@ export default async function handler(req, res) {
       // the wet-run UPDATE touches so the count is truthful.
       const rows = [];
       for (const s of specs) {
+        const forceResolverSync = shouldForceResolverSync(s);
         const r = await sql`
           SELECT m.id AS market_id,
                  m.resolver_type,
+                 m.resolver_config,
                  m.sport,
                  m.league,
                  m.outcome_images
@@ -242,6 +253,14 @@ export default async function handler(req, res) {
             AND m.parent_id IS NULL
             AND (
               (m.resolver_type IS NULL AND ${s.resolver_type || null}::text IS NOT NULL)
+              OR (
+                ${forceResolverSync}::boolean
+                AND ${s.resolver_type || null}::text IS NOT NULL
+                AND (
+                  m.resolver_type IS DISTINCT FROM ${s.resolver_type || null}::text
+                  OR m.resolver_config IS DISTINCT FROM ${s.resolver_config ? JSON.stringify(s.resolver_config) : null}::jsonb
+                )
+              )
               OR (m.sport IS NULL AND ${s.sport || null}::text IS NOT NULL)
               OR (m.league IS NULL AND ${s.league || null}::text IS NOT NULL)
               OR (m.outcome_images IS NULL
@@ -255,7 +274,7 @@ export default async function handler(req, res) {
             source: s.source,
             sourceEventId: s.source_event_id,
             patches: {
-              resolverType:   r[0].resolver_type   === null && !!s.resolver_type,
+              resolverType:   (r[0].resolver_type === null || forceResolverSync) && !!s.resolver_type,
               sport:          r[0].sport           === null && !!s.sport,
               league:         r[0].league          === null && !!s.league,
               outcomeImages:  r[0].outcome_images  === null && !!s.outcome_images,
@@ -330,6 +349,7 @@ export default async function handler(req, res) {
 
     for (const s of specs) {
       if (s.resolver_type) {
+        const forceResolverSync = shouldForceResolverSync(s);
         const r = await sql`
           UPDATE points_markets m
           SET resolver_type   = ${s.resolver_type},
@@ -338,7 +358,16 @@ export default async function handler(req, res) {
           WHERE pm.source = ${s.source}
             AND pm.source_event_id = ${s.source_event_id}
             AND pm.approved_market_id = m.id
-            AND m.resolver_type IS NULL
+            AND (
+              m.resolver_type IS NULL
+              OR (
+                ${forceResolverSync}::boolean
+                AND (
+                  m.resolver_type IS DISTINCT FROM ${s.resolver_type}::text
+                  OR m.resolver_config IS DISTINCT FROM ${s.resolver_config ? JSON.stringify(s.resolver_config) : null}::jsonb
+                )
+              )
+            )
             AND m.status = 'active'
             AND m.parent_id IS NULL
           RETURNING m.id

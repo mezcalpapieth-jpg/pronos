@@ -27,3 +27,12 @@ test('retrofit endpoint backfills bilingual market translations', () => {
   assert.match(source, /patchCounts\.translations = translations\.updatedCount/);
   assert.doesNotMatch(source, /record\(row\.approved_market_id,\s*'translations'\)/);
 });
+
+test('retrofit endpoint can force-sync the approved INPC resolver upgrade', () => {
+  assert.match(source, /generateOctoberTournament2026Markets/);
+  assert.match(source, /FORCE_RESOLVER_SYNC_SOURCE_EVENT_IDS/);
+  assert.match(source, /october-2026:inpc-first-half-october-annual-inflation/);
+  assert.match(source, /function shouldForceResolverSync/);
+  assert.match(source, /m\.resolver_type IS DISTINCT FROM \$\{s\.resolver_type \|\| null\}::text/);
+  assert.match(source, /m\.resolver_config IS DISTINCT FROM \$\{s\.resolver_config \? JSON\.stringify\(s\.resolver_config\) : null\}::jsonb/);
+});

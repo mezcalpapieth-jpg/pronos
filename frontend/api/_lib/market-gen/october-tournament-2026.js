@@ -4,6 +4,12 @@ import { readCreAverages, fuelLabel } from '../fuel.js';
 import { attachSuggestedPricing } from '../market-pricing.js';
 import { IBTRACS_PRODUCT_PAGE } from '../hurricanes.js';
 import { SNIIM_FOOD_PRICE_SOURCE } from '../sniim-food-prices.js';
+import {
+  INEGI_API_DOCS_URL,
+  INEGI_FEEDS_URL,
+  INEGI_INPC_BIWEEKLY_ANNUAL_INDICATOR_ID,
+  INEGI_INPC_SOURCE,
+} from '../inegi-inpc.js';
 import { dateAtMexicoCityTime, formatMexicoDateEs, formatMexicoDateYmd } from './mexico-time.js';
 
 const SOURCE = 'october-tournament-2026';
@@ -169,7 +175,8 @@ const EVIDENCE = Object.freeze({
   ballonDor: 'https://www.uefa.com/ballondor/',
   ballonDorNominees: 'https://www.uefa.com/uefachampionsleague/news/02a9-218b019cbca5-cb4b9be51c4b-1000--2026-ballon-dor-awards-nominees-revealed/',
   fedCalendar: 'https://www.federalreserve.gov/newsevents/2026-october.htm',
-  inegiFeeds: 'https://www.inegi.org.mx/servicios/feedsnoticias/feeds.html',
+  inegiApi: INEGI_API_DOCS_URL,
+  inegiFeeds: INEGI_FEEDS_URL,
   inegiPressRoom: 'https://www.inegi.org.mx/app/saladeprensa/',
   ibtracs: IBTRACS_PRODUCT_PAGE,
   sniimTortilla: 'https://www.economia-sniim.gob.mx/Tortilla.asp',
@@ -317,6 +324,7 @@ function buildPriceBucketSpec({
   kind = 'october_tournament_price_bucket',
   extraSourceData = {},
   startIso = tradingStartOneDayBefore(endTime),
+  seedLiquidity = 1200,
 }) {
   return pricedSpec({
     source: SOURCE,
@@ -325,7 +333,7 @@ function buildPriceBucketSpec({
     category,
     icon,
     outcomes: outcomesEs,
-    seed_liquidity: 1200,
+    seed_liquidity: seedLiquidity,
     start_time: startIso,
     end_time: endTime,
     amm_mode: 'unified',
@@ -475,8 +483,14 @@ function inpcFirstHalfOctoberMarket() {
   const outcomesEn = ['Below 3.00%', '3.00% to 3.49%', '3.50% to 3.99%', '4.00% or higher'];
   const criteriaEs = 'Se resuelve con el comunicado quincenal oficial del INPC publicado por INEGI para la primera quincena de octubre de 2026. Gana el rango que contenga la inflación anual reportada para esa quincena. Solo cuenta el dato inicial del comunicado oficial; revisiones posteriores no cuentan. Si el dato cae exactamente en un límite, gana el bucket superior.';
   const criteriaEn = 'Resolve from INEGI\'s official biweekly INPC release for the first half of October 2026. The winning bucket is the one containing the annual inflation rate reported for that period. Only the initial official release counts; later revisions do not count. If the value lands exactly on a boundary, the upper bucket wins.';
+  const buckets = [
+    { label: outcomesEs[0], labelEn: outcomesEn[0], min: null, max: 3.00 },
+    { label: outcomesEs[1], labelEn: outcomesEn[1], min: 3.00, max: 3.50 },
+    { label: outcomesEs[2], labelEn: outcomesEn[2], min: 3.50, max: 4.00 },
+    { label: outcomesEs[3], labelEn: outcomesEn[3], min: 4.00, max: null },
+  ];
 
-  return buildManualSpec({
+  return buildPriceBucketSpec({
     key: 'inpc-first-half-october-annual-inflation',
     questionEs: '¿Cuál será la inflación anual de la primera quincena de octubre?',
     questionEn: 'What will annual inflation be for the first half of October?',
@@ -485,27 +499,35 @@ function inpcFirstHalfOctoberMarket() {
     icon: 'INEGI',
     outcomesEs,
     outcomesEn,
-    closeIso: INPC_FIRST_HALF_OCTOBER_CLOSE_ISO,
-    resolveIso: INPC_FIRST_HALF_OCTOBER_RESOLVE_ISO,
-    criteriaEs,
-    criteriaEn,
+    buckets,
+    endTime: INPC_FIRST_HALF_OCTOBER_CLOSE_ISO,
+    resolverType: 'api_price',
+    resolverConfig: {
+      source: INEGI_INPC_SOURCE,
+      indicatorId: INEGI_INPC_BIWEEKLY_ANNUAL_INDICATOR_ID,
+      symbol: 'INPC 1Q Oct 2026',
+      targetPeriod: '2026-10-1Q',
+      resolveAt: INPC_FIRST_HALF_OCTOBER_RESOLVE_ISO,
+      unit: 'annual_pct',
+    },
+    resolutionCriteria: criteriaEs,
     evidence: [
       { title: 'INEGI sala de prensa', url: EVIDENCE.inegiPressRoom },
+      { title: 'INEGI API Banco de Indicadores', url: EVIDENCE.inegiApi },
       { title: 'INEGI feeds', url: EVIDENCE.inegiFeeds },
     ],
     kind: 'october_tournament_inpc_inflation',
     extraSourceData: {
       indicator: 'INPC',
+      indicatorId: INEGI_INPC_BIWEEKLY_ANNUAL_INDICATOR_ID,
       period: 'primera quincena de octubre de 2026',
+      targetPeriod: '2026-10-1Q',
       unit: 'annual_pct',
       expectedPublicationWindow: '2026-10-22/2026-10-23',
-      buckets: [
-        { label: outcomesEs[0], labelEn: outcomesEn[0], min: null, max: 3.00 },
-        { label: outcomesEs[1], labelEn: outcomesEn[1], min: 3.00, max: 3.50 },
-        { label: outcomesEs[2], labelEn: outcomesEn[2], min: 3.50, max: 4.00 },
-        { label: outcomesEs[3], labelEn: outcomesEn[3], min: 4.00, max: null },
-      ],
+      resolutionCriteriaEn: criteriaEn,
+      buckets,
     },
+    seedLiquidity: 1000,
   });
 }
 
