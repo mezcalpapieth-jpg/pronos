@@ -273,7 +273,42 @@ export async function upsertPending(sql, allSpecs) {
       skipped += 1;
     }
   }
-  return { inserted, updated, skipped };
+  const staleRejected = await rejectMissingMlbSeriesPendings(sql, allSpecs);
+  return { inserted, updated, skipped, staleRejected };
+}
+
+async function rejectMissingMlbSeriesPendings(sql, allSpecs) {
+  const mlbSeriesEventIds = [...new Set(
+    (Array.isArray(allSpecs) ? allSpecs : [])
+      .filter((spec) => spec?.source === 'espn-mlb' && spec?.resolver_config?.series)
+      .map((spec) => String(spec.source_event_id || '').trim())
+      .filter(Boolean),
+  )];
+  if (!mlbSeriesEventIds.length) return 0;
+
+  try {
+    const rows = await sql`
+      UPDATE points_pending_markets
+      SET status = 'rejected',
+          admin_note = COALESCE(NULLIF(admin_note, ''), 'series-not-needed: removed from ESPN playoff schedule'),
+          reviewer = COALESCE(reviewer, 'system'),
+          reviewed_at = COALESCE(reviewed_at, NOW())
+      WHERE status = 'pending'
+        AND approved_market_id IS NULL
+        AND source = 'espn-mlb'
+        AND resolver_config->'series' IS NOT NULL
+        AND end_time > NOW()
+        AND start_time <= NOW() + INTERVAL '12 days'
+        AND NOT (source_event_id = ANY(${mlbSeriesEventIds}::text[]))
+      RETURNING id
+    `;
+    return rows.length;
+  } catch (e) {
+    console.error('[run-generators] stale MLB series cleanup failed', {
+      message: e?.message,
+    });
+    return 0;
+  }
 }
 
 function approvedScheduleSyncCandidate(spec, nowMs = Date.now()) {

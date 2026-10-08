@@ -5,6 +5,7 @@ import {
   applySeriesGateToMarket,
   buildSeriesDetail,
   extractEspnSeriesMeta,
+  isSeriesGameNotNeeded,
   seriesTradeLockFromRows,
   seriesScoreSummary,
   seriesSubtitle,
@@ -61,6 +62,101 @@ test('extractEspnSeriesMeta reads NBA playoff game number and best-of metadata',
   assert.equal(meta.homeTeam.shortName, 'Thunder');
   assert.equal(meta.awayTeam.shortName, 'Lakers');
   assert.match(meta.key, /basketball-nba/);
+});
+
+test('extractEspnSeriesMeta infers MLB Division Series as best-of-five', () => {
+  const meta = extractEspnSeriesMeta({
+    id: '401999105',
+    name: 'Cleveland Guardians at Chicago White Sox - Game 5',
+    shortName: 'CLE @ CHW',
+    date: '2026-10-10T00:00:00Z',
+    season: { year: 2026, type: 3 },
+    competitions: [
+      {
+        notes: [{ headline: 'American League Division Series - Game 5' }],
+        competitors: [
+          {
+            homeAway: 'home',
+            team: {
+              id: '4',
+              displayName: 'Chicago White Sox',
+              shortDisplayName: 'White Sox',
+              abbreviation: 'CHW',
+            },
+          },
+          {
+            homeAway: 'away',
+            team: {
+              id: '5',
+              displayName: 'Cleveland Guardians',
+              shortDisplayName: 'Guardians',
+              abbreviation: 'CLE',
+            },
+          },
+        ],
+        series: {
+          name: 'American League Division Series',
+          competitors: [
+            { team: { id: '4' }, wins: 3 },
+            { team: { id: '5' }, wins: 0 },
+          ],
+        },
+      },
+    ],
+  }, {
+    leaguePath: 'baseball/mlb',
+    league: 'mlb',
+    sport: 'baseball',
+    fallbackBestOf: 7,
+  });
+
+  assert.equal(meta.bestOf, 5);
+  assert.equal(meta.winTarget, 3);
+  assert.equal(meta.guaranteedGames, 3);
+  assert.deepEqual(meta.espnSeriesWins, { homeWins: 3, awayWins: 0 });
+  assert.equal(isSeriesGameNotNeeded(meta), true);
+});
+
+test('extractEspnSeriesMeta infers MLB Championship Series as best-of-seven', () => {
+  const meta = extractEspnSeriesMeta({
+    id: '401999205',
+    name: 'Chicago White Sox at Los Angeles Dodgers - Game 5',
+    shortName: 'CHW @ LAD',
+    date: '2026-10-17T00:00:00Z',
+    season: { year: 2026, type: 3 },
+    competitions: [
+      {
+        notes: [{ headline: 'League Championship Series - Game 5' }],
+        competitors: [
+          {
+            homeAway: 'home',
+            team: { id: '19', displayName: 'Los Angeles Dodgers', shortDisplayName: 'Dodgers', abbreviation: 'LAD' },
+          },
+          {
+            homeAway: 'away',
+            team: { id: '4', displayName: 'Chicago White Sox', shortDisplayName: 'White Sox', abbreviation: 'CHW' },
+          },
+        ],
+        series: {
+          name: 'League Championship Series',
+          competitors: [
+            { team: { id: '19' }, wins: 2 },
+            { team: { id: '4' }, wins: 2 },
+          ],
+        },
+      },
+    ],
+  }, {
+    leaguePath: 'baseball/mlb',
+    league: 'mlb',
+    sport: 'baseball',
+    fallbackBestOf: 7,
+  });
+
+  assert.equal(meta.bestOf, 7);
+  assert.equal(meta.winTarget, 4);
+  assert.equal(meta.guaranteedGames, 4);
+  assert.equal(isSeriesGameNotNeeded(meta), false);
 });
 
 test('seriesSubtitle defaults to Spanish game and score copy', () => {
