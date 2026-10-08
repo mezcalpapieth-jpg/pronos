@@ -212,6 +212,9 @@ const BADGE_THEMES = Object.freeze({
 const SPORTS_LEAGUE_BADGES = Object.freeze([
   { key: 'league:nba', label: 'NBA', eyebrow: 'Basket', theme: 'basketball', aliases: ['nba', 'basketball-nba'] },
   { key: 'league:nfl', label: 'NFL', eyebrow: 'Football', theme: 'football', aliases: ['nfl', 'football-nfl'] },
+  { key: 'league:ncaaf', label: 'NCAAF', eyebrow: 'Bowls', theme: 'football', aliases: ['ncaaf', 'college-football', 'football-college-football'] },
+  { key: 'league:ncaamb', label: 'NCAAM', eyebrow: 'March', theme: 'basketball', aliases: ['ncaamb', 'mens-college-basketball'] },
+  { key: 'league:ncaawb', label: 'NCAAW', eyebrow: 'March', theme: 'basketball', aliases: ['ncaawb', 'womens-college-basketball'] },
   { key: 'league:mlb', label: 'MLB', eyebrow: 'Beisbol', theme: 'baseball', aliases: ['mlb', 'baseball-mlb'] },
   { key: 'league:lmb', label: 'LMB', eyebrow: 'Beisbol MX', theme: 'baseball', aliases: ['lmb', 'liga-mexicana-de-beisbol'] },
   { key: 'league:lmp', label: 'LMP', eyebrow: 'Pacifico', theme: 'baseball', aliases: ['lmp', 'liga-mexicana-del-pacifico'] },
@@ -237,6 +240,8 @@ const SPORTS_LEAGUE_BADGES = Object.freeze([
 
 const SPORT_BADGES = Object.freeze([
   { key: 'sport:soccer', label: 'FUTBOL', eyebrow: 'Partido', theme: 'soccer', aliases: ['soccer', 'football', 'futbol', 'balon de oro', 'ballon dor', 'ballon d or', 'ballon-dor'] },
+  { key: 'sport:ncaaf', label: 'NCAAF', eyebrow: 'Bowl', theme: 'football', aliases: ['ncaaf', 'college football'] },
+  { key: 'sport:ncaab', label: 'NCAAB', eyebrow: 'March', theme: 'basketball', aliases: ['ncaab', 'college basketball', 'march madness'] },
   { key: 'sport:basketball', label: 'BASKET', eyebrow: 'Partido', theme: 'basketball', aliases: ['basketball', 'basquetbol'] },
   { key: 'sport:baseball', label: 'BEISBOL', eyebrow: 'Juego', theme: 'baseball', aliases: ['baseball', 'beisbol', 'mlb'] },
   { key: 'sport:f1', label: 'F1', eyebrow: 'Racing', theme: 'racing', aliases: ['f1', 'formula-1', 'formula-one'] },

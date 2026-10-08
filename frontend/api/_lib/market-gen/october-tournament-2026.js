@@ -21,6 +21,7 @@ const TOURNAMENT_END_ISO = dateAtMexicoCityTime({
   hour: 23,
   minute: 59,
 }).toISOString();
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
 const PRICE_TRADING_CLOSE_ISO = dateAtMexicoCityTime({
   year: 2026,
@@ -120,6 +121,20 @@ const GDP_RESOLVE_ISO = dateAtMexicoCityTime({
   hour: 8,
   minute: 0,
 }).toISOString();
+const INPC_FIRST_HALF_OCTOBER_CLOSE_ISO = dateAtMexicoCityTime({
+  year: 2026,
+  month: 10,
+  day: 22,
+  hour: 5,
+  minute: 59,
+}).toISOString();
+const INPC_FIRST_HALF_OCTOBER_RESOLVE_ISO = dateAtMexicoCityTime({
+  year: 2026,
+  month: 10,
+  day: 23,
+  hour: 12,
+  minute: 0,
+}).toISOString();
 const AMILCAR_INVESTIGATION_DEADLINE_ISO = dateAtMexicoCityTime({
   year: 2026,
   month: 10,
@@ -155,6 +170,7 @@ const EVIDENCE = Object.freeze({
   ballonDorNominees: 'https://www.uefa.com/uefachampionsleague/news/02a9-218b019cbca5-cb4b9be51c4b-1000--2026-ballon-dor-awards-nominees-revealed/',
   fedCalendar: 'https://www.federalreserve.gov/newsevents/2026-october.htm',
   inegiFeeds: 'https://www.inegi.org.mx/servicios/feedsnoticias/feeds.html',
+  inegiPressRoom: 'https://www.inegi.org.mx/app/saladeprensa/',
   ibtracs: IBTRACS_PRODUCT_PAGE,
   sniimTortilla: 'https://www.economia-sniim.gob.mx/Tortilla.asp',
   sniimNationalMarkets: 'https://www.economia-sniim.gob.mx/e_MenNal.asp',
@@ -277,6 +293,12 @@ function pricedSpec(spec, probabilities = null) {
   });
 }
 
+function tradingStartOneDayBefore(closeIso) {
+  const closeMs = new Date(closeIso).getTime();
+  if (!Number.isFinite(closeMs)) return START_ISO;
+  return new Date(closeMs - ONE_DAY_MS).toISOString();
+}
+
 function buildPriceBucketSpec({
   key,
   questionEs,
@@ -294,6 +316,7 @@ function buildPriceBucketSpec({
   resolutionCriteria,
   kind = 'october_tournament_price_bucket',
   extraSourceData = {},
+  startIso = tradingStartOneDayBefore(endTime),
 }) {
   return pricedSpec({
     source: SOURCE,
@@ -303,7 +326,7 @@ function buildPriceBucketSpec({
     icon,
     outcomes: outcomesEs,
     seed_liquidity: 1200,
-    start_time: START_ISO,
+    start_time: startIso,
     end_time: endTime,
     amm_mode: 'unified',
     resolver_type: resolverType,
@@ -348,6 +371,7 @@ function buildManualSpec({
   evidence,
   kind = 'october_tournament_manual',
   extraSourceData = {},
+  startIso = tradingStartOneDayBefore(closeIso),
 }) {
   return pricedSpec({
     source: SOURCE,
@@ -357,7 +381,7 @@ function buildManualSpec({
     icon,
     outcomes: outcomesEs,
     seed_liquidity: 1000,
-    start_time: START_ISO,
+    start_time: startIso,
     end_time: closeIso,
     amm_mode: 'unified',
     resolver_type: 'manual_review',
@@ -446,6 +470,45 @@ function popocatepetlExhalationsMarket(now = new Date()) {
   });
 }
 
+function inpcFirstHalfOctoberMarket() {
+  const outcomesEs = ['Menos de 3.00%', '3.00% a 3.49%', '3.50% a 3.99%', '4.00% o más'];
+  const outcomesEn = ['Below 3.00%', '3.00% to 3.49%', '3.50% to 3.99%', '4.00% or higher'];
+  const criteriaEs = 'Se resuelve con el comunicado quincenal oficial del INPC publicado por INEGI para la primera quincena de octubre de 2026. Gana el rango que contenga la inflación anual reportada para esa quincena. Solo cuenta el dato inicial del comunicado oficial; revisiones posteriores no cuentan. Si el dato cae exactamente en un límite, gana el bucket superior.';
+  const criteriaEn = 'Resolve from INEGI\'s official biweekly INPC release for the first half of October 2026. The winning bucket is the one containing the annual inflation rate reported for that period. Only the initial official release counts; later revisions do not count. If the value lands exactly on a boundary, the upper bucket wins.';
+
+  return buildManualSpec({
+    key: 'inpc-first-half-october-annual-inflation',
+    questionEs: '¿Cuál será la inflación anual de la primera quincena de octubre?',
+    questionEn: 'What will annual inflation be for the first half of October?',
+    category: 'mexico',
+    tags: { categoryTags: ['mexico', 'finanzas'], geoTags: ['mexico'], topicTags: ['finanzas'] },
+    icon: 'INEGI',
+    outcomesEs,
+    outcomesEn,
+    closeIso: INPC_FIRST_HALF_OCTOBER_CLOSE_ISO,
+    resolveIso: INPC_FIRST_HALF_OCTOBER_RESOLVE_ISO,
+    criteriaEs,
+    criteriaEn,
+    evidence: [
+      { title: 'INEGI sala de prensa', url: EVIDENCE.inegiPressRoom },
+      { title: 'INEGI feeds', url: EVIDENCE.inegiFeeds },
+    ],
+    kind: 'october_tournament_inpc_inflation',
+    extraSourceData: {
+      indicator: 'INPC',
+      period: 'primera quincena de octubre de 2026',
+      unit: 'annual_pct',
+      expectedPublicationWindow: '2026-10-22/2026-10-23',
+      buckets: [
+        { label: outcomesEs[0], labelEn: outcomesEn[0], min: null, max: 3.00 },
+        { label: outcomesEs[1], labelEn: outcomesEn[1], min: 3.00, max: 3.50 },
+        { label: outcomesEs[2], labelEn: outcomesEn[2], min: 3.50, max: 4.00 },
+        { label: outcomesEs[3], labelEn: outcomesEn[3], min: 4.00, max: null },
+      ],
+    },
+  });
+}
+
 function buildAutoBinarySpec({
   key,
   questionEs,
@@ -464,6 +527,7 @@ function buildAutoBinarySpec({
   kind,
   extraSourceData = {},
   touchMarket = false,
+  startIso = tradingStartOneDayBefore(closeIso),
 }) {
   return pricedSpec({
     source: SOURCE,
@@ -473,7 +537,7 @@ function buildAutoBinarySpec({
     icon,
     outcomes: outcomesEs,
     seed_liquidity: 1000,
-    start_time: START_ISO,
+    start_time: startIso,
     end_time: closeIso,
     amm_mode: 'unified',
     resolver_type: resolverType,
@@ -898,6 +962,8 @@ function manualMarkets(env = process.env, { now = new Date() } = {}) {
     criteriaEn: 'Only the initial Q3 2026 flash GDP estimate, annual change, counts. Later revisions do not count. If the value lands exactly on a boundary, the upper bucket wins.',
     evidence: [{ title: 'INEGI feeds', url: EVIDENCE.inegiFeeds }],
   }));
+
+  specs.push(inpcFirstHalfOctoberMarket());
 
   specs.push(popocatepetlExhalationsMarket(now));
 
@@ -1353,6 +1419,7 @@ export const _internal = {
   candidateOutcomes,
   hurricaneMarket,
   manualMarkets,
+  inpcFirstHalfOctoberMarket,
   popocatepetlExhalationsMarket,
   weeklyCommodityWindow,
 };

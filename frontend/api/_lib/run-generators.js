@@ -34,6 +34,8 @@ import { generateAicm48hMarkets }       from './market-gen/aicm-48h.js';
 import { generateMlbMarkets }           from './market-gen/mlb.js';
 import { generateNbaMarkets }           from './market-gen/nba.js';
 import { generateNflMarkets }           from './market-gen/nfl.js';
+import { generateNcaafMarkets }         from './market-gen/ncaaf.js';
+import { generateNcaaBasketballMarkets } from './market-gen/ncaa-basketball.js';
 import { generateF1Markets }            from './market-gen/f1.js';
 import { generateFxMarkets }            from './market-gen/fx.js';
 import { generateFuelMarkets }          from './market-gen/fuel.js';
@@ -81,6 +83,8 @@ export const GENERATORS = [
   { name: 'mlb',            run: generateMlbMarkets           },
   { name: 'nba',            run: generateNbaMarkets           },
   { name: 'nfl',            run: generateNflMarkets           },
+  { name: 'ncaaf',          run: generateNcaafMarkets         },
+  { name: 'ncaa-basketball', run: generateNcaaBasketballMarkets },
   { name: 'f1',             run: generateF1Markets            },
   { name: 'charts',         run: generateChartsMarkets        },
   { name: 'youtube',        run: generateYouTubeMarkets       },

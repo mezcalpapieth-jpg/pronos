@@ -49,6 +49,8 @@ const SPORT_TABS = [
   { key: 'baseball', label: 'Béisbol'  },
   { key: 'nba',      label: 'NBA'      },
   { key: 'nfl',      label: 'NFL'      },
+  { key: 'ncaaf',    label: 'NCAAF'    },
+  { key: 'ncaab',    label: 'NCAAB'    },
   // Combate = combat-sports umbrella. Markets land here with
   // sport='combate' and league='ufc' or 'boxing'. Generator:
   // market-gen/ufc.js + market-gen/boxing.js.
