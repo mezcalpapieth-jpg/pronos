@@ -45,6 +45,8 @@ function decodeHtmlEntities(value) {
     .replace(/&quot;/gi, '"')
     .replace(/&#34;/g, '"')
     .replace(/&#39;/gi, "'")
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(parseInt(code, 10)))
     .replace(/&lt;/gi, '<')
     .replace(/&gt;/gi, '>');
 }
@@ -229,6 +231,108 @@ function statusFields(status) {
   };
 }
 
+function articleTitleScore(text, href = '') {
+  const raw = stripAccents(stripHtml(`${text} ${href}`)).toLowerCase();
+  if (!raw.includes('nominad')) return 0;
+  let score = 1;
+  if (/\boficial\b/.test(raw)) score += 5;
+  if (/\blista\b|\bcompleta\b|\bfinal\b/.test(raw)) score += 4;
+  if (/\bquienes?\s+son\b|\btabla\b/.test(raw)) score += 3;
+  if (/\bvotar\b|\bsalvar\b/.test(raw)) score += 1;
+  if (/\ben\s+vivo\b/.test(raw)) score -= 2;
+  return Math.max(0, score);
+}
+
+function candidateNomineeArticleLinks(html, { baseUrl = GRANJA_VIP_DEFAULT_BASE_URL } = {}) {
+  const source = String(html || '');
+  const rows = [];
+  const seen = new Set();
+  const anchorRe = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  let match;
+  while ((match = anchorRe.exec(source))) {
+    const href = cleanUrl(match[1]);
+    const label = stripHtml(match[2]);
+    const score = articleTitleScore(label, href);
+    if (!score) continue;
+    const url = absoluteUrl(href, baseUrl);
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    rows.push({ url, title: label, score });
+  }
+  return rows.sort((a, b) => b.score - a.score).slice(0, 5);
+}
+
+function participantAliases(row) {
+  const name = String(row?.name || '').trim();
+  const aliases = new Set([
+    normalizeGranjaVipName(name),
+    normalizeGranjaVipName(name.replace(/["'][^"']+["']/g, ' ')),
+    normalizeGranjaVipName(name.replace(/\s+["'][^"']+["']\s*/g, ' ')),
+  ].filter(Boolean));
+  const quoted = [...name.matchAll(/["']([^"']+)["']/g)].map(match => normalizeGranjaVipName(match[1]));
+  quoted.forEach(alias => { if (alias) aliases.add(alias); });
+  const manual = {
+    'rafael mercadante': ['rafa mercadante', 'rafa'],
+    'kevin contreras bicolor': ['kevyn bicolor', 'kevin bicolor', 'bicolor'],
+    'daniela alexis bebeshita': ['la bebeshita', 'bebeshita'],
+    'abigail pak la coreanera': ['la coreanera', 'coreanera'],
+    'manelyk gonzalez': ['mane', 'manelyk'],
+    'pimpinela escarlata': ['pimpinela'],
+    'mono osuna': ['mario mono osuna', 'mono'],
+    'azalia la negra': ['azalia ojeda', 'azalia la negra', 'la negra'],
+  };
+  const normalizedName = normalizeGranjaVipName(name);
+  (manual[normalizedName] || []).forEach(alias => aliases.add(normalizeGranjaVipName(alias)));
+  return [...aliases].filter(alias => alias.length >= 4);
+}
+
+function nomineeSentencesFromArticle(html) {
+  const text = stripHtml(html);
+  if (!text) return [];
+  const compactText = text.replace(/\s+/g, ' ').trim();
+  const targeted = [];
+  const targetPatterns = [
+    /\bactualmente\s+los\s+nominados\s+son:?\s+([\s\S]{1,420}?)(?:\bTags relacionados\b|\bGaler[ií]as\b|$)/i,
+    /\btabla\s+(?:final\s+)?(?:de\s+)?nominados[\s\S]{0,160}?\b(?:son|qued[oó]\s+integrada\s+por):?\s+([\s\S]{1,420}?)(?:\bTags relacionados\b|\bGaler[ií]as\b|$)/i,
+    /\blista\s+(?:final\s+|completa\s+)?de\s+nominados[\s\S]{0,180}?\b(?:son|es|qued[oó]\s+integrada\s+por):?\s+([\s\S]{1,420}?)(?:\bTags relacionados\b|\bGaler[ií]as\b|$)/i,
+  ];
+  for (const pattern of targetPatterns) {
+    const match = compactText.match(pattern);
+    if (match?.[1]) targeted.push(match[1]);
+  }
+  if (targeted.length) return targeted;
+
+  const sentences = text
+    .replace(/\s+/g, ' ')
+    .split(/(?<=[.!?])\s+|(?=##\s)/)
+    .map(sentence => sentence.trim())
+    .filter(Boolean);
+  return sentences.filter(sentence => {
+    const normalized = stripAccents(sentence).toLowerCase();
+    return normalized.includes('nominad')
+      && /\b(son|lista|tabla|quedo|quedo|integrada|completa|riesgo|eliminad)/.test(normalized);
+  });
+}
+
+function nominatedRowsFromArticle(html, rows) {
+  const snippets = nomineeSentencesFromArticle(html);
+  if (!snippets.length) return [];
+  const nominees = [];
+  const seen = new Set();
+  for (const snippet of snippets) {
+    const normalizedSnippet = normalizeGranjaVipName(snippet);
+    for (const row of rows) {
+      const aliases = participantAliases(row);
+      if (!aliases.some(alias => normalizedSnippet.includes(alias))) continue;
+      const key = row.slug || slugifyGranjaVipName(row.name);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      nominees.push(row);
+    }
+  }
+  return nominees;
+}
+
 function statusPriority(key) {
   if (key === 'eliminado') return 5;
   if (key === 'nominado') return 4;
@@ -311,17 +415,40 @@ export async function readGranjaVipOfficialSnapshot({
 } = {}) {
   const sourceUrl = getBaseUrl(baseUrl);
   let discovered = [];
+  let officialHtml = '';
+  let nomineeEvidence = [];
   let fetchError = null;
   try {
     const response = await fetchFreshText(sourceUrl, { fetchImpl, cacheBust: true });
     if (!response.ok) throw new Error(`http_${response.status}`);
-    discovered = extractParticipantsFromOfficialHtml(response.text, { baseUrl: sourceUrl });
+    officialHtml = response.text;
+    discovered = extractParticipantsFromOfficialHtml(officialHtml, { baseUrl: sourceUrl });
   } catch (e) {
     fetchError = e?.message || 'fetch_failed';
   }
 
   const fallback = loadGranjaVipParticipants();
-  const rows = uniqueParticipants(discovered.length >= 6 ? discovered : fallback);
+  let rows = uniqueParticipants(discovered.length >= 6 ? discovered : fallback);
+  if (rows.filter(row => row.statusKey === 'nominado').length < 2 && officialHtml) {
+    for (const article of candidateNomineeArticleLinks(officialHtml, { baseUrl: sourceUrl })) {
+      try {
+        const articleResponse = await fetchFreshText(article.url, { fetchImpl, cacheBust: true });
+        if (!articleResponse.ok) continue;
+        const articleNominees = nominatedRowsFromArticle(articleResponse.text, rows);
+        if (articleNominees.length < 2) continue;
+        const nominatedKeys = new Set(articleNominees.map(row => row.slug || slugifyGranjaVipName(row.name)));
+        rows = rows.map(row => {
+          const key = row.slug || slugifyGranjaVipName(row.name);
+          if (!nominatedKeys.has(key)) return row;
+          return mergeStatus(row, { key: 'nominado', label: 'Nominado/a', raw: 'NOMINADO' });
+        });
+        nomineeEvidence.push({ title: article.title || 'Lista de nominados', url: article.url });
+        break;
+      } catch {
+        // Keep the generator quiet rather than trusting partial article reads.
+      }
+    }
+  }
   const nominated = rows.filter(row => row.statusKey === 'nominado');
   const eliminated = rows.filter(row => row.statusKey === 'eliminado');
   const peones = rows.filter(row => row.statusKey === 'peon');
@@ -340,6 +467,7 @@ export async function readGranjaVipOfficialSnapshot({
     nominated,
     eliminated,
     peones,
+    nomineeEvidence,
     error: rows.length >= 6 ? fetchError : (fetchError || 'granja_vip_roster_parse_failed'),
   };
 }
@@ -426,6 +554,7 @@ export function buildGranjaVipWeeklyMarketSpec({
   const outcomes = snapshot.nominated.map(row => row.name).filter(Boolean);
   const evidence = [
     { title: 'La Granja VIP · TV Azteca', url: snapshot.sourceUrl },
+    ...(Array.isArray(snapshot.nomineeEvidence) ? snapshot.nomineeEvidence : []),
     ...snapshot.nominated.map(row => ({
       title: `${row.name} · ${row.statusLabel || 'Nominado/a'}`,
       url: row.url || snapshot.sourceUrl,
@@ -482,8 +611,10 @@ export function buildGranjaVipWeeklyMarketSpec({
 
 export const _internal = {
   DEFAULT_PARTICIPANTS,
+  candidateNomineeArticleLinks,
   compactRows,
   getBaseUrl,
+  nominatedRowsFromArticle,
   statusPriority,
   stripHtml,
 };

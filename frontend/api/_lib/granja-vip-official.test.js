@@ -61,6 +61,84 @@ test('readGranjaVipOfficialSnapshot marks nominees from scoped official links', 
   assert.equal(snapshot.eliminated.length, 0);
 });
 
+test('readGranjaVipOfficialSnapshot follows official nominee article links', async () => {
+  const fetchImpl = async (url) => ({
+    ok: true,
+    status: 200,
+    text: async () => String(url).includes('/nominados-finales/')
+      ? `
+        <article>
+          <h1>OFICIAL: LISTA completa de NOMINADOS en la quinta semana</h1>
+          <p>Aunque la Tabla final cambiará luego del viernes de Traición,
+          actualmente los nominados son: Pimpinela Escarlata Ivonne Montero
+          Julio Camejo Pascal Nadaud Natalia Alcocer</p>
+          <p>Tags relacionados</p>
+        </article>
+      `
+      : `
+        ${OFFICIAL_SECTION_HTML.replace('<h3>Conductores', '<a href="/aztecauno/la-granja-vip/natalia-alcocer">Natalia Alcocer</a><a href="/aztecauno/la-granja-vip/julio-camejo">Julio Camejo</a><h3>Conductores')}
+        <a href="/aztecauno/la-granja-vip/nominados-finales/">
+          OFICIAL: LISTA completa de NOMINADOS en la quinta semana de La Granja VIP
+        </a>
+      `,
+  });
+
+  const snapshot = await readGranjaVipOfficialSnapshot({
+    fetchImpl,
+    baseUrl: 'https://www.tvazteca.com/aztecauno/la-granja-vip/',
+    now: new Date('2026-10-08T18:00:00Z'),
+  });
+
+  assert.deepEqual(snapshot.nominated.map(row => row.name), [
+    'Ivonne Montero',
+    'Pascal Nadaud',
+    'Pimpinela Escarlata',
+    'Natalia Alcocer',
+    'Julio Camejo',
+  ]);
+  assert.equal(snapshot.nomineeEvidence[0].url, 'https://www.tvazteca.com/aztecauno/la-granja-vip/nominados-finales/');
+});
+
+test('readGranjaVipOfficialSnapshot extracts final list after earlier nomination changes', async () => {
+  const fetchImpl = async (url) => ({
+    ok: true,
+    status: 200,
+    text: async () => String(url).includes('/tabla-nominados/')
+      ? `
+        <article>
+          <h1>El huevo dorado cambió la Tabla de Nominados</h1>
+          <p>Mónica Escobedo recibió votos, pero Mono Osuna la sacó de la tabla.</p>
+          <p>Natalia Alcocer puso a Pascal Nadaud automáticamente.</p>
+          <p>Así quedó la Tabla de Nominados este miércoles. Actualmente los nominados son:
+          Pimpinela Escarlata Ivonne Montero Julio Camejo Pascal Nadaud Natalia Alcocer</p>
+          <p>Tags relacionados Mónica Escobedo Mono Osuna</p>
+        </article>
+      `
+      : `
+        ${OFFICIAL_SECTION_HTML.replace('<h3>Conductores', '<a href="/aztecauno/la-granja-vip/natalia-alcocer">Natalia Alcocer</a><a href="/aztecauno/la-granja-vip/julio-camejo">Julio Camejo</a><h3>Conductores')}
+        <a href="/aztecauno/la-granja-vip/tabla-nominados/">
+          El huevo dorado benefició a dos Granjeros y cambió la Tabla de Nominados
+        </a>
+      `,
+  });
+
+  const snapshot = await readGranjaVipOfficialSnapshot({
+    fetchImpl,
+    baseUrl: 'https://www.tvazteca.com/aztecauno/la-granja-vip/',
+    now: new Date('2026-10-08T18:00:00Z'),
+  });
+
+  assert.deepEqual(snapshot.nominated.map(row => row.name), [
+    'Ivonne Montero',
+    'Pascal Nadaud',
+    'Pimpinela Escarlata',
+    'Natalia Alcocer',
+    'Julio Camejo',
+  ]);
+  assert.ok(!snapshot.nominated.some(row => row.name === 'Mónica Escobedo'));
+  assert.ok(!snapshot.nominated.some(row => row.name === 'Mono Osuna'));
+});
+
 test('nextGranjaVipSundayClose defaults to before the Sunday elimination gala', () => {
   const close = nextGranjaVipSundayClose(new Date('2026-09-09T18:00:00Z'));
   assert.equal(close.toISOString(), '2026-09-14T01:55:00.000Z');
