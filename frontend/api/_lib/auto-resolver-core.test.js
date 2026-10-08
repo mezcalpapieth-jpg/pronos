@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { MANANERA_TRANSCRIPT_SOURCE } from './mananera.js';
+import { INEGI_INPC_SOURCE } from './inegi-inpc.js';
 import { buildAutoResolverFinalScore, resolveAutoResolverCandidate } from './auto-resolver-core.js';
 
 function jsonResponse(body) {
@@ -275,6 +276,53 @@ test('auto resolver core settles SNIIM food price bucket markets', async (t) => 
   assert.equal(decision.resolverConfigPatch.closePrice, 55.5);
   assert.equal(decision.resolverConfigPatch.resolvedBucketIndex, 3);
   assert.equal(decision.finalScore, 'sniim-food-price · 55.5');
+});
+
+test('auto resolver core settles INEGI INPC annual inflation bucket markets', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  globalThis.fetch = async (url) => {
+    assert.match(String(url), /INDICATOR\/910438\/es\/00\/false\/BISE\/2\.0\/null/);
+    return jsonResponse({
+      Series: [{
+        OBSERVATIONS: [
+          { TIME_PERIOD: '2026/10/01', OBS_VALUE: '3.63' },
+        ],
+      }],
+    });
+  };
+
+  const decision = await resolveAutoResolverCandidate({
+    resolver_type: 'api_price',
+    resolver_config: {
+      source: INEGI_INPC_SOURCE,
+      shape: 'price-bucket',
+      indicatorId: '910438',
+      symbol: 'INPC 1Q Oct 2026',
+      targetPeriod: '2026-10-1Q',
+      resolveAt: '2026-01-01T00:00:00.000Z',
+      buckets: [
+        { label: 'Menos de 3.00%', max: 3 },
+        { label: '3.00% a 3.49%', min: 3, max: 3.5 },
+        { label: '3.50% a 3.99%', min: 3.5, max: 4 },
+        { label: '4.00% o mas', min: 4 },
+      ],
+    },
+    outcomes: ['Menos de 3.00%', '3.00% a 3.49%', '3.50% a 3.99%', '4.00% o mas'],
+  });
+
+  assert.equal(decision.winningIdx, 2);
+  assert.equal(decision.resolverInfo.priceAtResolve, 3.63);
+  assert.equal(decision.resolverInfo.source, INEGI_INPC_SOURCE);
+  assert.equal(decision.resolverInfo.indicatorId, '910438');
+  assert.equal(decision.resolverInfo.period, '2026-10-1Q');
+  assert.equal(decision.resolverInfo.bucketLabel, '3.50% a 3.99%');
+  assert.equal(decision.resolverConfigPatch.closePrice, 3.63);
+  assert.equal(decision.resolverConfigPatch.resolvedBucketIndex, 2);
+  assert.equal(decision.finalScore, 'INPC 1Q Oct 2026 · 3.63');
 });
 
 test('auto resolver core settles Frankfurter FX pairs by target date', async (t) => {

@@ -141,15 +141,22 @@ test('October tournament generator emits bilingual auto and review specs when co
   assert.deepEqual(fed.source_data.translations.en.outcomes, ['Cut', 'Hold', 'Hike']);
 
   const inpc = byEventId['october-2026:inpc-first-half-october-annual-inflation'];
-  assert.equal(inpc.resolver_type, 'manual_review');
+  assert.equal(inpc.resolver_type, 'api_price');
   assert.equal(inpc.category, 'mexico');
   assert.equal(inpc.start_time, '2026-10-21T11:59:00.000Z');
   assert.equal(inpc.end_time, '2026-10-22T11:59:00.000Z');
+  assert.equal(inpc.resolver_config.source, 'inegi-inpc');
+  assert.equal(inpc.resolver_config.indicatorId, '910438');
+  assert.equal(inpc.resolver_config.targetPeriod, '2026-10-1Q');
+  assert.equal(inpc.resolver_config.resolveAt, '2026-10-23T18:00:00.000Z');
+  assert.equal(inpc.resolver_config.shape, 'price-bucket');
   assert.deepEqual(inpc.outcomes, ['Menos de 3.00%', '3.00% a 3.49%', '3.50% a 3.99%', '4.00% o más']);
   assert.deepEqual(inpc.source_data.suggestedPricing.probabilityPct, [25, 25, 25, 25]);
   assert.deepEqual(inpc.seed_liquidities, [1000, 1000, 1000, 1000]);
   assert.match(inpc.resolver_config.criteria, /primera quincena de octubre de 2026/);
   assert.match(inpc.resolver_config.criteria, /INEGI/);
+  assert.equal(inpc.source_data.indicatorId, '910438');
+  assert.equal(inpc.source_data.targetPeriod, '2026-10-1Q');
   assert.equal(inpc.source_data.buckets[1].min, 3);
   assert.equal(inpc.source_data.buckets[1].max, 3.5);
 

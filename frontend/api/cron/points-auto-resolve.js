@@ -46,6 +46,7 @@ import { banxicoFechaToYmd, banxicoFixTargetDateYmd, readBanxicoLatest } from '.
 import { FRANKFURTER_SOURCE, frankfurterTargetDateYmd, readFrankfurterRate } from '../_lib/frankfurter.js';
 import { readCreAverageFor } from '../_lib/fuel.js';
 import { readSniimFoodPrice, SNIIM_FOOD_PRICE_SOURCE } from '../_lib/sniim-food-prices.js';
+import { readInegiInpcAnnualInflation, INEGI_INPC_SOURCE } from '../_lib/inegi-inpc.js';
 import { deferUntilResolveAt, priceBucketIndexFor } from '../_lib/price-buckets.js';
 import {
   COINGECKO_TOKEN_MCAP_SOURCE,
@@ -2084,6 +2085,15 @@ export async function runAutoResolve({ dry = false } = {}) {
               targetYear: r.targetYear,
               targetMonth: r.targetMonth,
               week: r.week,
+              sourceUrl: r.sourceUrl,
+            };
+          } else if (cfg.source === INEGI_INPC_SOURCE) {
+            const r = await readInegiInpcAnnualInflation(cfg);
+            price = r.value;
+            readerInfo = {
+              indicatorId: r.indicatorId,
+              period: r.period,
+              periodRaw: r.periodRaw,
               sourceUrl: r.sourceUrl,
             };
           } else if (cfg.source === COINGECKO_TOKEN_MCAP_SOURCE) {
