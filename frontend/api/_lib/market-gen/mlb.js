@@ -17,7 +17,7 @@
  * by re-reading the scoreboard after the game and picking the winner.
  */
 
-import { extractEspnSeriesMeta } from '../series-markets.js';
+import { extractEspnSeriesMeta, isSeriesGameNotNeeded } from '../series-markets.js';
 import { fetchEspnScoreboardData, formatEspnDateCompact, formatEspnVenue } from './espn-scoreboard.js';
 
 const BASE = 'https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard';
@@ -79,6 +79,7 @@ export async function generateMlbMarkets() {
       sport: 'baseball',
       fallbackBestOf: 7,
     });
+    if (isSeriesGameNotNeeded(seriesMeta)) continue;
 
     // Drop regular-season games that don't feature at least one
     // marquee franchise. Postseason series are sparse and contextual,

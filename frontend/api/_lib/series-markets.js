@@ -61,9 +61,26 @@ function extractBestOfFromText(text) {
     const match = raw.match(pattern);
     if (match) {
       const n = Number(match[1]);
-      if (n === 5 || n === 7) return n;
+      if (n === 3 || n === 5 || n === 7) return n;
     }
   }
+  return null;
+}
+
+function normalizeBestOf(value, fallback = 7) {
+  const n = Number(value);
+  if (n === 3 || n === 5 || n === 7) return n;
+  const fb = Number(fallback);
+  return fb === 3 || fb === 5 || fb === 7 ? fb : 7;
+}
+
+function inferBestOfFromRoundText(text) {
+  const raw = compact(text).toLowerCase();
+  if (!raw) return null;
+  if (/\bwild\s*card\b/.test(raw) || /\bcomod[ií]n\b/.test(raw)) return 3;
+  if (/\bdivision(?:al)?\b/.test(raw)) return 5;
+  if (/\bchampionship\b/.test(raw) || /\bworld\s+series\b/.test(raw)) return 7;
+  if (/\bsemifinals?\b/.test(raw) || /\bfinals?\b/.test(raw)) return 7;
   return null;
 }
 
@@ -80,7 +97,7 @@ function bestOfFromSeriesObject(series) {
   ];
   for (const candidate of candidates) {
     const n = Number(candidate);
-    if (n === 5 || n === 7) return n;
+    if (n === 3 || n === 5 || n === 7) return n;
   }
   return null;
 }
@@ -179,7 +196,16 @@ export function extractEspnSeriesMeta(ev, {
 
   const seasonYear = ev?.season?.year || new Date(ev.date || Date.now()).getUTCFullYear();
   const round = compact(series?.round || series?.name || (ev?.season?.type === 3 ? series?.name : '')) || null;
-  const bestOf = bestOfFromSeriesObject(series) || extractBestOfFromText(pool) || fallbackBestOf || 7;
+  const roundText = textPool(round, pool);
+  const bestOf = normalizeBestOf(
+    bestOfFromSeriesObject(series)
+      || extractBestOfFromText(pool)
+      || inferBestOfFromRoundText(roundText)
+      || fallbackBestOf
+      || 7,
+    fallbackBestOf || 7,
+  );
+  const winTarget = Math.floor(bestOf / 2) + 1;
   const homeTeam = {
     id: home.team.id || null,
     name: home.team.displayName || home.team.name || null,
@@ -202,8 +228,8 @@ export function extractEspnSeriesMeta(ev, {
     sport: sport || null,
     gameNumber,
     bestOf,
-    winTarget: Math.floor(bestOf / 2) + 1,
-    guaranteedGames: bestOf === 5 ? 3 : 4,
+    winTarget,
+    guaranteedGames: winTarget,
     round,
     seasonYear,
     homeTeam,
@@ -238,7 +264,8 @@ export function normalizeSeriesMeta({ resolverConfig, sourceData, row } = {}) {
   const round = series?.round || sd?.round || null;
   const key = series?.key || buildSeriesKey({ leaguePath, seasonYear, round, homeTeam: home, awayTeam: away });
   const gameNumber = Number(series?.gameNumber);
-  const bestOf = Number(series?.bestOf || 7);
+  const bestOf = normalizeBestOf(series?.bestOf, 7);
+  const winTarget = Math.floor(bestOf / 2) + 1;
   if (!key) return null;
 
   return {
@@ -247,9 +274,9 @@ export function normalizeSeriesMeta({ resolverConfig, sourceData, row } = {}) {
     league: series?.league || row?.league || null,
     sport: series?.sport || row?.sport || null,
     gameNumber: Number.isInteger(gameNumber) && gameNumber > 0 ? gameNumber : null,
-    bestOf: bestOf === 5 || bestOf === 7 ? bestOf : 7,
-    winTarget: Math.floor((bestOf === 5 || bestOf === 7 ? bestOf : 7) / 2) + 1,
-    guaranteedGames: (bestOf === 5 ? 3 : 4),
+    bestOf,
+    winTarget,
+    guaranteedGames: winTarget,
     round,
     seasonYear,
     homeTeam: home,
@@ -286,9 +313,9 @@ export function seriesSubtitle({ gameNumber, summary, locale = 'es' } = {}) {
 
 export function seriesGameGate({ bestOf, gameNumber, teamAWins = 0, teamBWins = 0, status } = {}) {
   const game = validGameNumber(gameNumber);
-  const size = bestOf === 5 || bestOf === 7 ? bestOf : 7;
-  const guaranteedGames = size === 5 ? 3 : 4;
+  const size = normalizeBestOf(bestOf, 7);
   const winTarget = Math.floor(size / 2) + 1;
+  const guaranteedGames = winTarget;
   const a = Math.max(0, Number(teamAWins) || 0);
   const b = Math.max(0, Number(teamBWins) || 0);
   const totalWins = a + b;
@@ -323,7 +350,7 @@ export function applySeriesGateToMarket(market, seriesMeta = market?.seriesMeta)
   const gameNumber = validGameNumber(seriesMeta?.gameNumber || market.gameNumber);
   const wins = plausibleSeriesWinsForGame(seriesMeta?.espnSeriesWins, gameNumber);
   if (!gameNumber) return market;
-  if (gameNumber <= (seriesMeta?.guaranteedGames || (seriesMeta?.bestOf === 5 ? 3 : 4))) return market;
+  if (gameNumber <= (seriesMeta?.guaranteedGames || Math.floor(normalizeBestOf(seriesMeta?.bestOf, 7) / 2) + 1)) return market;
   const resolvedWins = wins || { homeWins: 0, awayWins: 0 };
 
   const gate = seriesGameGate({
@@ -342,6 +369,25 @@ export function applySeriesGateToMarket(market, seriesMeta = market?.seriesMeta)
     seriesLocked: true,
     seriesLockReason: gate.reason,
   };
+}
+
+export function seriesGateFromMeta(seriesMeta, status = 'active') {
+  const gameNumber = validGameNumber(seriesMeta?.gameNumber);
+  if (!gameNumber) return null;
+  const wins = plausibleSeriesWinsForGame(seriesMeta?.espnSeriesWins, gameNumber);
+  if (!wins) return null;
+  return seriesGameGate({
+    bestOf: seriesMeta?.bestOf,
+    gameNumber,
+    teamAWins: wins.homeWins,
+    teamBWins: wins.awayWins,
+    status,
+  });
+}
+
+export function isSeriesGameNotNeeded(seriesMeta) {
+  const gate = seriesGateFromMeta(seriesMeta, 'active');
+  return gate?.seriesLocked === true && gate.status === 'not_needed';
 }
 
 export function applySeriesDetailGateToMarket(market, seriesMeta = market?.seriesMeta) {
@@ -570,9 +616,9 @@ export function buildSeriesDetail(meta, markets = []) {
     teamBWins = officialWins.teamBWins;
   }
 
-  const bestOf = meta.bestOf === 5 || meta.bestOf === 7 ? meta.bestOf : 7;
+  const bestOf = normalizeBestOf(meta.bestOf, 7);
   const winTarget = Math.floor(bestOf / 2) + 1;
-  const guaranteedGames = bestOf === 5 ? 3 : 4;
+  const guaranteedGames = winTarget;
   const maxActualGame = Math.max(0, ...normalizedMarkets.map((market) => Number(market.gameNumber) || 0));
   const completedGames = Math.min(bestOf, Math.max(
     teamAWins + teamBWins,
@@ -661,5 +707,7 @@ export function buildSeriesDetail(meta, markets = []) {
 export const _internal = {
   extractGameNumberFromText,
   extractBestOfFromText,
+  inferBestOfFromRoundText,
+  normalizeBestOf,
   normalizeKeyPart,
 };

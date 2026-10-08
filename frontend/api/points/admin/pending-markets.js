@@ -291,6 +291,51 @@ async function list(req, res) {
         )
     `;
     await schemaSql`
+      WITH parsed AS (
+        SELECT
+          id,
+          CASE
+            WHEN LOWER(COALESCE(resolver_config #>> '{series,round}', source_data #>> '{series,round}', '')) ~ 'wild[[:space:]-]*card|comod' THEN 3
+            WHEN LOWER(COALESCE(resolver_config #>> '{series,round}', source_data #>> '{series,round}', '')) ~ 'division' THEN 5
+            WHEN LOWER(COALESCE(resolver_config #>> '{series,round}', source_data #>> '{series,round}', '')) ~ 'championship|world[[:space:]-]*series|semifinals?|finals?' THEN 7
+            WHEN COALESCE(resolver_config #>> '{series,bestOf}', source_data #>> '{series,bestOf}', '') ~ '^[0-9]+$'
+             AND (COALESCE(resolver_config #>> '{series,bestOf}', source_data #>> '{series,bestOf}', '')::int IN (3, 5, 7))
+            THEN COALESCE(resolver_config #>> '{series,bestOf}', source_data #>> '{series,bestOf}', '')::int
+            ELSE 7
+          END AS best_of,
+          CASE
+            WHEN COALESCE(resolver_config #>> '{series,gameNumber}', source_data #>> '{series,gameNumber}', '') ~ '^[0-9]+$'
+            THEN COALESCE(resolver_config #>> '{series,gameNumber}', source_data #>> '{series,gameNumber}', '')::int
+            ELSE NULL
+          END AS game_number,
+          CASE
+            WHEN COALESCE(resolver_config #>> '{series,espnSeriesWins,homeWins}', source_data #>> '{series,espnSeriesWins,homeWins}', '') ~ '^[0-9]+$'
+            THEN COALESCE(resolver_config #>> '{series,espnSeriesWins,homeWins}', source_data #>> '{series,espnSeriesWins,homeWins}', '')::int
+            ELSE 0
+          END AS home_wins,
+          CASE
+            WHEN COALESCE(resolver_config #>> '{series,espnSeriesWins,awayWins}', source_data #>> '{series,espnSeriesWins,awayWins}', '') ~ '^[0-9]+$'
+            THEN COALESCE(resolver_config #>> '{series,espnSeriesWins,awayWins}', source_data #>> '{series,espnSeriesWins,awayWins}', '')::int
+            ELSE 0
+          END AS away_wins
+        FROM points_pending_markets
+        WHERE status = 'pending'
+          AND approved_market_id IS NULL
+          AND source IN ('espn-mlb', 'espn-nba')
+          AND resolver_config->'series' IS NOT NULL
+      )
+      UPDATE points_pending_markets p
+      SET status = 'rejected',
+          admin_note = COALESCE(NULLIF(p.admin_note, ''), 'series-not-needed: clinched before this game'),
+          reviewer = COALESCE(p.reviewer, 'system'),
+          reviewed_at = COALESCE(p.reviewed_at, NOW())
+      FROM parsed
+      WHERE p.id = parsed.id
+        AND parsed.game_number > ((parsed.best_of + 1) / 2)
+        AND GREATEST(parsed.home_wins, parsed.away_wins) >= ((parsed.best_of + 1) / 2)
+        AND (parsed.home_wins + parsed.away_wins) <= parsed.game_number - 1
+    `;
+    await schemaSql`
       UPDATE points_pending_markets
       SET status = 'rejected',
           admin_note = COALESCE(NULLIF(admin_note, ''), 'auto-rejected: NBA tipoff still TBD'),
