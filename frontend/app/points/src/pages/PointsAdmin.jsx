@@ -59,6 +59,7 @@ import {
   adminBulkHideMarkets,
   adminAppendParallelOutcomes,
   adminConvertParallelToBinary,
+  adminResolveParallelLegNo,
   adminListRisk,
   adminUpdateRiskReview,
   adminListApiUsage,
@@ -3482,6 +3483,97 @@ function MarketAdminMeta({ market }) {
   );
 }
 
+function ParallelLegEarlyNoControls({ market, workingLegId, onResolveNo }) {
+  if (market?.status !== 'active' || market?.ammMode !== 'parallel' || !Array.isArray(market.parallelLegs)) {
+    return null;
+  }
+  const legs = market.parallelLegs;
+  if (legs.length === 0) return null;
+
+  return (
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 6,
+      marginTop: 10,
+      maxWidth: 620,
+    }}>
+      <div style={{
+        fontFamily: 'var(--font-mono)',
+        fontSize: 9,
+        letterSpacing: '0.08em',
+        textTransform: 'uppercase',
+        color: 'var(--text-muted)',
+      }}>
+        Resolver child temprano a No
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {legs.map((leg, index) => {
+          const reserves = Array.isArray(leg.reserves) ? leg.reserves.map(Number) : [];
+          const yesPct = parallelYesProbabilityFromReserves(reserves[0], reserves[1]) * 100;
+          const isActive = leg.status === 'active';
+          const resolvedNo = leg.status === 'resolved' && Number(leg.outcome) === 1;
+          const resolvedYes = leg.status === 'resolved' && Number(leg.outcome) === 0;
+          return (
+            <div
+              key={leg.id || index}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 7,
+                padding: '5px 6px 5px 8px',
+                borderRadius: 8,
+                border: `1px solid ${resolvedNo ? 'rgba(239,68,68,0.32)' : 'var(--border)'}`,
+                background: resolvedNo ? 'rgba(239,68,68,0.08)' : 'rgba(255,255,255,0.03)',
+                color: 'var(--text-secondary)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+              }}
+            >
+              <span style={{ maxWidth: 170, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {leg.label || `Opción ${index + 1}`}
+              </span>
+              <span style={{ color: 'var(--text-muted)' }}>
+                {Number.isFinite(yesPct) ? `${yesPct.toFixed(0)}%` : '--'}
+              </span>
+              {isActive ? (
+                <button
+                  type="button"
+                  onClick={() => onResolveNo(market, leg)}
+                  disabled={workingLegId === leg.id}
+                  title="Resolver solo este child market como No; el parent sigue activo"
+                  style={{
+                    padding: '4px 7px',
+                    borderRadius: 7,
+                    border: '1px solid rgba(239,68,68,0.36)',
+                    background: 'rgba(239,68,68,0.10)',
+                    color: '#f87171',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 9,
+                    cursor: workingLegId === leg.id ? 'not-allowed' : 'pointer',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.04em',
+                    opacity: workingLegId === leg.id ? 0.55 : 1,
+                  }}
+                >
+                  {workingLegId === leg.id ? '...' : 'No'}
+                </button>
+              ) : (
+                <span style={{
+                  color: resolvedNo ? '#f87171' : (resolvedYes ? 'var(--green)' : 'var(--text-muted)'),
+                  textTransform: 'uppercase',
+                }}>
+                  {resolvedNo ? 'No' : resolvedYes ? 'Sí' : leg.status}
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── Markets table ───────────────────────────────────────────────────────────
 function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
   const [markets, setMarkets] = useState(null);
@@ -3506,6 +3598,7 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
   const [editing, setEditing] = useState(null);
   const [appending, setAppending] = useState(null);
   const [converting, setConverting] = useState(null);
+  const [resolvingLegNo, setResolvingLegNo] = useState(null);
 
   const showSportFilters = categoryFilter === 'deportes';
   const showCryptoFilters = categoryFilter === 'crypto';
@@ -3808,6 +3901,60 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
       alert(`No se pudo convertir: ${convertParallelToBinaryErrorDetail(e)}`);
     } finally {
       setConverting(null);
+    }
+  }
+
+  async function resolveParallelLegNo(market, leg) {
+    if (!market?.id || !leg?.id) return;
+    const label = leg.label || `Opción ${Number(leg.outcomeIndex || 0) + 1}`;
+    const ok = window.confirm(
+      `¿Resolver "${label}" como NO en "${market.question}"?\n\n`
+      + 'Solo se cierra este child market. El mercado principal y las demás opciones siguen activos.',
+    );
+    if (!ok) return;
+    const reason = window.prompt(
+      'Motivo / evidencia corta',
+      `${label} ya no puede ganar`,
+    );
+    if (reason === null) return;
+    const finalScore = window.prompt(
+      'Resultado mostrado en este child market (opcional)',
+      reason,
+    );
+    if (finalScore === null) return;
+
+    setResolvingLegNo(leg.id);
+    try {
+      const result = await adminResolveParallelLegNo({
+        legMarketId: leg.id,
+        parentMarketId: market.id,
+        reason,
+        finalScore,
+      });
+      const resolvedAt = result?.leg?.resolved_at || new Date().toISOString();
+      setMarkets(prev => (prev || []).map((m) => {
+        if (m.id !== market.id) return m;
+        return {
+          ...m,
+          parallelLegs: Array.isArray(m.parallelLegs)
+            ? m.parallelLegs.map(child => Number(child.id) === Number(leg.id)
+              ? {
+                  ...child,
+                  status: 'resolved',
+                  outcome: 1,
+                  resolvedAt,
+                  finalScore: result?.leg?.final_score || finalScore || child.finalScore,
+                }
+              : child)
+            : m.parallelLegs,
+        };
+      }));
+      onQueueChange?.();
+      alert('Child resuelto como NO. El parent sigue activo.');
+    } catch (e) {
+      alert(`No se pudo resolver el child: ${e.code || e.message}${e.detail ? '\n' + e.detail : ''}`);
+    } finally {
+      setResolvingLegNo(null);
     }
   }
 
@@ -4314,6 +4461,11 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
             <div className="points-admin-market-title">
               {m.question}
             </div>
+            <ParallelLegEarlyNoControls
+              market={m}
+              workingLegId={resolvingLegNo}
+              onResolveNo={resolveParallelLegNo}
+            />
             {m.resolutionCandidate && (
               <ResolutionCandidatePanel
                 market={m}

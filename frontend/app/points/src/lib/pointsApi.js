@@ -1008,6 +1008,20 @@ export async function adminConvertParallelToBinary({ marketId } = {}) {
   return postJson('/api/points/admin/convert-parallel-binary', { marketId });
 }
 
+export async function adminResolveParallelLegNo({
+  legMarketId,
+  parentMarketId,
+  reason,
+  finalScore,
+} = {}) {
+  return postJson('/api/points/admin/resolve-parallel-leg-no', {
+    legMarketId,
+    parentMarketId,
+    reason,
+    finalScore,
+  });
+}
+
 export async function adminCancelMarket({ marketId, reason } = {}) {
   return postJson('/api/points/admin/cancel-market', {
     marketId,
