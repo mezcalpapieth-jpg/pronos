@@ -383,7 +383,9 @@ export default async function handler(req, res) {
           const endMs   = r.end_time   ? new Date(r.end_time).getTime()   : 0;
           const windowOk = startMs > 0 && endMs > startMs
             && (endMs - startMs) <= 14 * 86_400_000;
-          const live = !!(!isOpenEnded
+          const sportsLiveEligible = Boolean(String(r.sport || '').trim());
+          const live = !!(sportsLiveEligible
+            && !isOpenEnded
             && windowOk
             && startMs <= Date.now()
             && endMs > Date.now()

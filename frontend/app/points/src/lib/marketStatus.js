@@ -1,4 +1,4 @@
-export const CLOSING_SOON_MS = 12 * 60 * 60 * 1000;
+export const CLOSING_SOON_MS = 8 * 60 * 60 * 1000;
 
 function normalize(value) {
   return String(value || '').trim().toLowerCase();
@@ -17,9 +17,13 @@ export function isSportsMarket(market = {}) {
     || normalizedTags(market?.topicTags).includes('deportes');
 }
 
+export function isLiveSportsMarket(market = {}) {
+  return Boolean(normalize(market?.sport));
+}
+
 export function isClosingSoonNonSportsMarket(market = {}, now = Date.now()) {
   if (!market || market.status !== 'active') return false;
-  if (isSportsMarket(market)) return false;
+  if (isLiveSportsMarket(market)) return false;
   const end = market.endTime ? new Date(market.endTime).getTime() : NaN;
   const nowMs = now instanceof Date ? now.getTime() : Number(now);
   if (!Number.isFinite(end) || !Number.isFinite(nowMs)) return false;

@@ -88,7 +88,9 @@ export function buildProtocolMarketPayload(row = {}) {
   const windowOk = startMs > 0 && endMs > startMs
     && (endMs - startMs) <= 14 * 86_400_000;
   const featured = row.featured === true || row.featured === 'true';
-  const live = !!(!isOpenEnded
+  const sportsLiveEligible = Boolean(String(sport || '').trim());
+  const live = !!(sportsLiveEligible
+    && !isOpenEnded
     && windowOk
     && startMs <= Date.now()
     && endMs > Date.now()

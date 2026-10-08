@@ -101,12 +101,13 @@ test('October tournament generator emits bilingual auto and review specs when co
     now: new Date('2026-10-01T15:30:00.000Z'),
   });
 
-  assert.equal(specs.length, 21);
+  assert.equal(specs.length, 22);
   const byEventId = Object.fromEntries(specs.map(spec => [spec.source_event_id, spec]));
   assert.equal(Object.values(byEventId).every(spec => spec.tournament_featured === true), true);
 
   const usd = byEventId['october-2026:usd-mxn-close'];
   assert.equal(usd.resolver_type, 'api_price');
+  assert.equal(usd.start_time, '2026-10-29T17:59:00.000Z');
   assert.equal(usd.resolver_config.shape, 'price-bucket');
   assert.equal(usd.source_data.translations.en.question, 'USD/MXN October 2026 close');
   assert.equal(usd.source_data.translations.en.outcomes.length, usd.outcomes.length);
@@ -128,6 +129,8 @@ test('October tournament generator emits bilingual auto and review specs when co
 
   const hurricane = byEventId['october-2026:mexico-major-hurricane-landfall'];
   assert.equal(hurricane.resolver_type, 'api_hurricane');
+  assert.equal(hurricane.start_time, '2026-10-31T05:59:00.000Z');
+  assert.equal(hurricane.resolver_config.startIso, '2026-10-01T06:00:00.000Z');
   assert.equal(hurricane.tournament_featured, true);
   assert.deepEqual(hurricane.outcomes, ['Sí', 'No']);
   assert.equal(hurricane.source_data.translations.en.question, 'Will a Category 4 or 5 hurricane make landfall in Mexico during October 2026?');
@@ -137,8 +140,22 @@ test('October tournament generator emits bilingual auto and review specs when co
   assert.deepEqual(fed.outcomes, ['Recorta', 'Mantiene', 'Sube']);
   assert.deepEqual(fed.source_data.translations.en.outcomes, ['Cut', 'Hold', 'Hike']);
 
+  const inpc = byEventId['october-2026:inpc-first-half-october-annual-inflation'];
+  assert.equal(inpc.resolver_type, 'manual_review');
+  assert.equal(inpc.category, 'mexico');
+  assert.equal(inpc.start_time, '2026-10-21T11:59:00.000Z');
+  assert.equal(inpc.end_time, '2026-10-22T11:59:00.000Z');
+  assert.deepEqual(inpc.outcomes, ['Menos de 3.00%', '3.00% a 3.49%', '3.50% a 3.99%', '4.00% o más']);
+  assert.deepEqual(inpc.source_data.suggestedPricing.probabilityPct, [25, 25, 25, 25]);
+  assert.deepEqual(inpc.seed_liquidities, [1000, 1000, 1000, 1000]);
+  assert.match(inpc.resolver_config.criteria, /primera quincena de octubre de 2026/);
+  assert.match(inpc.resolver_config.criteria, /INEGI/);
+  assert.equal(inpc.source_data.buckets[1].min, 3);
+  assert.equal(inpc.source_data.buckets[1].max, 3.5);
+
   const popocatepetl = byEventId['october-2026:popocatepetl-exhalations-2026-10-02'];
   assert.equal(popocatepetl.resolver_type, 'manual_review');
+  assert.equal(popocatepetl.start_time, '2026-10-01T16:29:00.000Z');
   assert.equal(popocatepetl.end_time, '2026-10-02T16:29:00.000Z');
   assert.deepEqual(popocatepetl.outcomes, ['0 a 19', '20 a 49', '50 a 99', '100 o más']);
   assert.equal(popocatepetl.source_data.targetDateYmd, '2026-10-02');

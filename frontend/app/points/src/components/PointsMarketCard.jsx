@@ -27,7 +27,7 @@ import { soccerMatchTypeLabel } from '@app/lib/soccerMarketType.js';
 import { pointsPublicAssetSrc } from '@app/lib/publicAssets.js';
 import { AICM_HUB_PATH, isAicmDelayMarket } from '../lib/aicmMarkets.js';
 import { marketArtworkHidden, marketImageSrc, marketPlaceholderImageSrc } from '../lib/marketImages.js';
-import { isClosingSoonNonSportsMarket } from '../lib/marketStatus.js';
+import { isClosingSoonNonSportsMarket, isLiveSportsMarket } from '../lib/marketStatus.js';
 import PointsBuyModal from './PointsBuyModal.jsx';
 
 const STAKE_PREVIEW = 100; // MXNP reference stake for the card payout preview
@@ -203,10 +203,12 @@ export default function PointsMarketCard({ market, userPosition }) {
   // predictions like ¿Contra quién pelea Canelo? which used to flash
   // EN VIVO for their entire 180-day window.
   const now = new Date();
+  const liveSportsMarket = isLiveSportsMarket(market);
   const isLive = typeof market.live === 'boolean'
-    ? (!isResolved && market.live)
+    ? (!isResolved && liveSportsMarket && market.live)
     : (
         !isResolved
+        && liveSportsMarket
         && market.status === 'active'
         && market.startTime
         && new Date(market.startTime) <= now
@@ -311,7 +313,7 @@ export default function PointsMarketCard({ market, userPosition }) {
         <span className="mock-card-cat">
           {market.category || 'General'}
         </span>
-        {market.isTestMarket && (
+        {market.isTestMarket && !isAicmDelayCard && (
           <span
             className="mock-card-badge test-market-badge"
             title={t('points.testMarket.tooltip')}

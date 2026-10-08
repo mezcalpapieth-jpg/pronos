@@ -56,6 +56,11 @@ test('points market list sorts active markets by closest close date', () => {
   assert.match(source, /CASE WHEN m\.end_time <= NOW\(\) THEN m\.end_time END DESC NULLS LAST/);
 });
 
+test('points market live flag is limited to rows with a sports discriminator', () => {
+  assert.match(source, /const sportsLiveEligible = Boolean\(String\(r\.sport \|\| ''\)\.trim\(\)\)/);
+  assert.match(source, /const live = !!\(sportsLiveEligible[\s\S]*?&& !isOpenEnded/);
+});
+
 test('parallel payload prices resolved loser legs as zero instead of stale AMM odds', () => {
   for (const text of [source, detailSource]) {
     assert.match(text, /function binaryLegPricesFromRow/);

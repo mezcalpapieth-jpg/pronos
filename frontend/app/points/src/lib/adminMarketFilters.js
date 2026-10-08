@@ -21,6 +21,8 @@ export const ADMIN_SPORT_FILTERS = [
   { key: 'baseball', label: 'Beisbol' },
   { key: 'nba', label: 'NBA' },
   { key: 'nfl', label: 'NFL' },
+  { key: 'ncaaf', label: 'NCAAF' },
+  { key: 'ncaab', label: 'NCAAB' },
   { key: 'f1', label: 'F1' },
   { key: 'tennis', label: 'Tenis' },
   { key: 'golf', label: 'Golf' },

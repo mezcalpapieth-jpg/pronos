@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const source = await readFile(new URL('./markets.js', import.meta.url), 'utf8');
+const payloadSource = await readFile(new URL('../_lib/protocol-market-payload.js', import.meta.url), 'utf8');
 
 test('protocol market lists sort live first and then upcoming by close date', () => {
   const orderBlocks = source.match(/ORDER BY[\s\S]*?m\.id ASC/g) || [];
@@ -15,4 +16,9 @@ test('protocol market lists sort live first and then upcoming by close date', ()
     assert.match(block, /CASE WHEN m\.end_time <= NOW\(\) THEN m\.end_time END DESC NULLS LAST/);
     assert.match(block, /m\.created_at DESC/);
   }
+});
+
+test('protocol payload live flag is limited to sports rows', () => {
+  assert.match(payloadSource, /const sportsLiveEligible = Boolean\(String\(sport \|\| ''\)\.trim\(\)\)/);
+  assert.match(payloadSource, /const live = !!\(sportsLiveEligible[\s\S]*?&& !isOpenEnded/);
 });

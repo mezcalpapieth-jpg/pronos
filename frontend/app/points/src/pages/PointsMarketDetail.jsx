@@ -72,7 +72,7 @@ import {
 import { marketInterestPayload, trackInterest } from '@app/lib/interest.js';
 import { pointsPublicAssetSrc } from '@app/lib/publicAssets.js';
 import { marketArtworkHidden, marketImageSrc, marketPlaceholderImageSrc } from '../lib/marketImages.js';
-import { isClosingSoonNonSportsMarket } from '../lib/marketStatus.js';
+import { isClosingSoonNonSportsMarket, isLiveSportsMarket } from '../lib/marketStatus.js';
 import { emitPointsRefresh } from '../lib/pointsLiveRefresh.js';
 import { isVideoDemoActive, videoDemoPollMs } from '../demo/demoFlag.js';
 
@@ -3447,7 +3447,9 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
   // open. Only sports markets set start_time; everything else falls
   // back to isPendingResolution semantics.
   const _now = new Date();
+  const liveSportsMarket = isLiveSportsMarket(market);
   const isLive = !isResolved
+    && liveSportsMarket
     && market.status === 'active'
     && market.startTime
     && new Date(market.startTime) <= _now

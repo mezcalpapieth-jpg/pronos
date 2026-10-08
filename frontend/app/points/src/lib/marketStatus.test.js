@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   CLOSING_SOON_MS,
   isClosingSoonNonSportsMarket,
+  isLiveSportsMarket,
   isSportsMarket,
 } from './marketStatus.js';
 
@@ -14,9 +15,11 @@ test('detects sports markets from category, sport, or tags', () => {
   assert.equal(isSportsMarket({ category: 'general', sport: 'baseball' }), true);
   assert.equal(isSportsMarket({ category: 'general', topicTags: ['deportes'] }), true);
   assert.equal(isSportsMarket({ category: 'mexico', topicTags: ['weather'] }), false);
+  assert.equal(isLiveSportsMarket({ category: 'deportes' }), false);
+  assert.equal(isLiveSportsMarket({ category: 'deportes', sport: 'soccer' }), true);
 });
 
-test('marks non-sports active markets as closing soon inside the final 12 hours', () => {
+test('marks non-sports active markets as closing soon inside the final 8 hours', () => {
   assert.equal(isClosingSoonNonSportsMarket({
     category: 'mexico',
     status: 'active',
@@ -31,7 +34,14 @@ test('marks non-sports active markets as closing soon inside the final 12 hours'
 
   assert.equal(isClosingSoonNonSportsMarket({
     category: 'deportes',
+    sport: 'baseball',
     status: 'active',
     endTime: new Date(now.getTime() + 30 * 60 * 1000).toISOString(),
   }, now), false);
+
+  assert.equal(isClosingSoonNonSportsMarket({
+    category: 'deportes',
+    status: 'active',
+    endTime: new Date(now.getTime() + 30 * 60 * 1000).toISOString(),
+  }, now), true);
 });

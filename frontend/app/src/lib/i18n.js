@@ -763,6 +763,8 @@ const STRINGS = {
   'points.sport.baseball':    { es: 'Béisbol',               en: 'Baseball' },
   'points.sport.nba':         { es: 'NBA',                    en: 'NBA' },
   'points.sport.nfl':         { es: 'NFL',                    en: 'NFL' },
+  'points.sport.ncaaf':       { es: 'NCAAF',                  en: 'NCAAF' },
+  'points.sport.ncaab':       { es: 'NCAAB',                  en: 'NCAAB' },
   'points.sport.f1':          { es: 'F1',                     en: 'F1' },
   'points.sport.tennis':      { es: 'Tenis',                 en: 'Tennis' },
   'points.sport.golf':        { es: 'Golf',                  en: 'Golf' },

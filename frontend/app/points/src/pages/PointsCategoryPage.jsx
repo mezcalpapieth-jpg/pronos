@@ -61,6 +61,8 @@ const SPORT_TABS = [
   { key: 'baseball', tKey: 'points.sport.baseball' },
   { key: 'nba',      tKey: 'points.sport.nba'      },
   { key: 'nfl',      tKey: 'points.sport.nfl'      },
+  { key: 'ncaaf',    tKey: 'points.sport.ncaaf',    fallback: 'NCAAF' },
+  { key: 'ncaab',    tKey: 'points.sport.ncaab',    fallback: 'NCAAB' },
   { key: 'f1',       tKey: 'points.sport.f1'       },
   { key: 'tennis',   tKey: 'points.sport.tennis'   },
   { key: 'golf',     tKey: 'points.sport.golf'     },
