@@ -142,6 +142,9 @@ export default async function handler(req, res) {
     const makerOrderbook = realOrderbook.remainingShares > 0.000001
       ? previewPronosMakerInventoryBidsForSell(makerTradeRows, {
         shares: realOrderbook.remainingShares,
+        reserves,
+        outcomeIndex: oi,
+        minPrice: bookMinPrice,
       })
       : null;
     const orderbook = combineSellOrderbookMatches(realOrderbook, makerOrderbook);
