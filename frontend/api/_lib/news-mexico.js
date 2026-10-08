@@ -48,9 +48,10 @@ function getFirstSeenSql() {
 //   host      — domain for the Google News `site:<host>` fallback
 //               query. Used when directRss isn't set OR returns
 //               zero items (404/403/empty).
-// Probed 2026-05-04: only El Financiero still has a working public
-// RSS feed with items. Everyone else 404/403s or returns an HTML
-// page. The other 8 fall through to Google News.
+// Probed 2026-05-04: only El Financiero still had a working public
+// RSS feed with items. Probed again 2026-10-07: TV Azteca Noticias
+// also exposes a working news RSS. Everyone else goes through a
+// homepage scrape when configured, then Google News as last resort.
 const OUTLETS = [
   // El Universal serves images from a CDN that rejects hot-linked
   // requests from our origin (referrer check), so og:image enrichment
@@ -70,6 +71,11 @@ const OUTLETS = [
   // homepage has 72 <article> tags, 66 of which extract cleanly
   // via the homepage scraper. Lean = independent / right-leaning.
   { id: 'latinus',         name: 'Latinus',            host: 'latinus.us',             lean: 'independent',    priority: 2 },
+  { id: 'tvpacifico',      name: 'TVP',                host: 'tvpacifico.mx',          lean: 'regional',       priority: 2 },
+  { id: 'tv-azteca-noticias', name: 'TV Azteca Noticias', host: 'tvazteca.com',        lean: 'broadcast',      priority: 2,
+    googleSite: 'tvazteca.com/aztecanoticias',
+    directRss: 'https://www.tvazteca.com/aztecanoticias/rss-gpc-seo-noticias.rss' },
+  { id: 'adn40',           name: 'ADN40',              host: 'adn40.mx',               lean: 'broadcast',      priority: 2 },
 
   // ── International / topical (added 2026-05-07) ──────────────────────
   // Speculation-heavy feeds for prediction-market input. All ship a
@@ -134,6 +140,7 @@ const OUTLETS = [
 // Sourceid → outlet lookup. Built once at module load so classify()
 // can pull defaultCategories without scanning OUTLETS on every item.
 const OUTLETS_BY_ID = Object.fromEntries(OUTLETS.map(o => [o.id, o]));
+export const NEWS_OUTLET_IDS = OUTLETS.map(o => o.id);
 
 function normalize(s) {
   return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
@@ -766,7 +773,7 @@ async function fetchDirectRss(outlet) {
 // expensive at refresh time). The frontend renders these cards
 // with a colored gradient + favicon instead.
 async function fetchGoogleNewsForOutlet(outlet) {
-  const q = `site:${outlet.host}`;
+  const q = `site:${outlet.googleSite || outlet.host}`;
   const url = `${GNEWS_BASE}?q=${encodeURIComponent(q)}&${GNEWS_LOCALE}`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FEED_TIMEOUT_MS);
@@ -792,11 +799,10 @@ async function fetchGoogleNewsForOutlet(outlet) {
 }
 
 // Per-outlet fetcher with channel-fallback chain:
-//   1. Direct RSS (when working — only El Financiero today). Best
-//      because the RSS feed ships article images via media:thumbnail.
-//   2. Homepage HTML scrape (5 outlets — El Universal, Aristegui,
-//      Milenio, Proceso, Noroeste). Pulls real article images from
-//      <article> blocks on the outlet's homepage.
+//   1. Direct RSS (when working). Best because the RSS feed ships
+//      article images via media:thumbnail.
+//   2. Homepage HTML scrape for outlets we've validated. Pulls real
+//      article metadata from cards on the outlet's homepage.
 //   3. Google News site:-scoped query (last resort, no images).
 // Each step is gated on the previous returning useful data.
 async function fetchOneOutlet(outlet) {
@@ -804,12 +810,13 @@ async function fetchOneOutlet(outlet) {
     const direct = await fetchDirectRss(outlet);
     if (Array.isArray(direct) && direct.length > 0) return direct;
   }
-  // Homepage scrape — present for the 5 outlets we've validated.
+  // Homepage scrape — present for the outlets we've validated.
   // Returns null if no scraper config OR fetch failed.
   const scrapeCfg = getScraperConfig(outlet.id);
   if (scrapeCfg) {
     const scraped = await fetchHomepageScrape(outlet, { timeoutMs: FEED_TIMEOUT_MS });
-    if (Array.isArray(scraped) && scraped.length > 0) {
+    const minScrapedItems = scrapeCfg.minItems || 1;
+    if (Array.isArray(scraped) && scraped.length >= minScrapedItems) {
       // Tag with outlet metadata + favicon (the scraper sets sourceId/
       // sourceName but doesn't add the lean / priority / favicon
       // fields the rest of the pipeline expects).

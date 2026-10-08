@@ -65,6 +65,14 @@ function extractFirstHref(block) {
   return m ? m[1] : null;
 }
 
+function extractAnchorBlocks(html, cfg) {
+  if (!cfg.linkHrefPattern) return [];
+  const anchors = html.match(/<a\b[\s\S]{0,800}?<\/a>/gi) || [];
+  return anchors
+    .filter(anchor => cfg.linkHrefPattern.test(extractFirstHref(anchor) || ''))
+    .map(anchor => `<article>${anchor}</article>`);
+}
+
 function extractFirstImage(block) {
   // Priority 1: <source srcset="..."> within <picture>. First entry
   // before space/comma is the lowest-density variant.
@@ -224,6 +232,13 @@ const OUTLET_SCRAPERS = {
   'proceso':         { homepage: 'https://www.proceso.com.mx/' },
   'noroeste':        { homepage: 'https://www.noroeste.com.mx/' },
   'latinus':         { homepage: 'https://latinus.us/' },
+  'tvpacifico':      {
+    homepage: 'https://tvpacifico.mx/noticias',
+    linkHrefPattern: /\/noticias\/\d{6}-/i,
+    minItems: 5,
+  },
+  'tv-azteca-noticias': { homepage: 'https://www.tvazteca.com/aztecanoticias/' },
+  'adn40':           { homepage: 'https://www.adn40.mx/' },
   // animal-politico, sin-embargo, debate are blocked / SPA-rendered
   // — they fall through to Google News in the fetchOneOutlet chain.
 };
@@ -249,7 +264,10 @@ export async function fetchHomepageScrape(outlet, { timeoutMs = 8_000, userAgent
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const html = await res.text();
-    const blocks = html.match(/<article\b[\s\S]{0,4000}?<\/article>/gi) || [];
+    const blocks = [
+      ...(html.match(/<article\b[\s\S]{0,4000}?<\/article>/gi) || []),
+      ...extractAnchorBlocks(html, cfg),
+    ];
 
     const items = [];
     const seenUrls = new Set();
