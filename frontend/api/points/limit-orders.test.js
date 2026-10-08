@@ -275,67 +275,82 @@ test('synthetic maker sell cap is identity-independent across coordinated exits'
   assert.ok(sellA.priceAfter > sellB.priceAfter, 'second exit should continue unwinding the same virtual pool');
 });
 
-test('Pronos maker inventory buybacks unwind synthetic shares before AMM shares', () => {
-  let tradeId = 1;
-  let reserves = [500, 500];
-  let usage = {};
-  let totalShares = 0;
-  let totalSpent = 0;
-  let ammGrossSpent = 0;
-  let ammFees = 0;
-  const treasuryRows = [];
-
-  for (const collateral of [700, 300]) {
-    const maker = previewPronosMakerAsksForBuy({
-      reserves: JSON.stringify(reserves),
-      seed_liquidity: 500,
-      seed_liquidities: null,
-    }, {
-      outcomeIndex: 0,
-      collateral,
-      usage,
-      currentPrice: binaryPrices(reserves)[0],
-    });
-
-    for (const fill of maker.fills) {
-      treasuryRows.push({
-        id: tradeId,
-        side: 'sell',
-        shares: fill.shares,
-        collateral: fill.collateral,
-        price_at_trade: fill.price,
-        created_at: new Date(1_800_000_000_000 + tradeId).toISOString(),
-      });
-      tradeId += 1;
-    }
-
-    const remainingCollateral = Math.max(0, collateral - maker.collateralSpent);
-    if (remainingCollateral > 0.000001) {
-      const amm = binaryBuyQuote(reserves, 0, remainingCollateral);
-      reserves = amm.reservesAfter;
-      totalShares += amm.sharesOut;
-      ammGrossSpent += remainingCollateral;
-      ammFees += amm.fee;
-    }
-
-    totalShares += maker.sharesOut;
-    totalSpent += collateral;
-    usage = makerUsageFromRows(treasuryRows);
-  }
-
+test('Pronos maker inventory buybacks walk the AMM path before stale inventory', () => {
+  const reserves = [1177.865921, 848.993091];
+  const shares = 3261.421928;
+  const treasuryRows = [
+    {
+      id: 23107,
+      side: 'sell',
+      shares: 199.108751,
+      collateral: 88.028169,
+      price_at_trade: 0.442111,
+      created_at: '2026-10-07T18:42:33.889Z',
+    },
+    {
+      id: 23109,
+      side: 'sell',
+      shares: 26.479849,
+      collateral: 11.971831,
+      price_at_trade: 0.452111,
+      created_at: '2026-10-07T18:42:33.889Z',
+    },
+  ];
   const buyback = previewPronosMakerInventoryBidsForSell(treasuryRows, {
-    shares: totalShares,
+    shares,
+    reserves,
+    outcomeIndex: 1,
   });
-  const ammShares = buyback.remainingShares;
-  const ammSell = binarySellQuote(reserves, 0, ammShares);
+  const ammSell = binarySellQuote(buyback.reservesAfter || reserves, 1, buyback.remainingShares);
+  const pureAmmSell = binarySellQuote(reserves, 1, shares);
   const totalOut = buyback.collateralOut + ammSell.collateralOut;
 
-  approxEqual(ammSell.priceAfter, 0.5, 0.00001, 'AMM shares should return the pool to the starting price');
-  approxEqual(totalOut, totalSpent - ammFees, 0.0001, 'full self-unwind should return spent collateral minus buy fees');
-  assert.ok(buyback.remainingShares > 0, 'AMM-created shares should remain for the AMM fallback');
-  assert.ok(buyback.remainingShares < totalShares, 'synthetic inventory should absorb the maker-created shares first');
-  assert.ok(buyback.fills.length > 0);
+  assert.equal(buyback.fills[0]?.source, 'amm_path', 'sell-back should move through AMM before stale maker inventory');
+  assert.ok(buyback.fills.some(fill => fill.source === 'maker_inventory'), 'maker inventory can fill only after the AMM path reaches it');
+  assert.ok(buyback.fills.every(fill => fill.source !== 'maker_inventory' || fill.cappedToAmm), 'maker inventory payout should stay capped by AMM value');
+  approxEqual(totalOut, pureAmmSell.collateralOut, 0.000001, 'fallback should match pure AMM unwind');
+  assert.ok(totalOut < 900, 'round trip should not profit after a 900 MXNP buy');
   assert.ok(pronosMakerInventoryBidDepthFromRows(treasuryRows).length > 0);
+});
+
+test('Pronos maker buy then immediate sell-back cannot round-trip for profit', () => {
+  const reserves = [500, 500];
+  const buy = previewPronosMakerAsksForBuy({
+    reserves: JSON.stringify(reserves),
+    seed_liquidity: 750,
+    seed_liquidities: null,
+  }, {
+    outcomeIndex: 0,
+    collateral: 300,
+    levels: [10, 25, 50, 100],
+    currentPrice: 0.5,
+  });
+  const reservesAfterBuy = buy.reservesAfter || reserves;
+  const treasuryRows = buy.fills
+    .filter(fill => fill.source === 'maker')
+    .map((fill, index) => ({
+      id: index + 1,
+      side: 'sell',
+      shares: fill.shares,
+      collateral: fill.collateral,
+      price_at_trade: fill.price,
+      created_at: new Date(1_800_000_000_000 + index).toISOString(),
+    }));
+
+  const buyback = previewPronosMakerInventoryBidsForSell(treasuryRows, {
+    shares: buy.sharesOut,
+    reserves: reservesAfterBuy,
+    outcomeIndex: 0,
+  });
+  const fallback = buyback.remainingShares > 0
+    ? binarySellQuote(buyback.reservesAfter || reservesAfterBuy, 0, buyback.remainingShares)
+    : null;
+  const totalOut = buyback.collateralOut + Number(fallback?.collateralOut || 0);
+
+  assert.ok(buy.fills.some(fill => fill.source === 'amm_path'));
+  assert.ok(treasuryRows.length > 0);
+  assert.ok(buyback.fills.every(fill => fill.source !== 'maker_inventory' || fill.cappedToAmm));
+  assert.ok(totalOut <= buy.collateralSpent + 0.000001, 'immediate sell-back should not return more than the buy spent');
 });
 
 test('Pronos maker sell preview feeds post-maker reserves into combined fallback', () => {
@@ -621,7 +636,9 @@ test('Pronos maker previews use seeded depth after real resting orders', () => {
   assert.equal(combined.remainingCollateral, 0);
   assert.ok(combined.sharesOut > realPreview.sharesOut);
   assert.equal(combined.fills[0].source, 'limit');
-  assert.equal(combined.fills[1].source, 'maker');
+  assert.equal(combined.fills[1].source, 'amm_path');
+  assert.ok(combined.fills.some(fill => fill.source === 'maker'));
+  assert.ok(Array.isArray(combined.reservesAfter));
 });
 
 test('buy quotes and execution prioritize user orderbook liquidity before Pronos depth', () => {

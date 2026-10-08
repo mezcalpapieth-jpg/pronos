@@ -249,13 +249,16 @@ export async function executePointsBuy(client, {
   const ammCollateral = orderbookMatch.remainingCollateral > EPSILON
     ? orderbookMatch.remainingCollateral
     : 0;
+  const reservesForAmm = Array.isArray(orderbookMatch.reservesAfter)
+    ? orderbookMatch.reservesAfter.map(Number)
+    : reserves;
 
   let quote = null;
   if (ammCollateral > 0) {
     try {
-      quote = reserves.length === 2
-        ? binaryBuyQuote(reserves, oi, ammCollateral)
-        : multiBuyQuote(reserves, oi, ammCollateral);
+      quote = reservesForAmm.length === 2
+        ? binaryBuyQuote(reservesForAmm, oi, ammCollateral)
+        : multiBuyQuote(reservesForAmm, oi, ammCollateral);
     } catch (e) {
       throw apiError('invalid_quote', 400, e.message);
     }
@@ -263,7 +266,7 @@ export async function executePointsBuy(client, {
 
   const totalSharesOut = orderbookMatch.sharesOut + Number(quote?.sharesOut || 0);
   const totalSpent = orderbookMatch.collateralSpent + ammCollateral;
-  const totalFee = Number(quote?.fee || 0);
+  const totalFee = Number(orderbookMatch.fee || 0) + Number(quote?.fee || 0);
   const combinedAvgPrice = totalSharesOut > EPSILON
     ? (totalSpent - totalFee) / totalSharesOut
     : 0;
@@ -305,7 +308,7 @@ export async function executePointsBuy(client, {
       [
         mid, username, oi,
         quote.sharesOut, ammCollateral, quote.fee, quote.avgPrice,
-        JSON.stringify(reserves),
+        JSON.stringify(reservesForAmm),
         JSON.stringify(quote.reservesAfter),
         tradeSource,
         tradeApiKeyId,
@@ -344,9 +347,10 @@ export async function executePointsBuy(client, {
   }
 
   const triggeredLimitOrders = await executeTriggeredLimitOrders(client, { marketId: mid });
-  const responsePriceBefore = quote?.priceBefore ?? displayPriceBefore ?? orderbookMatch.avgPrice;
+  const responsePriceBefore = orderbookMatch.priceBefore ?? displayPriceBefore ?? quote?.priceBefore ?? orderbookMatch.avgPrice;
   const responsePriceAfter = monotonicBuyDisplayPrice(responsePriceBefore, [
     quote?.priceAfter,
+    orderbookMatch.priceAfter,
     combinedAvgPrice,
   ]);
 
@@ -446,6 +450,7 @@ export async function executePointsSell(client, {
       username,
       outcomeIndex: oi,
       sharesToSell: realOrderbookMatch.remainingShares,
+      minPrice: bookMinPrice,
       source: tradeSource,
       apiKeyId: tradeApiKeyId,
     })

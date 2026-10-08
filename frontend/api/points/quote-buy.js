@@ -198,19 +198,24 @@ export default async function handler(req, res) {
     const ammCollateral = orderbook.remainingCollateral > 0.000001
       ? orderbook.remainingCollateral
       : 0;
+    const reservesForAmm = Array.isArray(orderbook.reservesAfter)
+      ? orderbook.reservesAfter.map(Number)
+      : reserves;
     const q = ammCollateral > 0
-      ? (reserves.length === 2
-        ? binaryBuyQuote(reserves, oi, ammCollateral)
-        : multiBuyQuote(reserves, oi, ammCollateral))
+      ? (reservesForAmm.length === 2
+        ? binaryBuyQuote(reservesForAmm, oi, ammCollateral)
+        : multiBuyQuote(reservesForAmm, oi, ammCollateral))
       : null;
-    const pricesAfter = q?.pricesAfter || pricesBefore;
+    const finalReserves = q?.reservesAfter || orderbook.reservesAfter || reserves;
+    const pricesAfter = finalReserves.length === 2 ? binaryPrices(finalReserves) : multiPrices(finalReserves);
     const sharesOut = orderbook.sharesOut + Number(q?.sharesOut || 0);
     const collateralSpent = orderbook.collateralSpent + ammCollateral;
-    const fee = Number(q?.fee || 0);
+    const fee = Number(orderbook.fee || 0) + Number(q?.fee || 0);
     const avgPrice = sharesOut > 0.000001 ? (collateralSpent - fee) / sharesOut : 0;
     const executionPrice = avgPrice > 0 ? avgPrice : null;
     const priceAfter = monotonicBuyDisplayPrice(priceBefore, [
       q?.pricesAfter?.[oi],
+      orderbook.priceAfter,
       executionPrice,
     ]);
     return res.status(200).json({

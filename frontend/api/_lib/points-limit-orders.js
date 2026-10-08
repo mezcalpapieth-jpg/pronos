@@ -779,8 +779,29 @@ export function pronosMakerInventoryBidDepthFromRows(rows = [], {
 
 export function previewPronosMakerInventoryBidsForSell(rows = [], {
   shares,
+  reserves = null,
+  outcomeIndex = null,
+  minPrice = null,
   maxFills = MAX_TRIGGERED_PER_PASS * 8,
 } = {}) {
+  if (Array.isArray(reserves) && Number.isInteger(Number(outcomeIndex))) {
+    const depthRows = pronosMakerInventoryBidDepthFromRows(rows, { limit: maxFills })
+      .map((row, index) => ({
+        id: row.sourceTradeId ?? row.orderId ?? `maker-inventory-${index + 1}`,
+        username: PRONOS_TREASURY_USERNAME,
+        limit_price: row.price,
+        remaining_amount: row.total,
+        source: 'maker_inventory',
+        created_at: row.createdAt || null,
+      }));
+    return previewLinearizedBidsForSell(depthRows, {
+      reserves,
+      outcomeIndex: Number(outcomeIndex),
+      shares,
+      minPrice,
+    });
+  }
+
   let remainingShares = Math.max(0, Number(shares || 0));
   const fills = [];
   let collateralOut = 0;
@@ -934,6 +955,10 @@ export function combineBuyOrderbookMatches(...matches) {
   const fills = clean.flatMap(match => match.fills || []);
   const sharesOut = round(clean.reduce((sum, match) => sum + Number(match.sharesOut || 0), 0), 6);
   const collateralSpent = round(clean.reduce((sum, match) => sum + Number(match.collateralSpent || 0), 0), 6);
+  const fee = round(clean.reduce((sum, match) => sum + Number(match.fee || 0), 0), 6);
+  const reserveMatch = [...clean].reverse().find(match => Array.isArray(match.reservesAfter));
+  const priceAfterMatch = [...clean].reverse().find(match => Number.isFinite(Number(match.priceAfter)));
+  const priceBeforeMatch = clean.find(match => Number.isFinite(Number(match.priceBefore)));
   const remainingCollateral = clean.length > 0
     ? Number(clean[clean.length - 1].remainingCollateral || 0)
     : 0;
@@ -941,8 +966,12 @@ export function combineBuyOrderbookMatches(...matches) {
     fills,
     sharesOut,
     collateralSpent,
+    fee,
     remainingCollateral: round(remainingCollateral, 6),
     avgPrice: orderbookAverage(collateralSpent, sharesOut),
+    reservesAfter: reserveMatch?.reservesAfter || null,
+    priceBefore: priceBeforeMatch ? Number(priceBeforeMatch.priceBefore) : null,
+    priceAfter: priceAfterMatch ? Number(priceAfterMatch.priceAfter) : null,
   };
 }
 
@@ -1059,6 +1088,337 @@ export function previewRestingBidsForSell(rows = [], {
   };
 }
 
+function buyQuoteToTargetPrice(reserves, outcomeIndex, targetPrice, maxCollateral) {
+  const budget = Math.max(0, Number(maxCollateral || 0));
+  const target = normalizeTakerPrice(targetPrice, null);
+  const virtualReserves = Array.isArray(reserves) ? reserves.map(Number) : [];
+  if (
+    target === null
+    || budget <= EPSILON
+    || virtualReserves.length < 2
+    || virtualReserves.some(value => !Number.isFinite(value) || value <= 0)
+  ) {
+    return null;
+  }
+
+  const currentPrice = currentPriceForOutcome(virtualReserves, outcomeIndex);
+  if (currentPrice + EPSILON >= target) return null;
+
+  let maxQuote = null;
+  try {
+    maxQuote = quoteBuy(virtualReserves, outcomeIndex, budget);
+  } catch {
+    return null;
+  }
+  if (Number(maxQuote?.priceAfter || 0) <= target + EPSILON) return maxQuote;
+
+  let lo = 0;
+  let hi = budget;
+  let best = maxQuote;
+  for (let i = 0; i < 32; i += 1) {
+    const mid = (lo + hi) / 2;
+    if (mid <= EPSILON) {
+      lo = mid;
+      continue;
+    }
+    let quote;
+    try {
+      quote = quoteBuy(virtualReserves, outcomeIndex, mid);
+    } catch {
+      lo = mid;
+      continue;
+    }
+    if (Number(quote.priceAfter || 0) >= target) {
+      best = quote;
+      hi = mid;
+    } else {
+      lo = mid;
+    }
+  }
+  return best;
+}
+
+function sellQuoteToTargetPrice(reserves, outcomeIndex, targetPrice, maxShares) {
+  const targetShares = Math.max(0, Number(maxShares || 0));
+  const target = normalizeTakerPrice(targetPrice, null);
+  const virtualReserves = Array.isArray(reserves) ? reserves.map(Number) : [];
+  if (
+    target === null
+    || targetShares <= EPSILON
+    || virtualReserves.length < 2
+    || virtualReserves.some(value => !Number.isFinite(value) || value <= 0)
+  ) {
+    return null;
+  }
+
+  const currentPrice = currentPriceForOutcome(virtualReserves, outcomeIndex);
+  if (currentPrice <= target + EPSILON) return null;
+
+  let maxQuote = null;
+  try {
+    maxQuote = quoteSell(virtualReserves, outcomeIndex, targetShares);
+  } catch {
+    return null;
+  }
+  if (Number(maxQuote?.priceAfter || 0) >= target - EPSILON) return maxQuote;
+
+  let lo = 0;
+  let hi = targetShares;
+  let best = maxQuote;
+  for (let i = 0; i < 32; i += 1) {
+    const mid = (lo + hi) / 2;
+    if (mid <= EPSILON) {
+      lo = mid;
+      continue;
+    }
+    let quote;
+    try {
+      quote = quoteSell(virtualReserves, outcomeIndex, mid);
+    } catch {
+      lo = mid;
+      continue;
+    }
+    if (Number(quote.priceAfter || 0) <= target) {
+      best = quote;
+      hi = mid;
+    } else {
+      lo = mid;
+    }
+  }
+  return best;
+}
+
+export function previewLinearizedAsksForBuy(rows = [], {
+  reserves,
+  outcomeIndex,
+  collateral,
+  maxPrice = null,
+} = {}) {
+  let remainingCollateral = Math.max(0, Number(collateral || 0));
+  const priceCap = normalizeTakerPrice(maxPrice, null);
+  let nextReserves = Array.isArray(reserves) ? reserves.map(Number) : [];
+  const fills = [];
+  let sharesOut = 0;
+  let collateralSpent = 0;
+  let fee = 0;
+  let priceBefore = null;
+  let priceAfter = null;
+
+  if (
+    remainingCollateral <= EPSILON
+    || nextReserves.length < 2
+    || nextReserves.some(value => !Number.isFinite(value) || value <= 0)
+  ) {
+    return {
+      fills,
+      sharesOut,
+      collateralSpent,
+      fee,
+      remainingCollateral,
+      avgPrice: 0,
+      reservesAfter: null,
+      priceBefore,
+      priceAfter,
+    };
+  }
+
+  const sortedRows = [...rows].sort((a, b) => {
+    const byPrice = Number(a.limit_price ?? a.price ?? 0) - Number(b.limit_price ?? b.price ?? 0);
+    if (byPrice !== 0) return byPrice;
+    return timestampForSort(a.created_at) - timestampForSort(b.created_at);
+  });
+
+  for (const row of sortedRows) {
+    if (remainingCollateral <= EPSILON) break;
+    const makerPrice = normalizeTakerPrice(row.limit_price ?? row.price, null);
+    const availableShares = Math.max(0, Number(row.remaining_amount ?? row.shares ?? 0));
+    if (!makerPrice || availableShares <= EPSILON) continue;
+    if (priceCap !== null && makerPrice > priceCap + EPSILON) break;
+
+    const leadQuote = buyQuoteToTargetPrice(nextReserves, outcomeIndex, makerPrice, remainingCollateral);
+    if (leadQuote && Number(leadQuote.collateral || 0) > EPSILON) {
+      const leadCollateral = round(Number(leadQuote.collateral || 0), 6);
+      const leadShares = round(Number(leadQuote.sharesOut || 0), 6);
+      const leadFee = round(Number(leadQuote.fee || 0), 6);
+      fills.push({
+        orderId: `amm-path-${fills.length + 1}`,
+        maker: null,
+        side: 'buy',
+        source: 'amm_path',
+        price: Number(leadQuote.avgPrice || 0),
+        shares: leadShares,
+        collateral: leadCollateral,
+        fee: leadFee,
+        reservesBefore: nextReserves,
+        reservesAfter: leadQuote.reservesAfter,
+      });
+      sharesOut = round(sharesOut + leadShares, 6);
+      collateralSpent = round(collateralSpent + leadCollateral, 6);
+      fee = round(fee + leadFee, 6);
+      remainingCollateral = round(Math.max(0, remainingCollateral - leadCollateral), 6);
+      priceBefore = priceBefore ?? leadQuote.priceBefore ?? null;
+      priceAfter = leadQuote.priceAfter ?? priceAfter;
+      nextReserves = Array.isArray(leadQuote.reservesAfter) ? leadQuote.reservesAfter.map(Number) : nextReserves;
+      if (remainingCollateral <= EPSILON) break;
+    }
+
+    const fillCollateral = round(Math.min(remainingCollateral, availableShares * makerPrice), 6);
+    const fillShares = round(fillCollateral / makerPrice, 6);
+    if (fillShares <= EPSILON || fillCollateral <= EPSILON) continue;
+
+    fills.push({
+      orderId: serializeOrderId(row.id, fills.length + 1),
+      maker: row.username || PRONOS_TREASURY_USERNAME,
+      side: 'sell',
+      source: row.source || 'maker',
+      price: makerPrice,
+      shares: fillShares,
+      collateral: fillCollateral,
+      fee: 0,
+      reservesBefore: nextReserves,
+      reservesAfter: nextReserves,
+    });
+    sharesOut = round(sharesOut + fillShares, 6);
+    collateralSpent = round(collateralSpent + fillCollateral, 6);
+    remainingCollateral = round(Math.max(0, remainingCollateral - fillCollateral), 6);
+    priceBefore = priceBefore ?? currentPriceForOutcome(nextReserves, outcomeIndex);
+    priceAfter = currentPriceForOutcome(nextReserves, outcomeIndex);
+  }
+
+  return {
+    fills,
+    sharesOut,
+    collateralSpent,
+    fee,
+    remainingCollateral,
+    avgPrice: orderbookAverage(collateralSpent - fee, sharesOut),
+    reservesAfter: fills.some(fill => fill.source === 'amm_path') ? nextReserves : null,
+    priceBefore,
+    priceAfter,
+  };
+}
+
+export function previewLinearizedBidsForSell(rows = [], {
+  reserves,
+  outcomeIndex,
+  shares,
+  minPrice = null,
+} = {}) {
+  let remainingShares = Math.max(0, Number(shares || 0));
+  const priceFloor = normalizeTakerPrice(minPrice, null);
+  let nextReserves = Array.isArray(reserves) ? reserves.map(Number) : [];
+  const fills = [];
+  let sharesSold = 0;
+  let collateralOut = 0;
+  let priceBefore = null;
+  let priceAfter = null;
+  let movedReserves = false;
+
+  if (
+    remainingShares <= EPSILON
+    || nextReserves.length < 2
+    || nextReserves.some(value => !Number.isFinite(value) || value <= 0)
+  ) {
+    return {
+      fills,
+      sharesSold,
+      collateralOut,
+      remainingShares,
+      avgPrice: 0,
+      reservesAfter: null,
+      priceBefore,
+      priceAfter,
+    };
+  }
+
+  const sortedRows = [...rows].sort((a, b) => {
+    const byPrice = Number(b.limit_price ?? b.price ?? 0) - Number(a.limit_price ?? a.price ?? 0);
+    if (byPrice !== 0) return byPrice;
+    return timestampForSort(a.created_at) - timestampForSort(b.created_at);
+  });
+
+  for (const row of sortedRows) {
+    if (remainingShares <= EPSILON) break;
+    const makerPrice = normalizeTakerPrice(row.limit_price ?? row.price, null);
+    const availableCollateral = Math.max(0, Number(row.remaining_amount ?? row.total ?? 0));
+    if (!makerPrice || availableCollateral <= EPSILON) continue;
+    if (priceFloor !== null && makerPrice + EPSILON < priceFloor) break;
+
+    const leadQuote = sellQuoteToTargetPrice(nextReserves, outcomeIndex, makerPrice, remainingShares);
+    if (leadQuote && Number(leadQuote.shares || 0) > EPSILON) {
+      const leadShares = round(Number(leadQuote.shares || 0), 6);
+      const leadCollateral = round(Number(leadQuote.collateralOut || 0), 6);
+      fills.push({
+        orderId: `amm-path-${fills.length + 1}`,
+        maker: null,
+        side: 'sell',
+        source: 'amm_path',
+        price: orderbookAverage(leadCollateral, leadShares),
+        shares: leadShares,
+        collateral: leadCollateral,
+        reservesBefore: nextReserves,
+        reservesAfter: leadQuote.reservesAfter,
+      });
+      sharesSold = round(sharesSold + leadShares, 6);
+      collateralOut = round(collateralOut + leadCollateral, 6);
+      remainingShares = round(Math.max(0, remainingShares - leadShares), 6);
+      priceBefore = priceBefore ?? leadQuote.priceBefore ?? null;
+      priceAfter = leadQuote.priceAfter ?? priceAfter;
+      nextReserves = Array.isArray(leadQuote.reservesAfter) ? leadQuote.reservesAfter.map(Number) : nextReserves;
+      movedReserves = true;
+      if (remainingShares <= EPSILON) break;
+    }
+
+    const currentPrice = currentPriceForOutcome(nextReserves, outcomeIndex);
+    const fillPrice = Math.min(makerPrice, currentPrice || makerPrice);
+    if (!fillPrice || fillPrice <= EPSILON) continue;
+    const fillShares = round(Math.min(remainingShares, availableCollateral / fillPrice), 6);
+    if (fillShares <= EPSILON) continue;
+
+    let quote;
+    try {
+      quote = quoteSell(nextReserves, outcomeIndex, fillShares);
+    } catch {
+      continue;
+    }
+    const rawCollateral = round(fillShares * fillPrice, 6);
+    const cappedCollateral = round(Math.min(rawCollateral, Number(quote.collateralOut || 0)), 6);
+    if (cappedCollateral <= EPSILON) continue;
+
+    fills.push({
+      orderId: serializeOrderId(row.id, fills.length + 1),
+      maker: row.username || PRONOS_TREASURY_USERNAME,
+      side: 'buy',
+      source: row.source || 'maker',
+      price: orderbookAverage(cappedCollateral, fillShares),
+      makerLimitPrice: makerPrice,
+      shares: fillShares,
+      collateral: cappedCollateral,
+      cappedToAmm: rawCollateral > cappedCollateral + EPSILON,
+      reservesBefore: nextReserves,
+      reservesAfter: quote.reservesAfter,
+    });
+    sharesSold = round(sharesSold + fillShares, 6);
+    collateralOut = round(collateralOut + cappedCollateral, 6);
+    remainingShares = round(Math.max(0, remainingShares - fillShares), 6);
+    priceBefore = priceBefore ?? quote.priceBefore ?? currentPriceForOutcome(nextReserves, outcomeIndex);
+    priceAfter = quote.priceAfter ?? priceAfter;
+    nextReserves = Array.isArray(quote.reservesAfter) ? quote.reservesAfter.map(Number) : nextReserves;
+    movedReserves = true;
+  }
+
+  return {
+    fills,
+    sharesSold,
+    collateralOut,
+    remainingShares,
+    avgPrice: orderbookAverage(collateralOut, sharesSold),
+    reservesAfter: movedReserves ? nextReserves : null,
+    priceBefore,
+    priceAfter,
+  };
+}
+
 export function previewAmmCappedBidsForSell(rows = [], {
   reserves,
   outcomeIndex,
@@ -1162,7 +1522,12 @@ export function previewPronosMakerAsksForBuy(market, {
     usage,
     currentPrice,
   });
-  return previewRestingAsksForBuy(makerAskRows(depth), { collateral, maxPrice });
+  return previewLinearizedAsksForBuy(makerAskRows(depth), {
+    reserves: reservesForMarket(market, outcomeIndex),
+    outcomeIndex,
+    collateral,
+    maxPrice,
+  });
 }
 
 export function previewPronosMakerBidsForSell(market, {
@@ -1180,7 +1545,7 @@ export function previewPronosMakerBidsForSell(market, {
     usage,
     currentPrice,
   });
-  return previewAmmCappedBidsForSell(makerBidRows(depth), {
+  return previewLinearizedBidsForSell(makerBidRows(depth), {
     reserves,
     outcomeIndex,
     shares,
@@ -1205,22 +1570,24 @@ export function pronosMakerExecutableBidDepthForMarket(market, {
   const targetShares = rows.reduce((sum, row) => (
     sum + Math.max(0, Number(row.maker_shares || 0))
   ), 0);
-  const capped = previewAmmCappedBidsForSell(rows, {
+  const capped = previewLinearizedBidsForSell(rows, {
     reserves,
     outcomeIndex,
     shares: targetShares,
   });
-  const bids = capped.fills.map(fill => ({
-    side: 'bid',
-    price: fill.price,
-    shares: fill.shares,
-    total: fill.collateral,
-    fee: 0,
-    priceImpactPts: 0,
-    source: 'maker',
-    cappedToAmm: fill.cappedToAmm,
-    makerLimitPrice: fill.makerLimitPrice,
-  }));
+  const bids = capped.fills
+    .filter(fill => fill.source !== 'amm_path')
+    .map(fill => ({
+      side: 'bid',
+      price: fill.price,
+      shares: fill.shares,
+      total: fill.collateral,
+      fee: 0,
+      priceImpactPts: 0,
+      source: 'maker',
+      cappedToAmm: fill.cappedToAmm,
+      makerLimitPrice: fill.makerLimitPrice,
+    }));
   const bestAsk = depth.asks.reduce((best, row) => (
     best == null || row.price < best ? row.price : best
   ), null);
@@ -1528,7 +1895,12 @@ export async function matchPronosMakerAsksForBuy(client, {
   const usage = await readPronosMakerUsage(client, { marketId, outcomeIndex });
   const depth = pronosMakerDepthForMarket(market, { outcomeIndex, usage, currentPrice });
   const rows = makerAskRows(depth, Math.max(1, Number.parseInt(maxOrders, 10) || MAX_TRIGGERED_PER_PASS));
-  const preview = previewRestingAsksForBuy(rows, { collateral: budget, maxPrice });
+  const preview = previewLinearizedAsksForBuy(rows, {
+    reserves,
+    outcomeIndex,
+    collateral: budget,
+    maxPrice,
+  });
   if (preview.sharesOut <= EPSILON || preview.collateralSpent <= EPSILON) {
     return preview;
   }
@@ -1536,12 +1908,16 @@ export async function matchPronosMakerAsksForBuy(client, {
   const fills = [];
   let sharesOut = 0;
   let collateralSpent = 0;
+  let fee = 0;
   let remainingCollateral = budget;
+  let reservesAfter = null;
+  let priceBefore = preview.priceBefore ?? null;
+  let priceAfter = preview.priceAfter ?? null;
 
   for (const fill of preview.fills) {
     if (remainingCollateral <= EPSILON) break;
-    const fillShares = round(Math.min(fill.shares, remainingCollateral / fill.price), 6);
-    const fillCollateral = round(fillShares * fill.price, 6);
+    const fillShares = round(Number(fill.shares || 0), 6);
+    const fillCollateral = round(Math.min(Number(fill.collateral || 0), remainingCollateral), 6);
     if (fillShares <= EPSILON || fillCollateral <= EPSILON) continue;
 
     await assertTournamentShareCap(client, {
@@ -1558,6 +1934,9 @@ export async function matchPronosMakerAsksForBuy(client, {
       costBasis: fillCollateral,
     });
 
+    const fillReservesBefore = Array.isArray(fill.reservesBefore) ? fill.reservesBefore : reserves;
+    const fillReservesAfter = Array.isArray(fill.reservesAfter) ? fill.reservesAfter : fillReservesBefore;
+    const fillFee = round(Number(fill.fee || 0), 6);
     await insertTradeAndSnapshot(client, {
       marketId,
       username,
@@ -1565,44 +1944,66 @@ export async function matchPronosMakerAsksForBuy(client, {
       outcomeIndex,
       shares: fillShares,
       collateral: fillCollateral,
-      fee: 0,
+      fee: fillFee,
       priceAtTrade: fill.price,
-      reservesBefore: reserves,
-      reservesAfter: reserves,
+      reservesBefore: fillReservesBefore,
+      reservesAfter: fillReservesAfter,
       snapshotLabel: null,
       source,
       apiKeyId,
     });
-    await insertTradeAndSnapshot(client, {
-      marketId,
-      username: PRONOS_TREASURY_USERNAME,
-      side: 'sell',
-      outcomeIndex,
-      shares: fillShares,
-      collateral: fillCollateral,
-      fee: 0,
-      priceAtTrade: fill.price,
-      reservesBefore: reserves,
-      reservesAfter: reserves,
-      snapshotLabel: null,
-    });
+    if (fill.source !== 'amm_path') {
+      await insertTradeAndSnapshot(client, {
+        marketId,
+        username: PRONOS_TREASURY_USERNAME,
+        side: 'sell',
+        outcomeIndex,
+        shares: fillShares,
+        collateral: fillCollateral,
+        fee: fillFee,
+        priceAtTrade: fill.price,
+        reservesBefore: fillReservesBefore,
+        reservesAfter: fillReservesAfter,
+        snapshotLabel: null,
+      });
+    }
 
     fills.push({
       ...fill,
       status: 'filled',
-      source: 'maker',
+      source: fill.source || 'maker',
     });
     sharesOut = round(sharesOut + fillShares, 6);
     collateralSpent = round(collateralSpent + fillCollateral, 6);
+    fee = round(fee + fillFee, 6);
     remainingCollateral = round(Math.max(0, remainingCollateral - fillCollateral), 6);
+    if (Array.isArray(fill.reservesAfter) && fill.source === 'amm_path') {
+      reservesAfter = fill.reservesAfter.map(Number);
+    }
+  }
+
+  if (Array.isArray(reservesAfter)) {
+    await client.query(
+      `UPDATE points_markets SET reserves = $1::jsonb WHERE id = $2`,
+      [JSON.stringify(reservesAfter), marketId],
+    );
+    await bestEffortInsertPointsPriceSnapshot(client, {
+      marketId,
+      reserves: reservesAfter,
+      logLabel: 'points-maker-buy-price-snapshot',
+    });
   }
 
   return {
     fills,
     sharesOut,
     collateralSpent,
+    fee,
     remainingCollateral,
     avgPrice: orderbookAverage(collateralSpent, sharesOut),
+    reservesAfter,
+    priceBefore,
+    priceAfter,
   };
 }
 
@@ -1757,6 +2158,7 @@ export async function matchPronosMakerInventoryBidsForSell(client, {
   username,
   outcomeIndex,
   sharesToSell,
+  minPrice = null,
   source = 'web',
   apiKeyId = null,
 } = {}) {
@@ -1778,6 +2180,9 @@ export async function matchPronosMakerInventoryBidsForSell(client, {
   );
   const preview = previewPronosMakerInventoryBidsForSell(inventoryRows.rows, {
     shares: targetShares,
+    reserves,
+    outcomeIndex,
+    minPrice,
   });
   if (preview.sharesSold <= EPSILON || preview.collateralOut <= EPSILON) {
     return { ...preview, realizedPnl: 0 };
@@ -1788,6 +2193,9 @@ export async function matchPronosMakerInventoryBidsForSell(client, {
   let collateralOut = 0;
   let realizedPnl = 0;
   let remainingShares = targetShares;
+  let reservesAfter = null;
+  let priceBefore = preview.priceBefore ?? null;
+  let priceAfter = preview.priceAfter ?? null;
 
   for (const fill of preview.fills) {
     if (remainingShares <= EPSILON) break;
@@ -1808,6 +2216,8 @@ export async function matchPronosMakerInventoryBidsForSell(client, {
       throw err;
     }
 
+    const fillReservesBefore = Array.isArray(fill.reservesBefore) ? fill.reservesBefore : reserves;
+    const fillReservesAfter = Array.isArray(fill.reservesAfter) ? fill.reservesAfter : fillReservesBefore;
     await insertTradeAndSnapshot(client, {
       marketId,
       username,
@@ -1817,35 +2227,52 @@ export async function matchPronosMakerInventoryBidsForSell(client, {
       collateral: fillCollateral,
       fee: 0,
       priceAtTrade: fill.price,
-      reservesBefore: reserves,
-      reservesAfter: reserves,
+      reservesBefore: fillReservesBefore,
+      reservesAfter: fillReservesAfter,
       snapshotLabel: null,
       source,
       apiKeyId,
     });
-    await insertTradeAndSnapshot(client, {
-      marketId,
-      username: PRONOS_TREASURY_USERNAME,
-      side: 'buy',
-      outcomeIndex,
-      shares: fillShares,
-      collateral: fillCollateral,
-      fee: 0,
-      priceAtTrade: fill.price,
-      reservesBefore: reserves,
-      reservesAfter: reserves,
-      snapshotLabel: null,
-    });
+    if (fill.source !== 'amm_path') {
+      await insertTradeAndSnapshot(client, {
+        marketId,
+        username: PRONOS_TREASURY_USERNAME,
+        side: 'buy',
+        outcomeIndex,
+        shares: fillShares,
+        collateral: fillCollateral,
+        fee: 0,
+        priceAtTrade: fill.price,
+        reservesBefore: fillReservesBefore,
+        reservesAfter: fillReservesAfter,
+        snapshotLabel: null,
+      });
+    }
 
     fills.push({
       ...fill,
       status: 'filled',
-      source: 'maker_inventory',
+      source: fill.source || 'maker_inventory',
     });
     sharesSold = round(sharesSold + fillShares, 6);
     collateralOut = round(collateralOut + fillCollateral, 6);
     realizedPnl = round(realizedPnl + sellerPosition.addedRealized, 6);
     remainingShares = round(Math.max(0, remainingShares - fillShares), 6);
+    if (Array.isArray(fill.reservesAfter) && (fill.source === 'amm_path' || fill.cappedToAmm)) {
+      reservesAfter = fill.reservesAfter.map(Number);
+    }
+  }
+
+  if (Array.isArray(reservesAfter)) {
+    await client.query(
+      `UPDATE points_markets SET reserves = $1::jsonb WHERE id = $2`,
+      [JSON.stringify(reservesAfter), marketId],
+    );
+    await bestEffortInsertPointsPriceSnapshot(client, {
+      marketId,
+      reserves: reservesAfter,
+      logLabel: 'points-maker-sell-price-snapshot',
+    });
   }
 
   return {
@@ -1855,6 +2282,9 @@ export async function matchPronosMakerInventoryBidsForSell(client, {
     realizedPnl,
     remainingShares,
     avgPrice: orderbookAverage(collateralOut, sharesSold),
+    reservesAfter,
+    priceBefore,
+    priceAfter,
   };
 }
 
@@ -1879,7 +2309,7 @@ export async function matchPronosMakerBidsForSell(client, {
   const usage = await readPronosMakerUsage(client, { marketId, outcomeIndex });
   const depth = pronosMakerDepthForMarket(market, { outcomeIndex, usage, currentPrice });
   const rows = makerBidRows(depth, Math.max(1, Number.parseInt(maxOrders, 10) || MAX_TRIGGERED_PER_PASS));
-  const preview = previewAmmCappedBidsForSell(rows, {
+  const preview = previewLinearizedBidsForSell(rows, {
     reserves,
     outcomeIndex,
     shares: targetShares,
@@ -1932,19 +2362,21 @@ export async function matchPronosMakerBidsForSell(client, {
       source,
       apiKeyId,
     });
-    await insertTradeAndSnapshot(client, {
-      marketId,
-      username: PRONOS_TREASURY_USERNAME,
-      side: 'buy',
-      outcomeIndex,
-      shares: fillShares,
-      collateral: fillCollateral,
-      fee: 0,
-      priceAtTrade: fill.price,
-      reservesBefore: fill.reservesBefore || reserves,
-      reservesAfter: fill.reservesAfter || reserves,
-      snapshotLabel: null,
-    });
+    if (fill.source !== 'amm_path') {
+      await insertTradeAndSnapshot(client, {
+        marketId,
+        username: PRONOS_TREASURY_USERNAME,
+        side: 'buy',
+        outcomeIndex,
+        shares: fillShares,
+        collateral: fillCollateral,
+        fee: 0,
+        priceAtTrade: fill.price,
+        reservesBefore: fill.reservesBefore || reserves,
+        reservesAfter: fill.reservesAfter || reserves,
+        snapshotLabel: null,
+      });
+    }
 
     fills.push({
       ...fill,
@@ -1965,6 +2397,11 @@ export async function matchPronosMakerBidsForSell(client, {
       `UPDATE points_markets SET reserves = $1::jsonb WHERE id = $2`,
       [JSON.stringify(reservesAfter), marketId],
     );
+    await bestEffortInsertPointsPriceSnapshot(client, {
+      marketId,
+      reserves: reservesAfter,
+      logLabel: 'points-maker-bid-sell-price-snapshot',
+    });
   }
 
   return {
