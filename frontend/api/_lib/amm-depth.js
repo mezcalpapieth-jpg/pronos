@@ -74,7 +74,7 @@ function bestBid(bids) {
   ), null);
 }
 
-export function buildAmmDepth({ reserves, outcomeIndex = 0, levels = DEFAULT_LEVELS } = {}) {
+export function buildAmmDepth({ reserves, outcomeIndex = 0, levels = DEFAULT_LEVELS, incremental = false } = {}) {
   if (!Array.isArray(reserves) || reserves.length < 2) {
     throw new Error('amm-depth: reserves must contain at least two values');
   }
@@ -86,48 +86,61 @@ export function buildAmmDepth({ reserves, outcomeIndex = 0, levels = DEFAULT_LEV
   if (!Number.isInteger(oi) || oi < 0 || oi >= normalizedReserves.length) {
     throw new Error('amm-depth: outcome_index out of range');
   }
-  const cleanLevels = (Array.isArray(levels) && levels.length > 0 ? levels : DEFAULT_LEVELS)
+  let cleanLevels = (Array.isArray(levels) && levels.length > 0 ? levels : DEFAULT_LEVELS)
     .map(Number)
     .filter((value) => Number.isFinite(value) && value > 0)
     .slice(0, 12);
+  if (incremental) cleanLevels = [...new Set(cleanLevels)].sort((a, b) => a - b);
 
   const asks = [];
   const bids = [];
   let currentPrice = null;
+  let previousBuy = { sharesOut: 0, collateral: 0, fee: 0 };
+  let previousSell = { shares: 0, collateralOut: 0, fee: 0 };
 
   for (const amount of cleanLevels) {
     try {
       const quote = quoteBuy(normalizedReserves, oi, amount);
-      const price = clampPrice(quote.avgPrice);
-      if (price > 0 && quote.sharesOut > 0) {
+      const shares = quote.sharesOut - (incremental ? previousBuy.sharesOut : 0);
+      const total = quote.collateral - (incremental ? previousBuy.collateral : 0);
+      const fee = quote.fee - (incremental ? previousBuy.fee : 0);
+      const price = clampPrice(incremental ? total / shares : quote.avgPrice);
+      if (price > 0 && shares > 0) {
         currentPrice = currentPrice == null ? clampPrice(quote.priceBefore) : currentPrice;
         asks.push({
           side: 'ask',
+          source: 'amm',
           price: round(price, 6),
-          shares: round(quote.sharesOut, 6),
-          total: round(quote.collateral, 6),
-          fee: round(quote.fee, 6),
+          shares: round(shares, 6),
+          total: round(total, 6),
+          fee: round(fee, 6),
           priceImpactPts: round(quote.priceImpactPts, 4),
         });
       }
+      previousBuy = quote;
     } catch {
       // Larger levels can legitimately exceed available liquidity.
     }
 
     try {
       const quote = quoteSell(normalizedReserves, oi, amount);
-      const price = clampPrice(quote.collateralOut / quote.shares);
-      if (price > 0 && quote.collateralOut > 0) {
+      const shares = quote.shares - (incremental ? previousSell.shares : 0);
+      const total = quote.collateralOut - (incremental ? previousSell.collateralOut : 0);
+      const fee = quote.fee - (incremental ? previousSell.fee : 0);
+      const price = clampPrice(total / shares);
+      if (price > 0 && total > 0) {
         currentPrice = currentPrice == null ? clampPrice(quote.priceBefore) : currentPrice;
         bids.push({
           side: 'bid',
+          source: 'amm',
           price: round(price, 6),
-          shares: round(quote.shares, 6),
-          total: round(quote.collateralOut, 6),
-          fee: round(quote.fee, 6),
+          shares: round(shares, 6),
+          total: round(total, 6),
+          fee: round(fee, 6),
           priceImpactPts: round(quote.priceImpactPts, 4),
         });
       }
+      previousSell = quote;
     } catch {
       // Same: depth is bounded by the pool.
     }

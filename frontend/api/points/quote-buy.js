@@ -9,7 +9,7 @@
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
-import { binaryBuyQuote, binaryPrices, multiBuyQuote, multiPrices } from '../_lib/amm-math.js';
+import { binaryPrices, multiPrices } from '../_lib/amm-math.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 import { seriesTradeLockFromRows } from '../_lib/series-markets.js';
 import { cryptoTradeLock } from '../_lib/points-crypto-trade-guard.js';
@@ -18,14 +18,8 @@ import {
   tournamentSettlementLock,
 } from '../_lib/points-tournament-entry.js';
 import { TOURNAMENT_APPROVED_MARKET_START_ISO } from '../_lib/points-tournament-config.js';
-import {
-  combineBuyOrderbookMatches,
-  makerUsageFromRows,
-  previewPronosMakerAsksForBuy,
-  previewRestingAsksForBuy,
-  PRONOS_TREASURY_USERNAME,
-} from '../_lib/points-limit-orders.js';
-import { monotonicBuyDisplayPrice } from '../_lib/points-display-prices.js';
+import { previewHybridBuy } from '../_lib/points-trade-router.js';
+import { readSession } from '../_lib/session.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -35,22 +29,6 @@ function parseJsonb(value, fallback) {
   if (value && typeof value === 'object') return value;
   if (typeof value !== 'string') return fallback;
   try { return JSON.parse(value); } catch { return fallback; }
-}
-
-function buyOrderbookPriceCap(reserves, outcomeIndex, collateral) {
-  const amount = Number(collateral);
-  if (!Array.isArray(reserves) || reserves.length < 2 || !Number.isFinite(amount) || amount <= 0) {
-    return null;
-  }
-  try {
-    const quote = reserves.length === 2
-      ? binaryBuyQuote(reserves, outcomeIndex, amount)
-      : multiBuyQuote(reserves, outcomeIndex, amount);
-    const cap = Number(quote?.avgPrice);
-    return Number.isFinite(cap) && cap > 0 ? cap : null;
-  } catch {
-    return null;
-  }
 }
 
 async function readSeriesTradeLock(market) {
@@ -160,64 +138,28 @@ export default async function handler(req, res) {
     const pricesBefore = reserves.length === 2 ? binaryPrices(reserves) : multiPrices(reserves);
     const priceBefore = pricesBefore[oi] || 0;
 
+    const username = readSession(req, res)?.username || null;
     const askRows = await sql`
-      SELECT id, username, limit_price, remaining_amount
+      SELECT id, username, limit_price, remaining_amount, created_at
         FROM points_limit_orders
        WHERE market_id = ${mid}
          AND outcome_index = ${oi}
          AND side = 'sell'
          AND status = 'open'
+         AND remaining_amount > 0
+         AND (${username}::text IS NULL OR username <> ${username})
          AND (expires_at IS NULL OR expires_at > NOW())
        ORDER BY limit_price ASC, created_at ASC, id ASC
        LIMIT 24
     `;
-    const bookMaxPrice = buyOrderbookPriceCap(reserves, oi, amt);
-    const realOrderbook = previewRestingAsksForBuy(askRows, {
-      collateral: amt,
-      maxPrice: bookMaxPrice,
+    const orderbook = previewHybridBuy(askRows, {
+      reserves, outcomeIndex: oi, collateral: amt, username,
     });
-    const usageRows = await sql`
-      SELECT side, COALESCE(SUM(collateral), 0)::text AS collateral
-        FROM points_trades
-       WHERE market_id = ${mid}
-         AND outcome_index = ${oi}
-         AND username = ${PRONOS_TREASURY_USERNAME}
-         AND side IN ('buy', 'sell')
-       GROUP BY side
-    `;
-    const makerOrderbook = realOrderbook.remainingCollateral > 0.000001
-      ? previewPronosMakerAsksForBuy(r, {
-        outcomeIndex: oi,
-        collateral: realOrderbook.remainingCollateral,
-        usage: makerUsageFromRows(usageRows),
-        currentPrice: priceBefore,
-        maxPrice: bookMaxPrice,
-      })
-      : null;
-    const orderbook = combineBuyOrderbookMatches(realOrderbook, makerOrderbook);
-    const ammCollateral = orderbook.remainingCollateral > 0.000001
-      ? orderbook.remainingCollateral
-      : 0;
-    const reservesForAmm = Array.isArray(orderbook.reservesAfter)
-      ? orderbook.reservesAfter.map(Number)
-      : reserves;
-    const q = ammCollateral > 0
-      ? (reservesForAmm.length === 2
-        ? binaryBuyQuote(reservesForAmm, oi, ammCollateral)
-        : multiBuyQuote(reservesForAmm, oi, ammCollateral))
-      : null;
-    const finalReserves = q?.reservesAfter || orderbook.reservesAfter || reserves;
-    const pricesAfter = finalReserves.length === 2 ? binaryPrices(finalReserves) : multiPrices(finalReserves);
-    const sharesOut = orderbook.sharesOut + Number(q?.sharesOut || 0);
-    const collateralSpent = orderbook.collateralSpent + ammCollateral;
-    const fee = Number(orderbook.fee || 0) + Number(q?.fee || 0);
-    const avgPrice = sharesOut > 0.000001 ? (collateralSpent - fee) / sharesOut : 0;
-    const executionPrice = avgPrice > 0 ? avgPrice : null;
-    const priceAfter = monotonicBuyDisplayPrice(priceBefore, [
-      q?.pricesAfter?.[oi],
-      orderbook.priceAfter,
-      executionPrice,
-    ]);
+    const { sharesOut, fee, avgPrice, priceAfter } = orderbook;
+    const collateralSpent = orderbook.collateralSpent;
+    const pricesAfter = reserves.length === 2
+      ? binaryPrices(orderbook.reservesAfter)
+      : multiPrices(orderbook.reservesAfter);
     return res.status(200).json({
       collateral: collateralSpent,
       fee,
@@ -229,7 +171,7 @@ export default async function handler(req, res) {
       priceImpactPts: (priceAfter - priceBefore) * 100,
       pricesBefore,
       pricesAfter,
-      orderbookFillCount: Array.isArray(orderbook.fills) ? orderbook.fills.length : 0,
+      orderbookFillCount: orderbook.fills.filter(fill => fill.source === 'limit').length,
     });
   } catch (e) {
     const msg = (e?.message || '').toLowerCase();

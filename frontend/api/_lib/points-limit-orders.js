@@ -7,6 +7,7 @@ import {
   multiSellQuote,
 } from './amm-math.js';
 import { buildMockMakerDepth, AMM_DEPTH_LEVELS } from './amm-depth.js';
+import { previewHybridBuy, previewHybridSell } from './points-trade-router.js';
 import { bestEffortInsertPointsPriceSnapshot } from './points-price-snapshots.js';
 import { assertCryptoTradeAllowed, cryptoTradeLock } from './points-crypto-trade-guard.js';
 import {
@@ -791,6 +792,7 @@ export function previewPronosMakerInventoryBidsForSell(rows = [], {
         username: PRONOS_TREASURY_USERNAME,
         limit_price: row.price,
         remaining_amount: row.total,
+        maker_shares: row.shares,
         source: 'maker_inventory',
         created_at: row.createdAt || null,
       }));
@@ -957,8 +959,8 @@ export function combineBuyOrderbookMatches(...matches) {
   const collateralSpent = round(clean.reduce((sum, match) => sum + Number(match.collateralSpent || 0), 0), 6);
   const fee = round(clean.reduce((sum, match) => sum + Number(match.fee || 0), 0), 6);
   const reserveMatch = [...clean].reverse().find(match => Array.isArray(match.reservesAfter));
-  const priceAfterMatch = [...clean].reverse().find(match => Number.isFinite(Number(match.priceAfter)));
-  const priceBeforeMatch = clean.find(match => Number.isFinite(Number(match.priceBefore)));
+  const priceAfterMatch = [...clean].reverse().find(match => match.priceAfter != null && Number.isFinite(Number(match.priceAfter)));
+  const priceBeforeMatch = clean.find(match => match.priceBefore != null && Number.isFinite(Number(match.priceBefore)));
   const remainingCollateral = clean.length > 0
     ? Number(clean[clean.length - 1].remainingCollateral || 0)
     : 0;
@@ -982,8 +984,8 @@ export function combineSellOrderbookMatches(...matches) {
   const collateralOut = round(clean.reduce((sum, match) => sum + Number(match.collateralOut || 0), 0), 6);
   const realizedPnl = round(clean.reduce((sum, match) => sum + Number(match.realizedPnl || 0), 0), 6);
   const reserveMatch = [...clean].reverse().find(match => Array.isArray(match.reservesAfter));
-  const priceAfterMatch = [...clean].reverse().find(match => Number.isFinite(Number(match.priceAfter)));
-  const priceBeforeMatch = clean.find(match => Number.isFinite(Number(match.priceBefore)));
+  const priceAfterMatch = [...clean].reverse().find(match => match.priceAfter != null && Number.isFinite(Number(match.priceAfter)));
+  const priceBeforeMatch = clean.find(match => match.priceBefore != null && Number.isFinite(Number(match.priceBefore)));
   const remainingShares = clean.length > 0
     ? Number(clean[clean.length - 1].remainingShares || 0)
     : 0;
@@ -1372,7 +1374,8 @@ export function previewLinearizedBidsForSell(rows = [], {
     const currentPrice = currentPriceForOutcome(nextReserves, outcomeIndex);
     const fillPrice = Math.min(makerPrice, currentPrice || makerPrice);
     if (!fillPrice || fillPrice <= EPSILON) continue;
-    const fillShares = round(Math.min(remainingShares, availableCollateral / fillPrice), 6);
+    const availableShares = row.maker_shares == null ? Infinity : Math.max(0, Number(row.maker_shares));
+    const fillShares = round(Math.min(remainingShares, availableShares, availableCollateral / fillPrice), 6);
     if (fillShares <= EPSILON) continue;
 
     let quote;
@@ -1734,6 +1737,7 @@ export async function matchRestingAsksForBuy(client, {
   outcomeIndex,
   collateralBudget,
   maxPrice = null,
+  routeAmm = false,
   maxOrders = MAX_TRIGGERED_PER_PASS,
   source = 'web',
   apiKeyId = null,
@@ -1744,7 +1748,7 @@ export async function matchRestingAsksForBuy(client, {
   }
 
   const reserves = reservesForMarket(market, outcomeIndex);
-  const priceCap = normalizeTakerPrice(maxPrice, null);
+  const priceCap = routeAmm ? null : normalizeTakerPrice(maxPrice, null);
   const limit = Math.max(1, Number.parseInt(maxOrders, 10) || MAX_TRIGGERED_PER_PASS);
   const orders = await client.query(
     `SELECT *
@@ -1766,16 +1770,47 @@ export async function matchRestingAsksForBuy(client, {
   const fills = [];
   let sharesOut = 0;
   let collateralSpent = 0;
+  let plan = null;
+  if (routeAmm) {
+    try {
+      plan = previewHybridBuy(orders.rows, { reserves, outcomeIndex, collateral: budget, username });
+    } catch (error) {
+      const err = new Error('invalid_quote');
+      err.status = 400;
+      err.detail = error.message;
+      throw err;
+    }
+  }
+  const byId = new Map(orders.rows.map(row => [row.id, row]));
 
-  for (const rawOrder of orders.rows) {
+  for (const planned of plan?.fills || orders.rows) {
     if (remainingCollateral <= EPSILON) break;
-    const order = await accrueMakerRewardForOrder(client, rawOrder, market, reserves);
+    if (planned.source === 'amm') {
+      await assertTournamentShareCap(client, { market, marketId, username, additionalShares: planned.shares });
+      await upsertBoughtPosition(client, {
+        marketId, username, outcomeIndex, shares: planned.shares, costBasis: planned.collateral,
+      });
+      await insertTradeAndSnapshot(client, {
+        marketId, username, side: 'buy', outcomeIndex, shares: planned.shares,
+        collateral: planned.collateral, fee: planned.fee, priceAtTrade: planned.price,
+        reservesBefore: planned.reservesBefore, reservesAfter: planned.reservesAfter,
+        source, apiKeyId,
+      });
+      fills.push(planned);
+      sharesOut = round(sharesOut + planned.shares, 6);
+      collateralSpent = round(collateralSpent + planned.collateral, 6);
+      remainingCollateral = round(Math.max(0, remainingCollateral - planned.collateral), 6);
+      continue;
+    }
+    const rawOrder = plan ? byId.get(planned.orderId) : planned;
+    const fillReserves = planned.reservesBefore || reserves;
+    const order = await accrueMakerRewardForOrder(client, rawOrder, market, fillReserves);
     const price = normalizeTakerPrice(order.limit_price, null);
     const availableShares = Math.max(0, Number(order.remaining_amount || 0));
     if (!price || availableShares <= EPSILON) continue;
 
-    const fillShares = round(Math.min(availableShares, remainingCollateral / price), 6);
-    const fillCollateral = round(fillShares * price, 6);
+    const fillShares = plan ? planned.shares : round(Math.min(availableShares, remainingCollateral / price), 6);
+    const fillCollateral = plan ? planned.collateral : round(fillShares * price, 6);
     if (fillShares <= EPSILON || fillCollateral <= EPSILON) continue;
 
     await assertTournamentShareCap(client, {
@@ -1793,7 +1828,14 @@ export async function matchRestingAsksForBuy(client, {
       collateralOut: fillCollateral,
       expireOrderId: order.id,
     });
-    if (!sellerPosition) continue;
+    if (!sellerPosition) {
+      if (plan) {
+        const err = new Error('price_moved');
+        err.status = 409;
+        throw err;
+      }
+      continue;
+    }
 
     await upsertBoughtPosition(client, {
       marketId,
@@ -1820,8 +1862,8 @@ export async function matchRestingAsksForBuy(client, {
       collateral: fillCollateral,
       fee: 0,
       priceAtTrade: price,
-      reservesBefore: reserves,
-      reservesAfter: reserves,
+      reservesBefore: fillReserves,
+      reservesAfter: fillReserves,
       snapshotLabel: null,
       source,
       apiKeyId,
@@ -1835,8 +1877,8 @@ export async function matchRestingAsksForBuy(client, {
       collateral: fillCollateral,
       fee: 0,
       priceAtTrade: price,
-      reservesBefore: reserves,
-      reservesAfter: reserves,
+      reservesBefore: fillReserves,
+      reservesAfter: fillReserves,
       snapshotLabel: null,
     });
 
@@ -1853,6 +1895,7 @@ export async function matchRestingAsksForBuy(client, {
     fills.push({
       orderId: Number(order.id),
       maker: order.username,
+      source: 'limit',
       side: 'sell',
       status,
       price,
@@ -1865,12 +1908,22 @@ export async function matchRestingAsksForBuy(client, {
     remainingCollateral = round(Math.max(0, remainingCollateral - fillCollateral), 6);
   }
 
+  if (plan?.fills.some(fill => fill.source === 'amm')) {
+    await client.query(
+      `UPDATE points_markets SET reserves = $1::jsonb WHERE id = $2`,
+      [JSON.stringify(plan.reservesAfter), marketId],
+    );
+    await bestEffortInsertPointsPriceSnapshot(client, {
+      marketId, reserves: plan.reservesAfter, logLabel: 'points-buy-price-snapshot',
+    });
+  }
   return {
+    ...plan,
     fills,
     sharesOut,
     collateralSpent,
     remainingCollateral,
-    avgPrice: orderbookAverage(collateralSpent, sharesOut),
+    avgPrice: plan?.avgPrice ?? orderbookAverage(collateralSpent, sharesOut),
   };
 }
 
@@ -2014,6 +2067,7 @@ export async function matchRestingBidsForSell(client, {
   outcomeIndex,
   sharesToSell,
   minPrice = null,
+  routeAmm = false,
   maxOrders = MAX_TRIGGERED_PER_PASS,
   source = 'web',
   apiKeyId = null,
@@ -2024,7 +2078,7 @@ export async function matchRestingBidsForSell(client, {
   }
 
   const reserves = reservesForMarket(market, outcomeIndex);
-  const priceFloor = normalizeTakerPrice(minPrice, null);
+  const priceFloor = routeAmm ? null : normalizeTakerPrice(minPrice, null);
   const limit = Math.max(1, Number.parseInt(maxOrders, 10) || MAX_TRIGGERED_PER_PASS);
   const orders = await client.query(
     `SELECT *
@@ -2047,16 +2101,52 @@ export async function matchRestingBidsForSell(client, {
   let sharesSold = 0;
   let collateralOut = 0;
   let realizedPnl = 0;
+  let plan = null;
+  if (routeAmm) {
+    try {
+      plan = previewHybridSell(orders.rows, { reserves, outcomeIndex, shares: targetShares, username });
+    } catch (error) {
+      const err = new Error('invalid_quote');
+      err.status = 400;
+      err.detail = error.message;
+      throw err;
+    }
+  }
+  const byId = new Map(orders.rows.map(row => [row.id, row]));
 
-  for (const rawOrder of orders.rows) {
+  for (const planned of plan?.fills || orders.rows) {
     if (remainingShares <= EPSILON) break;
-    const order = await accrueMakerRewardForOrder(client, rawOrder, market, reserves);
+    if (planned.source === 'amm') {
+      const position = await reduceSoldPosition(client, {
+        marketId, username, outcomeIndex, shares: planned.shares, collateralOut: planned.collateral,
+      });
+      if (!position) {
+        const err = new Error('insufficient_available_shares');
+        err.status = 400;
+        throw err;
+      }
+      await insertTradeAndSnapshot(client, {
+        marketId, username, side: 'sell', outcomeIndex, shares: planned.shares,
+        collateral: planned.collateral, fee: 0, priceAtTrade: planned.price,
+        reservesBefore: planned.reservesBefore, reservesAfter: planned.reservesAfter,
+        source, apiKeyId,
+      });
+      fills.push(planned);
+      sharesSold = round(sharesSold + planned.shares, 6);
+      collateralOut = round(collateralOut + planned.collateral, 6);
+      realizedPnl = round(realizedPnl + position.addedRealized, 6);
+      remainingShares = round(Math.max(0, remainingShares - planned.shares), 6);
+      continue;
+    }
+    const rawOrder = plan ? byId.get(planned.orderId) : planned;
+    const fillReserves = planned.reservesBefore || reserves;
+    const order = await accrueMakerRewardForOrder(client, rawOrder, market, fillReserves);
     const price = normalizeTakerPrice(order.limit_price, null);
     const availableCollateral = Math.max(0, Number(order.remaining_amount || 0));
     if (!price || availableCollateral <= EPSILON) continue;
 
-    const fillShares = round(Math.min(remainingShares, availableCollateral / price), 6);
-    const fillCollateral = round(fillShares * price, 6);
+    const fillShares = plan ? planned.shares : round(Math.min(remainingShares, availableCollateral / price), 6);
+    const fillCollateral = plan ? planned.collateral : round(fillShares * price, 6);
     if (fillShares <= EPSILON || fillCollateral <= EPSILON) continue;
 
     await assertTournamentShareCap(client, {
@@ -2096,8 +2186,8 @@ export async function matchRestingBidsForSell(client, {
       collateral: fillCollateral,
       fee: 0,
       priceAtTrade: price,
-      reservesBefore: reserves,
-      reservesAfter: reserves,
+      reservesBefore: fillReserves,
+      reservesAfter: fillReserves,
       snapshotLabel: null,
       source,
       apiKeyId,
@@ -2111,8 +2201,8 @@ export async function matchRestingBidsForSell(client, {
       collateral: fillCollateral,
       fee: 0,
       priceAtTrade: price,
-      reservesBefore: reserves,
-      reservesAfter: reserves,
+      reservesBefore: fillReserves,
+      reservesAfter: fillReserves,
       snapshotLabel: null,
     });
 
@@ -2129,6 +2219,7 @@ export async function matchRestingBidsForSell(client, {
     fills.push({
       orderId: Number(order.id),
       maker: order.username,
+      source: 'limit',
       side: 'buy',
       status,
       price,
@@ -2142,7 +2233,17 @@ export async function matchRestingBidsForSell(client, {
     remainingShares = round(Math.max(0, remainingShares - fillShares), 6);
   }
 
+  if (plan?.fills.some(fill => fill.source === 'amm')) {
+    await client.query(
+      `UPDATE points_markets SET reserves = $1::jsonb WHERE id = $2`,
+      [JSON.stringify(plan.reservesAfter), marketId],
+    );
+    await bestEffortInsertPointsPriceSnapshot(client, {
+      marketId, reserves: plan.reservesAfter, logLabel: 'points-sell-price-snapshot',
+    });
+  }
   return {
+    ...plan,
     fills,
     sharesSold,
     collateralOut,
@@ -2258,7 +2359,7 @@ export async function matchPronosMakerInventoryBidsForSell(client, {
     collateralOut = round(collateralOut + fillCollateral, 6);
     realizedPnl = round(realizedPnl + sellerPosition.addedRealized, 6);
     remainingShares = round(Math.max(0, remainingShares - fillShares), 6);
-    if (Array.isArray(fill.reservesAfter) && (fill.source === 'amm_path' || fill.cappedToAmm)) {
+    if (Array.isArray(fill.reservesAfter)) {
       reservesAfter = fill.reservesAfter.map(Number);
     }
   }

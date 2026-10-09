@@ -2,21 +2,14 @@
  * GET /api/points/orderbook?marketId=<id>&outcomeIndex=<idx>&levels=<n>
  *
  * Hybrid points order book. User bids/asks come from reserved limit
- * orders; Pronos maker asks add light treasury depth, while maker bids
- * reflect outstanding treasury inventory that can be bought back without
- * moving the AMM twice.
+ * orders; AMM rows show incremental, fee-inclusive depth from the same
+ * reserves used by the trade router, not independent synthetic liquidity.
  */
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
-import { AMM_DEPTH_LEVELS } from '../_lib/amm-depth.js';
-import {
-  aggregateLimitOrderRows,
-  makerUsageFromRows,
-  pronosMakerDepthForMarket,
-  pronosMakerInventoryBidDepthFromRows,
-  PRONOS_TREASURY_USERNAME,
-} from '../_lib/points-limit-orders.js';
+import { AMM_DEPTH_LEVELS, buildAmmDepth } from '../_lib/amm-depth.js';
+import { aggregateLimitOrderRows } from '../_lib/points-limit-orders.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 import { cachedJson, createApiTimer, setCacheHeaders } from '../_lib/api-performance.js';
 import { TOURNAMENT_APPROVED_MARKET_START_ISO } from '../_lib/points-tournament-config.js';
@@ -68,7 +61,7 @@ export default async function handler(req, res) {
   });
 
   try {
-    const cacheKey = `points:orderbook:v8:${marketId}:${outcomeIndex}:${requestedLevels.join(',')}`;
+    const cacheKey = `points:orderbook:v9:${marketId}:${outcomeIndex}:${requestedLevels.join(',')}`;
     const { value: payload, hit } = await cachedJson(cacheKey, 1_000, async () => {
       await timer.time('schema', () => ensurePointsSchema(schemaSql));
       const rows = await timer.time('db_market', () => sql`
@@ -110,19 +103,11 @@ export default async function handler(req, res) {
         };
       }
 
-      const makerTradeRows = await timer.time('db_maker_trades', () => sql`
-        SELECT id, side, shares, collateral, price_at_trade, created_at
-          FROM points_trades
-         WHERE market_id = ${marketId}
-           AND outcome_index = ${outcomeIndex}
-           AND username = ${PRONOS_TREASURY_USERNAME}
-           AND side IN ('buy', 'sell')
-         ORDER BY created_at ASC, id ASC
-      `);
-      const depth = pronosMakerDepthForMarket(market, {
+      const depth = buildAmmDepth({
+        reserves,
         outcomeIndex,
         levels: requestedLevels,
-        usage: makerUsageFromRows(makerTradeRows),
+        incremental: true,
       });
       const limitRows = await timer.time('db_limit_orders', () => sql`
         SELECT side,
@@ -133,24 +118,22 @@ export default async function handler(req, res) {
          WHERE market_id = ${marketId}
            AND outcome_index = ${outcomeIndex}
            AND status = 'open'
+           AND remaining_amount > 0
+           AND (expires_at IS NULL OR expires_at > NOW())
          GROUP BY side, limit_price
       `);
       const limitBook = aggregateLimitOrderRows(limitRows);
-      const makerAsks = depth.asks;
-      const makerBids = pronosMakerInventoryBidDepthFromRows(makerTradeRows, {
-        limit: requestedLevels.length,
-      });
-      const asks = [...limitBook.asks, ...makerAsks]
+      const asks = [...limitBook.asks, ...depth.asks]
         .sort((a, b) => b.price - a.price)
         .slice(0, requestedLevels.length + limitBook.asks.length);
-      const bids = [...limitBook.bids, ...makerBids]
+      const bids = [...limitBook.bids, ...depth.bids]
         .sort((a, b) => b.price - a.price)
         .slice(0, requestedLevels.length + limitBook.bids.length);
-      const bestAsk = [...limitBook.asks, ...makerAsks].reduce(
+      const bestAsk = [...limitBook.asks, ...depth.asks].reduce(
         (best, row) => (best == null || row.price < best ? row.price : best),
         null,
       );
-      const bestBid = [...limitBook.bids, ...makerBids].reduce(
+      const bestBid = [...limitBook.bids, ...depth.bids].reduce(
         (best, row) => (best == null || row.price > best ? row.price : best),
         null,
       );
@@ -170,12 +153,11 @@ export default async function handler(req, res) {
         spread,
         asks,
         bids,
-        bookType: 'mock_orderbook',
-        mockMakerDepth: depth.perSideDepth,
+        bookType: 'hybrid_orderbook',
         limitAskCount: limitBook.asks.reduce((sum, row) => sum + (Number(row.orderCount) || 0), 0),
         limitBidCount: limitBook.bids.reduce((sum, row) => sum + (Number(row.orderCount) || 0), 0),
-        makerAskCount: makerAsks.length,
-        makerBidCount: makerBids.length,
+        ammAskCount: depth.asks.length,
+        ammBidCount: depth.bids.length,
       };
     });
     res.setHeader('X-Pronos-Cache', hit ? 'hit' : 'miss');

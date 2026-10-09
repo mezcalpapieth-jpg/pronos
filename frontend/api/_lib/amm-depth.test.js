@@ -6,6 +6,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildAmmDepth, buildMockMakerDepth } from './amm-depth.js';
+import { binaryBuyQuote, binarySellQuote } from './amm-math.js';
+
+test('incremental AMM book rows do not double-count liquidity and include buy fees', () => {
+  const reserves = [500, 500];
+  const depth = buildAmmDepth({ reserves, outcomeIndex: 0, levels: [100, 10, 25, 25, 50], incremental: true });
+  const buy = binaryBuyQuote(reserves, 0, 100);
+  const sell = binarySellQuote(reserves, 0, 100);
+  assert.equal(depth.asks.length, 4);
+  const sum = (rows, key) => rows.reduce((n, row) => n + row[key], 0);
+  assert.ok(Math.abs(sum(depth.asks, 'shares') - buy.sharesOut) < 0.00001);
+  assert.equal(sum(depth.asks, 'total'), 100);
+  assert.ok(Math.abs(sum(depth.asks, 'fee') - buy.fee) < 0.00001);
+  assert.equal(sum(depth.bids, 'shares'), 100);
+  assert.ok(Math.abs(sum(depth.bids, 'total') - sell.collateralOut) < 0.00001);
+  assert.ok([...depth.asks, ...depth.bids].every(row => row.source === 'amm'));
+  for (const row of depth.asks) assert.ok(Math.abs(row.price * row.shares - row.total) < 0.0001);
+});
 
 test('buildAmmDepth derives executable bids and asks from binary AMM quotes', () => {
   const depth = buildAmmDepth({

@@ -1,33 +1,12 @@
-import {
-  binaryBuyQuote,
-  binaryPrices,
-  binarySellQuote,
-  multiBuyQuote,
-  multiPrices,
-  multiSellQuote,
-} from './amm-math.js';
 import { seriesTradeLockFromRows } from './series-markets.js';
-import { bestEffortInsertPointsPriceSnapshot } from './points-price-snapshots.js';
 import {
-  combineBuyOrderbookMatches,
-  combineSellOrderbookMatches,
   executeTriggeredLimitOrders,
   lockedReservedShares,
-  matchPronosMakerAsksForBuy,
-  matchPronosMakerInventoryBidsForSell,
   matchRestingAsksForBuy,
   matchRestingBidsForSell,
 } from './points-limit-orders.js';
-import {
-  monotonicBuyDisplayPrice,
-  monotonicSellDisplayPrice,
-} from './points-display-prices.js';
 import { assertCryptoTradeAllowed } from './points-crypto-trade-guard.js';
-import {
-  TOURNAMENT_APPROVED_MARKET_START_ISO,
-  TOURNAMENT_MAX_SHARES_PER_MARKET,
-  tournamentRulesActive,
-} from './points-tournament-config.js';
+import { TOURNAMENT_APPROVED_MARKET_START_ISO } from './points-tournament-config.js';
 import {
   assertTournamentCutoffSnapshotReady,
   assertTournamentMinimumEntry,
@@ -45,12 +24,6 @@ function parseJsonb(value, fallback) {
   try { return JSON.parse(value); } catch { return fallback; }
 }
 
-function truthy(value) {
-  if (value === true) return true;
-  const normalized = String(value || '').trim().toLowerCase();
-  return normalized === 'true' || normalized === '1' || normalized === 'yes';
-}
-
 function apiError(message, status = 400, detail = undefined) {
   const err = new Error(message);
   err.status = status;
@@ -66,38 +39,6 @@ function normalizeTradeSource(source) {
 function normalizeApiKeyId(apiKeyId) {
   const value = Number(apiKeyId);
   return Number.isInteger(value) && value > 0 ? value : null;
-}
-
-function buyOrderbookPriceCap(reserves, outcomeIndex, collateral) {
-  const amount = Number(collateral);
-  if (!Array.isArray(reserves) || reserves.length < 2 || !Number.isFinite(amount) || amount <= 0) {
-    return null;
-  }
-  try {
-    const quote = reserves.length === 2
-      ? binaryBuyQuote(reserves, outcomeIndex, amount)
-      : multiBuyQuote(reserves, outcomeIndex, amount);
-    const cap = Number(quote?.avgPrice);
-    return Number.isFinite(cap) && cap > 0 ? cap : null;
-  } catch {
-    return null;
-  }
-}
-
-function sellOrderbookPriceFloor(reserves, outcomeIndex, shares) {
-  const amount = Number(shares);
-  if (!Array.isArray(reserves) || reserves.length < 2 || !Number.isFinite(amount) || amount <= 0) {
-    return null;
-  }
-  try {
-    const quote = reserves.length === 2
-      ? binarySellQuote(reserves, outcomeIndex, amount)
-      : multiSellQuote(reserves, outcomeIndex, amount);
-    const floor = Number(quote?.collateralOut) / amount;
-    return Number.isFinite(floor) && floor > 0 ? floor : null;
-  } catch {
-    return null;
-  }
 }
 
 async function readSeriesTradeLock(client, market) {
@@ -121,27 +62,6 @@ async function readSeriesTradeLock(client, market) {
     [cfg.leaguePath, anchor],
   );
   return seriesTradeLockFromRows(market, siblingResult.rows);
-}
-
-async function assertTournamentShareCap(client, { market, marketId, username, additionalShares }) {
-  if (!tournamentRulesActive()) return;
-  if (!truthy(market?.tournament_featured ?? market?.tournamentFeatured)) return;
-  const rows = await client.query(
-    `SELECT outcome_index, shares
-       FROM points_positions
-      WHERE market_id = $1
-        AND username = $2
-      FOR UPDATE`,
-    [marketId, username],
-  );
-  const currentShares = rows.rows.reduce((sum, row) => sum + Number(row.shares || 0), 0);
-  if (currentShares + Number(additionalShares || 0) > TOURNAMENT_MAX_SHARES_PER_MARKET + EPSILON) {
-    throw apiError(
-      'tournament_share_cap',
-      400,
-      `Máximo ${TOURNAMENT_MAX_SHARES_PER_MARKET.toLocaleString('es-MX')} acciones por mercado en el torneo.`,
-    );
-  }
 }
 
 export async function executePointsBuy(client, {
@@ -209,9 +129,6 @@ export async function executePointsBuy(client, {
   if (reserves.length < 2) throw apiError('degenerate_reserves', 400);
   if (oi >= reserves.length) throw apiError('invalid_outcome_index', 400);
 
-  const pricesBefore = reserves.length === 2 ? binaryPrices(reserves) : multiPrices(reserves);
-  const displayPriceBefore = Number(pricesBefore[oi] ?? 0);
-
   const balanceResult = await client.query(
     `SELECT balance FROM points_balances WHERE username = $1 FOR UPDATE`,
     [username],
@@ -221,52 +138,19 @@ export async function executePointsBuy(client, {
     : 0;
   if (currentBalance < amt) throw apiError('insufficient_balance', 400);
 
-  const bookMaxPrice = buyOrderbookPriceCap(reserves, oi, amt);
-  const realOrderbookMatch = await matchRestingAsksForBuy(client, {
+  const orderbookMatch = await matchRestingAsksForBuy(client, {
     market,
     marketId: mid,
     username,
     outcomeIndex: oi,
     collateralBudget: amt,
-    maxPrice: bookMaxPrice,
+    routeAmm: true,
     source: tradeSource,
     apiKeyId: tradeApiKeyId,
   });
-  const makerOrderbookMatch = realOrderbookMatch.remainingCollateral > EPSILON
-    ? await matchPronosMakerAsksForBuy(client, {
-      market,
-      marketId: mid,
-      username,
-      outcomeIndex: oi,
-      collateralBudget: realOrderbookMatch.remainingCollateral,
-      currentPrice: displayPriceBefore || null,
-      maxPrice: bookMaxPrice,
-      source: tradeSource,
-      apiKeyId: tradeApiKeyId,
-    })
-    : null;
-  const orderbookMatch = combineBuyOrderbookMatches(realOrderbookMatch, makerOrderbookMatch);
-  const ammCollateral = orderbookMatch.remainingCollateral > EPSILON
-    ? orderbookMatch.remainingCollateral
-    : 0;
-  const reservesForAmm = Array.isArray(orderbookMatch.reservesAfter)
-    ? orderbookMatch.reservesAfter.map(Number)
-    : reserves;
-
-  let quote = null;
-  if (ammCollateral > 0) {
-    try {
-      quote = reservesForAmm.length === 2
-        ? binaryBuyQuote(reservesForAmm, oi, ammCollateral)
-        : multiBuyQuote(reservesForAmm, oi, ammCollateral);
-    } catch (e) {
-      throw apiError('invalid_quote', 400, e.message);
-    }
-  }
-
-  const totalSharesOut = orderbookMatch.sharesOut + Number(quote?.sharesOut || 0);
-  const totalSpent = orderbookMatch.collateralSpent + ammCollateral;
-  const totalFee = Number(orderbookMatch.fee || 0) + Number(quote?.fee || 0);
+  const totalSharesOut = orderbookMatch.sharesOut;
+  const totalSpent = orderbookMatch.collateralSpent;
+  const totalFee = Number(orderbookMatch.fee || 0);
   const combinedAvgPrice = totalSharesOut > EPSILON
     ? (totalSpent - totalFee) / totalSharesOut
     : 0;
@@ -279,53 +163,11 @@ export async function executePointsBuy(client, {
   }
   if (totalSharesOut <= EPSILON || totalSpent <= EPSILON) throw apiError('invalid_quote', 400);
 
-  if (quote) {
-    await assertTournamentShareCap(client, {
-      market,
-      marketId: mid,
-      username,
-      additionalShares: quote.sharesOut,
-    });
-    await client.query(
-      `UPDATE points_markets SET reserves = $1::jsonb WHERE id = $2`,
-      [JSON.stringify(quote.reservesAfter), mid],
-    );
-  }
-
   const newBalance = currentBalance - totalSpent;
   await client.query(
     `UPDATE points_balances SET balance = $1, updated_at = NOW() WHERE username = $2`,
     [newBalance, username],
   );
-
-  if (quote) {
-    await client.query(
-      `INSERT INTO points_trades (
-         market_id, username, side, outcome_index,
-         shares, collateral, fee, price_at_trade,
-         reserves_before, reserves_after, source, api_key_id
-       ) VALUES ($1, $2, 'buy', $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10, $11)`,
-      [
-        mid, username, oi,
-        quote.sharesOut, ammCollateral, quote.fee, quote.avgPrice,
-        JSON.stringify(reservesForAmm),
-        JSON.stringify(quote.reservesAfter),
-        tradeSource,
-        tradeApiKeyId,
-      ],
-    );
-
-    await client.query(
-      `INSERT INTO points_positions (market_id, username, outcome_index, shares, cost_basis)
-       VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (market_id, username, outcome_index) DO UPDATE
-       SET shares     = points_positions.shares + EXCLUDED.shares,
-           cost_basis = points_positions.cost_basis + EXCLUDED.cost_basis,
-           dismissed_at = NULL,
-           updated_at = NOW()`,
-      [mid, username, oi, quote.sharesOut, ammCollateral],
-    );
-  }
 
   await client.query(
     `INSERT INTO points_distributions (username, amount, kind, reference_id, reason)
@@ -338,29 +180,15 @@ export async function executePointsBuy(client, {
     ],
   );
 
-  if (quote) {
-    await bestEffortInsertPointsPriceSnapshot(client, {
-      marketId: mid,
-      reserves: quote.reservesAfter,
-      logLabel: 'points-buy-price-snapshot',
-    });
-  }
-
   const triggeredLimitOrders = await executeTriggeredLimitOrders(client, { marketId: mid });
-  const responsePriceBefore = orderbookMatch.priceBefore ?? displayPriceBefore ?? quote?.priceBefore ?? orderbookMatch.avgPrice;
-  const responsePriceAfter = monotonicBuyDisplayPrice(responsePriceBefore, [
-    quote?.priceAfter,
-    orderbookMatch.priceAfter,
-    combinedAvgPrice,
-  ]);
 
   return {
     balance: newBalance,
     sharesOut: totalSharesOut,
     fee: totalFee,
-    priceBefore: responsePriceBefore,
-    priceAfter: responsePriceAfter,
-    orderbookFills: orderbookMatch.fills,
+    priceBefore: orderbookMatch.priceBefore,
+    priceAfter: orderbookMatch.priceAfter,
+    orderbookFills: orderbookMatch.fills.filter(fill => fill.source === 'limit'),
     triggeredLimitOrders,
   };
 }
@@ -412,9 +240,6 @@ export async function executePointsSell(client, {
   if (reserves.length < 2) throw apiError('degenerate_reserves', 400);
   if (oi >= reserves.length) throw apiError('invalid_outcome_index', 400);
 
-  const pricesBefore = reserves.length === 2 ? binaryPrices(reserves) : multiPrices(reserves);
-  const displayPriceBefore = Number(pricesBefore[oi] ?? 0);
-
   const positionResult = await client.query(
     `SELECT shares, cost_basis, realized_pnl
        FROM points_positions
@@ -432,125 +257,17 @@ export async function executePointsSell(client, {
     reservedShares,
   });
 
-  const bookMinPrice = sellOrderbookPriceFloor(reserves, oi, sharesToSell);
-  const realOrderbookMatch = await matchRestingBidsForSell(client, {
+  const orderbookMatch = await matchRestingBidsForSell(client, {
     market,
     marketId: mid,
     username,
     outcomeIndex: oi,
     sharesToSell,
-    minPrice: bookMinPrice,
+    routeAmm: true,
     source: tradeSource,
     apiKeyId: tradeApiKeyId,
   });
-  const makerOrderbookMatch = realOrderbookMatch.remainingShares > EPSILON
-    ? await matchPronosMakerInventoryBidsForSell(client, {
-      market,
-      marketId: mid,
-      username,
-      outcomeIndex: oi,
-      sharesToSell: realOrderbookMatch.remainingShares,
-      minPrice: bookMinPrice,
-      source: tradeSource,
-      apiKeyId: tradeApiKeyId,
-    })
-    : null;
-  const orderbookMatch = combineSellOrderbookMatches(realOrderbookMatch, makerOrderbookMatch);
-  const ammShares = orderbookMatch.remainingShares > EPSILON
-    ? orderbookMatch.remainingShares
-    : 0;
-  const reservesForAmm = Array.isArray(orderbookMatch.reservesAfter)
-    ? orderbookMatch.reservesAfter.map(Number)
-    : reserves;
-
-  let quote = null;
-  let addedAmmRealized = 0;
-  if (ammShares > 0) {
-    const freshPositionResult = await client.query(
-      `SELECT shares, cost_basis, realized_pnl
-         FROM points_positions
-        WHERE market_id = $1 AND username = $2 AND outcome_index = $3
-        FOR UPDATE`,
-      [mid, username, oi],
-    );
-    if (freshPositionResult.rows.length === 0) throw apiError('no_position', 400);
-    const freshPosition = freshPositionResult.rows[0];
-    const freshHeld = Number(freshPosition.shares);
-    const freshCostBasis = Number(freshPosition.cost_basis);
-    const freshRealized = Number(freshPosition.realized_pnl || 0);
-    if (freshHeld + EPSILON < ammShares) throw apiError('insufficient_available_shares', 400);
-
-    try {
-      quote = reservesForAmm.length === 2
-        ? binarySellQuote(reservesForAmm, oi, ammShares)
-        : multiSellQuote(reservesForAmm, oi, ammShares);
-    } catch (e) {
-      throw apiError('invalid_quote', 400, e.message);
-    }
-
-    const minAmmOut = minOut !== null
-      ? Math.max(0, minOut - orderbookMatch.collateralOut)
-      : null;
-    if (minAmmOut !== null && quote.collateralOut < minAmmOut) {
-      throw apiError(
-        'price_moved',
-        409,
-        `out=${(orderbookMatch.collateralOut + quote.collateralOut).toFixed(6)} below min=${minOut}`,
-      );
-    }
-
-    await client.query(
-      `UPDATE points_markets SET reserves = $1::jsonb WHERE id = $2`,
-      [JSON.stringify(quote.reservesAfter), mid],
-    );
-
-    const avgCost = freshHeld > 0 ? freshCostBasis / freshHeld : 0;
-    const soldCostBasis = avgCost * ammShares;
-    addedAmmRealized = quote.collateralOut - soldCostBasis;
-    const newShares = Math.max(0, freshHeld - ammShares);
-    const newCostBasis = newShares > 0 ? freshCostBasis - soldCostBasis : 0;
-    const newRealized = freshRealized + addedAmmRealized;
-
-    await client.query(
-      `UPDATE points_positions
-       SET shares       = $1,
-           cost_basis   = $2,
-           realized_pnl = $3,
-           updated_at   = NOW()
-       WHERE market_id = $4 AND username = $5 AND outcome_index = $6`,
-      [newShares, newCostBasis, newRealized, mid, username, oi],
-    );
-
-    await client.query(
-      `INSERT INTO points_trades (
-         market_id, username, side, outcome_index,
-         shares, collateral, fee, price_at_trade,
-         reserves_before, reserves_after, source, api_key_id
-       ) VALUES ($1, $2, 'sell', $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10, $11)`,
-      [
-        mid, username, oi,
-        ammShares, quote.collateralOut, quote.fee, quote.priceBefore || 0,
-        JSON.stringify(reservesForAmm),
-        JSON.stringify(quote.reservesAfter),
-        tradeSource,
-        tradeApiKeyId,
-      ],
-    );
-
-    await bestEffortInsertPointsPriceSnapshot(client, {
-      marketId: mid,
-      reserves: quote.reservesAfter,
-      logLabel: 'points-sell-price-snapshot',
-    });
-  } else if (Array.isArray(orderbookMatch.reservesAfter)) {
-    await bestEffortInsertPointsPriceSnapshot(client, {
-      marketId: mid,
-      reserves: orderbookMatch.reservesAfter,
-      logLabel: 'points-sell-price-snapshot',
-    });
-  }
-
-  const totalCollateralOut = orderbookMatch.collateralOut + Number(quote?.collateralOut || 0);
+  const totalCollateralOut = orderbookMatch.collateralOut;
   if (minOut !== null && totalCollateralOut < minOut) {
     throw apiError('price_moved', 409, `out=${totalCollateralOut.toFixed(6)} below min=${minOut}`);
   }
@@ -585,18 +302,11 @@ export async function executePointsSell(client, {
   return {
     balance: newBalance,
     collateralOut: totalCollateralOut,
-    sharesSold: sharesToSell,
-    realizedPnl: orderbookMatch.realizedPnl + addedAmmRealized,
-    priceBefore: quote?.priceBefore ?? orderbookMatch.priceBefore ?? displayPriceBefore ?? orderbookMatch.avgPrice,
-    priceAfter: monotonicSellDisplayPrice(
-      quote?.priceBefore ?? orderbookMatch.priceBefore ?? displayPriceBefore ?? orderbookMatch.avgPrice,
-      [
-        quote?.priceAfter,
-        orderbookMatch.priceAfter,
-        orderbookMatch.avgPrice,
-      ],
-    ),
-    orderbookFills: orderbookMatch.fills,
+    sharesSold: orderbookMatch.sharesSold,
+    realizedPnl: orderbookMatch.realizedPnl,
+    priceBefore: orderbookMatch.priceBefore,
+    priceAfter: orderbookMatch.priceAfter,
+    orderbookFills: orderbookMatch.fills.filter(fill => fill.source === 'limit'),
     triggeredLimitOrders,
   };
 }
