@@ -3,6 +3,7 @@
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",
     "@turnkey/sdk-server": "^5.3.0",
-    "ethers": "^5.7.2"
+    "ethers": "^5.7.2",
+    "linkedom": "0.18.13"
   }
 }

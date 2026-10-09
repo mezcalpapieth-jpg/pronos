@@ -103,7 +103,7 @@ test('October tournament generator emits bilingual auto and review specs when co
 
   assert.equal(specs.length, 22);
   const byEventId = Object.fromEntries(specs.map(spec => [spec.source_event_id, spec]));
-  assert.equal(Object.values(byEventId).every(spec => spec.tournament_featured === true), true);
+  assert.equal(Object.values(byEventId).every(spec => spec.tournament_featured === false), true);
 
   const usd = byEventId['october-2026:usd-mxn-close'];
   assert.equal(usd.resolver_type, 'api_price');
@@ -131,7 +131,7 @@ test('October tournament generator emits bilingual auto and review specs when co
   assert.equal(hurricane.resolver_type, 'api_hurricane');
   assert.equal(hurricane.start_time, '2026-10-31T05:59:00.000Z');
   assert.equal(hurricane.resolver_config.startIso, '2026-10-01T06:00:00.000Z');
-  assert.equal(hurricane.tournament_featured, true);
+  assert.equal(hurricane.tournament_featured, false);
   assert.deepEqual(hurricane.outcomes, ['Sí', 'No']);
   assert.equal(hurricane.source_data.translations.en.question, 'Will a Category 4 or 5 hurricane make landfall in Mexico during October 2026?');
 
@@ -161,7 +161,12 @@ test('October tournament generator emits bilingual auto and review specs when co
   assert.equal(inpc.source_data.buckets[1].max, 3.5);
 
   const popocatepetl = byEventId['october-2026:popocatepetl-exhalations-2026-10-02'];
-  assert.equal(popocatepetl.resolver_type, 'manual_review');
+  assert.equal(popocatepetl.resolver_type, 'api_price');
+  assert.equal(popocatepetl.resolver_config.source, 'cenapred-popocatepetl');
+  assert.equal(popocatepetl.resolver_config.targetDateYmd, '2026-10-02');
+  assert.equal(popocatepetl.resolver_config.resolveAt, '2026-10-03T06:00:00.000Z');
+  assert.equal(popocatepetl.resolver_config.shape, 'price-bucket');
+  assert.deepEqual(popocatepetl.resolver_config.buckets.map(bucket => bucket.max), [20, 50, 100, null]);
   assert.equal(popocatepetl.start_time, '2026-10-01T16:29:00.000Z');
   assert.equal(popocatepetl.end_time, '2026-10-02T16:29:00.000Z');
   assert.deepEqual(popocatepetl.outcomes, ['0 a 19', '20 a 49', '50 a 99', '100 o más']);
@@ -239,7 +244,7 @@ test('October award markets have default candidates when env lists are not confi
     ..._internal.DEFAULT_NOBEL_PEACE_CANDIDATES_EN,
     'Other',
   ]);
-  assert.equal(nobel.tournament_featured, true);
+  assert.equal(nobel.tournament_featured, false);
 
   const ballonDor = byEventId['october-2026:ballon-dor-men'];
   assert.ok(ballonDor);
@@ -247,5 +252,5 @@ test('October award markets have default candidates when env lists are not confi
     ..._internal.DEFAULT_BALLON_DOR_CANDIDATES,
     'Otro',
   ]);
-  assert.equal(ballonDor.tournament_featured, true);
+  assert.equal(ballonDor.tournament_featured, false);
 });

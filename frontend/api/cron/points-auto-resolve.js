@@ -47,6 +47,11 @@ import { FRANKFURTER_SOURCE, frankfurterTargetDateYmd, readFrankfurterRate } fro
 import { readCreAverageFor } from '../_lib/fuel.js';
 import { readSniimFoodPrice, SNIIM_FOOD_PRICE_SOURCE } from '../_lib/sniim-food-prices.js';
 import { readInegiInpcAnnualInflation, INEGI_INPC_SOURCE } from '../_lib/inegi-inpc.js';
+import {
+  readCenapredPopocatepetlExhalations,
+  CENAPRED_POPOCATEPETL_SOURCE,
+  upgradeLegacyPopocatepetlResolver,
+} from '../_lib/cenapred-popocatepetl.js';
 import { deferUntilResolveAt, priceBucketIndexFor } from '../_lib/price-buckets.js';
 import {
   COINGECKO_TOKEN_MCAP_SOURCE,
@@ -158,6 +163,9 @@ function buildFinalScore({ resolverType, cfg, result, resolverInfo, outcomes, wi
 
     if (resolverType === 'chainlink_price' || resolverType === 'api_price') {
       const price = resolverInfo?.priceAtResolve;
+      if (cfg.source === CENAPRED_POPOCATEPETL_SOURCE && Number.isInteger(resolverInfo?.count)) {
+        return clip(`${resolverInfo.count} exhalaciones · ${resolverInfo.reportDateYmd}`);
+      }
       if (cfg.shape === 'binary-direction' && price != null && cfg.threshold != null) {
         return clip(formatDirectionFinalScore(cfg.threshold, price));
       }
@@ -1778,6 +1786,15 @@ export async function runAutoResolve({ dry = false } = {}) {
       const sourceData = parseJsonb(m.pending_source_data, {});
       let cfg = parseJsonb(m.resolver_config, null);
       let resolverType = m.resolver_type;
+      // Existing generated daily reports can use the reader without repricing or a bulk backfill.
+      const legacyPopocatepetlCfg = upgradeLegacyPopocatepetlResolver({
+        resolverType, cfg, source: m.source, sourceEventId: m.source_event_id,
+        sourceData, outcomes: marketOutcomes,
+      });
+      if (legacyPopocatepetlCfg) {
+        cfg = legacyPopocatepetlCfg;
+        resolverType = 'api_price';
+      }
       if (!cfg) {
         const fallbackCfg = buildEspnLiveScoreConfig({
           resolverType: null,
@@ -2096,6 +2113,18 @@ export async function runAutoResolve({ dry = false } = {}) {
               periodRaw: r.periodRaw,
               sourceUrl: r.sourceUrl,
             };
+          } else if (cfg.source === CENAPRED_POPOCATEPETL_SOURCE) {
+            const r = await readCenapredPopocatepetlExhalations(cfg);
+            price = r.value;
+            readerInfo = {
+              count: r.count,
+              reportDateYmd: r.reportDateYmd,
+              sourceUrl: r.sourceUrl,
+              reportTitle: r.reportTitle,
+              reportPublishedAt: r.reportPublishedAt,
+              readAt: r.readAt,
+            };
+            resolverConfigPatch = { ...readerInfo };
           } else if (cfg.source === COINGECKO_TOKEN_MCAP_SOURCE) {
             const resolved = await resolveSolanaTokenMcapOutcome({
               sql: readSql,
@@ -3148,11 +3177,11 @@ export async function runAutoResolve({ dry = false } = {}) {
             `UPDATE points_markets
                SET status = 'resolved', outcome = $1,
                    resolved_at = NOW(), resolved_by = $2,
-                   resolver_type = COALESCE(resolver_type, $4),
-                   resolver_config = COALESCE(resolver_config, $5::jsonb)
+                   resolver_type = CASE WHEN $6 THEN $4 ELSE COALESCE(resolver_type, $4) END,
+                   resolver_config = CASE WHEN $6 THEN $5::jsonb ELSE COALESCE(resolver_config, $5::jsonb) END
              WHERE id = $3 AND status = 'active'
              RETURNING id, amm_mode`,
-            [winningIdx, `resolver:${resolverType}`, m.id, resolverType, JSON.stringify(cfg)],
+            [winningIdx, `resolver:${resolverType}`, m.id, resolverType, JSON.stringify(cfg), Boolean(legacyPopocatepetlCfg)],
           );
           if (r.rows.length === 0) {
             const err = new Error('not_active_at_write'); err.benign = true; throw err;

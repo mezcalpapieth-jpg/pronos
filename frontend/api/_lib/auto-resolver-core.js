@@ -7,6 +7,7 @@ import { FRANKFURTER_SOURCE, frankfurterTargetDateYmd, readFrankfurterRate } fro
 import { readCreAverageFor } from './fuel.js';
 import { readSniimFoodPrice, SNIIM_FOOD_PRICE_SOURCE } from './sniim-food-prices.js';
 import { readInegiInpcAnnualInflation, INEGI_INPC_SOURCE } from './inegi-inpc.js';
+import { readCenapredPopocatepetlExhalations, CENAPRED_POPOCATEPETL_SOURCE } from './cenapred-popocatepetl.js';
 import { deferUntilResolveAt, priceBucketIndexFor } from './price-buckets.js';
 import {
   COINGECKO_TOKEN_MCAP_SOURCE,
@@ -98,6 +99,9 @@ export function buildAutoResolverFinalScore({
 
     if (resolverType === 'chainlink_price' || resolverType === 'api_price') {
       const price = resolverInfo?.priceAtResolve;
+      if (cfg.source === CENAPRED_POPOCATEPETL_SOURCE && Number.isInteger(resolverInfo?.count)) {
+        return clip(`${resolverInfo.count} exhalaciones · ${resolverInfo.reportDateYmd}`);
+      }
       if (cfg.shape === 'binary-direction' && price != null && cfg.threshold != null) {
         return clip(formatDirectionFinalScore(cfg.threshold, price));
       }
@@ -452,6 +456,18 @@ export async function resolveAutoResolverCandidate(candidate = {}, { sql = null 
         periodRaw: r.periodRaw,
         sourceUrl: r.sourceUrl,
       };
+    } else if (cfg.source === CENAPRED_POPOCATEPETL_SOURCE) {
+      const r = await readCenapredPopocatepetlExhalations(cfg);
+      price = r.value;
+      readerInfo = {
+        count: r.count,
+        reportDateYmd: r.reportDateYmd,
+        sourceUrl: r.sourceUrl,
+        reportTitle: r.reportTitle,
+        reportPublishedAt: r.reportPublishedAt,
+        readAt: r.readAt,
+      };
+      resolverConfigPatch = { ...readerInfo };
     } else if (cfg.source === COINGECKO_TOKEN_MCAP_SOURCE) {
       if (!sql) throw new Error('solana-token-mcap: sql required');
       const resolved = await resolveSolanaTokenMcapOutcome({

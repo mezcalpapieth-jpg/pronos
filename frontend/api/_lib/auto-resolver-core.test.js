@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import { MANANERA_TRANSCRIPT_SOURCE } from './mananera.js';
 import { INEGI_INPC_SOURCE } from './inegi-inpc.js';
+import { popocatepetlResolverConfig } from './cenapred-popocatepetl.js';
 import { buildAutoResolverFinalScore, resolveAutoResolverCandidate } from './auto-resolver-core.js';
 
 function jsonResponse(body) {
@@ -20,6 +21,41 @@ function htmlResponse(body) {
     text: async () => body,
   };
 }
+
+test('auto resolver core settles CENAPRED counts at every range boundary and stores dated evidence', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const targetDateYmd = '2026-10-02';
+  const title = 'Monitoreo del volcán Popocatépetl, hoy 2 de octubre de 2026';
+  const sourceUrl = 'https://www.gob.mx/cenapred/es/articulos/monitoreo-del-volcan-popocatepetl-hoy-2-de-octubre-de-2026';
+  const cfg = popocatepetlResolverConfig(targetDateYmd);
+  for (const [count, index] of [[0, 0], [19, 0], [20, 1], [49, 1], [50, 2], [99, 2], [100, 3]]) {
+    globalThis.fetch = async (url) => new Response(String(url).includes('/archivo/')
+      ? `<article><time date="2026-10-02 11:00:00"></time><h2>${title}</h2><a href="${sourceUrl}">Reporte</a></article>`
+      : `<main><h1>${title}</h1><section>Centro Nacional de Prevención de Desastres | 02 de octubre de 2026</section><div class="article-body">Se detectaron ${count} exhalaciones.</div></main>`,
+    { headers: { 'content-type': 'text/html' } });
+    const decision = await resolveAutoResolverCandidate({
+      resolver_type: 'api_price', resolver_config: cfg, outcomes: cfg.buckets.map(bucket => bucket.label),
+    });
+    assert.equal(decision.winningIdx, index);
+    assert.equal(decision.finalScore, `${count} exhalaciones · ${targetDateYmd}`);
+    assert.equal(decision.resolverInfo.count, count);
+    assert.equal(decision.resolverConfigPatch.count, count);
+    assert.equal(decision.resolverConfigPatch.reportDateYmd, targetDateYmd);
+    assert.equal(decision.resolverConfigPatch.sourceUrl, sourceUrl);
+    assert.equal(decision.resolverConfigPatch.resolvedBucketIndex, index);
+    assert.equal(decision.resolverConfigPatch.reportPublishedAt, '2026-10-02T17:00:00.000Z');
+  }
+});
+
+test('auto resolver core leaves CENAPRED markets unresolved when the official source is blocked', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  globalThis.fetch = async () => new Response('Forbidden', { status: 403 });
+  await assert.rejects(resolveAutoResolverCandidate({
+    resolver_type: 'api_price', resolver_config: popocatepetlResolverConfig('2026-10-02'),
+  }), error => error.benign === true && /cenapred_report_unavailable/.test(error.message));
+});
 
 test('auto resolver core falls back from football-data to ESPN soccer scoreboards', async (t) => {
   const originalFetch = globalThis.fetch;
