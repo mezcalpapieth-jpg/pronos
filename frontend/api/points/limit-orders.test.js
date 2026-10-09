@@ -56,6 +56,24 @@ function approxEqual(actual, expected, epsilon, message) {
   );
 }
 
+test('combined legacy previews do not turn missing prices into zero', () => {
+  for (const combine of [combineBuyOrderbookMatches, combineSellOrderbookMatches]) {
+    const preview = combine({ priceBefore: null, priceAfter: null }, { priceBefore: 0.09, priceAfter: 0.12 });
+    assert.equal(preview.priceBefore, 0.09);
+    assert.equal(preview.priceAfter, 0.12);
+    assert.equal(combine({ priceBefore: null, priceAfter: null }).priceBefore, null);
+  }
+});
+
+test('legacy inventory previews cannot buy back more shares than the historical lot contains', () => {
+  const preview = previewPronosMakerInventoryBidsForSell([
+    { id: 1, side: 'sell', shares: 100, collateral: 60, price_at_trade: 0.6, created_at: '2026-10-01T00:00:00Z' },
+  ], { reserves: [900, 100], outcomeIndex: 0, shares: 300 });
+  const inventoryShares = preview.fills.filter(f => f.source === 'maker_inventory').reduce((sum, f) => sum + f.shares, 0);
+  assert.ok(inventoryShares <= 100);
+  assert.ok(preview.remainingShares >= 200);
+});
+
 test('points schema and manual migration create reserved limit-order book storage', () => {
   for (const source of [schemaSource, migrateSource]) {
     assert.match(source, /CREATE TABLE IF NOT EXISTS points_limit_orders/);
@@ -423,62 +441,27 @@ test('Pronos maker depth keeps a second opposing buy below fifty when the leader
   assert.ok(makerDisplayAfter < 0.5, 'filled buy should stay below fifty while the other side leads');
 });
 
-test('buy quotes use orderbook fills as damped display movement without stale market overrides', () => {
-  assert.match(quoteBuySource, /function buyOrderbookPriceCap/);
-  assert.match(quoteBuySource, /const bookMaxPrice = buyOrderbookPriceCap\(reserves, oi, amt\)/);
-  assert.match(quoteBuySource, /previewRestingAsksForBuy\(askRows, \{\s*collateral: amt,\s*maxPrice: bookMaxPrice,\s*\}\)/s);
-  assert.doesNotMatch(quoteBuySource, /binaryPricesWithBookTrade/);
-  assert.match(quoteBuySource, /monotonicBuyDisplayPrice/);
-  assert.doesNotMatch(quoteBuySource, /displayTradeRows/);
-  assert.doesNotMatch(quoteBuySource, /reserves_before = reserves_after/);
-  assert.match(quoteBuySource, /const priceBefore = pricesBefore\[oi\] \|\| 0/);
-  assert.match(quoteBuySource, /currentPrice: priceBefore/);
-  assert.match(quoteBuySource, /const executionPrice = avgPrice > 0 \? avgPrice : null/);
-  assert.match(quoteBuySource, /const priceAfter = monotonicBuyDisplayPrice\(priceBefore, \[/);
+test('buy quotes and execution use the same funded hybrid route without synthetic makers', () => {
+  assert.match(quoteBuySource, /previewHybridBuy\(askRows/);
+  assert.match(helperSource, /previewHybridBuy\(orders\.rows/);
+  assert.match(tradeServiceSource, /matchRestingAsksForBuy\(client,[\s\S]*?routeAmm: true/);
+  for (const source of [quoteBuySource, tradeServiceSource]) {
+    assert.doesNotMatch(source, /previewPronosMaker|matchPronosMaker|buyOrderbookPriceCap|monotonicBuyDisplayPrice/);
+    assert.doesNotMatch(source, /binaryPricesWithBookTrade/);
+  }
   assert.match(quoteBuySource, /priceImpactPts: \(priceAfter - priceBefore\) \* 100/);
-  assert.doesNotMatch(tradeServiceSource, /binaryPricesWithBookTrade/);
-  assert.match(tradeServiceSource, /monotonicBuyDisplayPrice/);
-  assert.match(tradeServiceSource, /function buyOrderbookPriceCap/);
-  assert.match(tradeServiceSource, /const bookMaxPrice = buyOrderbookPriceCap\(reserves, oi, amt\)/);
-  assert.match(tradeServiceSource, /matchRestingAsksForBuy\(client, \{[\s\S]*maxPrice: bookMaxPrice,[\s\S]*\}\)/);
-  assert.match(tradeServiceSource, /matchPronosMakerAsksForBuy\(client, \{[\s\S]*maxPrice: bookMaxPrice,[\s\S]*\}\)/);
-  assert.match(tradeServiceSource, /const pricesBefore = reserves\.length === 2 \? binaryPrices\(reserves\) : multiPrices\(reserves\)/);
-  assert.match(tradeServiceSource, /const displayPriceBefore = Number\(pricesBefore\[oi\] \?\? 0\)/);
-  assert.match(tradeServiceSource, /currentPrice: displayPriceBefore \|\| null/);
-  assert.match(tradeServiceSource, /const responsePriceAfter = monotonicBuyDisplayPrice\(responsePriceBefore, \[/);
   assert.match(quoteBuySource, /orderbookFillCount/);
-  assert.doesNotMatch(quoteBuySource, /orderbookFills: orderbook\.fills/);
-  assert.doesNotMatch(quoteBuySource, /ammCollateral,/);
   assert.match(buySource, /const \{ orderbookFills, triggeredLimitOrders, \.\.\.publicResult \} = result/);
 });
 
-test('sell quotes use orderbook fills as damped display movement', () => {
-  for (const source of [quoteSellSource, orderbookSource]) {
-    assert.doesNotMatch(source, /reserves_before IS NOT NULL AND reserves_after IS NOT NULL AND reserves_before = reserves_after/);
-    assert.doesNotMatch(source, /is_book_trade/);
-    assert.doesNotMatch(source, /binaryPricesWithBookTrade/);
+test('sell quotes and execution share the same funded route and actual reserve prices', () => {
+  assert.match(quoteSellSource, /previewHybridSell\(bidRows/);
+  assert.match(helperSource, /previewHybridSell\(orders\.rows/);
+  assert.match(tradeServiceSource, /matchRestingBidsForSell\(client,[\s\S]*?routeAmm: true/);
+  for (const source of [quoteSellSource, tradeServiceSource]) {
+    assert.doesNotMatch(source, /previewPronosMaker|matchPronosMaker|sellOrderbookPriceFloor|monotonicSellDisplayPrice/);
   }
-  assert.match(quoteSellSource, /function sellOrderbookPriceFloor/);
-  assert.match(quoteSellSource, /const bookMinPrice = sellOrderbookPriceFloor\(reserves, oi, n\)/);
-  assert.match(quoteSellSource, /previewRestingBidsForSell\(bidRows, \{\s*shares: n,\s*minPrice: bookMinPrice,\s*\}\)/s);
-  assert.match(quoteSellSource, /const reservesForAmm = Array\.isArray\(orderbook\.reservesAfter\)/);
-  assert.match(quoteSellSource, /binarySellQuote\(reservesForAmm, oi, ammShares\)/);
-  assert.match(tradeServiceSource, /function sellOrderbookPriceFloor/);
-  assert.match(tradeServiceSource, /const bookMinPrice = sellOrderbookPriceFloor\(reserves, oi, sharesToSell\)/);
-  assert.match(tradeServiceSource, /matchRestingBidsForSell\(client, \{[\s\S]*minPrice: bookMinPrice,[\s\S]*\}\)/);
-  assert.match(tradeServiceSource, /matchPronosMakerInventoryBidsForSell\(client, \{/);
-  assert.match(tradeServiceSource, /const reservesForAmm = Array\.isArray\(orderbookMatch\.reservesAfter\)/);
-  assert.match(tradeServiceSource, /binarySellQuote\(reservesForAmm, oi, ammShares\)/);
-  assert.match(quoteSellSource, /previewPronosMakerInventoryBidsForSell\(makerTradeRows, \{/);
-  assert.match(quoteSellSource, /const priceBefore = pricesBefore\[oi\] \|\| 0/);
-  assert.doesNotMatch(quoteSellSource, /lastBookFillPrice/);
-  assert.match(quoteSellSource, /const priceAfter = monotonicSellDisplayPrice\(priceBefore, \[/);
-  assert.doesNotMatch(orderbookSource, /lastRows/);
-  assert.doesNotMatch(orderbookSource, /displayCurrentPrice/);
-  assert.match(orderbookSource, /const currentPrice = depth\.currentPrice/);
   assert.match(quoteSellSource, /orderbookFillCount/);
-  assert.doesNotMatch(quoteSellSource, /orderbookFills: orderbook\.fills/);
-  assert.doesNotMatch(quoteSellSource, /ammShares,/);
   assert.match(sellSource, /const \{ orderbookFills, triggeredLimitOrders, \.\.\.publicResult \} = result/);
 });
 
@@ -641,18 +624,13 @@ test('Pronos maker previews use seeded depth after real resting orders', () => {
   assert.ok(Array.isArray(combined.reservesAfter));
 });
 
-test('buy quotes and execution prioritize user orderbook liquidity before Pronos depth', () => {
-  const quoteRealIndex = quoteBuySource.indexOf('const realOrderbook = previewRestingAsksForBuy');
-  const quoteSyntheticIndex = quoteBuySource.indexOf('const makerOrderbook = realOrderbook.remainingCollateral');
-  const tradeRealIndex = tradeServiceSource.indexOf('const realOrderbookMatch = await matchRestingAsksForBuy');
-  const tradeSyntheticIndex = tradeServiceSource.indexOf('const makerOrderbookMatch = realOrderbookMatch.remainingCollateral');
-
-  assert.ok(quoteRealIndex > 0, 'quote-buy should preview real user asks');
-  assert.ok(quoteSyntheticIndex > quoteRealIndex, 'quote-buy should preview Pronos depth after user asks');
-  assert.match(quoteBuySource, /collateral: realOrderbook\.remainingCollateral/);
-  assert.ok(tradeRealIndex > 0, 'buy execution should match real user asks');
-  assert.ok(tradeSyntheticIndex > tradeRealIndex, 'buy execution should match Pronos depth after user asks');
-  assert.match(tradeServiceSource, /collateralBudget: realOrderbookMatch\.remainingCollateral/);
+test('authenticated quotes exclude own orders before the query row limit', () => {
+  for (const source of [quoteBuySource, quoteSellSource]) {
+    assert.match(source, /readSession\(req, res\)\?\.username/);
+    assert.match(source, /AND \(\$\{username\}::text IS NULL OR username <> \$\{username\}\)[\s\S]*?LIMIT 24/);
+    assert.match(source, /expires_at IS NULL OR expires_at > NOW\(\)/);
+    assert.doesNotMatch(source, /req\.body.*username/);
+  }
 });
 
 test('Pronos maker previews can anchor to an explicit current price', () => {
@@ -792,21 +770,15 @@ test('Pronos maker depth depletes from treasury trade usage', () => {
   assert.ok(after.fills[0].price > before.fills[0].price);
 });
 
-test('orderbook exposes executable user rows with depleted Pronos maker depth', () => {
+test('orderbook exposes funded user rows and incremental AMM depth without synthetic liquidity', () => {
   assert.match(orderbookSource, /Hybrid points order book/);
   assert.match(orderbookSource, /aggregateLimitOrderRows/);
   assert.match(orderbookSource, /FROM points_limit_orders/);
-  assert.match(helperSource, /source: 'limit'/);
-  assert.match(helperSource, /matchPronosMakerAsksForBuy/);
-  assert.match(helperSource, /matchPronosMakerInventoryBidsForSell/);
-  assert.match(helperSource, /pronosMakerInventoryBidDepthFromRows/);
-  assert.match(orderbookSource, /pronosMakerInventoryBidDepthFromRows/);
-  assert.match(orderbookSource, /makerUsageFromRows/);
-  assert.match(orderbookSource, /PRONOS_TREASURY_USERNAME/);
-  assert.match(orderbookSource, /m\.seed_liquidity,\s*m\.seed_liquidities/);
-  assert.match(orderbookSource, /LEFT JOIN points_markets p ON p\.id = m\.parent_id/);
-  assert.match(orderbookSource, /bookType: 'mock_orderbook'/);
-  assert.doesNotMatch(orderbookSource, /source: 'amm'/);
+  assert.match(orderbookSource, /buildAmmDepth/);
+  assert.match(orderbookSource, /incremental: true/);
+  assert.match(orderbookSource, /bookType: 'hybrid_orderbook'/);
+  assert.match(orderbookSource, /expires_at IS NULL OR expires_at > NOW\(\)/);
+  assert.doesNotMatch(orderbookSource, /PRONOS_TREASURY_USERNAME|pronosMaker|FROM points_trades/);
 });
 
 test('public endpoints create, list, and cancel authenticated limit orders', () => {
@@ -840,7 +812,6 @@ test('portfolio and cron expose daily liquidity payouts', () => {
 test('market writes trigger orders and close paths release open reserves', () => {
   assert.match(tradeServiceSource, /executeTriggeredLimitOrders\(client, \{\s*marketId: mid\s*\}\)/s);
   assert.match(tradeServiceSource, /executeTriggeredLimitOrders\(client, \{\s*marketId: mid\s*\}\)/s);
-  assert.match(tradeServiceSource, /dismissed_at = NULL/);
   assert.match(helperSource, /dismissed_at = NULL/);
   assert.match(tradeServiceSource, /assertCryptoTradeAllowed/);
   assert.match(tradeServiceSource, /assertCryptoTradeAllowed/);
