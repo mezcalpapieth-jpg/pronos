@@ -4,6 +4,16 @@ import { readFileSync } from 'node:fs';
 
 const SOURCE = readFileSync(new URL('./points-auto-resolve.js', import.meta.url), 'utf8');
 
+test('points auto-resolver upgrades legacy Popocatepetl markets before manual queuing and persists the effective resolver', () => {
+  assert.match(SOURCE, /from '\.\.\/_lib\/cenapred-popocatepetl\.js'/);
+  assert.ok(SOURCE.indexOf('const legacyPopocatepetlCfg = upgradeLegacyPopocatepetlResolver') < SOURCE.indexOf('if (isManualReviewMarket({ resolverType, cfg, row: m, sourceData }))'));
+  assert.match(SOURCE, /if \(legacyPopocatepetlCfg\) \{\s*cfg = legacyPopocatepetlCfg;\s*resolverType = 'api_price';/);
+  assert.match(SOURCE, /cfg\.source === CENAPRED_POPOCATEPETL_SOURCE[\s\S]{0,100}readCenapredPopocatepetlExhalations\(cfg\)/);
+  assert.match(SOURCE, /resolver_type = CASE WHEN \$6 THEN \$4 ELSE COALESCE\(resolver_type, \$4\) END/);
+  assert.match(SOURCE, /Boolean\(legacyPopocatepetlCfg\)/);
+  assert.match(SOURCE, /reportPublishedAt: r\.reportPublishedAt/);
+});
+
 test('points auto-resolver queues ordinary manual-review markets', () => {
   assert.match(SOURCE, /manual_review\/manual markets are queued/);
   assert.match(SOURCE, /buildPointsResolutionCandidateInsert/);

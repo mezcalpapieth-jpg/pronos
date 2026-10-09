@@ -4,6 +4,7 @@ import { readCreAverages, fuelLabel } from '../fuel.js';
 import { attachSuggestedPricing } from '../market-pricing.js';
 import { IBTRACS_PRODUCT_PAGE } from '../hurricanes.js';
 import { SNIIM_FOOD_PRICE_SOURCE } from '../sniim-food-prices.js';
+import { CENAPRED_ARCHIVE_URL, popocatepetlResolverConfig } from '../cenapred-popocatepetl.js';
 import {
   INEGI_API_DOCS_URL,
   INEGI_FEEDS_URL,
@@ -291,7 +292,7 @@ function sourceDataBase({
 }
 
 function pricedSpec(spec, probabilities = null) {
-  const tournamentSpec = { tournament_featured: true, ...spec };
+  const tournamentSpec = { tournament_featured: false, ...spec };
   return attachSuggestedPricing(tournamentSpec, {
     probabilities: probabilities || Array.from({ length: tournamentSpec.outcomes.length }, () => 1 / tournamentSpec.outcomes.length),
     source: 'cofounder-brief',
@@ -439,14 +440,16 @@ function popocatepetlExhalationsMarket(now = new Date()) {
   const targetNoon = dateAtMexicoCityTime({ ...target, hour: 12, minute: 0 });
   const targetDisplay = formatMexicoDateEs(targetNoon);
   const closeIso = dateAtMexicoCityTime({ ...target, hour: 10, minute: 29 }).toISOString();
-  const resolveIso = dateAtMexicoCityTime({ ...target, hour: 13, minute: 0 }).toISOString();
+  const automaticConfig = popocatepetlResolverConfig(targetYmd);
+  const resolveIso = automaticConfig.resolveAt;
   const reportUrl = `${EVIDENCE.cenapredPopocatepetlPdfBase}${targetYmd}.pdf`;
   const outcomesEs = ['0 a 19', '20 a 49', '50 a 99', '100 o más'];
   const outcomesEn = ['0 to 19', '20 to 49', '50 to 99', '100 or more'];
+  const buckets = automaticConfig.buckets.map((bucket, index) => ({ ...bucket, labelEn: outcomesEn[index] }));
   const criteriaEs = `Se resuelve con el reporte diario oficial de monitoreo del Popocatépetl de CENAPRED correspondiente al ${targetDisplay}. Gana el bucket que contiene el número entero de exhalaciones reportado por CENAPRED. Solo cuenta el reporte oficial de CENAPRED; notas de prensa, redes sociales o lecturas parciales no cuentan. Si CENAPRED corrige el reporte el mismo día, se usa la última versión oficial publicada antes de las 23:59 CDMX.`;
   const criteriaEn = `Resolve from CENAPRED's official daily Popocatepetl monitoring report for ${targetYmd}. The winning bucket is the one containing the integer number of exhalations reported by CENAPRED. Only the official CENAPRED report counts; press articles, social posts, or partial readings do not count. If CENAPRED corrects the report on the same day, use the latest official version published before 23:59 Mexico City time.`;
 
-  return buildManualSpec({
+  return buildPriceBucketSpec({
     key: `popocatepetl-exhalations-${targetYmd}`,
     questionEs: `¿Cuántas exhalaciones reporta el Popocatépetl el ${targetDisplay}?`,
     questionEn: `How many exhalations will Popocatepetl report on ${targetYmd}?`,
@@ -455,26 +458,27 @@ function popocatepetlExhalationsMarket(now = new Date()) {
     icon: 'CENAPRED',
     outcomesEs,
     outcomesEn,
-    closeIso,
-    resolveIso,
-    criteriaEs,
-    criteriaEn,
+    buckets,
+    endTime: closeIso,
+    resolverType: 'api_price',
+    resolverConfig: { ...automaticConfig, criteriaEn },
+    resolutionCriteria: criteriaEs,
     evidence: [
       { title: 'CENAPRED Popocatépetl monitoring FAQ', url: EVIDENCE.cenapredPopocatepetlFaq },
       { title: `CENAPRED daily report ${targetYmd}`, url: reportUrl },
+      { title: 'CENAPRED official daily report archive', url: CENAPRED_ARCHIVE_URL },
     ],
     kind: 'october_tournament_popocatepetl',
     extraSourceData: {
       targetDateYmd: targetYmd,
       reportUrl,
+      reportArchiveUrl: CENAPRED_ARCHIVE_URL,
+      resolveAt: resolveIso,
+      resolutionCriteriaEn: criteriaEn,
       unit: 'exhalaciones',
-      buckets: [
-        { label: outcomesEs[0], labelEn: outcomesEn[0], min: 0, max: 19 },
-        { label: outcomesEs[1], labelEn: outcomesEn[1], min: 20, max: 49 },
-        { label: outcomesEs[2], labelEn: outcomesEn[2], min: 50, max: 99 },
-        { label: outcomesEs[3], labelEn: outcomesEn[3], min: 100, max: null },
-      ],
+      buckets,
     },
+    seedLiquidity: 1000,
   });
 }
 
