@@ -123,7 +123,7 @@ export function createStockData(db, { fetchInfo = infoRequest, fetchFx = latestF
         && Number.isFinite(c.t) && c.t <= end && c.t >= end - config.durationMs
         && Number(c.c) > 0 && Number.isFinite(Number(c.c)))
         .map(c => ({ t: c.t, close: Number(c.c) })).sort((a, b) => a.t - b.t);
-      return { ticker: asset.ticker, range, candles, fetchedAt: now(), currency: 'USD' };
+      return { ticker: asset.ticker, range, interval: config.interval, candles, fetchedAt: now(), currency: 'USD' };
     });
   }
   return { assets, book, candles };

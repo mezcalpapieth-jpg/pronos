@@ -27,20 +27,20 @@ const ITEMS = [
   { label: 'PREMIO 1° LUGAR',  val: '$3,500 MXN',     green: true },
 ];
 
-export default function PointsTicker() {
+export default function PointsTicker({ items = ITEMS, badge = 'EN VIVO' }) {
   return (
     <div id="ticker">
       <div className="ticker-badge">
         <span className="dot-live" />
-        <span>EN VIVO</span>
+        <span>{badge}</span>
       </div>
       <div className="ticker-track-wrapper">
         <div className="ticker-track">
-          {ITEMS.map((item, i) => (
+          {items.map((item, i) => (
             <div className="ticker-item" key={i}>
               <span className="label">{item.label}</span>
               <span className="sep" />
-              <span className={item.green ? 'val' : ''}>{item.val}</span>
+              <span className={item.className || (item.green ? 'val' : '')}>{item.val}</span>
             </div>
           ))}
         </div>

@@ -38,6 +38,7 @@ const TeamProfilePage = lazy(() => import('@app/pages/TeamProfilePage.jsx'));
 const PointsPortfolio = lazy(() => import('./pages/PointsPortfolio.jsx'));
 const PointsStocks = lazy(() => import('./pages/PointsStocks.jsx'));
 const PointsStockDetail = lazy(() => import('./pages/PointsStockDetail.jsx'));
+const StockLiveTicker = lazy(() => import('./components/StockLiveTicker.jsx'));
 const PointsTournament = lazy(() => import('./pages/PointsTournament.jsx'));
 const PointsEarn = lazy(() => import('./pages/PointsEarn.jsx'));
 const PointsDeveloper = lazy(() => import('./pages/PointsDeveloper.jsx'));
@@ -393,6 +394,7 @@ function Shell({ onOpenLogin, isAdmin }) {
   return (
     <>
       {isHome && <PointsTicker />}
+      {path.startsWith('/stocks') && <Suspense fallback={null}><StockLiveTicker /></Suspense>}
       <PointsNav onOpenLogin={onOpenLogin} isAdmin={isAdmin} />
       {showCategoryBar && <PointsCategoryBar />}
       <Suspense fallback={<RouteFallback />}>

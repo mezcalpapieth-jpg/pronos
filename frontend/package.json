@@ -1,7 +1,7 @@
 {
   "type": "module",
   "scripts": {
-    "test:stocks": "node --test api/_lib/stock-*.test.js app/points/src/lib/stockApi.test.js"
+    "test:stocks": "node --test api/_lib/stock-*.test.js app/points/src/lib/stockApi.test.js app/points/src/lib/stockChart.test.js"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",
