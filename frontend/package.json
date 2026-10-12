@@ -10,6 +10,7 @@
     "linkedom": "0.18.13"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "0.5.9"
+    "@electric-sql/pglite": "0.5.9",
+    "@vercel/nft": "1.10.0"
   }
 }

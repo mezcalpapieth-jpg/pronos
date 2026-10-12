@@ -73,7 +73,7 @@ No on-chain share ownership, crypto funding, wallet signature or external order 
 
 ## Verification
 
-- 66 focused stock/tournament/snapshot/wallet/leaderboard tests pass. Price interval mappings, unchanged provider closes/timestamps, nearest-candle selection, UTC formatting, venue routing, spot context identity and ETF read-only enforcement are covered.
+- 67 focused stock/tournament/snapshot/wallet/leaderboard tests pass. Price interval mappings, unchanged provider closes/timestamps, nearest-candle selection, UTC formatting, venue routing, spot context identity, ETF read-only enforcement and Vercel function tracing are covered.
 - Six real Neon contention scenarios pass across three independent connections, including a stock/prediction purchase race, double-sale prevention, idempotency and reset contention.
 - Real provider checks verified 14 displayed assets, including 13 tradable instruments and one ETF preview, Banxico FIX and a completed one-minute cutoff price.
 - Authenticated local staging browser checks completed a buy, partial sale and sell-all, with shared-wallet debits/credits and holding changes.

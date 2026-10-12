@@ -53,7 +53,8 @@ export function buildStockFill({ side, amount, quantity, sellAll = false, positi
   const budget = amount != null ? fixed(amount) : null;
   if (budget !== null && (budget <= 0n || budget > 1000000n * MONEY)) throw stockError('invalid_amount');
   if (side === 'buy' && (budget === null || budget < 100n * MONEY)) throw stockError('stock_minimum_amount');
-  let requested = null;
+  // Keep quantity arithmetic typed as BigInt, including during Vercel's static tracing.
+  let requested = 0n;
   if (side === 'sell') {
     if (available <= 0n) throw stockError('insufficient_stock_quantity');
     if (sellAll) requested = available * scale / QTY;
