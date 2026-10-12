@@ -12,6 +12,8 @@ import { neon } from '@neondatabase/serverless';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { withTransaction } from '../_lib/db-tx.js';
 import { snapshotActiveCycleAtCutoff } from '../_lib/points-cycle-snapshot.js';
+import { stocksAreEnabled } from '../_lib/stock-marks.js';
+import { ensureStockSchema } from '../_lib/stock-schema.js';
 
 const sql = neon(process.env.DATABASE_URL);
 
@@ -33,6 +35,7 @@ export default async function handler(req, res) {
   const started = Date.now();
   try {
     await ensurePointsSchema(sql);
+    if (stocksAreEnabled()) await ensureStockSchema(withTransaction);
     const result = await withTransaction((client) => (
       snapshotActiveCycleAtCutoff(client, { now: new Date() })
     ));

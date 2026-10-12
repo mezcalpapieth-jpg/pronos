@@ -340,7 +340,7 @@ function MiniLeaderboard({ currentUsername }) {
       <>
         {visibleRows.map(u => {
           const isMe = String(u.username || '').toLowerCase() === currentKey;
-          const value = isPnl ? Number(u.marketPnl ?? u.score ?? 0) : Number(u.balance ?? 0);
+          const value = isPnl ? Number(u.tradingPnl ?? u.marketPnl ?? u.score ?? 0) : Number(u.walletEquity ?? u.balance ?? 0);
           const delta = Number(u.cycleDelta ?? value - (data?.startingBalance || 0));
           const deltaPos = delta >= 0;
           return (
@@ -374,7 +374,7 @@ function MiniLeaderboard({ currentUsername }) {
                 {isMe ? '(tú) ' : ''}{u.username}
               </span>
               <span
-                title={isPnl ? 'PnL de mercados' : `${deltaPos ? '+' : ''}${fmt(delta)} MXNP desde el inicio del ciclo`}
+                title={isPnl ? 'PnL de operaciones' : `${deltaPos ? '+' : ''}${fmt(delta)} MXNP desde el inicio del ciclo`}
                 style={{
                   color: isPnl
                     ? (value >= 0 ? 'var(--success)' : 'var(--danger)')
@@ -406,7 +406,7 @@ function MiniLeaderboard({ currentUsername }) {
             fontSize: 11,
             color: 'var(--green)',
           }}>
-            Tu posición: #{me.rank} · {isPnl ? `${signedFmt(me.marketPnl ?? me.score)} MXNP` : `${fmt(me.balance)} MXNP`}
+            Tu posición: #{me.rank} · {isPnl ? `${signedFmt(me.tradingPnl ?? me.marketPnl ?? me.score)} MXNP` : `${fmt(me.walletEquity ?? me.balance)} MXNP`}
           </div>
         )}
       </>
@@ -480,7 +480,7 @@ function MiniLeaderboard({ currentUsername }) {
 
       <div style={{ marginBottom: 14 }}>
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', color: 'var(--orange)', textTransform: 'uppercase', marginBottom: 8 }}>
-          Wallet actual
+          {data?.rules?.stocks?.enabled ? 'Wallet + valor de acciones' : 'Wallet actual'}
         </div>
         {renderRows({
           rows: data.walletTop || data.top || [],
@@ -491,7 +491,7 @@ function MiniLeaderboard({ currentUsername }) {
 
       <div style={{ paddingTop: 8, borderTop: '1px solid var(--border)' }}>
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 8 }}>
-          PnL de mercados
+          {data?.rules?.stocks?.enabled ? 'PnL de mercados + acciones' : 'PnL de mercados'}
         </div>
         {renderRows({
           rows: data.pnlTop || [],
@@ -1384,7 +1384,7 @@ export default function PointsPortfolio() {
                 <div className="stock-filters" style={{ margin: '20px 0' }}>{[['all', lang === 'en' ? 'All' : 'Todo'], ['markets', lang === 'en' ? 'Markets' : 'Mercados'], ['stocks', lang === 'en' ? 'Stocks' : 'Acciones']].map(([key, label]) => <button type="button" key={key} aria-pressed={assetFilter === key} className={assetFilter === key ? 'active' : ''} onClick={() => setAssetFilter(key)}>{label}</button>)}</div>
                 {stockError && <p className="stock-alert" role="status">{stockError}</p>}
                 {assetFilter !== 'markets' && <StockPositions data={stockPortfolio} />}
-                <p className="stock-note">{lang === 'en' ? 'Stock PnL is recorded when trading and viewing your portfolio; the chart combines the latest available observations.' : 'El PnL de acciones se registra al operar y al consultar el portafolio; la gráfica combina las últimas observaciones disponibles.'}</p>
+                <p className="stock-note">{lang === 'en' ? 'Stock valuations update every minute, including while you are offline. The chart combines the latest available stock and market observations.' : 'La valuación de acciones se actualiza cada minuto, incluso sin conexión. La gráfica combina las últimas observaciones disponibles de acciones y mercados.'}</p>
               </>}
 
               {msg && (
@@ -1406,7 +1406,7 @@ export default function PointsPortfolio() {
                   border: '1px dashed var(--border)', borderRadius: 16,
                 }}>
                   <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 13 }}>
-                    No tienes posiciones activas todavía.
+                    {stocksEnabled ? (lang === 'en' ? 'You do not have open prediction-market positions yet.' : 'No tienes posiciones activas en mercados de pronósticos.') : 'No tienes posiciones activas todavía.'}
                   </p>
                   <Link to="/" className="btn-primary" style={{ display: 'inline-block', marginTop: 20, textDecoration: 'none' }}>
                     Ver mercados

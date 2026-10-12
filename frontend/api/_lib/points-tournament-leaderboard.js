@@ -1,4 +1,5 @@
 import { binaryPrices, multiPrices } from './amm-math.js';
+import { readStockTournamentRows } from './stock-marks.js';
 import {
   TOURNAMENT_CONVICTION_BONUS_RATE,
   TOURNAMENT_CONVICTION_DAILY_BONUS_RATE,
@@ -94,6 +95,11 @@ function buildNeutralLeaderboardRows(users, limit) {
     score: 0,
     cycleDelta: 0,
     marketPnl: 0,
+    stockPnl: 0,
+    tradingPnl: 0,
+    stockPositionValue: 0,
+    stockStale: false,
+    stockMarkedAt: null,
     currentPositionValue: 0,
     holdBonus: 0,
     convictionBonus: 0,
@@ -696,10 +702,19 @@ export async function buildTournamentLeaderboardRows(
   const parlayByUser = new Map(parlayRows.map(row => [row.username, row]));
   const liquidityRows = await readLiquidityRewardRows(db, startIso, cutoffIso);
   const liquidityByUser = new Map(liquidityRows.map(row => [row.username, row]));
+  const stocks = await readStockTournamentRows(db, { window: scoringWindow, now: new Date(now).getTime() });
 
   const ranked = users.map(user => {
-    const activity = activityByUser.get(user.username) || {};
+    const predictionActivity = activityByUser.get(user.username) || {};
+    const stockActivity = stocks.activity.get(user.username) || {};
+    const activity = { ...predictionActivity,
+      total_actions: Number(predictionActivity.total_actions || 0) + Number(stockActivity.total_actions || 0),
+      buy_count: Number(predictionActivity.buy_count || 0) + Number(stockActivity.buy_count || 0),
+      active_day_keys: [...new Set([...(predictionActivity.active_day_keys || []), ...(stockActivity.active_day_keys || [])])],
+    };
     const marketPnl = pnlByUser.get(user.username) || 0;
+    const stock = stocks.scores.get(user.username);
+    const stockPnl = stock?.pnl || 0;
     const currentPositionValue = valueByUser.get(user.username) || 0;
     const holdBonus = holdBonusByUser.get(user.username) || 0;
     const convictionStats = convictionStatsByUser.get(user.username) || emptyConvictionStats();
@@ -711,7 +726,7 @@ export async function buildTournamentLeaderboardRows(
     const liquidityReward = numeric(liquidityByUser.get(user.username)?.liquidity_reward);
     const penalty = buildPenalty({ user, activity, now, window: scoringWindow });
     const qualifyingMarkets = Number(activity.qualifying_markets || 0);
-    const score = marketPnl + holdBonus + liquidityReward + parlayPnl - penalty.inactivityPenalty;
+    const score = marketPnl + holdBonus + liquidityReward + parlayPnl + stockPnl - penalty.inactivityPenalty;
     return {
       username: user.username,
       profileImageUrl: user.profile_image_url || null,
@@ -720,6 +735,11 @@ export async function buildTournamentLeaderboardRows(
       score: roundTournamentAmount(score),
       cycleDelta: roundTournamentAmount(score),
       marketPnl: roundTournamentAmount(marketPnl),
+      stockPnl: roundTournamentAmount(stockPnl),
+      tradingPnl: roundTournamentAmount(marketPnl + stockPnl),
+      stockPositionValue: roundTournamentAmount(stock?.currentValue || 0),
+      stockStale: stock?.stale || false,
+      stockMarkedAt: stock?.markedAt || null,
       currentPositionValue: roundTournamentAmount(currentPositionValue),
       holdBonus: roundTournamentAmount(holdBonus),
       convictionBonus: roundTournamentAmount(holdBonus),

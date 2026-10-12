@@ -248,6 +248,16 @@ export function tournamentRulesPayload() {
     maxSharesPerMarket: TOURNAMENT_MAX_SHARES_PER_MARKET,
     qualifyingMarkets: TOURNAMENT_QUALIFYING_MARKETS,
     inactivityPenalty: TOURNAMENT_INACTIVITY_PENALTY,
+    stocks: {
+      enabled: process.env.POINTS_STOCKS_ENABLED === 'true',
+      realizedAndUnrealized: true,
+      feesIncluded: true,
+      tradesCountAsActivity: true,
+      holdingsCountAsActivity: false,
+      countForQualification: false,
+      convictionBonus: false,
+      cutoffPrice: 'last_completed_1m_candle',
+    },
     convictionMultiplier: {
       bonusRate: TOURNAMENT_CONVICTION_BONUS_RATE,
       dailyBonusRate: TOURNAMENT_CONVICTION_DAILY_BONUS_RATE,

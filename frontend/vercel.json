@@ -5,6 +5,10 @@
   "trailingSlash": false,
   "crons": [
     {
+      "path": "/api/cron/points-stock-snapshot",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/indexer",
       "schedule": "* * * * *"
     },

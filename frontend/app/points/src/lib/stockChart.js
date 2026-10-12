@@ -18,3 +18,9 @@ export function candleTimeLabel(time, lang = 'es') {
     hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
   }).format(new Date(time)) + ' UTC';
 }
+
+export function priceTimeLabel(time, lang = 'es') {
+  return new Intl.DateTimeFormat(lang === 'en' ? 'en-US' : 'es-MX', {
+    timeZone: 'UTC', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+  }).format(new Date(time)) + ' UTC';
+}

@@ -42,7 +42,7 @@ test('points tournament leaderboard scores against the active cycle window', () 
   assert.match(tournamentSource, /marketPnl \+ holdBonus \+ liquidityReward \+ parlayPnl/);
   assert.match(tournamentSource, /buildConvictionBonusByUser/);
   assert.match(source, /readActiveCycleLeaderboardCacheKey/);
-  assert.match(source, /points:leaderboard:ranked:v10:\$\{leaderboardCycleKey\}/);
+  assert.match(source, /points:leaderboard:ranked:v11:\$\{stocksEnabled\}:\$\{leaderboardCycleKey\}/);
   assert.match(source, /profileImageUrl:\s*null/);
   assert.match(tournamentSource, /u\.profile_image_url/);
   assert.match(tournamentSource, /profileImageUrl:\s*user\.profile_image_url \|\| null/);

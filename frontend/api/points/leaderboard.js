@@ -22,6 +22,9 @@ import {
 import { buildTournamentLeaderboardRows } from '../_lib/points-tournament-leaderboard.js';
 import { readFrozenLeaderboardRowsForActiveCutoff } from '../_lib/points-cycle-snapshot.js';
 import { buildWalletLeaderboardRows } from '../_lib/points-wallet-leaderboard.js';
+import { stocksAreEnabled } from '../_lib/stock-marks.js';
+import { ensureStockSchema } from '../_lib/stock-schema.js';
+import { withTransaction } from '../_lib/db-tx.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -41,6 +44,10 @@ function emptyTournamentRow(username) {
     score: 0,
     cycleDelta: 0,
     marketPnl: 0,
+    stockPnl: 0,
+    tradingPnl: 0,
+    stockPositionValue: 0,
+    stockStale: false,
     currentPositionValue: 0,
     holdBonus: 0,
     convictionBonus: 0,
@@ -67,13 +74,15 @@ function rankPnlLeaderboardRows(rows = []) {
   const active = (Array.isArray(rows) ? rows : [])
     .filter(row => (
       Number(row.marketPnl || 0) !== 0
+      || Number(row.stockPnl || 0) !== 0
+      || Number(row.stockPositionValue || 0) !== 0
       || Number(row.currentPositionValue || 0) !== 0
       || Number(row.totalActions || 0) > 0
     ))
     .map(row => ({ ...row }));
 
   active.sort((a, b) => {
-    const pnlDiff = Number(b.marketPnl || 0) - Number(a.marketPnl || 0);
+    const pnlDiff = Number(b.tradingPnl ?? b.marketPnl ?? 0) - Number(a.tradingPnl ?? a.marketPnl ?? 0);
     if (pnlDiff !== 0) return pnlDiff;
     const valueDiff = Number(b.currentPositionValue || 0) - Number(a.currentPositionValue || 0);
     if (valueDiff !== 0) return valueDiff;
@@ -84,8 +93,8 @@ function rankPnlLeaderboardRows(rows = []) {
 
   active.forEach((row, index) => {
     row.rank = index + 1;
-    row.score = row.marketPnl;
-    row.cycleDelta = row.marketPnl;
+    row.score = row.tradingPnl ?? row.marketPnl;
+    row.cycleDelta = row.score;
   });
 
   return active;
@@ -113,19 +122,23 @@ export default async function handler(req, res) {
     setCacheHeaders(res, { scope: 'private', maxAge: 15, staleWhileRevalidate: 60 });
 
     await timer.time('schema', () => ensurePointsSchema(schemaSql));
+    const stocksEnabled = stocksAreEnabled();
+    if (stocksEnabled) await ensureStockSchema(withTransaction);
+    const leaderboardSql = stocksEnabled ? schemaSql : sql;
     const leaderboardCycleKey = await timer.time('db_cycle_key', () => readActiveCycleLeaderboardCacheKey(schemaSql));
 
-    const { value: ranked, hit } = await cachedJson(`points:leaderboard:ranked:v10:${leaderboardCycleKey}`, 15_000, async () => {
+    const { value: ranked, hit } = await cachedJson(`points:leaderboard:ranked:v11:${stocksEnabled}:${leaderboardCycleKey}`, 15_000, async () => {
       return await timer.time('db_leaderboard', async () => {
-        const frozen = await readFrozenLeaderboardRowsForActiveCutoff(sql, { limit: 5000 });
+        const frozen = await readFrozenLeaderboardRowsForActiveCutoff(leaderboardSql, { limit: 5000 });
         if (frozen?.rows?.length) return frozen.rows;
-        return buildTournamentLeaderboardRows(sql, { limit: 5000 });
+        return buildTournamentLeaderboardRows(leaderboardSql, { limit: 5000 });
       });
     });
 
-    const { value: walletRanked, hit: walletHit } = await cachedJson('points:leaderboard:wallet:v1', 15_000, async () => {
+    const { value: walletRanked, hit: walletHit } = await cachedJson(`points:leaderboard:wallet:v2:${stocksEnabled}:${leaderboardCycleKey}`, 15_000, async () => {
       await timer.time('schema_wallet', () => ensurePointsSchema(schemaSql));
-      return await timer.time('db_wallet_leaderboard', () => buildWalletLeaderboardRows(sql, { limit: 5000 }));
+      return await timer.time('db_wallet_leaderboard', () => buildWalletLeaderboardRows(leaderboardSql, { limit: 5000,
+        stockCycleId: stocksEnabled && leaderboardCycleKey.startsWith('cycle:') ? Number(leaderboardCycleKey.slice(6)) : null }));
     });
 
     const top = ranked.slice(0, PUBLIC_LEADERBOARD_LIMIT);
