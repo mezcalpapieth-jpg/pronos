@@ -32,8 +32,9 @@ Tradable reference prices come from Hyperliquid native and xyz perpetuals. The E
 | Concurrency | Six live checks passed across three independent Postgres connections: competing stock buys, stock/prediction purchase race, duplicate retry, simultaneous sell-all, partial/full accounting, reset contention/replay. |
 | Scoring | Automated tests verify realized/open stock PnL after fees, reinvestment without double counting, common offline marks, wallet equity and immutable cutoff snapshots. |
 | Provider outage | Tests verify unavailable/stale books cannot trade, holdings survive, old values are marked stale and missing cutoff prices defer the photo. |
-| Focused checks | 66 stock, chart, tournament, snapshot, wallet and leaderboard tests pass, including ETF read-only enforcement. |
+| Focused checks | 67 stock, chart, tournament, snapshot, wallet and leaderboard tests pass, including ETF read-only enforcement and Vercel function tracing. |
 | Build | Points production build passes; existing dependency annotation and large-bundle warnings remain. |
+| Function packaging | Vercel's static evaluator failed when the requested sell quantity started as `null` and was later used in BigInt subtraction. It now starts as `0n`; all 380 API modules trace successfully. A development-only tracer regression test covers the stock endpoints and scoring dependencies. |
 | Feature control | Main server and frontend flags default off in production; separate trading pause preserves valuations and stock scoring. |
 
 The local harness runs the minute collector directly. Vercel cron delivery, preview routing and normal sign-in still need validation on the actual preview deployment. The on-chain phase is not part of this readiness claim.
