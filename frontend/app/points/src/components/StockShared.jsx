@@ -7,7 +7,7 @@ export const stockMoney = value => value == null ? '—' : new Intl.NumberFormat
 export const stockPercent = value => value == null ? '—' : `${value >= 0 ? '+' : ''}${Number(value).toFixed(2)}%`;
 export function StockBadge({ asset }) {
   const [failedTicker, setFailedTicker] = useState(null);
-  return <span className="stock-badge" style={{ '--stock-color': asset.color }} aria-hidden="true">
+  return <span className="stock-badge" data-ticker={asset.ticker} style={{ '--stock-color': asset.color }} aria-hidden="true">
     {failedTicker === asset.ticker ? asset.monogram : <img src={`${import.meta.env.BASE_URL}stock-logos/${asset.ticker.toLowerCase()}.svg`} alt="" onError={() => setFailedTicker(asset.ticker)} />}
   </span>;
 }
