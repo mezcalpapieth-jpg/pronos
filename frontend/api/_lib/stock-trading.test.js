@@ -5,6 +5,11 @@ import { STOCK_SCHEMA_MIGRATIONS } from './stock-schema.js';
 import { createStockQuote, executeStockTrade, stockOrderRequest } from './stock-trading.js';
 import { readStockPortfolio } from './stock-portfolio.js';
 
+test('ETF previews cannot create a tradable quote, including internal calls', async () => {
+  assert.throws(() => stockOrderRequest({ ticker: 'SPYX', side: 'buy', amount: '100' }), { code: 'stock_preview_only' });
+  await assert.rejects(createStockQuote(null, { username: 'fran', request: { ticker: 'SPYX', side: 'buy', amount: '100' }, book: {} }), { code: 'stock_preview_only' });
+});
+
 async function setup(t) {
   const db = new PGlite();
   t.after(() => db.close());
@@ -30,6 +35,14 @@ test('real SQL buy/sell updates wallet, positions, immutable audit and PnL', asy
   const wallet = (await db.query('SELECT balance FROM points_balances WHERE username=$1', ['fran'])).rows[0];
   assert.equal(wallet.balance, '9501.502000');
   assert.equal((await db.query('SELECT amount FROM points_distributions')).rows[0].amount, '-498.498000');
+  const holdings = await db.transaction(tx => readStockPortfolio({ query(sql, params) {
+    assert.ok(!sql.includes('FROM points_stock_trades') && !sql.includes('FROM points_stock_valuations'), 'detail polling must not load the whole history');
+    return tx.query(sql, params);
+  } }, { username: 'fran', includeHistory: false }));
+  assert.equal(holdings.positions[0].quantity, '0.249000000000000000');
+  assert.equal(holdings.summary.currentValue, 498);
+  assert.deepEqual(holdings.trades, []);
+  assert.deepEqual(holdings.series, []);
   const sale = await trade(await quote({ side: 'sell', sellAll: true }));
   assert.equal(sale.position.costBasis, '0');
   assert.equal(sale.position.quantity, '0');

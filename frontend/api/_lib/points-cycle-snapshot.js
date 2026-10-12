@@ -3,6 +3,7 @@ import {
   cycleWindowFromRow,
 } from './points-tournament-leaderboard.js';
 import { roundTournamentAmount } from './points-tournament-config.js';
+import { freezeStockCycleMarks, stocksAreEnabled } from './stock-marks.js';
 
 export const DEFAULT_CYCLE_SNAPSHOT_LIMIT = 5000;
 
@@ -30,6 +31,11 @@ function snapshotRow(row) {
     score: roundTournamentAmount(score),
     cycleDelta: roundTournamentAmount(score),
     marketPnl: roundTournamentAmount(row.market_pnl ?? row.final_pnl ?? 0),
+    stockPnl: roundTournamentAmount(row.stock_pnl ?? 0),
+    tradingPnl: roundTournamentAmount((row.market_pnl ?? row.final_pnl ?? 0) * 1 + numeric(row.stock_pnl)),
+    stockPositionValue: roundTournamentAmount(row.stock_position_value ?? 0),
+    stockMarkedAt: row.stock_marked_at || null,
+    stockStale: row.stock_stale === true,
     currentPositionValue: roundTournamentAmount(row.current_position_value ?? 0),
     holdBonus: roundTournamentAmount(row.hold_bonus ?? 0),
     convictionBonus: roundTournamentAmount(row.hold_bonus ?? 0),
@@ -77,13 +83,7 @@ export async function readCycleSnapshotRows(db, { cycleId, limit = DEFAULT_CYCLE
   const id = Number(cycleId);
   if (!Number.isInteger(id) || id <= 0) return [];
   const rows = await queryRows(db, `
-    SELECT s.username, u.profile_image_url, s.final_balance, s.final_pnl, s.rank,
-           s.tournament_score, s.market_pnl, s.current_position_value,
-           s.hold_bonus, s.liquidity_reward, s.parlay_pnl, s.parlay_tickets, s.parlay_wins,
-           s.conviction_bonus_gross, s.conviction_bonus_cap_applied,
-           s.conviction_eligible_profit, s.conviction_markets, s.conviction_lots,
-           s.inactivity_penalty, s.inactive_days, s.active_days,
-           s.qualifying_markets, s.qualified
+    SELECT s.*, u.profile_image_url
     FROM points_cycle_snapshots s
     LEFT JOIN points_users u ON LOWER(u.username) = LOWER(s.username)
     WHERE s.cycle_id = $1
@@ -105,6 +105,9 @@ export async function snapshotCycleLeaderboard(
     return readCycleSnapshotRows(client, { cycleId: activeCycle.id, limit });
   }
 
+  const stocksEnabled = stocksAreEnabled();
+  if (stocksEnabled) await freezeStockCycleMarks(client, activeCycle, { now });
+
   const top = await buildTournamentLeaderboardRows(client, {
     limit,
     now,
@@ -123,8 +126,10 @@ export async function snapshotCycleLeaderboard(
          conviction_eligible_profit, conviction_markets, conviction_lots,
          inactivity_penalty, inactive_days, active_days,
          qualifying_markets, qualified
+         ${stocksEnabled ? ',stock_pnl,stock_position_value,stock_marked_at,stock_stale' : ''}
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
+         ${stocksEnabled ? ',$24,$25,$26,$27' : ''})
        ON CONFLICT (cycle_id, username) DO NOTHING`,
       [
         activeCycle.id,
@@ -150,6 +155,7 @@ export async function snapshotCycleLeaderboard(
         Number(row.activeDays || 0),
         Number(row.qualifyingMarkets || 0),
         row.qualified === true,
+        ...(stocksEnabled ? [numeric(row.stockPnl), numeric(row.stockPositionValue), row.stockMarkedAt || null, row.stockStale === true] : []),
       ],
     );
   }

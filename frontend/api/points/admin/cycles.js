@@ -33,6 +33,8 @@
  *   { ok: true, cycleId, cutoffAt, snapshotted, winners: [top 5] }
  */
 import { neon } from '@neondatabase/serverless';
+import { stocksAreEnabled } from '../../_lib/stock-marks.js';
+import { ensureStockSchema } from '../../_lib/stock-schema.js';
 import { applyCors } from '../../_lib/cors.js';
 import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { requirePointsAdmin } from '../../_lib/points-admin.js';
@@ -966,6 +968,7 @@ export default async function handler(req, res) {
     if (!session) return; // requirePointsAdmin already sent 401/403
 
     await ensurePointsSchema(sql);
+    if (stocksAreEnabled()) await ensureStockSchema(withTransaction);
 
     if (req.method === 'GET') return await handleGet(req, res);
     if (req.method === 'POST') {

@@ -26,3 +26,14 @@ test('wallet leaderboard uses username as deterministic tie breaker', () => {
 
   assert.deepEqual(ranked.map(row => `${row.rank}:${row.username}`), ['1:alpha', '2:zeta']);
 });
+
+test('a stock purchase keeps wallet equity, with only fees and price changes affecting rank', () => {
+  const ranked = rankWalletLeaderboardRows([
+    { username: 'holder', balance: '100', stock_position_value: '399.6' },
+    { username: 'cash', balance: '499' },
+  ]);
+  assert.equal(ranked[0].username, 'holder');
+  assert.equal(ranked[0].balance, 100);
+  assert.equal(ranked[0].walletEquity, 499.6);
+  assert.equal(ranked[0].cycleDelta, -0.4);
+});

@@ -282,17 +282,18 @@ export function publicErrorMessage(error, lang = 'es', fallback = 'default') {
   return copy[lang] || copy.es;
 }
 
-export async function getJson(url) {
-  const res = await fetch(url, { method: 'GET', credentials: 'include' });
+export async function getJson(url, { signal } = {}) {
+  const res = await fetch(url, { method: 'GET', credentials: 'include', signal });
   return handle(res);
 }
 
-export async function postJson(url, body) {
+export async function postJson(url, body, { signal } = {}) {
   const res = await fetch(url, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body || {}),
+    signal,
   });
   return handle(res);
 }

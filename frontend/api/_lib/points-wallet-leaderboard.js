@@ -14,17 +14,21 @@ export function rankWalletLeaderboardRows(rows = [], { startingBalance = TOURNAM
     .filter(row => String(row?.username || '').trim())
     .map(row => {
       const balance = roundTournamentAmount(row.balance);
+      const stockPositionValue = roundTournamentAmount(row.stock_position_value ?? row.stockPositionValue ?? 0);
+      const walletEquity = roundTournamentAmount(balance + stockPositionValue);
       return {
         username: String(row.username).trim(),
         createdAt: row.created_at || row.createdAt || null,
         balance,
-        score: balance,
-        cycleDelta: roundTournamentAmount(balance - startingBalance),
+        stockPositionValue,
+        walletEquity,
+        score: walletEquity,
+        cycleDelta: roundTournamentAmount(walletEquity - startingBalance),
       };
     });
 
   ranked.sort((a, b) => {
-    const balanceDiff = b.balance - a.balance;
+    const balanceDiff = b.walletEquity - a.walletEquity;
     if (balanceDiff !== 0) return balanceDiff;
     return String(a.username).localeCompare(String(b.username));
   });
@@ -36,15 +40,26 @@ export function rankWalletLeaderboardRows(rows = [], { startingBalance = TOURNAM
   return ranked;
 }
 
-export async function buildWalletLeaderboardRows(db, { limit = 5000 } = {}) {
+export async function buildWalletLeaderboardRows(db, { limit = 5000, stockCycleId = null } = {}) {
+  // Read cash and holdings in the same SQL snapshot. A concurrent stock fill
+  // cannot temporarily make the wallet rank lose both its cash and its shares.
   const rows = await queryRows(db, `
     SELECT b.username, COALESCE(b.balance, 0) AS balance, u.created_at
+      ${stockCycleId ? ',COALESCE(s.value,0) AS stock_position_value' : ''}
     FROM points_balances b
     LEFT JOIN points_users u ON LOWER(u.username) = LOWER(b.username)
+    ${stockCycleId ? `LEFT JOIN (
+      SELECT p.username,SUM(CASE WHEN p.quantity=0 THEN 0
+        WHEN m.price_usd IS NOT NULL THEN TRUNC(p.quantity*m.price_usd*m.fx_rate,6)
+        ELSE p.current_value END) AS value
+      FROM points_stock_positions p LEFT JOIN points_stock_cycle_marks m
+        ON m.cycle_id=p.cycle_id AND m.ticker=p.ticker
+      WHERE p.cycle_id=$2 GROUP BY p.username
+    ) s ON s.username=b.username` : ''}
     WHERE b.username IS NOT NULL
-    ORDER BY b.balance DESC, LOWER(b.username) ASC
+    ORDER BY ${stockCycleId ? 'COALESCE(b.balance,0)+COALESCE(s.value,0)' : 'b.balance'} DESC, LOWER(b.username) ASC
     LIMIT $1
-  `, [Math.max(1, Number(limit) || 5000)]);
+  `, [Math.max(1, Number(limit) || 5000), ...(stockCycleId ? [stockCycleId] : [])]);
 
   return rankWalletLeaderboardRows(rows);
 }

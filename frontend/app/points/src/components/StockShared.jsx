@@ -6,10 +6,13 @@ import { candleTimeLabel, nearestStockCandle } from '../lib/stockChart.js';
 export const stockMoney = value => value == null ? '—' : new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 2 }).format(Number(value));
 export const stockPercent = value => value == null ? '—' : `${value >= 0 ? '+' : ''}${Number(value).toFixed(2)}%`;
 export function StockBadge({ asset }) {
-  return <span className="stock-badge" style={{ '--stock-color': asset.color }} aria-hidden="true">{asset.monogram}</span>;
+  const [failedTicker, setFailedTicker] = useState(null);
+  return <span className="stock-badge" style={{ '--stock-color': asset.color }} aria-hidden="true">
+    {failedTicker === asset.ticker ? asset.monogram : <img src={`${import.meta.env.BASE_URL}stock-logos/${asset.ticker.toLowerCase()}.svg`} alt="" onError={() => setFailedTicker(asset.ticker)} />}
+  </span>;
 }
 
-export function StockChart({ candles = [], small = false, positive = true }) {
+export function StockChart({ candles = [], small = false, positive = true, snapshotAt = Date.now() }) {
   const lang = useLang();
   const [selectedTime, setSelectedTime] = useState(null);
   const readoutId = useId();
@@ -64,7 +67,7 @@ export function StockChart({ candles = [], small = false, positive = true }) {
   if (small) return graph;
   return <div className="stock-chart-wrap">
     <div id={readoutId} className="stock-chart-readout" role="status">
-      {selected ? <><strong>{stockMoney(selected.close)} USD</strong><time dateTime={new Date(selected.t).toISOString()}>{candleTimeLabel(selected.t, lang)}</time></>
+      {selected ? <><strong>{stockMoney(selected.close)} USD{selected.endTime >= snapshotAt ? lang === 'en' ? ' · Forming' : ' · En curso' : ''}</strong><span>{lang === 'en' ? 'Candle start' : 'Inicio de vela'}: <time dateTime={new Date(selected.t).toISOString()}>{candleTimeLabel(selected.t, lang)}</time></span></>
         : <span>{lang === 'en' ? 'Hover or tap for price and time. Arrow keys also work.' : 'Pasa el cursor o toca para ver precio y hora. También puedes usar las flechas.'}</span>}
     </div>
     {graph}
@@ -78,6 +81,7 @@ export function StockPositions({ data }) {
   return <section className="stock-portfolio-section">
     <div className="stock-section-title"><h2>{lang === 'en' ? 'Stocks' : 'Acciones'}</h2><Link to="/stocks">{lang === 'en' ? 'Explore →' : 'Explorar →'}</Link></div>
     {data.stale && <p className="stock-note">{lang === 'en' ? 'Last recorded valuation. Prices may be outdated.' : 'Última valuación registrada. Los precios pueden estar desactualizados.'}</p>}
+    <p className="stock-note">{lang === 'en' ? 'Stock PnL counts in the tournament. Valuations update while you are offline; holdings reset with the points cycle.' : 'El PnL de acciones cuenta en el torneo. La valuación se actualiza aunque no estés conectado; las posiciones se reinician con el ciclo de puntos.'}</p>
     {data.positions.length === 0 ? <p className="stock-note">{lang === 'en' ? 'You do not hold any simulated stocks yet.' : 'Todavía no tienes posiciones simuladas de acciones.'}</p>
       : data.positions.map(position => <article className="stock-position" key={position.ticker}>
         <Link className="stock-position-identity" to={`/stocks/${position.ticker}`}><StockBadge asset={position} /><div><strong>{position.name}</strong><span>{Number(position.quantity).toLocaleString('es-MX', { maximumFractionDigits: 8 })} {position.ticker}</span>

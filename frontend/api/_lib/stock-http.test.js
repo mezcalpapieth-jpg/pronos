@@ -34,3 +34,25 @@ test('enabled trading and portfolios require authentication and reject cross-ori
     assert.equal(denied.body.error, 'cross_origin_state_change');
   } finally { if (original == null) delete process.env.POINTS_STOCKS_ENABLED; else process.env.POINTS_STOCKS_ENABLED = original; }
 });
+
+test('the trading kill switch blocks all stock writes while keeping authenticated reads enabled', async () => {
+  const enabled = process.env.POINTS_STOCKS_ENABLED;
+  const trading = process.env.POINTS_STOCKS_TRADING_ENABLED;
+  process.env.POINTS_STOCKS_ENABLED = 'true';
+  process.env.POINTS_STOCKS_TRADING_ENABLED = 'false';
+  try {
+    for (const action of ['quote', 'buy', 'sell']) {
+      const res = response();
+      await stockHandler(action)({ method: 'POST', headers: {} }, res);
+      assert.equal(res.statusCode, 503);
+      assert.equal(res.body.error, 'stock_trading_paused');
+    }
+    const read = response();
+    await stockHandler('positions')({ method: 'GET', headers: {} }, read);
+    assert.equal(read.statusCode, 401);
+  } finally {
+    for (const [key,value] of [['POINTS_STOCKS_ENABLED',enabled],['POINTS_STOCKS_TRADING_ENABLED',trading]]) {
+      if (value == null) delete process.env[key]; else process.env[key] = value;
+    }
+  }
+});

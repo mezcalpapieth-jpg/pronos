@@ -4,13 +4,17 @@ const env = import.meta.env || {};
 export const stocksEnabled = env.VITE_POINTS_STOCKS_ENABLED === 'true'
   || (env.DEV && env.VITE_POINTS_STOCKS_ENABLED !== 'false');
 const base = '/api/points/stocks';
-export const fetchStockAssets = ticker => getJson(`${base}/assets${ticker ? `?ticker=${encodeURIComponent(ticker)}` : ''}`);
-export const fetchStockCandles = (ticker, range) => getJson(`${base}/candles?ticker=${encodeURIComponent(ticker)}&range=${range}`);
-export const fetchStockPortfolio = (cycle = 'current') => getJson(`${base}/positions?cycle=${cycle}`);
-export const quoteStock = body => postJson(`${base}/quote`, body);
-export const tradeStock = (side, body) => postJson(`${base}/${side}`, body);
+const timeout = () => ({ signal: AbortSignal.timeout(12000) });
+export const fetchStockAssets = ticker => getJson(`${base}/assets${ticker ? `?ticker=${encodeURIComponent(ticker)}` : ''}`, timeout());
+export const fetchStockCandles = (ticker, range) => getJson(`${base}/candles?ticker=${encodeURIComponent(ticker)}&range=${range}`, timeout());
+export const fetchStockPortfolio = (cycle = 'current') => getJson(`${base}/positions?cycle=${cycle}`, timeout());
+export const fetchStockHoldings = () => getJson(`${base}/positions?cycle=current&view=holdings`, timeout());
+export const quoteStock = body => postJson(`${base}/quote`, body, timeout());
+export const tradeStock = (side, body) => postJson(`${base}/${side}`, body, timeout());
 const errors = {
+  stock_preview_only: ['Este ETF está disponible como vista previa; aún no admite operaciones con puntos.', 'This ETF is a preview; points trading is not enabled yet.'],
   stocks_disabled: ['Acciones estará disponible pronto.', 'Stocks will be available soon.'],
+  stock_trading_paused: ['Las operaciones de acciones están pausadas temporalmente.', 'Stock trading is temporarily paused.'],
   stock_price_unavailable: ['Precio no disponible. Intenta de nuevo en unos segundos.', 'Price unavailable. Try again in a few seconds.'],
   stock_fx_unavailable: ['Tipo de cambio no disponible. Intenta más tarde.', 'Exchange rate unavailable. Try later.'],
   stock_minimum_amount: ['La compra mínima es de 100 MXNP.', 'The minimum buy is 100 MXNP.'],
