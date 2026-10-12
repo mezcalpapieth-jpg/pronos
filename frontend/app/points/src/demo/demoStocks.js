@@ -11,7 +11,8 @@ function market() {
   const fx = { rate: '18.3', date: new Date().toISOString().slice(0, 10), source: 'DEMO · synthetic FX' };
   return { demo: true, fx, fetchedAt: Date.now(), source: 'DEMO · synthetic prices', stale: false,
     assets: STOCK_ASSETS.map((asset, i) => ({ ...asset, available: true, szDecimals: asset.ticker === 'GOLD' ? 4 : 3,
-      priceUsd: String(PRICES[i]), priceMxn: PRICES[i] * Number(fx.rate), change24h: [0.14, 0.41, 0.25, -0.25, 0.39, 0.32, 0.08, 0.18, 0.25][i] })) };
+      priceUsd: String(PRICES[i]), priceMxn: PRICES[i] * Number(fx.rate), volumeUsd: 1010000,
+      change24h: [0.14, 0.41, 0.25, -0.25, 0.39, 0.32, 0.08, 0.18, 0.25][i] })) };
 }
 function book(ticker) {
   const data = market();
@@ -52,12 +53,14 @@ export function routeDemoStocks(path, method, params, body = {}) {
       const asset = market().assets.find(item => item.ticker === params.get('ticker'));
       const range = params.get('range') || '7D';
       if (!asset) return response({ error: 'stock_not_found' }, 404);
-      const duration = STOCK_CHART_RANGES[range]?.durationMs || 86400000;
-      const count = range === 'SPARK' ? 24 : 100;
-      const end = Date.now();
-      const candles = Array.from({ length: count }, (_, i) => ({ t: end - duration + i / (count - 1) * duration,
+      const config = range === 'SPARK' ? { interval: '1h', durationMs: 86400000 } : STOCK_CHART_RANGES[range];
+      if (!config) return response({ error: 'invalid_stock_chart' }, 400);
+      const intervalMs = { '5m': 300000, '15m': 900000, '1h': 3600000, '4h': 14400000 }[config.interval];
+      const count = config.durationMs / intervalMs;
+      const end = Math.floor(Date.now() / intervalMs) * intervalMs;
+      const candles = Array.from({ length: count }, (_, i) => ({ t: end - (count - 1 - i) * intervalMs,
         close: Number(asset.priceUsd) * (1 + Math.sin(i * 0.45 + asset.order) * 0.006 + Math.cos(i * 0.12) * 0.008 + (i / count - 1) * 0.01) }));
-      return response({ ticker: asset.ticker, candles, range, demo: true, currency: 'USD' });
+      return response({ ticker: asset.ticker, candles, range, interval: config.interval, demo: true, currency: 'USD' });
     }
     if (method === 'GET' && action === 'positions') return response(portfolio(params.get('cycle') || 'current'));
     const state = getDemoState();
