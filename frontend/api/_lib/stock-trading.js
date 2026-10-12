@@ -3,6 +3,7 @@ import { stockAsset } from './stock-assets.js';
 import { rows } from './stock-data.js';
 import { applyStockFill, assertStockQuoteFresh, buildStockFill, decimal, fixed, stockError, stockPositionValue } from './stock-math.js';
 import { configuredCycleWindowFromRow } from './points-tournament-config.js';
+import { persistStockMarks } from './stock-marks.js';
 
 async function tradingCycle(db, now) {
   // Same lock order as rollover: cycle, then wallet. A rollover cannot pass
@@ -22,6 +23,7 @@ async function tradingCycle(db, now) {
 export function stockOrderRequest(body = {}) {
   const asset = stockAsset(body.ticker);
   if (!asset) throw stockError('stock_not_found', 404);
+  if (asset.readOnly) throw stockError('stock_preview_only', 503);
   if (!['buy', 'sell'].includes(body.side)) throw stockError('invalid_side');
   const hasAmount = body.amount != null;
   const hasQuantity = body.quantity != null;
@@ -35,6 +37,7 @@ export function stockOrderRequest(body = {}) {
 }
 
 export async function createStockQuote(db, { username, request, book, now = Date.now() }) {
+  if (stockAsset(request.ticker)?.readOnly) throw stockError('stock_preview_only', 503);
   const cycle = await tradingCycle(db, now);
   assertStockQuoteFresh(book, now);
   if (book.ticker !== request.ticker) throw stockError('invalid_quote');
@@ -81,6 +84,10 @@ export async function executeStockTrade(db, { username, side, quoteId, idempoten
   if (executionNow >= new Date(operationClose).getTime()) throw stockError('stock_cycle_closed', 409);
   if (executionNow >= new Date(quote.expires_at).getTime()) throw stockError('stock_quote_expired', 409);
   assertStockQuoteFresh(quote.payload.book, executionNow);
+  await persistStockMarks(db, { cycleId: cycle.id, now: executionNow, market: {
+    assets: [{ ...stockAsset(quote.ticker), available: true, priceUsd: quote.payload.book.markPriceUsd || quote.payload.fill.priceUsd }],
+    fx: quote.payload.book.fx, fetchedAt: quote.payload.book.markFetchedAt || quote.payload.book.fetchedAt, stale: false,
+  } });
   await db.query(`INSERT INTO points_stock_positions(username,cycle_id,ticker) VALUES($1,$2,$3)
     ON CONFLICT DO NOTHING`, [username, cycle.id, quote.ticker]);
   const [position] = await rows(db, `SELECT * FROM points_stock_positions

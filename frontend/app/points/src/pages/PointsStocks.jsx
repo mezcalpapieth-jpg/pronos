@@ -40,11 +40,11 @@ export default function PointsStocks() {
     && `${asset.name} ${asset.ticker}`.toLowerCase().includes(query.toLowerCase().trim()));
   return <main className="stocks-page">
     <div className="stock-eyebrow"><span className="stock-live-dot" />{en ? 'STOCKS IN POINTS' : 'ACCIONES EN PUNTOS'} · MXNP</div>
-    <div className="stocks-heading"><div><h1>{en ? 'Start with 100 points' : 'Compra Apple desde 100 puntos'}</h1>
-      <p>{en ? 'Follow the market. Build your simulated portfolio.' : 'Sigue el mercado. Construye tu portafolio simulado.'}</p></div>
+    <div className="stocks-heading"><div><h1>{en ? 'Buy stocks from 100 MXNP' : 'Compra acciones desde 100 MXNP'}</h1>
+      <p>{en ? 'Put your portfolio to work, follow the market.' : 'Pon tu portafolio a trabajar, sigue el mercado.'}</p></div>
       <Link className="stock-secondary" to="/portfolio">{en ? 'My portfolio ↗' : 'Mi portafolio ↗'}</Link></div>
     <div className="stocks-controls"><div className="stock-filters" aria-label={en ? 'Asset category' : 'Categoría de activo'}>
-      {[[ 'all', en ? 'All' : 'Todas' ], ['tecnologia', en ? 'Technology' : 'Tecnología'], ['indices', en ? 'Indices' : 'Índices'], ['materias-primas', en ? 'Commodities' : 'Materias primas']].map(([key, label]) =>
+      {[[ 'all', en ? 'All' : 'Todas' ], ['tecnologia', en ? 'Technology' : 'Tecnología'], ['indices', en ? 'Indices' : 'Índices'], ['materias-primas', en ? 'Commodities' : 'Materias primas'], ['crypto', 'Crypto'], ['etfs', 'ETFs']].map(([key, label]) =>
         <button type="button" key={key} aria-pressed={category === key} className={category === key ? 'active' : ''} onClick={() => setCategory(key)}>{label}</button>)}
     </div><input className="stock-search" aria-label={en ? 'Search stocks' : 'Buscar acción'} placeholder={en ? 'Search stocks…' : 'Buscar acción…'} value={query} onChange={e => setQuery(e.target.value)} /></div>
     {!stocksEnabled && <p className="stock-alert">{en ? 'Stocks will be available soon.' : 'Acciones estará disponible pronto.'}</p>}
@@ -53,13 +53,13 @@ export default function PointsStocks() {
     {stocksEnabled && <div className="stocks-table"><div className="stocks-table-head"><span>{en ? 'Asset' : 'Activo'}</span><span>24H · USD</span><span>{en ? 'Price MXNP' : 'Precio MXNP'} · 24H</span></div>
       {!data && !error && <div className="stock-loading">{en ? 'Loading prices…' : 'Cargando precios…'}</div>}
       {assets.map(asset => <Link key={asset.ticker} className="stocks-row" to={`/stocks/${asset.ticker}`}>
-        <div className="stock-identity"><StockBadge asset={asset} /><div><strong>{asset.name}</strong><span>{asset.ticker}</span></div></div>
+        <div className="stock-identity"><StockBadge asset={asset} /><div><strong>{asset.name}</strong><span>{asset.ticker}{asset.readOnly ? en ? ' · Preview' : ' · Vista previa' : ''}</span></div></div>
         <StockChart candles={sparks[asset.ticker]} small positive={asset.change24h >= 0} />
         <div className="stock-row-price"><strong>{stockMoney(asset.priceMxn)}</strong><span className={asset.change24h >= 0 ? 'stock-up' : 'stock-down'}>{asset.available ? stockPercent(asset.change24h) : en ? 'Unavailable' : 'No disponible'}</span></div>
       </Link>)}
       {data && !assets.length && <p className="stock-loading">{en ? 'No matching assets.' : 'No encontramos activos.'}</p>}
     </div>}
-    <p className="stock-note stocks-disclosure">{en ? 'Simulation with MXNP points. Reference prices from Hyperliquid / xyz derivatives; no ownership of shares. Trading depends on live price availability.' : 'Simulación con puntos MXNP. Precios de referencia de derivados Hyperliquid / xyz; no otorga propiedad de acciones. Las operaciones dependen de la disponibilidad de precios.'}
+    <p className="stock-note stocks-disclosure">{en ? 'Simulation with MXNP points. Reference prices from Hyperliquid; no ownership of shares or crypto. Trading depends on live price availability. ETFs are price previews.' : 'Simulación con puntos MXNP. Precios de referencia de Hyperliquid; no otorga propiedad de acciones ni crypto. Las operaciones dependen de la disponibilidad de precios. Los ETFs son vistas previas de precios.'}
       {data?.fx && <><br />{data.fx.source} · {data.fx.date} · {stockMoney(data.fx.rate)} MXN / USD</>}</p>
   </main>;
 }

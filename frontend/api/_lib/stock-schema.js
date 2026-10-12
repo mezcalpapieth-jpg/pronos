@@ -1,4 +1,15 @@
 export const STOCK_SCHEMA_MIGRATIONS = [
+  `CREATE TABLE IF NOT EXISTS points_stock_cycle_marks (
+    cycle_id INTEGER NOT NULL REFERENCES points_cycles(id), ticker TEXT NOT NULL,
+    price_usd NUMERIC(24,8) NOT NULL CHECK (price_usd > 0),
+    fx_rate NUMERIC(24,8) NOT NULL CHECK (fx_rate > 0), fx_date TEXT NOT NULL,
+    priced_at TIMESTAMPTZ NOT NULL, cutoff_at TIMESTAMPTZ, terminal BOOLEAN NOT NULL DEFAULT FALSE,
+    source TEXT NOT NULL, PRIMARY KEY (cycle_id,ticker)
+  )`,
+  `ALTER TABLE IF EXISTS points_cycle_snapshots ADD COLUMN IF NOT EXISTS stock_pnl NUMERIC(20,6)`,
+  `ALTER TABLE IF EXISTS points_cycle_snapshots ADD COLUMN IF NOT EXISTS stock_position_value NUMERIC(20,6)`,
+  `ALTER TABLE IF EXISTS points_cycle_snapshots ADD COLUMN IF NOT EXISTS stock_marked_at TIMESTAMPTZ`,
+  `ALTER TABLE IF EXISTS points_cycle_snapshots ADD COLUMN IF NOT EXISTS stock_stale BOOLEAN`,
   `CREATE TABLE IF NOT EXISTS points_stock_cache (
     cache_key TEXT PRIMARY KEY, payload JSONB NOT NULL, fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
@@ -43,7 +54,7 @@ let ready = false;
 export async function ensureStockSchema(transaction) {
   if (ready) return;
   await transaction(async client => {
-    await client.query("SELECT pg_advisory_xact_lock(hashtext('points_stock_schema_v1'))");
+    await client.query("SELECT pg_advisory_xact_lock(hashtext('points_stock_schema_v2'))");
     for (const statement of STOCK_SCHEMA_MIGRATIONS) await client.query(statement);
   });
   ready = true;
