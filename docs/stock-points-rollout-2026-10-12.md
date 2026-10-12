@@ -8,7 +8,7 @@ The real-data local demo runs at **http://127.0.0.1:5180/points/stocks**. Port 5
 
 A useful presentation sequence:
 
-1. Browse 13 tradable instruments and the separate SPYx ETF preview; search and filter categories, including Crypto and ETFs. The heading is “Compra acciones desde 100 MXNP” and the subtitle is “Pon tu portafolio a trabajar, sigue el mercado.”
+1. Browse 13 tradable instruments; search and filter categories, including Crypto. ETF listings and filters are removed. The heading is “Compra acciones desde 100 MXNP” and the subtitle is “Pon tu portafolio a trabajar, sigue el mercado.”
 2. Open Nvidia. Switch 7D to 4H to show one-hour versus five-minute candles. Hover/tap a candle to show its USD close and explicitly labeled UTC start time. Compare that with the chart fetch time and live order-book time/age; detail prices poll independently every three seconds.
 3. Enter an MXNP budget, review the units, actual fee, FX and rounding remainder, then confirm the expiring quote.
 4. Open Portfolio to show spendable cash, holding value, open/realized PnL and history. Partially sell and then use sell-all to turn exposure back into spendable points.
@@ -20,7 +20,7 @@ The demonstrated browser buy requested 400 MXNP and filled 0.096 NVDA for 398.77
 
 The Solana browser check requested 100 MXNP, filled 0.04 SOL for 80.35 MXNP including fee and kept the quantity-rounding remainder. Sell-all returned 80.23 MXNP, removed the holding and updated available cash from 319.08 to 399.31 MXNP. Processing kept the estimates visible and ended after the committed response. An expired quote was explicitly reviewed again rather than silently replaced. These are historical staging observations.
 
-Tradable reference prices come from Hyperliquid native and xyz perpetuals. The ETF preview uses a verified SPYx wrapped-token spot market. Transactions simulate exposure using MXNP points; they do not acquire shares or execute externally. On-chain crypto-funded execution is a subsequent product phase.
+Tradable reference prices come from Hyperliquid native and xyz perpetuals. Transactions simulate exposure using MXNP points; they do not acquire shares or execute externally. On-chain crypto-funded execution is a subsequent product phase.
 
 ## Verified readiness
 
@@ -28,11 +28,11 @@ Tradable reference prices come from Hyperliquid native and xyz perpetuals. The E
 | --- | --- |
 | Real data | 14 displayed instruments available through Pronos, 13 tradable with points; Banxico FIX 18.4163 dated October 9; actual completed one-minute cutoff candle retrieved. Native/xyz venue routing and explicit spot market-ID joins verified. |
 | Browser flow | Authenticated buy, partial sale, sell-all, wallet debit/credit, units, fee/proceeds and Portfolio history verified on local real-data staging. |
-| Expanded UI | Solana buy/sell-all, five-minute candle readout, index/ETF switching and SPYx read-only card verified. All 14 local logos loaded; the 390px catalogue had no horizontal overflow. |
+| Expanded UI | Solana buy/sell-all and five-minute candle readout verified. ETFs and the index/ETF switch are removed. All 13 current instrument logos are local; the 390px catalogue had no horizontal overflow. |
 | Concurrency | Six live checks passed across three independent Postgres connections: competing stock buys, stock/prediction purchase race, duplicate retry, simultaneous sell-all, partial/full accounting, reset contention/replay. |
 | Scoring | Automated tests verify realized/open stock PnL after fees, reinvestment without double counting, common offline marks, wallet equity and immutable cutoff snapshots. |
 | Provider outage | Tests verify unavailable/stale books cannot trade, holdings survive, old values are marked stale and missing cutoff prices defer the photo. |
-| Focused checks | 67 stock, chart, tournament, snapshot, wallet and leaderboard tests pass, including ETF read-only enforcement and Vercel function tracing. |
+| Focused checks | 73 stock, chart, tournament, snapshot, wallet and leaderboard tests pass, including rejection of removed instruments and Vercel function tracing. |
 | Build | Points production build passes; existing dependency annotation and large-bundle warnings remain. |
 | Function packaging | Vercel's static evaluator failed when the requested sell quantity started as `null` and was later used in BigInt subtraction. It now starts as `0n`; all 380 API modules trace successfully. A development-only tracer regression test covers the stock endpoints and scoring dependencies. |
 | Feature control | Main server and frontend flags default off in production; separate trading pause preserves valuations and stock scoring. |
@@ -56,7 +56,7 @@ No production migration or release approval is requested merely to prepare these
 ```sh
 cd frontend
 npm run test:stocks
-node --test api/_lib/stock-*.test.js api/_lib/points-cycle-snapshot.test.js api/_lib/points-tournament-*.test.js api/_lib/points-wallet-leaderboard.test.js api/points/leaderboard.test.js app/points/src/lib/stockApi.test.js app/points/src/lib/stockChart.test.js
+node --test api/_lib/stock-*.test.js api/_lib/points-cycle-snapshot.test.js api/_lib/points-tournament-*.test.js api/_lib/points-wallet-leaderboard.test.js api/points/leaderboard.test.js app/points/src/lib/stockApi.test.js app/points/src/lib/stockChart.test.js app/points/src/pages/PointsTournament.test.js app/points/src/pages/PointsTournament.rules.test.js
 node --env-file=/absolute/private/verification.env api/scripts/verify-stock-staging.mjs
 cd app
 npm run build:points
@@ -72,6 +72,8 @@ Choose the actual instrument (tokenized security or derivative), execution venue
 
 ## Hyperliquid instrument check, October 12, 2026
 
+This is dated research for the future on-chain phase. The current Points catalogue excludes ETFs; the earlier SPYx price preview and spot adapter have been removed.
+
 Checked the live public Info API's native and all listed builder perpetual venues, plus spot metadata, books and candles. Catalogue availability is a dated observation; recheck before choosing an execution venue.
 
 | Requested exposure | Current verified reference | Points behavior |
@@ -80,18 +82,18 @@ Checked the live public Info API's native and all listed builder perpetual venue
 | Ethereum | Native `ETH` perpetual; wrapped spot `UETH` also listed | ETH points trading added using the native perpetual reference. |
 | Solana | Native `SOL` perpetual; wrapped spot `USOL` also listed | SOL points trading added and browser buy/sell-all verified. |
 | SpaceX | Active `xyz:SPCX` perpetual; older `vntl:SPACEX` is delisted | SPCX points trading added. A similarly named token alone is not evidence of stock backing. |
-| S&P 500 index | Active `xyz:SP500` perpetual | Existing points trading retained; index/ETF navigation added. |
-| S&P 500 ETF | Active spot `@703`, wrapped SPYx token | Read-only price preview; not yet eligible for points holdings. |
+| S&P 500 index | Active `xyz:SP500` perpetual | Index points trading retained; ETF switching removed. |
+| S&P 500 ETF | Active spot `@703`, wrapped SPYx token | Removed from the Points product at the user's request. |
 | Dow Jones / DIA ETF | No matching active market found in this catalogue check | Omitted rather than inserting an unrelated or fabricated instrument. |
 
 The [Hyperliquid Info API](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/info-endpoint) documents venue discovery and spot market identifiers. [Hyperliquid contract specifications](https://hyperliquid.gitbook.io/hyperliquid-docs/trading/contract-specifications) describe perpetual derivatives. [TradeXYZ's official specification index](https://docs.trade.xyz/perpetuals/specifications-and-schedules/specification-index.md) identifies SPCX and its schedule; the [US equity-index specifications](https://docs.trade.xyz/perpetuals/markets/equity-indices/us.md) distinguish SP500 index exposure. A perpetual does not represent owned stock and involves funding, margin and liquidation mechanisms if executed on-chain.
 
 There is a more relevant buy-and-hold path than perpetuals: [xStocks announced live Hyperliquid spot markets](https://xstocks.com/news/xstocks-goes-live-on-hyperliquid-bringing-the-markets-deepest-tokenized-equities-framework-to-traders), including SPYx. Its tokens provide economic exposure to backed reference assets; its issuer states that holders do not own or gain shareholder rights to the underlying securities. This must remain distinct from direct stock ownership.
 
-The SPYx preview pins token ID `0x29067197b3125c8b82ad0f338e4a31b2` and wrapper `0xe7e553cd128f0011777323a0b44a7b96ea1cb540`. Hyperliquid metadata matches that wrapper to the current HyperEVM v2 address in the [official SPYx asset registry](https://api.xstocks.fi/api/v2/public/assets/SPYx). The preview displays the market price per wrapped token, not a fabricated one-token/one-ETF-share equivalence. See [wrapped xStocks documentation](https://docs.xstocks.fi/developers/wrapped-xstocks) for multipliers, conversions and independent price references.
+The former SPYx preview pinned token ID `0x29067197b3125c8b82ad0f338e4a31b2` and wrapper `0xe7e553cd128f0011777323a0b44a7b96ea1cb540`. Hyperliquid metadata matches that wrapper to the current HyperEVM v2 address in the [official SPYx asset registry](https://api.xstocks.fi/api/v2/public/assets/SPYx). That preview displayed the market price per wrapped token, with independent units from ETF shares. See [wrapped xStocks documentation](https://docs.xstocks.fi/developers/wrapped-xstocks) for multipliers, conversions and independent price references.
 
-The ETF/index switch makes sense because the instruments have different units, prices, liquidity, backing and execution mechanics. It is navigation between distinct instruments, not a cosmetic relabeling of the same price.
+The instruments have different units, prices, liquidity, backing and execution mechanics. The user chose to remove the ETF/index switch to simplify the Points experience.
 
-Before enabling SPYx points trading, define and implement a reliable tournament cutoff valuation for sparse spot trades. The current strict one-minute cutoff rule would defer the tournament photo whenever that minute has no trades. Add issuer halt/corporate-action handling, wrapper/multiplier validation and a tested valuation policy shared by all holders. ETF previews are excluded from private valuation and scheduled marks, so their venue outages cannot block the existing 13 tradable instruments.
+Before enabling SPYx points trading, define and implement a reliable tournament cutoff valuation for sparse spot trades. The current strict one-minute cutoff rule would defer the tournament photo whenever that minute has no trades. Add issuer halt/corporate-action handling, wrapper/multiplier validation and a tested valuation policy shared by all holders. The current catalogue and valuation feeds contain only the 13 supported instruments and make no spot-ETF requests.
 
 For on-chain buys, add the appropriate verified spot asset and funding adapter, user signing/custody, token conversion, execution reconciliation and transaction status. Off-chain MXNP points cannot themselves be transferred to Hyperliquid; the crypto product needs its own funded balances and conversion path. Do not route a “buy stock” promise to a perpetual without explicitly defining that derivative product.
