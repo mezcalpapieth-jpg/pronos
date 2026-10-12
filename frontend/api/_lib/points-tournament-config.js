@@ -250,13 +250,16 @@ export function tournamentRulesPayload() {
     inactivityPenalty: TOURNAMENT_INACTIVITY_PENALTY,
     stocks: {
       enabled: process.env.POINTS_STOCKS_ENABLED === 'true',
-      realizedAndUnrealized: true,
+      realizedAndUnrealized: false,
+      realizedOnly: true,
       feesIncluded: true,
       tradesCountAsActivity: true,
       holdingsCountAsActivity: false,
       countForQualification: false,
       convictionBonus: false,
-      cutoffPrice: 'last_completed_1m_candle',
+      cutoffPrice: 'last_completed_1m_candle_or_recent_pre_cutoff_mark',
+      automaticClose: true,
+      automaticCloseCountsAsActivity: false,
     },
     convictionMultiplier: {
       bonusRate: TOURNAMENT_CONVICTION_BONUS_RATE,

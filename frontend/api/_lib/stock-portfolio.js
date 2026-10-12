@@ -8,7 +8,7 @@ export async function readStockPortfolio(db, { username, scope = 'current', mark
   const [cycle] = await rows(db, scope === 'previous'
     ? `SELECT * FROM points_cycles WHERE status='closed' ORDER BY closed_at DESC NULLS LAST,ends_at DESC LIMIT 1 FOR SHARE`
     : `SELECT * FROM points_cycles WHERE status='active' ORDER BY ends_at DESC LIMIT 1 FOR SHARE`);
-  const empty = { positions: [], trades: [], series: [], summary: { currentValue: 0, costBasis: 0, unrealizedPnl: 0, realizedPnl: 0, pnl: 0 }, cycle: null };
+  const empty = { positions: [], trades: [], series: [], summary: { currentValue: 0, costBasis: 0, unrealizedPnl: 0, realizedPnl: 0, tournamentPnl: 0, pnl: 0 }, cycle: null };
   if (!cycle) return empty;
   // Synchronize with fills to avoid recording a position from one transaction
   // and its wallet/cost basis from another. Never hold this while fetching data.
@@ -70,7 +70,7 @@ export async function readStockPortfolio(db, { username, scope = 'current', mark
       cost_basis=EXCLUDED.cost_basis,realized_pnl=EXCLUDED.realized_pnl`,
     [username, cycle.id, new Date(now).toISOString(), decimal(totalValue), decimal(totalBasis), decimal(totalRealized)]);
   }
-  const trades = includeHistory ? await rows(db, `SELECT id,ticker,side,quantity,price_usd,fx_rate,fx_date,gross,fee,total,realized_pnl,created_at
+  const trades = includeHistory ? await rows(db, `SELECT id,ticker,side,origin,quantity,price_usd,fx_rate,fx_date,gross,fee,total,realized_pnl,created_at
     FROM points_stock_trades WHERE username=$1 AND cycle_id=$2 ORDER BY created_at DESC,id DESC LIMIT 201`, [username, cycle.id]) : [];
   const series = includeHistory ? await rows(db, `SELECT EXTRACT(EPOCH FROM sampled_at)::bigint AS t,
     (current_value-cost_basis+realized_pnl)::float8 AS v FROM points_stock_valuations
@@ -78,7 +78,7 @@ export async function readStockPortfolio(db, { username, scope = 'current', mark
   return { positions: displayed, trades: trades.slice(0, 200), hasMoreTrades: trades.length > 200,
     series: series.reverse().map(point => ({ t: Number(point.t), v: Number(point.v) })), cycle: { id: cycle.id, label: cycle.label, scope },
     stale: !marksFresh, summary: { currentValue: complete ? Number(decimal(totalValue)) : null,
-      costBasis: Number(decimal(totalBasis)), realizedPnl: Number(decimal(totalRealized)),
+      costBasis: Number(decimal(totalBasis)), realizedPnl: Number(decimal(totalRealized)), tournamentPnl: Number(decimal(totalRealized)),
       unrealizedPnl: complete ? Number(decimal(totalValue - totalBasis)) : null,
       pnl: complete ? Number(decimal(totalValue - totalBasis + totalRealized)) : null } };
 }

@@ -19,8 +19,9 @@ const entries = [
 
 test('Vercel can trace the stock endpoints and their scoring dependencies', async () => {
   // Runtime arithmetic tests do not cover the packager's static evaluation.
-  const { fileList } = await nodeFileTrace(entries, { base, processCwd: base });
+  const { fileList } = await nodeFileTrace(entries.map(entry => `${base}${entry}`), { base, processCwd: base });
   for (const entry of entries) assert.ok(fileList.has(entry), `missing entry: ${entry}`);
   assert.ok(fileList.has('api/_lib/stock-math.js'));
   assert.ok(fileList.has('api/_lib/stock-marks.js'));
+  assert.ok(fileList.has('api/_lib/stock-liquidation.js'));
 });

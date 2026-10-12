@@ -3,7 +3,8 @@ import {
   cycleWindowFromRow,
 } from './points-tournament-leaderboard.js';
 import { roundTournamentAmount } from './points-tournament-config.js';
-import { freezeStockCycleMarks, stocksAreEnabled } from './stock-marks.js';
+import { stocksAreEnabled } from './stock-marks.js';
+import { liquidateStockCyclePositions } from './stock-liquidation.js';
 
 export const DEFAULT_CYCLE_SNAPSHOT_LIMIT = 5000;
 
@@ -100,13 +101,15 @@ export async function snapshotCycleLeaderboard(
 ) {
   if (!activeCycle?.id) return [];
 
+  const stocksEnabled = stocksAreEnabled();
+  if (stocksEnabled) await client.query('SELECT id FROM points_cycles WHERE id=$1 FOR UPDATE', [activeCycle.id]);
+
   const existingCount = await countCycleSnapshots(client, activeCycle.id);
   if (existingCount > 0) {
     return readCycleSnapshotRows(client, { cycleId: activeCycle.id, limit });
   }
 
-  const stocksEnabled = stocksAreEnabled();
-  if (stocksEnabled) await freezeStockCycleMarks(client, activeCycle, { now });
+  if (stocksEnabled) await liquidateStockCyclePositions(client, activeCycle, { now });
 
   const top = await buildTournamentLeaderboardRows(client, {
     limit,

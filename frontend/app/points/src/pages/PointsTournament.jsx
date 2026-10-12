@@ -778,14 +778,14 @@ function WinnerPodium({ cycle, rows, currentUsername, lang = 'es' }) {
 function RuleList({ lang, rules }) {
   const r = rules || DEFAULT_RULES;
   const items = lang === 'en' ? [
-    `Ranking score is market PnL${r.stocks?.enabled ? ' plus stock PnL after fees' : ''} plus conviction multiplier rewards, liquidity rewards, and realized combo-slip PnL, minus ${fmtInteger(r.inactivityPenalty)} MXNP for each inactive day.`,
+    `Ranking score is market PnL${r.stocks?.enabled ? ' plus realized stock PnL after fees' : ''} plus conviction multiplier rewards, liquidity rewards, and realized combo-slip PnL, minus ${fmtInteger(r.inactivityPenalty)} MXNP for each inactive day.`,
     `Bonuses fund your account, but signup, streak, social, and referral rewards do not directly add to the score.`,
     `You qualify with ${fmtInteger(r.qualifyingMarkets)} entries in distinct markets. Each entry has a ${fmtInteger(r.minEntryMxnp)} MXNP minimum.`,
     `Each user can hold up to ${fmtInteger(r.maxSharesPerMarket)} shares per market.`,
     'New tournament markets go live every day at 9:00 AM Mexico City time.',
     'Ties break by fewer inactive days, more distinct liquidated markets, then older registration.',
   ] : [
-    `El puntaje es PnL de mercados${r.stocks?.enabled ? ' más PnL de acciones después de comisiones' : ''} más recompensas del multiplicador de convicción, recompensas por dar liquidez y PnL de combinadas liquidadas, menos ${fmtInteger(r.inactivityPenalty)} MXNP por cada día inactivo.`,
+    `El puntaje es PnL de mercados${r.stocks?.enabled ? ' más PnL realizado de acciones después de comisiones' : ''} más recompensas del multiplicador de convicción, recompensas por dar liquidez y PnL de combinadas liquidadas, menos ${fmtInteger(r.inactivityPenalty)} MXNP por cada día inactivo.`,
     'Los bonos fondean tu cuenta, pero registro, racha, redes y referidos no suman directo al puntaje.',
     `Calificas con ${fmtInteger(r.qualifyingMarkets)} entradas en mercados distintos. Cada entrada tiene mínimo de ${fmtInteger(r.minEntryMxnp)} MXNP.`,
     `Cada usuario puede tener hasta ${fmtInteger(r.maxSharesPerMarket)} acciones por mercado.`,
@@ -830,14 +830,14 @@ function ScoreFormulaPanel({ lang, rules }) {
   const inactivityPenalty = fmtInteger(r.inactivityPenalty);
   const rows = lang === 'en' ? [
     ['Market PnL', 'Realized and open market performance is the base of your score. Signup, streak, social, and referral bonuses only fund your wallet.'],
-    ...(r.stocks?.enabled ? [['Stock PnL', 'Realized gains and losses plus open stock holdings count, after trading fees. Stock trades count as activity. Holding a stock does not remove inactivity penalties or replace the prediction-market qualification requirement.']] : []),
+    ...(r.stocks?.enabled ? [['Stock PnL', 'Only gains and losses realized by selling count, after fees. Open PnL remains unrealized. All holdings are sold automatically at tournament close before standings are frozen. User buys and sells count as activity; holding and automatic closing sales do not. Stocks do not replace prediction-market qualification.']] : []),
     ['Conviction', `Winning tournament lots bought at ${maxEntryPrice} or less earn +${dailyBonusRate}% of profit per day held until resolution, capped after ${maxHoldDays} days. The bonus cannot exceed ${capRate}% of your net PnL in that market.`],
     ['Liquidity', 'Maker rewards count when your qualifying limit orders stay near the live price and follow the tournament reward caps.'],
     ['Combos', 'Only settled combo-slip PnL counts, so open slips do not move the leaderboard until they resolve.'],
     ['Inactivity', `${inactivityPenalty} MXNP is subtracted for each inactive day in the cycle.`],
   ] : [
     ['PnL de mercados', 'El desempeño realizado y de posiciones abiertas en mercados es la base del puntaje. Los bonos de registro, racha, redes y referidos solo fondean tu wallet.'],
-    ...(r.stocks?.enabled ? [['PnL de acciones', 'Cuentan las ganancias y pérdidas realizadas y de posiciones abiertas, después de comisiones. Las operaciones cuentan como actividad. Mantener una acción no elimina penalizaciones por inactividad ni sustituye los mercados de pronósticos requeridos para calificar.']] : []),
+    ...(r.stocks?.enabled ? [['PnL de acciones', 'Solo cuentan las ganancias y pérdidas realizadas al vender, después de comisiones. El PnL abierto no está realizado. Al cierre del torneo se venden todas las posiciones antes de congelar el ranking. Comprar o vender cuenta como actividad; mantener una posición y las ventas automáticas de cierre no. Las acciones no sustituyen los mercados requeridos para calificar.']] : []),
     ['Convicción', `Los lotes ganadores comprados a ${maxEntryPrice} o menos suman +${dailyBonusRate}% de ganancia por día mantenido hasta la resolución, con tope después de ${maxHoldDays} días. El bono no puede pasar de ${capRate}% de tu PnL neto en ese mercado.`],
     ['Liquidez', 'Las recompensas maker cuentan cuando tus órdenes límite califican cerca del precio vivo y respetan los topes del torneo.'],
     ['Combinadas', 'Solo cuenta el PnL de combinadas liquidadas; las combinadas abiertas no mueven el leaderboard hasta resolverse.'],
@@ -862,8 +862,8 @@ function ScoreFormulaPanel({ lang, rules }) {
         lineHeight: 1.55,
       }}>
         {lang === 'en'
-          ? `Score = market PnL${r.stocks?.enabled ? ' + stock PnL' : ''} + conviction + liquidity + settled combos - inactivity`
-          : `Puntaje = PnL de mercados${r.stocks?.enabled ? ' + PnL de acciones' : ''} + convicción + liquidez + combinadas liquidadas - inactividad`}
+          ? `Score = market PnL${r.stocks?.enabled ? ' + realized stock PnL' : ''} + conviction + liquidity + settled combos - inactivity`
+          : `Puntaje = PnL de mercados${r.stocks?.enabled ? ' + PnL realizado de acciones' : ''} + convicción + liquidez + combinadas liquidadas - inactividad`}
       </p>
       <div style={{ display: 'grid', gap: 10 }}>
         {rows.map(([label, text]) => (
@@ -903,7 +903,7 @@ function NewFeatureList({ lang, rules }) {
   const rows = lang === 'en' ? [
     ...(r.stocks?.enabled ? [[
       'Stocks',
-      'Invest in stocks from 100 MXNP and aim to grow your PnL with a more passive strategy. Gains and losses from open holdings and sales count toward tournament PnL after fees, even while you are offline. You can sell and use those MXNP in prediction markets. Holding stocks does not count as daily activity.',
+      'Invest in stocks from 100 MXNP with a more passive strategy. Track unrealized gains and losses in Portfolio; they count toward tournament PnL only when you sell, after fees. You can use the proceeds in prediction markets. At tournament close, all holdings are sold automatically and the final PnL is recorded. User buys and sells count as daily activity; holding and automatic sales do not. Every new tournament starts with reset points and no carried holdings.',
       '/stocks',
     ]] : []),
     [
@@ -921,7 +921,7 @@ function NewFeatureList({ lang, rules }) {
   ] : [
     ...(r.stocks?.enabled ? [[
       'Acciones',
-      'Invierte desde 100 MXNP en acciones para buscar aumentar tu PnL de forma más pasiva. Las ganancias y pérdidas de posiciones abiertas y ventas cuentan en el PnL del torneo después de comisiones, aunque estés desconectado. Puedes vender y usar esos MXNP en mercados de pronósticos. Mantener acciones no cuenta como actividad diaria.',
+      'Invierte desde 100 MXNP en acciones con una estrategia más pasiva. Sigue las ganancias y pérdidas no realizadas en Portafolio; cuentan en el PnL del torneo solo al vender, después de comisiones. Puedes usar lo vendido en mercados de pronósticos. Al cierre se venden automáticamente todas las posiciones y se registra el PnL final. Comprar o vender cuenta como actividad diaria; mantener posiciones y las ventas automáticas no. Cada nuevo torneo comienza con puntos reiniciados y sin posiciones heredadas.',
       '/stocks',
     ]] : []),
     [
@@ -975,7 +975,7 @@ function TournamentFaq({ lang, rules }) {
   const rows = lang === 'en' ? [
     [
       'What does PnL mean?',
-      `PnL means profit or loss. If a position rises in value, your PnL goes up; if it falls, your PnL goes down. The tournament counts market results${r.stocks?.enabled ? ' and realized and open stock PnL after fees' : ''}. Signup and referral bonuses only fund your wallet.`,
+      `PnL means profit or loss. If a position rises in value, your PnL goes up; if it falls, your PnL goes down. The tournament counts market results${r.stocks?.enabled ? ' and stock PnL realized by selling, after fees' : ''}. Signup and referral bonuses only fund your wallet.`,
     ],
     [
       'Do bonuses count toward winning?',
@@ -992,7 +992,7 @@ function TournamentFaq({ lang, rules }) {
   ] : [
     [
       '¿Qué significa PnL?',
-      `PnL significa ganancia o pérdida. Si una posición sube de valor, tu PnL sube; si baja, tu PnL baja. El torneo cuenta resultados de mercados${r.stocks?.enabled ? ' y PnL realizado y abierto de acciones después de comisiones' : ''}. Los bonos solo fondean tu wallet.`,
+      `PnL significa ganancia o pérdida. Si una posición sube de valor, tu PnL sube; si baja, tu PnL baja. El torneo cuenta resultados de mercados${r.stocks?.enabled ? ' y PnL de acciones realizado al vender, después de comisiones' : ''}. Los bonos solo fondean tu wallet.`,
     ],
     [
       '¿Los bonos cuentan para ganar el torneo?',
@@ -1087,14 +1087,14 @@ function PersonalScoreBreakdown({ row, rules, loading, lang = 'es' }) {
   const neededMarkets = Math.max(0, requiredMarkets - qualifyingMarkets);
   const scoreRows = lang === 'en' ? [
     ['Market PnL', row?.marketPnl],
-    ...(rules?.stocks?.enabled || Number(row?.stockPnl) ? [['Stock PnL', row?.stockPnl]] : []),
+    ...(rules?.stocks?.enabled || Number(row?.stockPnl) ? [['Realized stock PnL', row?.stockPnl]] : []),
     ['Conviction', row?.convictionBonus],
     ['Liquidity', row?.liquidityReward],
     ['Combos', row?.parlayPnl],
     ['Inactivity', -Number(row?.inactivityPenalty || 0)],
   ] : [
     ['PnL mercados', row?.marketPnl],
-    ...(rules?.stocks?.enabled || Number(row?.stockPnl) ? [['PnL acciones', row?.stockPnl]] : []),
+    ...(rules?.stocks?.enabled || Number(row?.stockPnl) ? [['PnL realizado acciones', row?.stockPnl]] : []),
     ['Convicción', row?.convictionBonus],
     ['Liquidez', row?.liquidityReward],
     ['Combinadas', row?.parlayPnl],
@@ -1681,8 +1681,8 @@ export default function PointsTournament() {
           margin: '14px 0 0',
         }}>
           {lang === 'en'
-            ? `Everyone starts from the same base. The leaderboard rewards market PnL${rules.stocks?.enabled ? ' and stock PnL after fees' : ''}, conviction on winning positions held through resolution, liquidity making, and settled combo slips, with a small inactivity penalty.`
-            : `Todos arrancan desde la misma base. El leaderboard premia PnL de mercados${rules.stocks?.enabled ? ' y PnL de acciones después de comisiones' : ''}, convicción en posiciones ganadoras mantenidas hasta resolución, liquidez maker y combinadas liquidadas, con una penalización pequeña de inactividad.`}
+            ? `Everyone starts from the same base. The leaderboard rewards market PnL${rules.stocks?.enabled ? ' and realized stock PnL after fees' : ''}, conviction on winning positions held through resolution, liquidity making, and settled combo slips, with a small inactivity penalty.`
+            : `Todos arrancan desde la misma base. El leaderboard premia PnL de mercados${rules.stocks?.enabled ? ' y PnL realizado de acciones después de comisiones' : ''}, convicción en posiciones ganadoras mantenidas hasta resolución, liquidez maker y combinadas liquidadas, con una penalización pequeña de inactividad.`}
         </p>
       </section>
 

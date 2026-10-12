@@ -12,7 +12,7 @@ A useful presentation sequence:
 2. Open Nvidia. Switch 7D to 4H to show one-hour versus five-minute candles. Hover/tap a candle to show its USD close and explicitly labeled UTC start time. Compare that with the chart fetch time and live order-book time/age; detail prices poll independently every three seconds.
 3. Enter an MXNP budget, review the units, actual fee, FX and rounding remainder, then confirm the expiring quote.
 4. Open Portfolio to show spendable cash, holding value, open/realized PnL and history. Partially sell and then use sell-all to turn exposure back into spendable points.
-5. Open Torneo to show the stock PnL score component. Stock actions count as activity, while existing prediction qualification and inactivity rules still apply.
+5. Open Torneo to show realized stock PnL. Open gains remain unrealized in the Portfolio monitor until sold. User buys/sells count as activity; holding or automatic cutoff sales do not. At cutoff, all stocks are sold before the photo. On rollover, points reset and no stock holdings or PnL carry into the next tournament.
 
 The demo currently retains a small 0.024-NVDA position purchased with a 100-MXNP request, with about 399.31 MXNP spendable cash after an additional Solana buy/sell check. Its value and PnL continue to move with the live reference price.
 
@@ -30,9 +30,9 @@ Tradable reference prices come from Hyperliquid native and xyz perpetuals. Trans
 | Browser flow | Authenticated buy, partial sale, sell-all, wallet debit/credit, units, fee/proceeds and Portfolio history verified on local real-data staging. |
 | Expanded UI | Solana buy/sell-all and five-minute candle readout verified. ETFs and the index/ETF switch are removed. All 13 current instrument logos are local; the 390px catalogue had no horizontal overflow. |
 | Concurrency | Six live checks passed across three independent Postgres connections: competing stock buys, stock/prediction purchase race, duplicate retry, simultaneous sell-all, partial/full accounting, reset contention/replay. |
-| Scoring | Automated tests verify realized/open stock PnL after fees, reinvestment without double counting, common offline marks, wallet equity and immutable cutoff snapshots. |
+| Scoring | Automated tests verify realized-only tournament stock PnL after fees and separate open Portfolio PnL, reinvestment without double counting, common offline marks, wallet equity and immutable cutoff snapshots. |
 | Provider outage | Tests verify unavailable/stale books cannot trade, holdings survive, old values are marked stale and missing cutoff prices defer the photo. |
-| Focused checks | 73 stock, chart, tournament, snapshot, wallet and leaderboard tests pass, including rejection of removed instruments and Vercel function tracing. |
+| Focused checks | 79 stock, chart, tournament, snapshot, wallet and leaderboard tests pass, including rejection of removed instruments and Vercel function tracing. |
 | Build | Points production build passes; existing dependency annotation and large-bundle warnings remain. |
 | Function packaging | Vercel's static evaluator failed when the requested sell quantity started as `null` and was later used in BigInt subtraction. It now starts as `0n`; all 380 API modules trace successfully. A development-only tracer regression test covers the stock endpoints and scoring dependencies. |
 | Feature control | Main server and frontend flags default off in production; separate trading pause preserves valuations and stock scoring. |
@@ -43,7 +43,7 @@ The local harness runs the minute collector directly. Vercel cron delivery, prev
 
 1. Review the local diff and commit the stock implementation changes. Keep unrelated approved-market reports out of the stock commits. The first two checkpoints are `9ee1d0f` and `2a08733`; include the subsequent scoring/staging changes as well.
 2. Create an isolated preview environment with both database URLs on its own Neon branch. Set `BANXICO_API_TOKEN`, the normal `POINTS_SESSION_SECRET`, `CRON_SECRET` and `POINTS_STOCKS_ENABLED=true`. Build with `VITE_POINTS_STOCKS_ENABLED=true`.
-3. Dry-run, then apply `frontend/api/scripts/migrate-stocks.mjs` with `--expected-host=<actual-preview-host> --apply`. Schema v2 creates six stock tables and adds the snapshot breakdown fields. Never paste or log a database connection string in the checklist.
+3. Dry-run, then apply `frontend/api/scripts/migrate-stocks.mjs` with `--expected-host=<actual-preview-host> --apply`. Schema v3 creates six stock tables, adds snapshot breakdown fields and records user/automatic trade origins. Never paste or log a database connection string in the checklist.
 4. Deploy the preview. Use normal authentication to run the buy/partial-sell/sell-all journey; verify the shared prediction wallet, leaderboard, history and minute cron. `/api/points/stocks/health` reports schema version, available assets and FX date.
 5. Cherry-pick the reviewed stock commits into the latest `pointbreak`. Resolve any changes to cycle snapshots, leaderboard or Portfolio against current Pointbreak behavior, then rerun focused tests and rebuild Points with its frontend flag.
 6. After release approval, apply the guarded migration to the approved production host and deploy. Activate the server feature and minute cron together, then verify the deployed build and a scoped real session flow. Do not claim the beta is live from a pushed commit alone.
@@ -56,7 +56,7 @@ No production migration or release approval is requested merely to prepare these
 ```sh
 cd frontend
 npm run test:stocks
-node --test api/_lib/stock-*.test.js api/_lib/points-cycle-snapshot.test.js api/_lib/points-tournament-*.test.js api/_lib/points-wallet-leaderboard.test.js api/points/leaderboard.test.js app/points/src/lib/stockApi.test.js app/points/src/lib/stockChart.test.js app/points/src/pages/PointsTournament.test.js app/points/src/pages/PointsTournament.rules.test.js
+node --test api/_lib/stock-*.test.js api/_lib/points-tournament-*.test.js api/_lib/points-wallet-leaderboard.test.js api/points/leaderboard.test.js api/points/cycles.test.js app/points/src/lib/stockApi.test.js app/points/src/lib/stockChart.test.js
 node --env-file=/absolute/private/verification.env api/scripts/verify-stock-staging.mjs
 cd app
 npm run build:points
@@ -94,6 +94,10 @@ The former SPYx preview pinned token ID `0x29067197b3125c8b82ad0f338e4a31b2` and
 
 The instruments have different units, prices, liquidity, backing and execution mechanics. The user chose to remove the ETF/index switch to simplify the Points experience.
 
-Before enabling SPYx points trading, define and implement a reliable tournament cutoff valuation for sparse spot trades. The current strict one-minute cutoff rule would defer the tournament photo whenever that minute has no trades. Add issuer halt/corporate-action handling, wrapper/multiplier validation and a tested valuation policy shared by all holders. The current catalogue and valuation feeds contain only the 13 supported instruments and make no spot-ETF requests.
+Before enabling SPYx points trading, define and implement a reliable tournament cutoff valuation for sparse spot trades. Cutoff settlement prefers the completed one-minute candle; when it has no trades, only a shared pre-cutoff mark no older than 90 seconds is accepted. If both are missing, settlement and the photo defer for retry. Add issuer halt/corporate-action handling, wrapper/multiplier validation and a tested valuation policy shared by all holders. The current catalogue and valuation feeds contain only the 13 supported instruments and make no spot-ETF requests.
 
 For on-chain buys, add the appropriate verified spot asset and funding adapter, user signing/custody, token conversion, execution reconciliation and transaction status. Off-chain MXNP points cannot themselves be transferred to Hyperliquid; the crypto product needs its own funded balances and conversion path. Do not route a “buy stock” promise to a perpetual without explicitly defining that derivative product.
+
+## Realized-only tournament update
+
+The October 12 follow-up implements user buys/sells as daily activity, realized-only stock tournament PnL, a clickable Portfolio monitor and automatic liquidation before the cutoff photo. Schema v3 distinguishes automatic closing sales from user transactions. All 79 focused tests and the Points build passed. Six live staging checks passed across three independent Postgres connections, including closing/reset contention, matching realized PnL to wallet proceeds, repeated-close idempotency and a new cycle with no holdings/PnL carried over. The cofounder demo wallet was not reset for these tests. Short selling remains disabled; it requires a separate collateralized position model.

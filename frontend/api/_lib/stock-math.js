@@ -131,3 +131,17 @@ export function parseSignedMoney(value) {
 export function stockPositionValue(quantity, priceUsd, fxRate) {
   return decimal(fixed(quantity, 18) * fixed(priceUsd, 8) * fixed(fxRate, 8) * MONEY / (QTY * PRICE * PRICE));
 }
+
+// Tournament settlement is a simulated full liquidation at the common cutoff
+// reference, including quantity dust that no longer fits today's book precision.
+export function buildStockClosingFill(quantity, mark) {
+  if (fixed(quantity, 18) <= 0n || fixed(mark.price_usd, 8) <= 0n || fixed(mark.fx_rate, 8) <= 0n) {
+    throw stockError('stock_cutoff_price_unavailable', 503);
+  }
+  const gross = fixed(stockPositionValue(quantity, mark.price_usd, mark.fx_rate));
+  const fee = ceil(gross, 1000n);
+  return { side: 'sell', quantity: decimal(fixed(quantity, 18), 18),
+    priceUsd: decimal(fixed(mark.price_usd, 8), 8),
+    fx: { rate: decimal(fixed(mark.fx_rate, 8), 8), date: mark.fx_date, source: 'Banxico FIX' },
+    gross: decimal(gross), fee: decimal(fee), total: decimal(gross - fee), unspent: '0' };
+}
