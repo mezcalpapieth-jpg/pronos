@@ -737,7 +737,7 @@ export async function buildTournamentLeaderboardRows(
       marketPnl: roundTournamentAmount(marketPnl),
       stockPnl: roundTournamentAmount(stockPnl),
       tradingPnl: roundTournamentAmount(marketPnl + stockPnl),
-      stockPositionValue: roundTournamentAmount(stock?.currentValue || 0),
+      stockPositionValue: stock?.currentValue === null ? null : roundTournamentAmount(stock?.currentValue || 0),
       stockStale: stock?.stale || false,
       stockMarkedAt: stock?.markedAt || null,
       currentPositionValue: roundTournamentAmount(currentPositionValue),

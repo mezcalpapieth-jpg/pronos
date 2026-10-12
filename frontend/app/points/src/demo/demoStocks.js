@@ -38,7 +38,7 @@ function portfolio(scope) {
   });
   return { positions, trades: scope === 'previous' ? [] : state.stockTrades || [],
     series: scope === 'previous' ? [] : state.stockSeries || [], cycle: { id: 1, label: 'Demo', scope },
-    summary: { currentValue: value, costBasis: basis, realizedPnl: realized, unrealizedPnl: value - basis, pnl: value - basis + realized } };
+    summary: { currentValue: value, costBasis: basis, realizedPnl: realized, tournamentPnl: realized, unrealizedPnl: value - basis, pnl: value - basis + realized } };
 }
 
 export function routeDemoStocks(path, method, params, body = {}) {

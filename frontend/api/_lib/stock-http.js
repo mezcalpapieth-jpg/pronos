@@ -38,7 +38,7 @@ export function stockHandler(action) {
       }
       else if (action === 'health') {
         const market = await data.assets();
-        result = { ok: true, schemaVersion: 2, tradingEnabled: process.env.POINTS_STOCKS_TRADING_ENABLED !== 'false',
+        result = { ok: true, schemaVersion: 3, tradingEnabled: process.env.POINTS_STOCKS_TRADING_ENABLED !== 'false',
           source: market.source, fetchedAt: market.fetchedAt, fxDate: market.fx.date, availableAssets: market.assets.filter(asset => asset.available).length,
           tradableAssets: market.assets.filter(asset => asset.available).length };
       }
