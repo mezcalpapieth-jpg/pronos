@@ -29,10 +29,10 @@ Reviewed all 10 pages of `/Users/Fran/Downloads/Pronos_Acciones_Spec_MXNP.pdf`, 
 | Store operation price, FX, quantity, fee and idempotency | Implemented | Immutable `points_stock_trades`; cycle-keyed positions, quote/cache/valuation tables. Names are prefixed to match Pronos. |
 | Same points balance/ledger as prediction markets | Implemented and staging verified | One transaction updates `points_balances`, stock position, stock trade, `points_distributions` audit and valuation. |
 | Existing Portfolio tabs and market cards | Implemented | Activo, Combinadas, Historial and Recompensas retained. |
-| Portfolio balance, exposure, open/total PnL include stocks | Implemented | Existing summary cards combine stock and prediction figures; unavailable valuations are shown as unknown/stale. Stock realized and open PnL now enter tournament scoring after fees, as subsequently approved by the user. |
+| Portfolio balance, exposure, open/total PnL include stocks | Implemented | Existing summary cards combine stock and prediction figures; unavailable valuations are shown as unknown/stale. Only stock PnL realized by selling enters tournament scoring after fees, following the latest user policy. |
 | Combined PnL evolution | Implemented with a limitation | Combines recorded stock and prediction PnL observations. A minute cron now records stock PnL while holders are offline; outages retain prior observations rather than fabricating samples. |
 | TODO / ACCIONES / MERCADOS list filters | Implemented | Portfolio active/history filters. |
-| Stock row: logo, name, quantity, average cost, current value, PnL and percentage; opens detail | Implemented | Average cost, percentage and detail link added in follow-up. Local company logos and custom index/gold icons are included, with monogram fallback. |
+| Stock row: logo, name, quantity, average cost, current value, PnL and percentage; opens detail | Implemented | Clickable stock monitor shows reference price/time, average cost, percentage, realized tournament PnL and unrealized PnL separately. Local company logos and custom index/gold icons are included, with monogram fallback. |
 | Cobraste notice after profitable stock sale | Implemented in follow-up | Sale success notice states actual net MXNP received. It also appears for a sale at a loss; this amount is proceeds, not a claim of profit. |
 | Existing dark tokens and Bebas Neue / DM Sans / DM Mono | Implemented with visual adaptations | Shared typography/theme reused. Follow-up replaces stock surface and positive/negative color fallbacks with actual Pronos tokens. Desktop uses two columns; mobile stacks cards. |
 | Company logos in circles, own index/gold icons | Implemented | Local SVG assets and source/license notes; icons remain visible without an external image host. |
@@ -59,21 +59,21 @@ The local `stocksDemo=1` preview remains synthetic, including its FX and volume.
 
 ## Tournament extension approved after the PDF
 
-The user requested that stock PnL count toward the tournament. Realized and open PnL now count after fees; stock buys/sells count as actions and active days. Existing prediction qualification, conviction/liquidity bonuses and inactivity rules remain. The wallet leaderboard ranks cash plus stock value. A minute cron values offline holdings, and the tournament snapshot freezes the last completed one-minute candle before cutoff with historical FIX. Missing terminal prices defer the photo; existing photos and terminal marks remain immutable.
+The user requested that stock PnL count toward the tournament. Only realized stock PnL counts after fees; user stock buys/sells count as actions and active CDMX days. Holding or an automatic closing sale does not grant activity. Existing prediction qualification, conviction/liquidity bonuses and inactivity rules remain. The wallet leaderboard ranks cash plus stock value. A minute cron values offline holdings. At cutoff, the snapshot automatically sells all stock holdings at the common completed-minute reference (or a shared pre-cutoff mark no older than 90 seconds), applies historical FIX and fees, realizes PnL and then saves immutable standings in the same transaction. Missing eligible references roll back for retry. Rollover resets points and carries no stock holdings or trading profits.
 
 ## Remaining rollout steps
 
 1. Review and commit the latest `stock-points` changes and generated Points assets.
 2. Deploy a preview with an isolated database, real normal sign-in, provider credentials and the minute cron; verify the deployment-specific routing, session and schedule.
 3. Cherry-pick the reviewed stock checkpoints into `pointbreak` and rebuild with the frontend feature flag.
-4. Apply the guarded schema v2 migration to the approved production host, then explicitly activate the server feature and cron.
+4. Apply the guarded schema v3 migration to the approved production host, then explicitly activate the server feature and cron.
 5. Keep the trading pause switch available without disabling valuation/scoring once holdings exist.
 
 No on-chain share ownership, crypto funding, wallet signature or external order execution has been implemented in the points MVP.
 
 ## Verification
 
-- 73 focused stock/tournament/snapshot/wallet/leaderboard tests pass. Price interval mappings, unchanged provider closes/timestamps, nearest-candle selection, UTC formatting, venue routing, rejection of removed instruments and Vercel function tracing are covered.
+- 79 focused stock/tournament/snapshot/wallet/leaderboard tests pass. Price interval mappings, unchanged provider closes/timestamps, nearest-candle selection, UTC formatting, venue routing, rejection of removed instruments and Vercel function tracing are covered.
 - Six real Neon contention scenarios pass across three independent connections, including a stock/prediction purchase race, double-sale prevention, idempotency and reset contention.
 - The original real provider checks verified 14 assets, Banxico FIX and a completed one-minute cutoff price. The ETF was subsequently removed, leaving 13 supported instruments.
 - Authenticated local staging browser checks completed a buy, partial sale and sell-all, with shared-wallet debits/credits and holding changes.

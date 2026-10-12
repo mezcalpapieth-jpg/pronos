@@ -23,7 +23,7 @@ export async function persistStockMarks(db, { cycleId, market, now = Date.now(),
       WHERE NOT points_stock_cycle_marks.terminal
         AND (EXCLUDED.terminal OR EXCLUDED.priced_at >= points_stock_cycle_marks.priced_at)`,
     [cycleId, asset.ticker, asset.priceUsd, market.fx.rate, market.fx.date, new Date(pricedAt).toISOString(), cutoffAt, terminal,
-      terminal ? 'Hyperliquid xyz completed 1m candle / Banxico FIX' : 'Hyperliquid xyz mark / Banxico FIX']);
+      asset.priceSource || (terminal ? 'Hyperliquid completed 1m candle / Banxico FIX' : 'Hyperliquid mark / Banxico FIX')]);
   }
 }
 
@@ -31,13 +31,13 @@ export async function freezeStockCycleMarks(db, cycle, { now = new Date(), data 
   const window = configuredCycleWindowFromRow(cycle);
   if (!window) throw stockError('stock_cycle_closed', 409);
   const cutoff = Math.min(new Date(window.rankingCutoffAt).getTime(), new Date(now).getTime());
-  const held = await rows(db, `SELECT DISTINCT p.ticker,m.terminal FROM points_stock_positions p
+  const held = await rows(db, `SELECT DISTINCT p.ticker,m.terminal,m.price_usd,m.priced_at FROM points_stock_positions p
     LEFT JOIN points_stock_cycle_marks m ON m.cycle_id=p.cycle_id AND m.ticker=p.ticker
     WHERE p.cycle_id=$1 AND p.quantity>0 ORDER BY p.ticker`, [cycle.id]);
   if (!held.length || held.every(row => row.terminal === true)) return;
   // Snapshot callers hold the exclusive cycle lock. The bounded provider reads
   // cannot race fills, and any unavailable cutoff price aborts the entire photo.
-  const market = await data.cutoff(held.map(row => row.ticker), cutoff);
+  const market = await data.cutoff(held.map(row => row.ticker), cutoff, held);
   const prices = new Set(market.assets.filter(asset => asset.available).map(asset => asset.ticker));
   if (held.some(row => !prices.has(row.ticker))) throw stockError('stock_cutoff_price_unavailable', 503);
   await persistStockMarks(db, { cycleId: cycle.id, market, now: new Date(now).getTime(), terminal: true, cutoffAt: new Date(cutoff).toISOString() });
@@ -51,7 +51,7 @@ async function updateStockPositionMarks(db, cycleId) {
     FROM points_stock_cycle_marks m WHERE p.cycle_id=$1 AND m.cycle_id=p.cycle_id AND m.ticker=p.ticker`, [cycleId]);
 }
 
-async function recordStockValuations(db, cycleId, sampledAt) {
+export async function recordStockValuations(db, cycleId, sampledAt) {
   await db.query(`INSERT INTO points_stock_valuations(username,cycle_id,sampled_at,current_value,cost_basis,realized_pnl)
     SELECT username,cycle_id,$2,SUM(CASE WHEN quantity=0 THEN 0 ELSE current_value END),SUM(cost_basis),SUM(realized_pnl)
     FROM points_stock_positions WHERE cycle_id=$1 GROUP BY username,cycle_id
@@ -85,9 +85,10 @@ export async function readStockTournamentRows(db, { window, now = Date.now(), en
     const held = fixed(position.quantity, 18) > 0n;
     const value = !held ? '0' : position.shared_price
       ? stockPositionValue(position.quantity, position.shared_price, position.shared_fx) : position.current_value;
-    if (value == null) throw stockError('stock_valuation_unavailable', 503);
-    score.currentValue += fixed(value);
-    score.pnl += fixed(value) - fixed(position.cost_basis) + parseSignedMoney(position.realized_pnl);
+    if (value == null) { score.currentValue = null; score.stale = true; }
+    else if (score.currentValue !== null) score.currentValue += fixed(value);
+    // Open holdings remain visible in Portfolio, but only completed sales score.
+    score.pnl += parseSignedMoney(position.realized_pnl);
     if (held) {
       const markedAt = position.shared_at || position.marked_at;
       const age = now - new Date(markedAt).getTime();
@@ -96,11 +97,14 @@ export async function readStockTournamentRows(db, { window, now = Date.now(), en
     }
     scores.set(position.username, score);
   }
-  for (const score of scores.values()) { score.pnl = Number(decimal(score.pnl)); score.currentValue = Number(decimal(score.currentValue)); }
+  for (const score of scores.values()) {
+    score.pnl = Number(decimal(score.pnl));
+    score.currentValue = score.currentValue === null ? null : Number(decimal(score.currentValue));
+  }
   const activity = await rows(db, `SELECT username,COUNT(*)::int AS total_actions,
     COUNT(*) FILTER(WHERE side='buy')::int AS buy_count,
     ARRAY_AGG(DISTINCT ((created_at AT TIME ZONE 'America/Mexico_City')::date)::text) AS active_day_keys
-    FROM points_stock_trades WHERE cycle_id=$1 AND created_at>=$2 AND created_at<=$3 GROUP BY username`,
+    FROM points_stock_trades WHERE cycle_id=$1 AND origin='user' AND created_at>=$2 AND created_at<=$3 GROUP BY username`,
   [window.id, window.startsAt, window.rankingCutoffAt]);
   return { scores, activity: new Map(activity.map(row => [row.username, row])) };
 }

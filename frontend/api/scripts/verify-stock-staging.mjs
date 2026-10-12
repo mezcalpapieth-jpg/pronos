@@ -9,8 +9,9 @@ import { createStockData } from '../_lib/stock-data.js';
 import { createStockQuote, executeStockTrade, stockOrderRequest } from '../_lib/stock-trading.js';
 import { readStockTournamentRows, snapshotStockValuations } from '../_lib/stock-marks.js';
 import { readStockPortfolio } from '../_lib/stock-portfolio.js';
+import { liquidateStockCyclePositions } from '../_lib/stock-liquidation.js';
 import { configuredCycleWindowFromRow } from '../_lib/points-tournament-config.js';
-import { decimal, fixed } from '../_lib/stock-math.js';
+import { decimal, fixed, parseSignedMoney } from '../_lib/stock-math.js';
 
 const host=new URL(process.env.DATABASE_URL).hostname;
 if (!process.env.STOCK_STAGING_BRANCH_ID || !process.env.STOCK_STAGING_HOST || host!==process.env.STOCK_STAGING_HOST
@@ -87,6 +88,17 @@ try {
   const rollover=transaction(async db=>{
     await db.query('SELECT id FROM points_cycles WHERE id=$1 FOR UPDATE',[cycle.id]); locked();
     await waitingPromise;
+    const closing=await liquidateStockCyclePositions(db,cycle,{data});
+    assert.ok(closing.closedPositions>0);
+    assert.equal((await db.query('SELECT COUNT(*)::int AS n FROM points_stock_positions WHERE cycle_id=$1 AND quantity>0',[cycle.id])).rows[0].n,0);
+    const [settled]=(await db.query('SELECT SUM(realized_pnl)::text AS pnl FROM points_stock_positions WHERE username=$1 AND cycle_id=$2',[reset,cycle.id])).rows;
+    const [cash]=(await db.query('SELECT balance FROM points_balances WHERE username=$1',[reset])).rows;
+    const delta=fixed(cash.balance)-1000000000n;
+    assert.equal(parseSignedMoney(settled.pnl),delta);
+    const activity=await readStockTournamentRows(db,{window:configuredCycleWindowFromRow(cycle),enabled:true});
+    assert.equal(activity.activity.get(reset).total_actions,1);
+    assert.equal(activity.activity.get(reset).active_day_keys.length,1);
+    assert.equal((await liquidateStockCyclePositions(db,cycle,{data})).closedPositions,0);
     await db.query("UPDATE points_cycles SET status='closed',closed_at=NOW() WHERE id=$1",[cycle.id]);
     const next=(await db.query(`INSERT INTO points_cycles(label,started_at,ends_at,status) VALUES($1,NOW(),$2,'active') RETURNING id`,[`${prefix}_next`,new Date(new Date(cycle.ends_at).getTime()+86400000)])).rows[0];
     cycleIds.push(next.id);
@@ -100,11 +112,13 @@ try {
   await rollover;
   await assert.rejects(queued,error=>['invalid_quote','stock_cycle_closed'].includes(error.code));
   assert.equal(await balance(reset),500000000n);
-  assert.equal((await trade(retry,qRetry,key)).tradeId,duplicates[0].tradeId); checked++; console.log('PASS cycle reset contention and committed retry');
+  const fresh=await transaction(db=>readStockPortfolio(db,{username:reset,market:null}));
+  assert.equal(fresh.positions.length,0);assert.equal(fresh.summary.tournamentPnl,0);
+  assert.equal((await trade(retry,qRetry,key)).tradeId,duplicates[0].tradeId); checked++; console.log('PASS automatic liquidation, reset contention and committed retry');
   await transaction(db=>snapshotStockValuations(db,{market:{...book,assets:[{ticker:'NVDA',available:true,priceUsd:book.markPriceUsd}],stale:false}}));
   assert.ok(pids.size>=2,'checks must use independent Postgres connections');
   console.log(JSON.stringify({ok:true,checks:checked,independentConnections:pids.size,branchId:process.env.STOCK_STAGING_BRANCH_ID,
-    cases:['competing stock buys','stock versus prediction buy','duplicate retry','simultaneous sell-all','partial/full sell PnL and audit','cycle-lock/reset contention']}));
+    cases:['competing stock buys','stock versus prediction buy','duplicate retry','simultaneous sell-all','partial/full sell PnL and audit','automatic liquidation, cycle-lock/reset contention and no carried holdings']}));
 } catch(error) {
   console.error('FAIL staging check',{completed:checked,code:error.code,message:error.message}); throw error;
 } finally {

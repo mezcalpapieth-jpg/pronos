@@ -9,6 +9,7 @@ import { configuredCycleWindowFromRow } from './points-tournament-config.js';
 import { buildTournamentLeaderboardRows } from './points-tournament-leaderboard.js';
 import { buildWalletLeaderboardRows } from './points-wallet-leaderboard.js';
 import { snapshotCycleLeaderboard } from './points-cycle-snapshot.js';
+import { liquidateStockCyclePositions } from './stock-liquidation.js';
 
 async function setup(t) {
   const db = new PGlite(); t.after(() => db.close());
@@ -36,14 +37,14 @@ async function setup(t) {
   return {db,cycle,fx,market,trade,scores};
 }
 
-test('stock PnL follows holdings, partial sales, full sales and reinvestment exactly once after fees', async t => {
+test('only sales realize tournament PnL; partial sales and reinvestment preserve cost basis', async t => {
   const {db,trade,market,scores}=await setup(t);
   await trade({side:'buy',amount:'500'});
-  assert.equal((await scores()).scores.get('holder').pnl,-0.498);
+  assert.equal((await scores()).scores.get('holder').pnl,0);
   await db.transaction(tx=>snapshotStockValuations(tx,{market:market('110')}));
-  assert.equal((await scores()).scores.get('holder').pnl,49.302);
+  assert.equal((await scores()).scores.get('holder').pnl,0);
   await trade({side:'sell',quantity:'0.1'},'110');
-  assert.equal((await scores()).scores.get('holder').pnl,49.082);
+  assert.equal((await scores()).scores.get('holder').pnl,19.58);
   await trade({side:'sell',sellAll:true},'110');
   let row=(await scores()).scores.get('holder');
   assert.equal(row.pnl,48.7542); assert.equal(row.currentValue,0);
@@ -51,9 +52,11 @@ test('stock PnL follows holdings, partial sales, full sales and reinvestment exa
   assert.equal(wallet.balance,'10048.754200');
   await trade({side:'buy',amount:'500'},'110');
   row=(await scores()).scores.get('holder');
-  assert.equal(row.pnl,48.2548);
+  assert.equal(row.pnl,48.7542);
   const history=await db.transaction(tx=>readStockPortfolio(tx,{username:'holder',market:market('110')}));
   assert.equal(history.summary.pnl,48.2548);
+  assert.equal(history.summary.tournamentPnl,48.7542);
+  assert.equal(history.summary.unrealizedPnl,-0.4994);
   assert.equal(history.trades.length,4);
 });
 
@@ -87,33 +90,44 @@ test('stocks add to tournament score and activity but do not replace prediction 
     ? Promise.resolve({rows:[]}) : db.query(sql,params)};
   const ranked=await buildTournamentLeaderboardRows(adapter,{window:configuredCycleWindowFromRow(cycle),now:new Date(Date.now()+86400000)});
   const holder=ranked.find(row=>row.username==='holder');
-  assert.equal(holder.stockPnl,49.3); assert.equal(holder.tradingPnl,49.3);
+  assert.equal(holder.stockPnl,0); assert.equal(holder.tradingPnl,0);
   assert.equal(holder.score,Number((holder.stockPnl-holder.inactivityPenalty).toFixed(2)));
   assert.equal(holder.totalActions,1); assert.equal(holder.activeDays,1);
   assert.equal(holder.qualifyingMarkets,0); assert.equal(holder.qualified,false);
   assert.equal(holder.convictionBonus,0);
 });
 
-test('cutoff marks are immutable, previous holdings are frozen and another cycle cannot inherit their PnL', async t => {
+test('cutoff liquidates holdings once at immutable marks; new cycles inherit neither positions nor PnL', async t => {
   const {db,cycle,fx,trade,scores}=await setup(t);
   await trade({side:'buy',amount:'500'});
   const at=Date.now();
-  await db.transaction(tx=>freezeStockCycleMarks(tx,cycle,{now:new Date(at),data:{cutoff:async()=>({
+  await db.transaction(tx=>liquidateStockCyclePositions(tx,cycle,{now:new Date(at),data:{cutoff:async()=>({
     assets:[{ticker:'AAPL',available:true,priceUsd:'120',pricedAt:at-1}],fx,stale:false,fetchedAt:at,
   })}}));
   await db.transaction(tx=>persistStockMarks(tx,{cycleId:cycle.id,market:{assets:[{ticker:'AAPL',available:true,priceUsd:'999'}],fx,stale:false,fetchedAt:at+1},now:at+1}));
-  assert.equal((await scores()).scores.get('holder').pnl,99.102);
+  assert.equal((await scores()).scores.get('holder').pnl,98.5044);
+  assert.equal((await scores()).scores.get('holder').currentValue,0);
+  const second=await db.transaction(tx=>liquidateStockCyclePositions(tx,cycle,{now:new Date(at)}));
+  assert.equal(second.closedPositions,0);
+  assert.equal((await db.query("SELECT balance FROM points_balances WHERE username='holder'")).rows[0].balance,'10098.504400');
+  assert.equal((await db.query("SELECT COUNT(*)::int AS n FROM points_stock_trades WHERE origin='tournament_close'")).rows[0].n,1);
+  assert.equal((await scores()).activity.get('holder').total_actions,1);
+  assert.equal((await scores()).activity.get('holder').active_day_keys.length,1);
   await db.exec("UPDATE points_cycles SET status='closed',closed_at=NOW(); INSERT INTO points_cycles(label,started_at,ends_at,status) VALUES('Next',NOW(),NOW()+INTERVAL '30 days','active');");
   const previous=await db.transaction(tx=>readStockPortfolio(tx,{username:'holder',scope:'previous'}));
-  assert.equal(previous.stale,false); assert.equal(previous.positions[0].terminal,true);
-  assert.equal(previous.summary.pnl,99.102);
+  assert.equal(previous.stale,false); assert.deepEqual(previous.positions,[]);
+  assert.equal(previous.summary.pnl,98.5044);
+  assert.equal(previous.trades[0].origin,'tournament_close');
+  await db.query('UPDATE points_balances SET balance=10000');
+  const fresh=await db.transaction(tx=>readStockPortfolio(tx,{username:'holder'}));
+  assert.deepEqual(fresh.positions,[]); assert.deepEqual(fresh.trades,[]); assert.equal(fresh.summary.tournamentPnl,0);
   const current=(await db.query("SELECT * FROM points_cycles WHERE status='active'")).rows[0];
   assert.equal((await readStockTournamentRows(db,{window:configuredCycleWindowFromRow(current),enabled:true})).scores.size,0);
 });
 
 test('a missing cutoff price aborts without freezing prices or losing open holdings', async t => {
   const {db,cycle,trade}=await setup(t); await trade({side:'buy',amount:'500'});
-  await assert.rejects(db.transaction(tx=>freezeStockCycleMarks(tx,cycle,{data:{cutoff:async()=>{throw Object.assign(new Error('outage'),{code:'stock_cutoff_price_unavailable'});}}})),{code:'stock_cutoff_price_unavailable'});
+  await assert.rejects(db.transaction(tx=>liquidateStockCyclePositions(tx,cycle,{data:{cutoff:async()=>{throw Object.assign(new Error('outage'),{code:'stock_cutoff_price_unavailable'});}}})),{code:'stock_cutoff_price_unavailable'});
   assert.equal((await db.query('SELECT terminal FROM points_stock_cycle_marks')).rows[0].terminal,false);
   assert.equal((await db.query('SELECT quantity FROM points_stock_positions')).rows[0].quantity,'0.249000000000000000');
 });
@@ -137,15 +151,54 @@ test('the tournament photo saves stock breakdowns once and reuses them after hol
   const adapter=tx=>({query:(sql,params)=>/FROM points_(?:trades|positions|parlay_tickets|distributions)\b/.test(sql)?Promise.resolve({rows:[]}):tx.query(sql,params)});
   const first=await db.transaction(tx=>snapshotCycleLeaderboard(adapter(tx),cycle,{now:new Date(at)}));
   const holder=first.find(row=>row.username==='holder');
-  assert.equal(holder.stockPnl,99.1);assert.equal(holder.stockPositionValue,597.6);
-  assert.equal(holder.stockStale,false);assert.equal(holder.tradingPnl,99.1);
+  assert.equal(holder.stockPnl,98.5);assert.equal(holder.stockPositionValue,0);
+  assert.equal(holder.stockStale,false);assert.equal(holder.tradingPnl,98.5);
   await db.query("UPDATE points_stock_positions SET quantity=0,cost_basis=0,realized_pnl=0 WHERE username='holder'");
   const second=await db.transaction(tx=>snapshotCycleLeaderboard(adapter(tx),cycle));
   assert.deepEqual(second,first);
 });
 
-test('an unknown holding value fails scoring instead of fabricating zero PnL',async t=>{
+test('a missing open valuation cannot block realized scoring or fabricate an equity value',async t=>{
   const {db,scores}=await setup(t);
   await db.query("INSERT INTO points_stock_positions(username,cycle_id,ticker,quantity,cost_basis) VALUES('holder',1,'AAPL',1,100)");
-  await assert.rejects(scores(),{code:'stock_valuation_unavailable',status:503});
+  const holder=(await scores()).scores.get('holder');
+  assert.equal(holder.pnl,0);assert.equal(holder.currentValue,null);assert.equal(holder.stale,true);
+});
+
+test('closing sales use a common price for offline holders and never award a new active day', async t => {
+  const {db,cycle,fx,trade,scores}=await setup(t);
+  await trade({side:'buy',amount:'500'});
+  await trade({side:'buy',amount:'500'},'100','offline');
+  await trade({side:'sell',quantity:'0.1'},'110');
+  // The user transactions happened yesterday in CDMX; cutoff is today.
+  await db.query("UPDATE points_stock_trades SET created_at=NOW()-INTERVAL '1 day'");
+  const at=Date.now();
+  const result=await db.transaction(tx=>liquidateStockCyclePositions(tx,cycle,{now:new Date(at),data:{cutoff:async()=>({
+    assets:[{ticker:'AAPL',available:true,priceUsd:'80',pricedAt:at-1}],fx,stale:false,fetchedAt:at,
+  })}}));
+  assert.equal(result.closedPositions,2);
+  const {scores:ranked,activity}=await scores();
+  assert.equal(ranked.get('holder').pnl,-40.5564);
+  assert.equal(ranked.get('offline').pnl,-100.4964);
+  assert.equal(activity.get('holder').total_actions,2);assert.equal(activity.get('offline').total_actions,1);
+  assert.equal(activity.get('holder').active_day_keys.length,1);
+  const closes=(await db.query("SELECT price_usd,quantity,created_at FROM points_stock_trades WHERE origin='tournament_close' ORDER BY username")).rows;
+  assert.deepEqual(closes.map(row=>row.price_usd),['80.00000000','80.00000000']);
+  assert.ok(closes.every(row=>new Date(row.created_at).getTime()===at));
+  assert.equal((await db.query('SELECT SUM(quantity)::text AS quantity,SUM(cost_basis)::text AS basis FROM points_stock_positions')).rows[0].quantity,'0.000000000000000000');
+});
+
+test('a later settlement failure rolls back all wallet credits, terminal prices and trade audits', async t => {
+  const {db,cycle,fx,trade}=await setup(t);
+  await trade({side:'buy',amount:'500'}); await trade({side:'buy',amount:'500'},'100','offline');
+  // Remove the second wallet to force a failure after the first holder's writes.
+  await db.query("DELETE FROM points_balances WHERE username='offline'");
+  const at=Date.now();
+  await assert.rejects(db.transaction(tx=>liquidateStockCyclePositions(tx,cycle,{now:new Date(at),data:{cutoff:async()=>({
+    assets:[{ticker:'AAPL',available:true,priceUsd:'120',pricedAt:at-1}],fx,stale:false,fetchedAt:at,
+  })}})),{code:'stock_cutoff_price_unavailable'});
+  assert.equal((await db.query("SELECT balance FROM points_balances WHERE username='holder'")).rows[0].balance,'9501.502000');
+  assert.equal((await db.query('SELECT terminal FROM points_stock_cycle_marks')).rows[0].terminal,false);
+  assert.equal((await db.query("SELECT COUNT(*)::int AS n FROM points_stock_trades WHERE origin='tournament_close'")).rows[0].n,0);
+  assert.ok((await db.query('SELECT quantity FROM points_stock_positions')).rows.every(row=>row.quantity==='0.249000000000000000'));
 });

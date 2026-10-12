@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { applyStockFill, assertStockQuoteFresh, buildStockFill, fixed, stockPositionValue } from './stock-math.js';
+import { applyStockFill, assertStockQuoteFresh, buildStockFill, buildStockClosingFill, fixed, stockPositionValue } from './stock-math.js';
 
 const book = { szDecimals: 3, fx: { rate: '20', date: '2026-10-12' },
   levels: [[{ px: '99', sz: '1000' }], [{ px: '100', sz: '1000' }]] };
@@ -60,4 +60,16 @@ test('accounting preserves all six money decimals across buy and sell cycles', (
     assert.equal(fixed(sold.total) - fixed(fill.total), BigInt(Math.round(Number(closed.realizedPnl) * 1000000)));
   }
   assert.equal(stockPositionValue('0.249', '100', '20'), '498');
+});
+
+test('cutoff settlement closes exact quantities, fees and even sub-micropoint dust', () => {
+  const mark = { price_usd: '120', fx_rate: '20', fx_date: '2026-10-09' };
+  const fill = buildStockClosingFill('0.249', mark);
+  assert.equal(fill.total, '597.0024'); assert.equal(fill.fee, '0.5976');
+  const sold = applyStockFill({ quantity: '0.249', cost_basis: '498.498' }, fill);
+  assert.equal(sold.quantity, '0'); assert.equal(sold.costBasis, '0'); assert.equal(sold.realizedPnl, '98.5044');
+  const dust = buildStockClosingFill('0.000000000000000001', mark);
+  assert.equal(dust.total, '0'); assert.equal(dust.fee, '0');
+  assert.equal(applyStockFill({ quantity: dust.quantity, cost_basis: '0.000001' }, dust).realizedPnl, '-0.000001');
+  assert.throws(() => buildStockClosingFill('1', { ...mark, price_usd: '0' }));
 });

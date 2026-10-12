@@ -79,14 +79,22 @@ export function StockPositions({ data }) {
   const lang = useLang();
   if (!data) return null;
   return <section className="stock-portfolio-section">
-    <div className="stock-section-title"><h2>{lang === 'en' ? 'Stocks' : 'Acciones'}</h2><Link to="/stocks">{lang === 'en' ? 'Explore →' : 'Explorar →'}</Link></div>
+    <div className="stock-section-title"><h2>{lang === 'en' ? 'Stock monitor' : 'Monitor de acciones'}</h2><Link to="/stocks">{lang === 'en' ? 'Explore →' : 'Explorar →'}</Link></div>
+    <div className="stock-monitor-summary">
+      <div><span>{lang === 'en' ? 'Realized · tournament' : 'Realizado · torneo'}</span><strong className={Number(data.summary.realizedPnl) >= 0 ? 'stock-up' : 'stock-down'}>{stockMoney(data.summary.realizedPnl)} MXNP</strong></div>
+      <div><span>{lang === 'en' ? 'Unrealized · open holdings' : 'No realizado · posiciones abiertas'}</span><strong className={Number(data.summary.unrealizedPnl) >= 0 ? 'stock-up' : 'stock-down'}>{stockMoney(data.summary.unrealizedPnl)} MXNP</strong></div>
+    </div>
     {data.stale && <p className="stock-note">{lang === 'en' ? 'Last recorded valuation. Prices may be outdated.' : 'Última valuación registrada. Los precios pueden estar desactualizados.'}</p>}
-    <p className="stock-note">{lang === 'en' ? 'Stock PnL counts in the tournament. Valuations update while you are offline; holdings reset with the points cycle.' : 'El PnL de acciones cuenta en el torneo. La valuación se actualiza aunque no estés conectado; las posiciones se reinician con el ciclo de puntos.'}</p>
+    <p className="stock-note">{lang === 'en' ? 'Stock PnL counts when you sell, after fees. Open gains and losses are unrealized. At tournament close, all holdings are sold automatically before standings are frozen. User buys and sells count as activity; holding and automatic closing sales do not.' : 'El PnL de acciones cuenta al vender, después de comisiones. Las ganancias y pérdidas de posiciones abiertas no están realizadas. Al cierre del torneo, todas se venden automáticamente antes de congelar el ranking. Comprar o vender cuenta como actividad; mantener posiciones y las ventas automáticas de cierre no.'}</p>
     {data.positions.length === 0 ? <p className="stock-note">{lang === 'en' ? 'You do not hold any simulated stocks yet.' : 'Todavía no tienes posiciones simuladas de acciones.'}</p>
       : data.positions.map(position => <article className="stock-position" key={position.ticker}>
-        <Link className="stock-position-identity" to={`/stocks/${position.ticker}`}><StockBadge asset={position} /><div><strong>{position.name}</strong><span>{Number(position.quantity).toLocaleString('es-MX', { maximumFractionDigits: 8 })} {position.ticker}</span>
-          <span>{lang === 'en' ? 'Avg. cost' : 'Costo promedio'}: {stockMoney(Number(position.costBasis) / Number(position.quantity))} MXNP</span></div></Link>
-        <div className="stock-position-value"><strong>{stockMoney(position.currentValue)} MXNP</strong><span className={Number(position.unrealizedPnl) >= 0 ? 'stock-up' : 'stock-down'}>{stockMoney(position.unrealizedPnl)} PnL · {stockPercent(position.unrealizedPnl != null && Number(position.costBasis) > 0 ? Number(position.unrealizedPnl) / Number(position.costBasis) * 100 : null)}</span></div>
+        <Link className="stock-monitor-link" to={`/stocks/${position.ticker}`}>
+          <div className="stock-position-identity"><StockBadge asset={position} /><div><strong>{position.name}</strong><span>{Number(position.quantity).toLocaleString('es-MX', { maximumFractionDigits: 8 })} {position.ticker}</span>
+            <span>{lang === 'en' ? 'Avg. cost' : 'Costo promedio'}: {stockMoney(Number(position.costBasis) / Number(position.quantity))} MXNP</span>
+            <span>{lang === 'en' ? 'Price' : 'Precio'}: {stockMoney(position.currentValue == null ? null : Number(position.currentValue) / Number(position.quantity))} MXNP</span>
+            <span>{position.markedAt ? <time dateTime={position.markedAt}>{new Date(position.markedAt).toLocaleString(lang === 'en' ? 'en-US' : 'es-MX')}</time> : lang === 'en' ? 'Price unavailable' : 'Precio no disponible'}{position.stale ? lang === 'en' ? ' · Outdated' : ' · Desactualizado' : ''}</span></div></div>
+          <div className="stock-position-value"><strong>{stockMoney(position.currentValue)} MXNP</strong><span className={Number(position.unrealizedPnl) >= 0 ? 'stock-up' : 'stock-down'}>{stockMoney(position.unrealizedPnl)} · {stockPercent(position.unrealizedPnl != null && Number(position.costBasis) > 0 ? Number(position.unrealizedPnl) / Number(position.costBasis) * 100 : null)}</span><span>{lang === 'en' ? 'Unrealized PnL · View asset →' : 'PnL no realizado · Ver activo →'}</span></div>
+        </Link>
         {!position.archived && <Link className="stock-secondary" to={`/stocks/${position.ticker}?side=sell`}>{lang === 'en' ? 'Sell' : 'Vender'}</Link>}
       </article>)}
     {data.positions.length > 0 && <p className="stock-note">{lang === 'en' ? 'Values before selling fees. Holdings belong to this points cycle.' : 'Valores antes de comisión de venta. Las posiciones pertenecen a este ciclo de puntos.'}</p>}
@@ -98,7 +106,7 @@ export function StockHistory({ data }) {
   if (!data?.trades?.length) return null;
   return <section className="stock-portfolio-section"><h2>{lang === 'en' ? 'Stock trades' : 'Operaciones de acciones'}</h2>
     <div className="stock-history"><table><thead><tr>{(lang === 'en' ? ['Date', 'Asset', 'Side', 'Units', 'Total MXNP', 'Fee'] : ['Fecha', 'Activo', 'Operación', 'Unidades', 'Total MXNP', 'Comisión']).map(title => <th key={title}>{title}</th>)}</tr></thead>
-      <tbody>{data.trades.map(trade => <tr key={trade.id}><td>{new Date(trade.created_at).toLocaleString(lang === 'en' ? 'en-US' : 'es-MX')}</td><td>{trade.ticker}</td><td>{trade.side === 'buy' ? lang === 'en' ? 'Buy' : 'Compra' : lang === 'en' ? 'Sell' : 'Venta'}</td><td>{Number(trade.quantity)}</td><td>{stockMoney(trade.total)}</td><td>{stockMoney(trade.fee)}</td></tr>)}</tbody></table></div>
+      <tbody>{data.trades.map(trade => <tr key={trade.id}><td>{new Date(trade.created_at).toLocaleString(lang === 'en' ? 'en-US' : 'es-MX')}</td><td><Link to={`/stocks/${trade.ticker}`}>{trade.ticker}</Link></td><td>{trade.origin === 'tournament_close' ? lang === 'en' ? 'Automatic closing sale' : 'Venta automática al cierre' : trade.side === 'buy' ? lang === 'en' ? 'Buy' : 'Compra' : lang === 'en' ? 'Sell' : 'Venta'}</td><td>{Number(trade.quantity)}</td><td>{stockMoney(trade.total)}</td><td>{stockMoney(trade.fee)}</td></tr>)}</tbody></table></div>
     {data.hasMoreTrades && <p className="stock-note">{lang === 'en' ? 'Showing the latest 200 trades.' : 'Mostrando las últimas 200 operaciones.'}</p>}
   </section>;
 }

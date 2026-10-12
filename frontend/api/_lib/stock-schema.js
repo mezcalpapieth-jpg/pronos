@@ -41,6 +41,8 @@ export const STOCK_SCHEMA_MIGRATIONS = [
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE (username, idempotency_key)
   )`,
   `CREATE INDEX IF NOT EXISTS idx_stock_trades_user_cycle ON points_stock_trades(username, cycle_id, created_at)`,
+  `ALTER TABLE points_stock_trades ADD COLUMN IF NOT EXISTS origin TEXT NOT NULL DEFAULT 'user'
+    CHECK (origin IN ('user','tournament_close'))`,
   `CREATE TABLE IF NOT EXISTS points_stock_valuations (
     username TEXT NOT NULL, cycle_id INTEGER NOT NULL REFERENCES points_cycles(id),
     sampled_at TIMESTAMPTZ NOT NULL, current_value NUMERIC(20,6) NOT NULL,

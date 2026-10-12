@@ -139,18 +139,29 @@ export function createStockData(db, { fetchInfo = infoRequest, fetchFx = latestF
       return { ticker: asset.ticker, range, interval: config.interval, candles, fetchedAt: now(), currency: 'USD' };
     });
   }
-  async function cutoff(tickers, cutoffAt) {
+  async function cutoff(tickers, cutoffAt, recentMarks = []) {
     if (!Number.isFinite(cutoffAt) || cutoffAt > now()) throw stockError('stock_cutoff_price_unavailable', 503);
     const boundary = Math.floor(cutoffAt / 60000) * 60000;
     const [exchange, prices] = await Promise.all([fetchFxAt(cutoffAt), Promise.all(tickers.map(async ticker => {
       const asset = stockAsset(ticker);
       if (!asset) throw stockError('stock_not_found', 404);
-      const raw = await fetchInfo({ type: 'candleSnapshot', req: { coin: asset.coin, interval: '1m', startTime: boundary - 60000, endTime: boundary } });
-      // Require the exact last completed minute. Never select a later candle,
-      // a forming close, or an older price silently when a cutoff sample is absent.
+      let raw;
+      try { raw = await fetchInfo({ type: 'candleSnapshot', req: { coin: asset.coin, interval: '1m', startTime: boundary - 60000, endTime: boundary } }); }
+      catch { raw = null; }
+      // Prefer the exact completed minute. A sparse market may have no candle;
+      // only a shared mark saved within 90 seconds BEFORE cutoff can replace it.
       const candle = raw?.find?.(c => c.s === asset.coin && c.i === '1m' && c.t === boundary - 60000
         && Number.isFinite(c.T) && c.T < boundary && Number(c.c) > 0 && Number.isFinite(Number(c.c)));
-      if (!candle) throw stockError('stock_cutoff_price_unavailable', 503);
+      if (!candle) {
+        const mark = recentMarks.find(row => row.ticker === ticker);
+        const time = new Date(mark?.priced_at).getTime();
+        if (!mark || !Number.isFinite(time) || time >= cutoffAt || cutoffAt - time > 90000
+            || !(Number(mark.price_usd) > 0) || !Number.isFinite(Number(mark.price_usd))) {
+          throw stockError('stock_cutoff_price_unavailable', 503);
+        }
+        return { ...asset, available: true, priceUsd: String(mark.price_usd), pricedAt: time,
+          priceSource: 'Hyperliquid recent pre-cutoff shared mark / Banxico FIX' };
+      }
       return { ...asset, available: true, priceUsd: String(candle.c), pricedAt: candle.T };
     }))]);
     validateFx(exchange, cutoffAt);

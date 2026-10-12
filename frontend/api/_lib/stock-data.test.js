@@ -173,3 +173,19 @@ test('cutoff uses the exact completed minute and historical FIX, never a forming
   const futureFix = createStockData(cacheDb(),{...options,fetchFxAt:async()=>({rate:'18.4',date:'2026-10-12'})});
   await assert.rejects(futureFix.cutoff(['NVDA'],cutoffAt),{code:'stock_fx_unavailable'});
 });
+
+test('missing cutoff candles use only a recent shared pre-cutoff mark, including during an outage', async () => {
+  const cutoffAt = Date.parse('2026-10-12T05:59:00Z');
+  const mark = { ticker: 'NVDA', price_usd: '231.11', priced_at: new Date(cutoffAt - 30000).toISOString() };
+  const options = { now: () => cutoffAt + 1000, fetchFxAt: async () => ({ rate: '18.4', date: '2026-10-09' }) };
+  for (const fetchInfo of [async () => [], async () => { throw new Error('outage'); }]) {
+    const data = createStockData(cacheDb(), { ...options, fetchInfo });
+    const result = await data.cutoff(['NVDA'], cutoffAt, [mark]);
+    assert.equal(result.assets[0].priceUsd, '231.11');
+    assert.match(result.assets[0].priceSource, /pre-cutoff/);
+    for (const delta of [0, -1, 90001]) {
+      await assert.rejects(data.cutoff(['NVDA'], cutoffAt, [{ ...mark, priced_at: new Date(cutoffAt - delta).toISOString() }]), { code: 'stock_cutoff_price_unavailable' });
+    }
+    await assert.rejects(data.cutoff(['NVDA'], cutoffAt), { code: 'stock_cutoff_price_unavailable' });
+  }
+});
