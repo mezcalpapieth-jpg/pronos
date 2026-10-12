@@ -66,7 +66,7 @@ export function routeDemoStocks(path, method, params, body = {}) {
     if (method === 'GET' && action === 'positions') return response(portfolio(params.get('cycle') || 'current'));
     const state = getDemoState();
     if (method === 'POST' && action === 'quote') {
-      if (STOCK_ASSETS.find(a => a.ticker === body.ticker)?.readOnly) return response({ error: 'stock_preview_only' }, 503);
+      if (!STOCK_ASSETS.some(a => a.ticker === body.ticker)) return response({ error: 'stock_not_found' }, 404);
       const data = book(body.ticker);
       const fill = buildStockFill({ ...body, positionQuantity: state.stockPositions?.[body.ticker]?.quantity || '0', quote: data });
       const result = { quoteId: crypto.randomUUID(), ticker: body.ticker, ...fill, expiresAt: Date.now() + 10000, bookTime: data.bookTime };

@@ -40,7 +40,7 @@ export function stockHandler(action) {
         const market = await data.assets();
         result = { ok: true, schemaVersion: 2, tradingEnabled: process.env.POINTS_STOCKS_TRADING_ENABLED !== 'false',
           source: market.source, fetchedAt: market.fetchedAt, fxDate: market.fx.date, availableAssets: market.assets.filter(asset => asset.available).length,
-          tradableAssets: market.assets.filter(asset => asset.available && !asset.readOnly).length };
+          tradableAssets: market.assets.filter(asset => asset.available).length };
       }
       else if (action === 'candles') result = await data.candles(req.query.ticker, req.query.range || '7D');
       else if (action === 'quote') {
@@ -51,7 +51,7 @@ export function stockHandler(action) {
         result = await withTransaction(db => createStockQuote(db, { username: session.username, request, book }));
       } else if (action === 'positions') {
         const scope = req.query.cycle === 'previous' ? 'previous' : 'current';
-        const market = scope === 'current' ? await data.assets(true, undefined, { includePreviews: false }).catch(() => null) : null;
+        const market = scope === 'current' ? await data.assets(true).catch(() => null) : null;
         result = await withTransaction(db => readStockPortfolio(db, { username: session.username, scope, market,
           includeHistory: req.query.view !== 'holdings' }));
       } else result = await withTransaction(db => executeStockTrade(db, {

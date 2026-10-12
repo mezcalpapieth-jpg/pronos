@@ -12,7 +12,6 @@ export const fetchStockHoldings = () => getJson(`${base}/positions?cycle=current
 export const quoteStock = body => postJson(`${base}/quote`, body, timeout());
 export const tradeStock = (side, body) => postJson(`${base}/${side}`, body, timeout());
 const errors = {
-  stock_preview_only: ['Este ETF está disponible como vista previa; aún no admite operaciones con puntos.', 'This ETF is a preview; points trading is not enabled yet.'],
   stocks_disabled: ['Acciones estará disponible pronto.', 'Stocks will be available soon.'],
   stock_trading_paused: ['Las operaciones de acciones están pausadas temporalmente.', 'Stock trading is temporarily paused.'],
   stock_price_unavailable: ['Precio no disponible. Intenta de nuevo en unos segundos.', 'Price unavailable. Try again in a few seconds.'],

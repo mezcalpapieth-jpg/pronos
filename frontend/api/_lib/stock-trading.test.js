@@ -5,9 +5,9 @@ import { STOCK_SCHEMA_MIGRATIONS } from './stock-schema.js';
 import { createStockQuote, executeStockTrade, stockOrderRequest } from './stock-trading.js';
 import { readStockPortfolio } from './stock-portfolio.js';
 
-test('ETF previews cannot create a tradable quote, including internal calls', async () => {
-  assert.throws(() => stockOrderRequest({ ticker: 'SPYX', side: 'buy', amount: '100' }), { code: 'stock_preview_only' });
-  await assert.rejects(createStockQuote(null, { username: 'fran', request: { ticker: 'SPYX', side: 'buy', amount: '100' }, book: {} }), { code: 'stock_preview_only' });
+test('removed instruments cannot create a tradable quote, including internal calls', async () => {
+  assert.throws(() => stockOrderRequest({ ticker: 'SPYX', side: 'buy', amount: '100' }), { code: 'stock_not_found' });
+  await assert.rejects(createStockQuote(null, { username: 'fran', request: { ticker: 'SPYX', side: 'buy', amount: '100' }, book: {} }), { code: 'stock_not_found' });
 });
 
 async function setup(t) {

@@ -20,7 +20,7 @@ export default async function handler(req, res) {
     // leave the previous marks intact and never freeze an estimated winner.
     const cutoff = await withTransaction(db => snapshotActiveCycleAtCutoff(db, { now: new Date() }));
     if (cutoff.skipped !== 'before_cutoff') return res.status(200).json(cutoff);
-    const market = await createStockData(sql).assets(false, undefined, { includePreviews: false });
+    const market = await createStockData(sql).assets();
     const result = await withTransaction(db => snapshotStockValuations(db, { market }));
     return res.status(200).json(result);
   } catch (error) {

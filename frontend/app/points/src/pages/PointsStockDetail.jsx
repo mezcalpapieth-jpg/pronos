@@ -39,7 +39,7 @@ export default function PointsStockDetail({ onOpenLogin }) {
   const screenRevision = useRef(0);
   const lastEstimate = useRef(null);
   const asset = data?.assets.find(item => item.ticker === ticker) || stockAsset(ticker);
-  const canReview = stocksEnabled && data?.tradingEnabled !== false && asset?.available && !asset.readOnly;
+  const canReview = stocksEnabled && data?.tradingEnabled !== false && asset?.available;
   const bookFresh = data?.book && now - data.book.bookTime >= -2000 && now - data.book.bookTime < 10000;
   const available = canReview && bookFresh;
   const balance = filledBalance ?? user?.balance;
@@ -153,20 +153,19 @@ export default function PointsStockDetail({ onOpenLogin }) {
     } finally { lock.current = false; setBusy(false); }
   }
 
-  const category = asset?.category === 'etfs' ? 'ETF' : asset?.category === 'crypto' ? 'Crypto' : asset?.category === 'indices' ? en ? 'Indices' : 'Índices' : asset?.category === 'materias-primas' ? en ? 'Commodities' : 'Materias primas' : en ? 'Technology' : 'Tecnología';
+  const category = asset?.category === 'crypto' ? 'Crypto' : asset?.category === 'indices' ? en ? 'Indices' : 'Índices' : asset?.category === 'materias-primas' ? en ? 'Commodities' : 'Materias primas' : en ? 'Technology' : 'Tecnología';
   const buttonLabel = busy ? en ? 'Processing…' : 'Procesando…' : retry ? en ? 'Retry confirmation' : 'Reintentar confirmación'
     : quote && !expired ? `${en ? 'Confirm' : 'Confirmar'} ${side === 'buy' ? en ? 'buy' : 'compra' : en ? 'sell' : 'venta'}`
       : `${en ? 'Review' : 'Revisar'} ${side === 'buy' ? en ? 'buy' : 'compra' : en ? 'sell' : 'venta'} ${sellAll && side === 'sell' ? en ? 'all' : 'total' : stockMoney(amount)} ${en ? 'of' : 'de'} ${asset?.name || ticker}`;
   return <main className="stocks-page stock-detail-page"><Link className="stock-back" to="/stocks">← {en ? 'STOCKS' : 'ACCIONES'}</Link>
     <div className="stock-eyebrow">{category} · {en ? 'POINTS SIMULATOR' : 'SIMULADOR DE PUNTOS'}</div>
     <div className="stock-detail-heading">{asset && <StockBadge asset={asset} />}<h1>{asset?.name || ticker} ({ticker})</h1></div>
-    {['SP500', 'SPYX'].includes(ticker) && <nav className="stock-filters" aria-label={en ? 'S&P 500 instrument' : 'Instrumento S&P 500'}>{[['SP500', en ? 'Index' : 'Índice'], ['SPYX', en ? 'ETF · Preview' : 'ETF · Vista previa']].map(([symbol, label]) => <Link key={symbol} className={`stock-secondary ${ticker === symbol ? 'active' : ''}`} aria-current={ticker === symbol ? 'page' : undefined} to={`/stocks/${symbol}`}>{label}</Link>)}</nav>}
     <div className="stock-hero-price"><strong>{stockMoney(asset?.priceMxn)}</strong><span>MXNP</span><span className={asset?.change24h >= 0 ? 'stock-up' : 'stock-down'}>{stockPercent(asset?.change24h)} · 24H USD</span></div>
     {!stocksEnabled && <p className="stock-alert">{en ? 'Stocks will be available soon.' : 'Acciones estará disponible pronto.'}</p>}
     {marketError && <p className="stock-alert" role="status">{marketError}</p>}
     {data?.tradingEnabled === false && <p className="stock-alert" role="status">{en ? 'Trading is temporarily paused. Your holdings and tournament PnL remain visible.' : 'Las operaciones están pausadas temporalmente. Tus posiciones y PnL del torneo siguen disponibles.'}</p>}
     {data?.demo && <p className="stock-alert">DEMO · {en ? 'Synthetic prices for preview.' : 'Precios sintéticos para la vista previa.'}</p>}
-    <p className="stock-note">{asset?.readOnly ? en ? 'Price per wrapped SPYx token on Hyperliquid spot. This is a different instrument from the index; wrapped units are not ETF shares.' : 'Precio por token SPYx envuelto en Hyperliquid spot. Es un instrumento distinto al índice; las unidades envueltas no son acciones del ETF.' : en ? 'Stock gains and losses count toward tournament PnL, including open holdings and fees. Prices reference perpetuals; purchases use MXNP points.' : 'Las ganancias y pérdidas de acciones cuentan en el PnL del torneo, incluyendo posiciones abiertas y comisiones. Precios de referencia de perpetuos; compras con puntos MXNP.'}</p>
+    <p className="stock-note">{en ? 'Stock gains and losses count toward tournament PnL, including open holdings and fees. Prices reference perpetuals; purchases use MXNP points.' : 'Las ganancias y pérdidas de acciones cuentan en el PnL del torneo, incluyendo posiciones abiertas y comisiones. Precios de referencia de perpetuos; compras con puntos MXNP.'}</p>
     <div className="stock-detail-grid"><section className="stock-chart-card">
       <div className="stock-chart-header"><span>{en ? 'PRICE IN USD' : 'PRECIO EN USD'}</span><div className="stock-ranges">{['4H', '24H', '7D', '30D'].map(value => <button type="button" key={value} aria-pressed={range === value} className={range === value ? 'active' : ''} onClick={() => setRange(value)}>{value}</button>)}</div></div>
       <p className="stock-note">{en ? 'Candle interval' : 'Intervalo de vela'}: {STOCK_CHART_RANGES[range].interval} · {en ? 'Refreshes every 60s' : 'Actualiza cada 60s'}
@@ -176,9 +175,9 @@ export default function PointsStockDetail({ onOpenLogin }) {
       {candles.at(-1)?.endTime < chartFetchedAt - 60000 && <p className="stock-note" role="status">{en ? 'The latest candle is older: no trades were recorded in the more recent intervals. See the live buy/sell prices below.' : 'La última vela es anterior: no hubo operaciones registradas en los intervalos más recientes. Consulta los precios de compra/venta en vivo abajo.'}</p>}
       <div className="stock-book-labels"><span>{en ? 'Buy' : 'Compra'} <strong>{stockMoney(data?.book?.levels[1][0].px)} USD</strong></span><span>{en ? 'Sell' : 'Venta'} <strong>{stockMoney(data?.book?.levels[0][0].px)} USD</strong></span>
         <span>Vol. 24H <strong>{asset?.volumeUsd == null ? '—' : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 2 }).format(asset.volumeUsd)} USD</strong></span></div>
-      <p className="stock-note">{data?.demo ? 'DEMO' : asset?.marketType === 'spot' ? 'Hyperliquid / spot' : asset?.dex ? `Hyperliquid / ${asset.dex}` : 'Hyperliquid'} · {en ? 'Candle prices; axis times show each candle’s start, not the latest update. A candle covering the current time is still forming.' : 'Precios de vela; el eje indica el inicio de cada vela, no su última actualización. Una vela que incluye la hora actual sigue en curso.'}</p>
-      {data?.book && <p className="stock-note" role="status">{en ? 'Live buy/sell prices' : 'Precios de compra/venta en vivo'} · <time dateTime={new Date(data.book.bookTime).toISOString()}>{priceTimeLabel(data.book.bookTime, lang)}</time> · {bookFresh ? `${Math.max(0, Math.floor((now - data.book.bookTime) / 1000))}s` : en ? 'Refreshing…' : 'Actualizando…'}<br />{asset?.readOnly ? en ? 'Refreshes every 3s.' : 'Actualiza cada 3s.' : en ? 'Refreshes every 3s. Review fetches a new confirmed quote.' : 'Actualiza cada 3s. Revisar solicita una nueva cotización confirmada.'}</p>}
-    </section><section className="stock-order-card">{asset?.readOnly ? <><div className="stock-eyebrow">{en ? 'ETF PRICE PREVIEW' : 'VISTA PREVIA DEL ETF'}</div><p className="stock-note">{en ? 'Points trading is not enabled for this ETF yet. We need a reliable tournament closing valuation when trading is sparse.' : 'Este ETF aún no admite operaciones con puntos. Necesitamos una valuación confiable al cierre del torneo cuando hay pocas operaciones.'}</p><Link className="stock-secondary" to="/stocks/SP500">{en ? 'Trade the S&P 500 index →' : 'Operar el índice S&P 500 →'}</Link></> : <>
+      <p className="stock-note">{data?.demo ? 'DEMO' : asset?.dex ? `Hyperliquid / ${asset.dex}` : 'Hyperliquid'} · {en ? 'Candle prices; axis times show each candle’s start, not the latest update. A candle covering the current time is still forming.' : 'Precios de vela; el eje indica el inicio de cada vela, no su última actualización. Una vela que incluye la hora actual sigue en curso.'}</p>
+      {data?.book && <p className="stock-note" role="status">{en ? 'Live buy/sell prices' : 'Precios de compra/venta en vivo'} · <time dateTime={new Date(data.book.bookTime).toISOString()}>{priceTimeLabel(data.book.bookTime, lang)}</time> · {bookFresh ? `${Math.max(0, Math.floor((now - data.book.bookTime) / 1000))}s` : en ? 'Refreshing…' : 'Actualizando…'}<br />{en ? 'Refreshes every 3s. Review fetches a new confirmed quote.' : 'Actualiza cada 3s. Revisar solicita una nueva cotización confirmada.'}</p>}
+    </section><section className="stock-order-card">
       <div className="stock-eyebrow">{en ? 'CHOOSE AN OPERATION' : 'ELIGE UNA OPERACIÓN'}</div>
       <div className="stock-side-switch">{['buy', 'sell'].map(value => <button type="button" disabled={busy || retry} key={value} className={side === value ? 'active' : ''} aria-pressed={side === value} onClick={() => choose(() => { setSide(value); setSellAll(false); })}>{value === 'buy' ? en ? 'Buy' : 'Comprar' : en ? 'Sell' : 'Vender'}</button>)}</div>
       <div className="stock-order-balance">{en ? 'Available' : 'Disponible'} <strong>{stockMoney(balance)} MXNP</strong></div>
@@ -200,6 +199,6 @@ export default function PointsStockDetail({ onOpenLogin }) {
       <button type="button" className="stock-primary" onClick={submit} disabled={busy || (authenticated && !retry && (!canReview || (side === 'sell' && !holding) || (!quote && estimateError) || (!sellAll && !(Number(amount) > 0))))}>{authenticated ? !canReview && !busy && !retry ? !data && !marketError ? en ? 'Loading prices…' : 'Cargando precios…' : en ? 'Price unavailable' : 'Precio no disponible' : buttonLabel : en ? 'Sign in to trade' : 'Inicia sesión para operar'}</button>
       <p className="stock-note">{en ? 'Simulated holdings with MXNP points. No real shares or cash withdrawals. Holdings reset with the points cycle.' : 'Posiciones simuladas con puntos MXNP. Sin acciones reales ni retiros de dinero. Las posiciones se reinician con el ciclo de puntos.'}
         {data?.fx && <><br />{data.fx.source} · {data.fx.date}</>}</p>
-    </>}</section></div>
+    </section></div>
   </main>;
 }

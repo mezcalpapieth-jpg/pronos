@@ -12,7 +12,6 @@ function cacheDb() {
   } };
 }
 function provider(body) {
-  if (body.type === 'spotMetaAndAssetCtxs') return [{ universe: [], tokens: [] }, []];
   if (body.type === 'metaAndAssetCtxs') return [{ universe: [{ name: 'xyz:AAPL', szDecimals: 3 }] }, [{ markPx: '100', prevDayPx: '99', dayNtlVlm: '1000' }]];
   if (body.type === 'l2Book') return { coin: 'xyz:AAPL', time: now, levels: [[{ px: '99', sz: '10' }], [{ px: '100', sz: '10' }]] };
   return [{ s: 'xyz:AAPL', i: body.req.interval, t: now - 3600000, c: '100' }, { s: 'xyz:TSLA', i: body.req.interval, t: now, c: '1' }];
@@ -21,11 +20,11 @@ test('allowlisted metadata joins by symbol; missing assets stay unavailable', as
   let requests = 0;
   const data = createStockData(cacheDb(), { fetchFx: async () => fx, fetchInfo: async body => { requests++; return provider(body); }, now: () => now });
   const result = await data.assets();
-  assert.equal(result.assets.length, 14);
+  assert.equal(result.assets.length, 13);
   assert.equal(result.assets[0].priceMxn, 1830);
   assert.equal(result.assets[1].available, false);
   await Promise.all([data.assets(), data.assets()]);
-  assert.equal(requests, 3);
+  assert.equal(requests, 2);
   assert.equal((await data.book('AAPL')).levels[0][0].px, '99');
   await assert.rejects(data.book('UNKNOWN'), { code: 'stock_not_found' });
 });
@@ -65,38 +64,19 @@ test('an unrelated venue outage does not block a current stock quote or detail p
   assert.equal((await data.book('AAPL')).bookTime, now);
   await assert.rejects(data.assets(false, 'NOPE'), { code: 'stock_not_found' });
 });
-test('ETF preview joins spot token identity and current wrapper, and never gates valuation feeds', async () => {
-  const token = { index: 846, tokenId: '0x29067197b3125c8b82ad0f338e4a31b2', szDecimals: 2,
-    evmContract: { address: '0xe7e553cd128f0011777323a0b44a7b96ea1cb540' } };
-  const options = { fetchFx: async () => fx, now: () => now, fetchInfo: async body => body.type === 'spotMetaAndAssetCtxs'
-    ? [{ universe: [{ name: '@703', index: 703, tokens: [846, 0] }], tokens: [token] },
-      [{ coin: '@312', markPx: '0.99994', prevDayPx: '1' }, { coin: '@703', markPx: '783.2', prevDayPx: '780' }]]
-    : body.type === 'l2Book' ? { coin: '@703', time: now, levels: [[{ px: '783', sz: '1' }], [{ px: '783.2', sz: '1' }]] } : provider(body) };
-  const data = createStockData(cacheDb(), options);
-  const etf = (await data.assets(false, 'SPYX')).assets[0];
-  assert.equal(etf.available, true); assert.equal(etf.readOnly, true);
-  assert.equal(etf.priceUsd, '783.2');
-  assert.equal((await data.book('SPYX')).szDecimals, 2);
-  const incorrect = createStockData(cacheDb(), { ...options, fetchInfo: async body => {
-    const result = await options.fetchInfo(body);
-    if (body.type === 'spotMetaAndAssetCtxs') result[0].tokens = [{ ...token, evmContract: { address: '0xwrong' } }];
-    return result;
-  } });
-  assert.equal((await incorrect.assets(false, 'SPYX')).assets[0].available, false);
-  await assert.rejects(incorrect.book('SPYX'), { code: 'stock_price_unavailable' });
-  const missingContext = createStockData(cacheDb(), { ...options, fetchInfo: async body => {
-    const result = await options.fetchInfo(body);
-    if (body.type === 'spotMetaAndAssetCtxs') result[1] = [result[1][0]];
-    return result;
-  } });
-  assert.equal((await missingContext.assets(false, 'SPYX')).assets[0].available, false);
-  await assert.rejects(missingContext.book('SPYX'), { code: 'stock_price_unavailable' });
-  const valuation = createStockData(cacheDb(), { ...options, fetchInfo: async body => {
-    assert.notEqual(body.type, 'spotMetaAndAssetCtxs', 'previews must not participate in trading valuations');
+test('removed ETF is absent from the catalogue and cannot load prices or charts', async () => {
+  const requests = [];
+  const data = createStockData(cacheDb(), { fetchFx: async () => fx, now: () => now, fetchInfo: async body => {
+    requests.push(body);
     return provider(body);
   } });
-  const market = await valuation.assets(false, undefined, { includePreviews: false });
-  assert.equal(market.assets.length, 13); assert.equal(market.stale, false);
+  const market = await data.assets();
+  assert.equal(market.assets.length, 13);
+  assert.equal(market.assets.some(asset => asset.ticker === 'SPYX' || asset.category === 'etfs'), false);
+  assert.ok(requests.every(body => body.type === 'metaAndAssetCtxs'));
+  await assert.rejects(data.assets(false, 'SPYX'), { code: 'stock_not_found' });
+  await assert.rejects(data.book('SPYX'), { code: 'stock_not_found' });
+  await assert.rejects(data.candles('SPYX', '4H'), { code: 'invalid_stock_chart' });
 });
 test('failed refresh may return stale valuations but never a tradable stale quote', async () => {
   let clock = now;
