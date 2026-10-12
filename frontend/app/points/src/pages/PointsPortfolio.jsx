@@ -39,6 +39,8 @@ import {
 } from '../lib/pointsApi.js';
 import PnlChartCard from '../components/PnlChartCard.jsx';
 import { emitPointsRefresh, onPointsRefresh } from '../lib/pointsLiveRefresh.js';
+import { fetchStockPortfolio, stocksEnabled, mergePnlSeries, stockErrorMessage } from '../lib/stockApi.js';
+import { StockPositions, StockHistory } from '../components/StockShared.jsx';
 
 function fmt(n) {
   const v = Number(n) || 0;
@@ -1041,6 +1043,9 @@ export default function PointsPortfolio() {
   const [rewards, setRewards] = useState([]);
   const [parlays, setParlays] = useState([]);
   const [summary, setSummary] = useState(null);
+  const [stockPortfolio, setStockPortfolio] = useState(null);
+  const [stockError, setStockError] = useState(null);
+  const [assetFilter, setAssetFilter] = useState('all');
   const [historySummary, setHistorySummary] = useState(null);
   const [rewardSummary, setRewardSummary] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -1075,8 +1080,10 @@ export default function PointsPortfolio() {
     if (!authenticated || tab !== 'activo' || onchain) return undefined;
     let cancelled = false;
     setPnlLoading(true);
-    fetchPnlHistory({ days: pnlRange, cycle: pnlCycleScope })
-      .then(({ series }) => { if (!cancelled) setPnlSeries(series || []); })
+    Promise.all([fetchPnlHistory({ days: pnlRange, cycle: pnlCycleScope }),
+      stocksEnabled ? fetchStockPortfolio(pnlCycleScope).catch(() => null) : Promise.resolve(null)])
+      .then(([markets, stocks]) => { if (!cancelled) setPnlSeries(mergePnlSeries(markets.series, stocks?.series, pnlRange)); })
+      .catch(() => { if (!cancelled) setPnlSeries([]); })
       .finally(() => { if (!cancelled) setPnlLoading(false); });
     return () => { cancelled = true; };
   }, [authenticated, tab, pnlRange, pnlCycleScope]);
@@ -1085,12 +1092,14 @@ export default function PointsPortfolio() {
     if (!silent) setLoading(true);
     try {
       if (tab === 'activo') {
-        const [positionsResult, historyResult] = await Promise.all([
+        const [positionsResult, historyResult, stocksResult] = await Promise.all([
           fetchPositions(),
           fetchHistory({ cycle: 'current' }).catch(() => null),
+          stocksEnabled ? fetchStockPortfolio().then(result => { setStockError(null); return result; }).catch(e => { setStockError(stockErrorMessage(e, lang)); return null; }) : Promise.resolve(null),
         ]);
         setPositions(positionsResult.positions || []);
         setSummary(positionsResult.summary || null);
+        if (stocksResult) setStockPortfolio(stocksResult);
         if (historyResult?.summary) {
           setHistorySummary(historyResult.summary);
         }
@@ -1102,9 +1111,11 @@ export default function PointsPortfolio() {
         const r = await fetchMyParlays(100);
         setParlays(r.tickets || []);
       } else {
-        const r = await fetchHistory({ cycle: historyCycleScope });
+        const [r, stocksResult] = await Promise.all([fetchHistory({ cycle: historyCycleScope }),
+          stocksEnabled ? fetchStockPortfolio(historyCycleScope).then(result => { setStockError(null); return result; }).catch(e => { setStockError(stockErrorMessage(e, lang)); return null; }) : Promise.resolve(null)]);
         setHistory(r.history || []);
         setHistorySummary(r.summary || null);
+        setStockPortfolio(stocksResult);
       }
     } catch (error) {
       setMsg({ type: 'error', text: publicErrorMessage(error, lang) });
@@ -1302,8 +1313,10 @@ export default function PointsPortfolio() {
   }
 
   const balance = executionBalance.balance;
-  const openPnl = Number((onchain ? summary?.unrealizedPnl : summary?.pnl) || 0);
-  const totalPnl = Number(historySummary?.totalPnl ?? openPnl);
+  const marketOpenPnl = Number((onchain ? summary?.unrealizedPnl : summary?.pnl) || 0);
+  const openPnl = marketOpenPnl + Number(stockPortfolio?.summary?.unrealizedPnl || 0);
+  const totalPnl = Number(historySummary?.totalPnl ?? marketOpenPnl) + Number(stockPortfolio?.summary?.pnl || 0);
+  const stockValuesUnknown = stocksEnabled && ((!stockPortfolio && stockError) || stockPortfolio?.summary?.currentValue === null);
 
   return (
     <>
@@ -1368,9 +1381,9 @@ export default function PointsPortfolio() {
               <div className="points-portfolio-stats">
                 {[
                   { label: 'Balance', value: balance == null ? '—' : `${fmt(balance)} MXNP`, color: 'var(--green)' },
-                  { label: 'En posiciones', value: `${fmt(summary?.currentValue || 0)} MXNP`, color: 'var(--text-primary)' },
-                  { label: 'PnL abierto', value: signedFmt(openPnl), color: openPnl >= 0 ? 'var(--success)' : 'var(--danger)' },
-                  { label: 'PnL total', value: signedFmt(totalPnl), color: totalPnl >= 0 ? 'var(--success)' : 'var(--danger)' },
+                  { label: 'En posiciones', value: stockValuesUnknown ? '—' : `${fmt(Number(summary?.currentValue || 0) + Number(stockPortfolio?.summary?.currentValue || 0))} MXNP`, color: 'var(--text-primary)' },
+                  { label: 'PnL abierto', value: stockValuesUnknown ? '—' : signedFmt(openPnl), color: openPnl >= 0 ? 'var(--success)' : 'var(--danger)' },
+                  { label: 'PnL total', value: stockValuesUnknown ? '—' : signedFmt(totalPnl), color: totalPnl >= 0 ? 'var(--success)' : 'var(--danger)' },
                 ].map(({ label, value, color }) => (
                   <div key={label} className="points-portfolio-stat-card">
                     <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.1em', marginBottom: 8, textTransform: 'uppercase' }}>
@@ -1391,10 +1404,28 @@ export default function PointsPortfolio() {
                 onCycleScopeChange={setPnlCycleScope}
                 loading={pnlLoading}
               />}
+              {stocksEnabled && <>
+                <div className="stock-filters" style={{ margin: '20px 0' }}>{[['all', lang === 'en' ? 'All' : 'Todo'], ['markets', lang === 'en' ? 'Markets' : 'Mercados'], ['stocks', lang === 'en' ? 'Stocks' : 'Acciones']].map(([key, label]) => <button type="button" key={key} aria-pressed={assetFilter === key} className={assetFilter === key ? 'active' : ''} onClick={() => setAssetFilter(key)}>{label}</button>)}</div>
+                {stockError && <p className="stock-alert" role="status">{stockError}</p>}
+                {assetFilter !== 'markets' && <StockPositions data={stockPortfolio} />}
+                <p className="stock-note">{lang === 'en' ? 'Stock PnL is recorded when trading and viewing your portfolio; the chart combines the latest available observations.' : 'El PnL de acciones se registra al operar y al consultar el portafolio; la gráfica combina las últimas observaciones disponibles.'}</p>
+              </>}
+
+              {msg && (
+                <div style={{
+                  background: msg.type === 'error' ? 'rgba(239,68,68,0.08)' : 'rgba(0,232,122,0.08)',
+                  border: `1px solid ${msg.type === 'error' ? 'rgba(239,68,68,0.3)' : 'rgba(0,232,122,0.3)'}`,
+                  color: msg.type === 'error' ? 'var(--danger)' : 'var(--green)',
+                  padding: '12px 14px', borderRadius: 10, marginBottom: 20,
+                  fontFamily: 'var(--font-mono)', fontSize: 12,
+                }}>
+                  {msg.text}
+                </div>
+              )}
               {executionBalance.error && <p role="alert" style={{ color: 'var(--danger)' }}>{executionBalance.error}</p>}
 
-              {loading && positions.length === 0 && <PositionSkeleton count={2} />}
-              {!loading && positions.length === 0 && (
+              {assetFilter !== 'stocks' && loading && positions.length === 0 && <PositionSkeleton count={2} />}
+              {assetFilter !== 'stocks' && !loading && positions.length === 0 && (
                 <div style={{
                   textAlign: 'center', padding: '60px 24px',
                   border: '1px dashed var(--border)', borderRadius: 16,
@@ -1407,7 +1438,7 @@ export default function PointsPortfolio() {
                   </Link>
                 </div>
               )}
-              {positions.length > 0 && (
+              {assetFilter !== 'stocks' && positions.length > 0 && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                   {positions.map(p => {
                     const key = `${p.marketId}-${p.outcomeIndex}`;
@@ -1431,6 +1462,15 @@ export default function PointsPortfolio() {
           )}
 
           {tab === 'historial' && (
+            <>
+            {stocksEnabled && <>
+              <div className="stock-filters" style={{ margin: '20px 0' }}>{[['all', lang === 'en' ? 'All' : 'Todo'], ['markets', lang === 'en' ? 'Markets' : 'Mercados'], ['stocks', lang === 'en' ? 'Stocks' : 'Acciones']].map(([key, label]) => <button type="button" key={key} aria-pressed={assetFilter === key} className={assetFilter === key ? 'active' : ''} onClick={() => setAssetFilter(key)}>{label}</button>)}</div>
+              {stockError && <p className="stock-alert" role="status">{stockError}</p>}
+              {assetFilter !== 'markets' && <StockHistory data={stockPortfolio} />}
+              {assetFilter === 'stocks' && <CycleScopeToggle value={historyCycleScope} onChange={setHistoryCycleScope} />}
+              {assetFilter === 'stocks' && !stockPortfolio?.trades?.length && <p className="stock-note">{lang === 'en' ? 'No stock trades in this cycle.' : 'No hay operaciones de acciones en este ciclo.'}</p>}
+            </>}
+            {assetFilter !== 'stocks' &&
             <HistoryView
               history={history}
               summary={historySummary}
@@ -1441,7 +1481,8 @@ export default function PointsPortfolio() {
               onRedeem={handleRedeem}
               onAcknowledgeCorrection={handleAcknowledgeResolutionCorrection}
               actionState={actionState}
-            />
+            />}
+            </>
           )}
 
           {tab === 'combinadas' && (

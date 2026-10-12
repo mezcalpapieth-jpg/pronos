@@ -1,9 +1,15 @@
 {
   "type": "module",
+  "scripts": {
+    "test:stocks": "node --test api/_lib/stock-*.test.js app/points/src/lib/stockApi.test.js"
+  },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",
     "@turnkey/sdk-server": "^5.3.0",
     "ethers": "^5.7.2",
     "linkedom": "0.18.13"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.9"
   }
 }
