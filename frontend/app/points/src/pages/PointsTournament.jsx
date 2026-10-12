@@ -901,6 +901,11 @@ function NewFeatureList({ lang, rules }) {
   const parlayFactor = Number(r.parlay?.edgeFactor || DEFAULT_RULES.parlay.edgeFactor).toFixed(2);
   const parlayPayoutCap = fmtInteger(r.parlay?.maxPayoutMxnp || DEFAULT_RULES.parlay.maxPayoutMxnp);
   const rows = lang === 'en' ? [
+    ...(r.stocks?.enabled ? [[
+      'Stocks',
+      'Invest in stocks from 100 MXNP and aim to grow your PnL with a more passive strategy. Gains and losses from open holdings and sales count toward tournament PnL after fees, even while you are offline. You can sell and use those MXNP in prediction markets. Holding stocks does not count as daily activity.',
+      '/stocks',
+    ]] : []),
     [
       'Conviction multiplier',
       `Winning lots bought at ${maxEntryPrice} or below earn +${dailyBonusRate}% of profit per day held until resolution, capped at ${maxMultiplier}x after ${maxHoldDays} days. The bonus is capped at ${capRate}% of your net PnL in that market.`,
@@ -914,6 +919,11 @@ function NewFeatureList({ lang, rules }) {
       `Limit orders near the live price can earn liquidity rewards at ${liquidityRate}% per week, prorated daily and capped at ${liquidityDailyCap} MXNP per user per day. If a buy order fills, that filled lot can count for conviction if it wins and stays held through resolution.`,
     ],
   ] : [
+    ...(r.stocks?.enabled ? [[
+      'Acciones',
+      'Invierte desde 100 MXNP en acciones para buscar aumentar tu PnL de forma más pasiva. Las ganancias y pérdidas de posiciones abiertas y ventas cuentan en el PnL del torneo después de comisiones, aunque estés desconectado. Puedes vender y usar esos MXNP en mercados de pronósticos. Mantener acciones no cuenta como actividad diaria.',
+      '/stocks',
+    ]] : []),
     [
       'Multiplicador de convicción',
       `Los lotes ganadores comprados a ${maxEntryPrice} o menos suman +${dailyBonusRate}% de ganancia por día mantenido hasta la resolución, con tope de ${maxMultiplier}x después de ${maxHoldDays} días. El bono se limita a ${capRate}% de tu PnL neto en ese mercado.`,
@@ -937,7 +947,7 @@ function NewFeatureList({ lang, rules }) {
     }}>
       <SectionLabel>{lang === 'en' ? 'New features' : 'Nuevos features'}</SectionLabel>
       <div style={{ display: 'grid', gap: 10 }}>
-        {rows.map(([label, text]) => (
+        {rows.map(([label, text, href]) => (
           <div key={label} style={{
             display: 'grid',
             gap: 5,
@@ -950,6 +960,9 @@ function NewFeatureList({ lang, rules }) {
             <p style={{ margin: 0, color: 'var(--text-secondary)', fontFamily: 'var(--font-body)', fontSize: 13, lineHeight: 1.55 }}>
               {text}
             </p>
+            {href && <Link to={href} style={{ color: 'var(--orange)', fontFamily: 'var(--font-body)', fontSize: 13 }}>
+              {lang === 'en' ? 'Explore stocks →' : 'Explorar acciones →'}
+            </Link>}
           </div>
         ))}
       </div>

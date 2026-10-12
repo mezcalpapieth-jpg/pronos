@@ -18,7 +18,6 @@ export function validateFx(fx, now = Date.now()) {
 
 export function createStockData(db, { fetchInfo = infoRequest, fetchFx = latestFx, fetchFxAt = historicalFx, now = Date.now } = {}) {
   const pending = new Map();
-  const venueFor = asset => asset.marketType === 'spot' ? 'spot' : asset.dex;
   async function cached(key, maxAge, loader, stale = false) {
     const [stored] = await rows(db, 'SELECT payload, fetched_at FROM points_stock_cache WHERE cache_key = $1', [key]);
     const age = now() - new Date(stored?.fetched_at).getTime();
@@ -51,22 +50,17 @@ export function createStockData(db, { fetchInfo = infoRequest, fetchFx = latestF
 
   async function metadata(venue, stale = false) {
     return cached(`meta:v4:${venue || 'native'}`, 5000, async () => {
-      const response = await fetchInfo(venue === 'spot' ? { type: 'spotMetaAndAssetCtxs' } : { type: 'metaAndAssetCtxs', dex: venue });
+      const response = await fetchInfo({ type: 'metaAndAssetCtxs', dex: venue });
       const universe = response?.[0]?.universe;
       const contexts = response?.[1];
       if (!Array.isArray(universe) || !Array.isArray(contexts)) throw stockError('stock_price_unavailable', 503);
-      const assets = STOCK_ASSETS.filter(asset => venueFor(asset) === venue).map(asset => {
+      const assets = STOCK_ASSETS.filter(asset => asset.dex === venue).map(asset => {
         const i = universe.findIndex(item => item.name === asset.coin);
-        const token = venue === 'spot' ? response[0].tokens?.find(t => t.tokenId === asset.tokenId) : null;
-        const identityMatches = venue !== 'spot' || (token?.evmContract?.address?.toLowerCase() === asset.wrapperAddress
-          && universe[i]?.tokens?.includes(token.index));
-        // Spot universe entries are sparse and can be reordered independently
-        // of contexts. Their explicit market ID is the join key.
-        const context = venue === 'spot' ? contexts.find(item => item.coin === asset.coin) : contexts[i];
-        const szDecimals = venue === 'spot' ? token?.szDecimals : universe[i]?.szDecimals;
+        const context = contexts[i];
+        const szDecimals = universe[i]?.szDecimals;
         const price = Number(context?.markPx);
         const previous = Number(context?.prevDayPx);
-        const available = i >= 0 && identityMatches && !universe[i].isDelisted && Number.isFinite(price) && price > 0
+        const available = i >= 0 && !universe[i].isDelisted && Number.isFinite(price) && price > 0
           && Number.isInteger(szDecimals) && szDecimals >= 0 && szDecimals <= 8;
         return { ...asset, available, szDecimals, fetchedAt: now(), priceUsd: available ? String(context.markPx) : null,
           change24h: available && previous > 0 ? (price / previous - 1) * 100 : null,
@@ -76,11 +70,11 @@ export function createStockData(db, { fetchInfo = infoRequest, fetchFx = latestF
     }, stale);
   }
 
-  async function assets(stale = false, ticker, { includePreviews = true } = {}) {
+  async function assets(stale = false, ticker) {
     const selected = ticker ? stockAsset(ticker) : null;
     if (ticker && !selected) throw stockError('stock_not_found', 404);
-    const catalogue = selected ? [selected] : STOCK_ASSETS.filter(asset => includePreviews || !asset.readOnly);
-    const dexes = [...new Set(catalogue.map(venueFor))];
+    const catalogue = selected ? [selected] : STOCK_ASSETS;
+    const dexes = [...new Set(catalogue.map(asset => asset.dex))];
     const [results, exchange] = await Promise.all([
       Promise.allSettled(dexes.map(dex => metadata(dex, stale))), fx(stale),
     ]);
@@ -98,7 +92,7 @@ export function createStockData(db, { fetchInfo = infoRequest, fetchFx = latestF
     const asset = stockAsset(ticker);
     if (!asset) throw stockError('stock_not_found', 404);
     const [meta, exchange, response] = await Promise.all([
-      metadata(venueFor(asset)), fx(), cached(`book:${asset.ticker}`, fresh ? 0 : 3000, async () => {
+      metadata(asset.dex), fx(), cached(`book:${asset.ticker}`, fresh ? 0 : 3000, async () => {
         const data = await fetchInfo({ type: 'l2Book', coin: asset.coin });
         return { ...data, fetchedAt: now() };
       }),

@@ -9,7 +9,7 @@ Reviewed all 10 pages of `/Users/Fran/Downloads/Pronos_Acciones_Spec_MXNP.pdf`, 
 | PDF requirement | Status | Evidence / limitation |
 | --- | --- | --- |
 | Points only; no deposits, wallets, external orders, leverage, shorts or limits | Implemented | Stock routes update the internal points wallet; only the public Hyperliquid Info API is used. |
-| Nine initial assets and their categories | Implemented and expanded after PDF | Original seven equities, SP500, GOLD, plus SPCX, BTC, ETH and SOL. SPYX is a read-only ETF preview. Catalogue is code-defined rather than an editable SQL assets table. |
+| Nine initial assets and their categories | Implemented and expanded after PDF | Original seven equities, SP500, GOLD, plus SPCX, BTC, ETH and SOL. ETFs were removed from the Points scope at the user's request. Catalogue is code-defined rather than an editable SQL assets table. |
 | Existing header and Acciones category pill | Implemented | Points shell/navigation reused; stock search and category filters are in the list page. Header search continues to search prediction markets. |
 | Top EN VIVO ticker with 24-hour changes | Implemented in follow-up | `StockLiveTicker.jsx` reuses `PointsTicker.jsx` markup/styles on stock list/detail. Demo is labeled DEMO; outages hide changes and show SIN DATOS. |
 | Searchable list; technology, indices, commodities filters; rows open detail | Implemented | `PointsStocks.jsx`. |
@@ -53,7 +53,7 @@ The implementation intentionally preserves quantity-rounding remainder in the us
 | 30D | 4 hours |
 | List sparkline, last 24 hours | 1 hour |
 
-Live mode draws the `c` close from each returned `candleSnapshot` candle. `t` is the candle interval start, explicitly labeled in UTC. The final candle can still be forming. The chart fetch timestamp and the live order-book timestamp/age are shown separately. The chart is in USD; the large asset price is in MXNP using the current FIX conversion. Historical FX is not reconstructed. Mark price and candle close can differ. Detail price/book polling is 3 seconds, list polling 5 seconds, candle polling 60 seconds and candle cache 55 seconds. These are separate from candle interval size. Sparse markets can have genuinely old last-trade candles; the ETF preview displays that distinction.
+Live mode draws the `c` close from each returned `candleSnapshot` candle. `t` is the candle interval start, explicitly labeled in UTC. The final candle can still be forming. The chart fetch timestamp and the live order-book timestamp/age are shown separately. The chart is in USD; the large asset price is in MXNP using the current FIX conversion. Historical FX is not reconstructed. Mark price and candle close can differ. Detail price/book polling is 3 seconds, list polling 5 seconds, candle polling 60 seconds and candle cache 55 seconds. These are separate from candle interval size. Sparse markets can have genuinely old last-trade candles; live buy/sell timestamps are shown separately.
 
 The local `stocksDemo=1` preview remains synthetic, including its FX and volume. Real staging checks verified the browser-to-Pronos-to-Neon fill path with Hyperliquid prices and Banxico FIX on October 12. The synthetic preview is a separate tool.
 
@@ -73,9 +73,9 @@ No on-chain share ownership, crypto funding, wallet signature or external order 
 
 ## Verification
 
-- 67 focused stock/tournament/snapshot/wallet/leaderboard tests pass. Price interval mappings, unchanged provider closes/timestamps, nearest-candle selection, UTC formatting, venue routing, spot context identity, ETF read-only enforcement and Vercel function tracing are covered.
+- 73 focused stock/tournament/snapshot/wallet/leaderboard tests pass. Price interval mappings, unchanged provider closes/timestamps, nearest-candle selection, UTC formatting, venue routing, rejection of removed instruments and Vercel function tracing are covered.
 - Six real Neon contention scenarios pass across three independent connections, including a stock/prediction purchase race, double-sale prevention, idempotency and reset contention.
-- Real provider checks verified 14 displayed assets, including 13 tradable instruments and one ETF preview, Banxico FIX and a completed one-minute cutoff price.
+- The original real provider checks verified 14 assets, Banxico FIX and a completed one-minute cutoff price. The ETF was subsequently removed, leaving 13 supported instruments.
 - Authenticated local staging browser checks completed a buy, partial sale and sell-all, with shared-wallet debits/credits and holding changes.
 - Points production build passes with existing dependency annotation and bundle-size warnings.
 - Prior local chart checks verified pointer-driven price/time selection, five-minute/one-hour range changes and a 390px layout without overflow. The original broad suite's two unchanged dated fixture failures are documented in the implementation notes.

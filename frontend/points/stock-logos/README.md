@@ -2,4 +2,4 @@ Company SVGs, including SpaceX, and the Bitcoin, Ethereum and Solana symbols are
 
 Source: https://github.com/simple-icons/simple-icons/tree/13.21.0/icons
 
-Microsoft is a geometric SVG based on the supplied UI reference. SP500 and GOLD are original Pronos category illustrations. SPYX reuses the S&P 500 category illustration.
+Microsoft is a geometric SVG based on the supplied UI reference. SP500 and GOLD are original Pronos category illustrations.

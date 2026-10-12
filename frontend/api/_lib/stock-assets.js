@@ -17,9 +17,7 @@ const perpetualAssets = [
   ticker, coin: dex ? `${dex}:${ticker}` : ticker, dex, marketType: 'perpetual', name, category, color, monogram, order,
 }));
 
-export const STOCK_ASSETS = Object.freeze([...perpetualAssets, Object.freeze({ ticker: 'SPYX', name: 'S&P 500 ETF', coin: '@703', dex: '', marketType: 'spot',
-  tokenId: '0x29067197b3125c8b82ad0f338e4a31b2', wrapperAddress: '0xe7e553cd128f0011777323a0b44a7b96ea1cb540',
-  category: 'etfs', color: '#ff5500', monogram: 'ETF', order: 13, readOnly: true })]);
+export const STOCK_ASSETS = Object.freeze(perpetualAssets);
 
 export function stockAsset(ticker) {
   const value = String(ticker || '').trim().toUpperCase();

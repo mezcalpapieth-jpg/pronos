@@ -23,7 +23,6 @@ async function tradingCycle(db, now) {
 export function stockOrderRequest(body = {}) {
   const asset = stockAsset(body.ticker);
   if (!asset) throw stockError('stock_not_found', 404);
-  if (asset.readOnly) throw stockError('stock_preview_only', 503);
   if (!['buy', 'sell'].includes(body.side)) throw stockError('invalid_side');
   const hasAmount = body.amount != null;
   const hasQuantity = body.quantity != null;
@@ -37,7 +36,7 @@ export function stockOrderRequest(body = {}) {
 }
 
 export async function createStockQuote(db, { username, request, book, now = Date.now() }) {
-  if (stockAsset(request.ticker)?.readOnly) throw stockError('stock_preview_only', 503);
+  if (!stockAsset(request.ticker)) throw stockError('stock_not_found', 404);
   const cycle = await tradingCycle(db, now);
   assertStockQuoteFresh(book, now);
   if (book.ticker !== request.ticker) throw stockError('invalid_quote');
