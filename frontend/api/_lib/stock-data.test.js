@@ -57,6 +57,30 @@ test('candle interval matches the selected range and rejects foreign symbols', a
   }, now: () => now });
   assert.equal((await data.candles('AAPL', '7D')).candles.length, 1);
 });
+test('every chart range uses its PDF interval and retains real closes and timestamps for 60 seconds', async () => {
+  for (const [range, interval, durationMs] of [['4H', '5m', 14400000], ['24H', '15m', 86400000],
+    ['7D', '1h', 604800000], ['30D', '4h', 2592000000], ['SPARK', '1h', 86400000]]) {
+    let clock = now;
+    let requests = 0;
+    const data = createStockData(cacheDb(), { now: () => clock, fetchInfo: async body => {
+      requests++;
+      assert.equal(body.req.coin, 'xyz:NVDA');
+      assert.equal(body.req.interval, interval);
+      assert.equal(body.req.endTime - body.req.startTime, durationMs);
+      return [{ s: 'xyz:NVDA', i: interval, t: now - 600000, c: '231.125' },
+        { s: 'xyz:NVDA', i: '1m', t: now, c: '999' }];
+    } });
+    const result = await data.candles('NVDA', range);
+    assert.equal(result.interval, interval);
+    assert.deepEqual(result.candles, [{ t: now - 600000, close: 231.125 }]);
+    clock += 59999;
+    await data.candles('NVDA', range);
+    assert.equal(requests, 1);
+    clock++;
+    await data.candles('NVDA', range);
+    assert.equal(requests, 2);
+  }
+});
 test('FX accepts a recent business-day FIX, rejects missing, future and old dates', () => {
   assert.equal(validateFx(fx, now), fx);
   for (const date of [null, 'bad', '2026-02-30', new Date(now - 8 * 86400000).toISOString().slice(0, 10), new Date(now + 86400000).toISOString().slice(0, 10)]) {

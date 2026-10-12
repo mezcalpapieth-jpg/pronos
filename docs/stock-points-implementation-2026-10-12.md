@@ -2,7 +2,7 @@
 
 Branch: `stock-points`, based on `pointbreak` at `ab8036a`.
 
-This is the first complete points-only slice of the Acciones concept in `Pronos_Acciones_Spec_MXNP.pdf`. It adds simulated exposure to seven equities, the S&P 500 and gold. It does not execute orders on Hyperliquid, represent ownership of securities, or interact with on-chain wallets/contracts.
+This is an initial points-only implementation of the Acciones concept in `Pronos_Acciones_Spec_MXNP.pdf`. It adds simulated exposure to seven equities, the S&P 500 and gold. Live staging integration has not been validated, and the local preview uses synthetic prices. See [the full PDF audit](stock-points-spec-audit-2026-10-12.md) for implemented requirements, pending items and deliberate differences. It does not execute orders on Hyperliquid, represent ownership of securities, or interact with on-chain wallets/contracts.
 
 ## Implemented
 
@@ -13,6 +13,8 @@ This is the first complete points-only slice of the Acciones concept in `Pronos_
 - Server-issued quotes, book timestamps under 10 seconds old, expiry and immutable fill records. Fills walk displayed depth, respect provider quantity precision, and reject material unfilled orders. Purchases debit actual fill plus fee and preserve rounding remainder; fee is included in cost basis.
 - One real Postgres transaction updates the shared wallet, stock holding, trade, valuation and `points_distributions` audit. A unique user/idempotency key supports retries and rejects changed requests. Quotes belong to one user/cycle/side and can be consumed once. The browser retains the same key after an uncertain confirmation.
 - Existing Portfolio shows stocks alongside prediction positions, asset filters, stock history, realized/unrealized PnL and a combined observed PnL chart.
+- Chart crosshair/readout shows the nearest candle's close price in USD and interval-start date/time in UTC. Mouse, tap and arrow/Home/End keys are supported; time labels and selected candle interval are visible. Charts refresh every 60 seconds; mark prices and order books are polled every 5 seconds. Demo samples now follow the same interval spacing.
+- Stock pages reuse the existing ticker with 24-hour changes. Detail includes 24-hour USD volume, indicative estimates that update with the amount, a sell-all button, and a net-proceeds confirmation after selling. Portfolio rows include average cost and PnL percentage and link to the asset detail.
 - Demo support behind existing demo activation. The local preview entry is compiled out of production builds and labels its prices/FX synthetic.
 
 ## Local preview
@@ -56,7 +58,8 @@ Metadata/book caches persist in Postgres across instances and coalesce refreshes
 - New stock tests cover integer accounting, remainder preservation, fees/cost basis, depth, malformed/stale books, FX validity, symbol mapping, feature gate, authentication/CSRF, SQL rollback, retries, quote ownership/expiry, cycle rollover, stale portfolio marks and combined PnL samples.
 - Transaction tests use PGlite, an isolated Postgres engine. It serializes transactions within one engine; it is not proof of multi-connection Neon contention behavior.
 - Browser preview verified a buy, wallet debit, holding in Portfolio, sell-all and wallet credit; mobile and desktop layouts were inspected. Preview prices are explicitly synthetic.
-- All 21 new stock tests pass. The final wider suite passed 797 of 799 tests. The two failures reproduced independently in unchanged code: the mañanera fallback fixture expects an older article URL, and a team schedule fixture treats a June 2026 event as future relative to the current October date.
+- All 24 stock tests pass after the chart follow-up. The initial implementation's wider suite passed 797 of 799 tests. The two failures reproduced independently in unchanged code: the mañanera fallback fixture expects an older article URL, and a team schedule fixture treats a June 2026 event as future relative to the current October date.
+- Read-only public Hyperliquid requests on October 12 returned NVIDIA candles for all four intervals. This verifies availability of the external feed, not the authenticated Pronos API/database path. Browser follow-up checks verified candle selection and changing order estimates; the Points production build passed.
 - Both MVP and Points production builds passed. Existing dependency annotation and large-bundle warnings remain. Only generated Points output is included in this branch's checkpoint.
 
 Before enabling a live beta, run the stock routes on an isolated Neon branch with real session cookies, Banxico FIX and Hyperliquid data. Verify competing stock/prediction purchases, simultaneous stock sales, idempotent retries across instances, rollover contention and provider outages. Then enable both flags on a preview deployment and review the resulting fills before deciding when to cherry-pick into `pointbreak`.
