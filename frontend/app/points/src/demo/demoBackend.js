@@ -27,6 +27,7 @@ import {
   tournamentRulesPayload,
 } from '../../../../api/_lib/points-tournament-config.js';
 import { getDemoState, updateDemoState } from './demoStore.js';
+import { routeDemoStocks } from './demoStocks.js';
 
 const json = (body, status = 200) => ({ status, body });
 
@@ -1451,6 +1452,7 @@ export function routeDemoRequest(url, method, body) {
   const parsed = new URL(url, window.location.origin);
   const path = parsed.pathname;
   const params = parsed.searchParams;
+  if (path.startsWith('/api/points/stocks/')) return routeDemoStocks(path, method, params, body || {});
   const state = getDemoState();
 
   if (method === 'GET') {

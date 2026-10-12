@@ -36,6 +36,8 @@ const TermsOfService = lazy(() => import('@app/pages/TermsOfService.jsx'));
 const TeamSearchPage = lazy(() => import('@app/pages/TeamSearchPage.jsx'));
 const TeamProfilePage = lazy(() => import('@app/pages/TeamProfilePage.jsx'));
 const PointsPortfolio = lazy(() => import('./pages/PointsPortfolio.jsx'));
+const PointsStocks = lazy(() => import('./pages/PointsStocks.jsx'));
+const PointsStockDetail = lazy(() => import('./pages/PointsStockDetail.jsx'));
 const PointsTournament = lazy(() => import('./pages/PointsTournament.jsx'));
 const PointsEarn = lazy(() => import('./pages/PointsEarn.jsx'));
 const PointsDeveloper = lazy(() => import('./pages/PointsDeveloper.jsx'));
@@ -384,6 +386,7 @@ function Shell({ onOpenLogin, isAdmin }) {
   const showCategoryBar = isHome
     || path.startsWith('/c/')
     || path.startsWith('/market')
+    || path.startsWith('/stocks')
     || path === '/teams'
     || path.startsWith('/teams/');
 
@@ -413,6 +416,8 @@ function Shell({ onOpenLogin, isAdmin }) {
           <Route path="/c/:slug" element={<PointsCategoryPage />} />
           <Route path="/market" element={<PointsMarketDetail onOpenLogin={onOpenLogin} isAdmin={isAdmin} />} />
           <Route path="/portfolio" element={<PointsPortfolio />} />
+          <Route path="/stocks" element={<PointsStocks />} />
+          <Route path="/stocks/:ticker" element={<PointsStockDetail onOpenLogin={onOpenLogin} />} />
           <Route path="/torneo" element={<PointsTournament />} />
           <Route path="/earn" element={<PointsEarn onOpenLogin={onOpenLogin} />} />
           <Route path="/developer" element={<PointsDeveloper onOpenLogin={onOpenLogin} />} />

@@ -14,6 +14,7 @@ import { preloadCryptoTicker } from './lib/useCryptoTicker.js';
 import App from './App.jsx';
 import '@app/styles/mvp.css';
 import './points.css';
+import './stocks.css';
 
 initSentry();
 
@@ -40,6 +41,12 @@ function liveSeedRequested() {
 }
 
 async function bootstrap() {
+  // Local preview entry: /points/stocks?stocksDemo=1. This branch is removed
+  // from production builds; the existing demos retain their own access gates.
+  if (import.meta.env.DEV && new URLSearchParams(window.location.search).get('stocksDemo') === '1') {
+    window.sessionStorage.setItem('pronos-video-demo-active', '1');
+    window.sessionStorage.setItem('pronos-stock-demo', '1');
+  }
   const isRis26Route = /^\/(?:points\/)?ris26(?:\/|$)/.test(window.location.pathname);
 
   // Must run before anything renders or pre-warms: once installed, every

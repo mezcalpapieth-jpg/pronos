@@ -15,7 +15,8 @@
  */
 import React from 'react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
-import { useT } from '@app/lib/i18n.js';
+import { useLang, useT } from '@app/lib/i18n.js';
+import { stocksEnabled } from '../lib/stockApi.js';
 
 // Order here = visual order in the bar. Each entry maps a URL slug
 // (used in /c/<slug>) to the i18n key that produces the label.
@@ -27,6 +28,7 @@ import { useT } from '@app/lib/i18n.js';
 export const CATEGORY_TABS = [
   { slug: 'noticias',    tKey: 'points.cat.noticias',   news: true },
   { slug: 'all',         tKey: 'points.cat.trending'    },
+  ...(stocksEnabled ? [{ slug: 'stocks', stocks: true }] : []),
   { slug: 'nuevos-mercados', tKey: 'points.cat.worldCup', highlight: true },
   { slug: 'mexico',      tKey: 'points.cat.mexico',      regional: true },
   { slug: 'deportes',    tKey: 'points.cat.deportes'    },
@@ -45,6 +47,7 @@ export const CATEGORY_TABS = [
  * 'all'; /c/<slug> extracts the slug.
  */
 export function activeSlugFromLocation(pathname, params) {
+  if (pathname === '/stocks' || pathname.startsWith('/stocks/')) return 'stocks';
   if (params?.slug) return params.slug;
   if (pathname === '/' || pathname === '') return 'all';
   const m = pathname.match(/^\/c\/([^/]+)/);
@@ -76,10 +79,12 @@ export default function PointsCategoryBar() {
   const location = useLocation();
   const params = useParams();
   const t = useT();
+  const lang = useLang();
   const active = activeSlugFromLocation(location.pathname, params);
 
   function handleClick(slug) {
-    if (slug === 'all') navigate('/');
+    if (slug === 'stocks') navigate('/stocks');
+    else if (slug === 'all') navigate('/');
     else navigate(`/c/${slug}`);
   }
 
@@ -89,6 +94,11 @@ export default function PointsCategoryBar() {
         <div className="market-filters">
           {CATEGORY_TABS.map(cat => {
             const isActive = active === cat.slug;
+            if (cat.stocks) return <button type="button" key={cat.slug} onClick={() => handleClick(cat.slug)}
+              className="filter-btn" aria-current={isActive ? 'page' : undefined}
+              style={{ color: 'var(--orange)', borderColor: isActive ? 'var(--orange)' : 'var(--border)', background: isActive ? 'rgba(255,85,0,.12)' : undefined }}>
+              {lang === 'en' ? 'Stocks' : 'Acciones'}
+            </button>;
             if (cat.highlight) {
               // Special treatment for the tournament drop bucket: a
               // Pronos orange/green treatment so it catches the eye
