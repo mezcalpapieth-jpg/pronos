@@ -41,15 +41,25 @@ function parseJsonb(value, fallback = null) {
   }
 }
 
+function queryRows(result) {
+  if (Array.isArray(result)) return result;
+  return Array.isArray(result?.rows) ? result.rows : [];
+}
+
 export async function runTokenMcapSnapshots({
   dryRun = false,
   capturedAt = new Date().toISOString(),
   purgeOld = true,
+} = {}, {
+  sqlClient = sql,
+  ensureSchema = ensurePointsSchema,
+  readSnapshot = readCoinGeckoTokenMarketCap,
+  writeSnapshot = writeSolanaTokenMcapSnapshot,
 } = {}) {
   const started = Date.now();
 
-  await ensurePointsSchema(sql);
-  const candidates = await sql.query(`
+  await ensureSchema(sqlClient);
+  const candidates = await sqlClient.query(`
     SELECT id, resolver_config
       FROM points_markets
      WHERE status = 'active'
@@ -59,7 +69,7 @@ export async function runTokenMcapSnapshots({
      ORDER BY end_time ASC, id ASC
      LIMIT 25
   `, [COINGECKO_TOKEN_MCAP_SOURCE]);
-  const rows = candidates?.rows || [];
+  const rows = queryRows(candidates);
   const markets = rows.map(row => ({
     id: Number(row.id),
     cfg: parseJsonb(row.resolver_config, {}),
@@ -88,13 +98,13 @@ export async function runTokenMcapSnapshots({
     let snapshot = cache.get(key);
     try {
       if (!snapshot) {
-        snapshot = await readCoinGeckoTokenMarketCap({
+        snapshot = await readSnapshot({
           coinId: market.cfg.coinId,
           capturedAt,
         });
         cache.set(key, snapshot);
       }
-      await writeSolanaTokenMcapSnapshot(sql, {
+      await writeSnapshot(sqlClient, {
         marketId: market.id,
         coinId: market.cfg.coinId,
         network: market.cfg.network || 'solana',
@@ -117,7 +127,7 @@ export async function runTokenMcapSnapshots({
   }
 
   const purged = purgeOld
-    ? await sql.query(`
+    ? await sqlClient.query(`
         DELETE FROM points_token_mcap_snapshots
          WHERE captured_at < NOW() - INTERVAL '60 days'
          RETURNING id
@@ -132,7 +142,7 @@ export async function runTokenMcapSnapshots({
     written: written.length,
     sample: written.slice(0, 5),
     errors,
-    purged: (purged?.rows || []).length,
+    purged: queryRows(purged).length,
     elapsedMs: Date.now() - started,
   };
 }
