@@ -21,6 +21,10 @@ function fixture({ shape = 'array', candidates, readError = null } = {}) {
       query: async (query, params) => {
         if (query.includes('SELECT id, resolver_config')) {
           assert.deepEqual(params, ['coingecko-token-mcap']);
+          assert.match(query, /pg_input_is_valid\(resolver_config->>'closesAt', 'timestamp with time zone'\)/);
+          assert.match(query, /ELSE end_time\s+END AS snapshot_deadline/);
+          assert.match(query, /WHERE snapshot_deadline > NOW\(\) - INTERVAL '10 minutes'/);
+          assert.match(query, /ORDER BY snapshot_deadline ASC, id ASC/);
           return result(candidates ?? [
             { id: 350154, resolver_config: cfg },
             { id: 350155, resolver_config: JSON.stringify(cfg) },
@@ -96,6 +100,18 @@ test('indexer collection preserves retained evidence when purgeOld is false', as
   assert.equal(report.written, 2);
   assert.equal(report.purged, 0);
   assert.equal(f.purgeCalls(), 0);
+});
+
+test('collector keeps gathering resolution evidence after trading closes early', async () => {
+  const f = fixture({ candidates: [{
+    id: 350154,
+    end_time: '2026-11-01T04:59:00.000Z',
+    resolver_config: { ...cfg, closesAt: '2026-11-01T05:59:59.000Z' },
+  }] });
+  const report = await runTokenMcapSnapshots({ capturedAt, purgeOld: false }, f.deps);
+  assert.equal(report.candidates, 1);
+  assert.equal(report.written, 1);
+  assert.equal(f.inserted[0][10], capturedAt);
 });
 
 test('collector skips malformed candidates and reports upstream failures', async () => {

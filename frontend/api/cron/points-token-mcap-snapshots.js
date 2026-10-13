@@ -60,13 +60,22 @@ export async function runTokenMcapSnapshots({
 
   await ensureSchema(sqlClient);
   const candidates = await sqlClient.query(`
+    WITH token_markets AS (
+      SELECT id, resolver_config,
+             CASE
+               WHEN pg_input_is_valid(resolver_config->>'closesAt', 'timestamp with time zone')
+                 THEN (resolver_config->>'closesAt')::timestamptz
+               ELSE end_time
+             END AS snapshot_deadline
+        FROM points_markets
+       WHERE status = 'active'
+         AND resolver_type = 'api_price'
+         AND resolver_config->>'source' = $1
+    )
     SELECT id, resolver_config
-      FROM points_markets
-     WHERE status = 'active'
-       AND resolver_type = 'api_price'
-       AND resolver_config->>'source' = $1
-       AND end_time > NOW() - INTERVAL '10 minutes'
-     ORDER BY end_time ASC, id ASC
+      FROM token_markets
+     WHERE snapshot_deadline > NOW() - INTERVAL '10 minutes'
+     ORDER BY snapshot_deadline ASC, id ASC
      LIMIT 25
   `, [COINGECKO_TOKEN_MCAP_SOURCE]);
   const rows = queryRows(candidates);
