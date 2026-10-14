@@ -3491,23 +3491,11 @@ function ParallelLegEarlyNoControls({ market, workingLegId, onResolveNo }) {
   if (legs.length === 0) return null;
 
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 6,
-      marginTop: 10,
-      maxWidth: 620,
-    }}>
-      <div style={{
-        fontFamily: 'var(--font-mono)',
-        fontSize: 9,
-        letterSpacing: '0.08em',
-        textTransform: 'uppercase',
-        color: 'var(--text-muted)',
-      }}>
-        Resolver child temprano a No
+    <div className="points-admin-early-no">
+      <div className="points-admin-early-no-title">
+        Resolver opciones a NO
       </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+      <div className="points-admin-leg-options">
         {legs.map((leg, index) => {
           const reserves = Array.isArray(leg.reserves) ? leg.reserves.map(Number) : [];
           const yesPct = parallelYesProbabilityFromReserves(reserves[0], reserves[1]) * 100;
@@ -3517,23 +3505,12 @@ function ParallelLegEarlyNoControls({ market, workingLegId, onResolveNo }) {
           return (
             <div
               key={leg.id || index}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 7,
-                padding: '5px 6px 5px 8px',
-                borderRadius: 8,
-                border: `1px solid ${resolvedNo ? 'rgba(239,68,68,0.32)' : 'var(--border)'}`,
-                background: resolvedNo ? 'rgba(239,68,68,0.08)' : 'rgba(255,255,255,0.03)',
-                color: 'var(--text-secondary)',
-                fontFamily: 'var(--font-mono)',
-                fontSize: 10,
-              }}
+              className={`points-admin-leg-option${resolvedNo ? ' is-no' : ''}`}
             >
-              <span style={{ maxWidth: 170, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <span className="points-admin-leg-label" title={leg.label || `Opción ${index + 1}`}>
                 {leg.label || `Opción ${index + 1}`}
               </span>
-              <span style={{ color: 'var(--text-muted)' }}>
+              <span className="points-admin-leg-price">
                 {Number.isFinite(yesPct) ? `${yesPct.toFixed(0)}%` : '--'}
               </span>
               {isActive ? (
@@ -3541,20 +3518,9 @@ function ParallelLegEarlyNoControls({ market, workingLegId, onResolveNo }) {
                   type="button"
                   onClick={() => onResolveNo(market, leg)}
                   disabled={workingLegId === leg.id}
-                  title="Resolver solo este child market como No; el parent sigue activo"
-                  style={{
-                    padding: '4px 7px',
-                    borderRadius: 7,
-                    border: '1px solid rgba(239,68,68,0.36)',
-                    background: 'rgba(239,68,68,0.10)',
-                    color: '#f87171',
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: 9,
-                    cursor: workingLegId === leg.id ? 'not-allowed' : 'pointer',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.04em',
-                    opacity: workingLegId === leg.id ? 0.55 : 1,
-                  }}
+                  aria-label={`Resolver ${leg.label || `Opción ${index + 1}`} como No`}
+                  title="Resolver solo esta opción como No; el mercado sigue activo"
+                  className="points-admin-leg-no"
                 >
                   {workingLegId === leg.id ? '...' : 'No'}
                 </button>
@@ -5736,13 +5702,14 @@ function ResolveControls({
   return (
     <>
       {multiple ? (
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', maxWidth: 480 }}>
+        <div className="points-admin-resolve-options">
           {outcomes.map((label, i) => {
             const checked = selectedSet.has(i);
             return (
               <button
                 key={i}
                 type="button"
+                aria-pressed={checked}
                 onClick={() => toggleSelected(i)}
                 disabled={resolving}
                 style={{

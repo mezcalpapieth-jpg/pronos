@@ -4,12 +4,14 @@ const env = import.meta.env || {};
 export const stocksEnabled = env.VITE_POINTS_STOCKS_ENABLED === 'true'
   || (env.DEV && env.VITE_POINTS_STOCKS_ENABLED !== 'false');
 const base = '/api/points/stocks';
-const timeout = () => ({ signal: AbortSignal.timeout(12000) });
+const timeout = (milliseconds = 12000) => ({ signal: AbortSignal.timeout(milliseconds) });
 export const fetchStockAssets = ticker => getJson(`${base}/assets${ticker ? `?ticker=${encodeURIComponent(ticker)}` : ''}`, timeout());
 export const fetchStockCandles = (ticker, range) => getJson(`${base}/candles?ticker=${encodeURIComponent(ticker)}&range=${range}`, timeout());
 export const fetchStockPortfolio = (cycle = 'current') => getJson(`${base}/positions?cycle=${cycle}`, timeout());
 export const fetchStockHoldings = () => getJson(`${base}/positions?cycle=current&view=holdings`, timeout());
-export const quoteStock = body => postJson(`${base}/quote`, body, timeout());
+// A cold quote function can spend over twelve seconds initializing its schema
+// before loading a fresh book. The quote's own ten-second expiry starts later.
+export const quoteStock = body => postJson(`${base}/quote`, body, timeout(30000));
 export const tradeStock = (side, body) => postJson(`${base}/${side}`, body, timeout());
 const errors = {
   stocks_disabled: ['Acciones estará disponible pronto.', 'Stocks will be available soon.'],
@@ -28,6 +30,9 @@ const errors = {
   stock_not_found: ['Activo no disponible.', 'Asset unavailable.'],
 };
 export function stockErrorMessage(error, lang = 'es') {
+  if (error?.name === 'TimeoutError') return lang === 'en'
+    ? 'Loading took too long. Try again without refreshing the page.'
+    : 'La carga tardó demasiado. Intenta otra vez sin recargar la página.';
   return errors[error?.code]?.[lang === 'en' ? 1 : 0] || publicErrorMessage(error, lang);
 }
 
