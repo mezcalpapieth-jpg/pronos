@@ -350,13 +350,13 @@
 }
 
 .points-admin-market-card {
-  align-items: center;
+  align-items: start;
   background: var(--surface1);
   border: 1px solid var(--border);
   border-radius: 10px;
   display: grid;
   gap: 12px;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr);
   margin-bottom: 10px;
   min-width: 0;
   overflow: hidden;
@@ -374,6 +374,7 @@
 
 .points-admin-market-toggles {
   flex-wrap: nowrap;
+  padding-top: 2px;
 }
 
 .points-admin-market-main {
@@ -402,11 +403,106 @@
 }
 
 .points-admin-market-actions {
-  justify-content: flex-end;
+  border-top: 1px solid var(--border);
+  grid-column: 1 / -1;
+  justify-content: flex-start;
+  padding-top: 10px;
+}
+
+.points-admin-market-actions > div {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.points-admin-resolve-options {
+  display: flex;
+  flex: 1 1 360px;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.points-admin-resolve-options button {
+  max-width: 100%;
+  overflow-wrap: break-word;
+  text-align: left;
+}
+
+.points-admin-early-no {
+  margin-top: 10px;
+  min-width: 0;
+}
+
+.points-admin-early-no-title {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+
+.points-admin-leg-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.points-admin-leg-option {
+  align-items: center;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  display: inline-flex;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  gap: 7px;
+  max-width: 100%;
+  min-width: 0;
+  padding: 5px 6px 5px 8px;
+}
+
+.points-admin-leg-option.is-no {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.32);
+}
+
+.points-admin-leg-label {
+  max-width: 220px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.points-admin-leg-price {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.points-admin-leg-no {
+  background: rgba(239, 68, 68, 0.10);
+  border: 1px solid rgba(239, 68, 68, 0.36);
+  border-radius: 7px;
+  color: #f87171;
+  cursor: pointer;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  padding: 4px 7px;
+  text-transform: uppercase;
+}
+
+.points-admin-leg-no:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .points-admin-market-actions button,
 .points-admin-market-actions select {
+  max-width: 100%;
   min-height: 34px;
   min-width: 0;
   white-space: normal;
@@ -506,6 +602,12 @@
     line-height: 1.18;
     padding: 10px 8px !important;
     width: 100%;
+  }
+
+  .points-admin-market-actions .points-admin-resolve-options button {
+    min-height: 34px;
+    padding: 6px 8px !important;
+    width: auto;
   }
 }
 
