@@ -378,7 +378,7 @@ function LeaderboardRow({ row, currentUsername, rules, compact = false, lang = '
         <span title={lang === 'en' ? 'Market and stock PnL, before tournament bonuses and inactivity' : 'PnL de mercados y acciones, antes de bonos e inactividad'} style={{ color: pnl >= 0 ? 'var(--green)' : 'var(--danger)', textAlign: 'right' }}>
           PnL {pnl >= 0 ? '+' : ''}{fmt(pnl)}
           {row.stockStale && <span style={{ display: 'block', color: 'var(--orange)', marginTop: 4 }}>
-            {lang === 'en' ? 'Stock prices delayed' : 'Precios de acciones retrasados'}
+            {lang === 'en' ? 'Open valuation delayed' : 'Valuación abierta retrasada'}
           </span>}
           {holdBonus > 0 && (
             <span style={{ display: 'block', color: 'var(--green)', marginTop: 4 }}>
@@ -1115,7 +1115,7 @@ function PersonalScoreBreakdown({ row, rules, loading, lang = 'es' }) {
       ) : (
         <div style={{ display: 'grid', gap: 14 }}>
           {row.stockStale && <p role="status" style={{ ...emptyText, margin: 0, color: 'var(--orange)' }}>
-            {lang === 'en' ? 'Stock prices are delayed. This score uses the last available valuation.' : 'Los precios de acciones están retrasados. Este score usa la última valuación disponible.'}
+            {lang === 'en' ? 'Open-position prices are delayed. Only realized stock PnL counts toward this score.' : 'Los precios de posiciones abiertas están retrasados. Solo el PnL realizado de acciones cuenta para este score.'}
           </p>}
           <div style={{
             display: 'grid',

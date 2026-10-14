@@ -101,3 +101,14 @@ For on-chain buys, add the appropriate verified spot asset and funding adapter, 
 ## Realized-only tournament update
 
 The October 12 follow-up implements user buys/sells as daily activity, realized-only stock tournament PnL, a clickable Portfolio monitor and automatic liquidation before the cutoff photo. Schema v3 distinguishes automatic closing sales from user transactions. All 79 focused tests and the Points build passed. Six live staging checks passed across three independent Postgres connections, including closing/reset contention, matching realized PnL to wallet proceeds, repeated-close idempotency and a new cycle with no holdings/PnL carried over. The cofounder demo wallet was not reset for these tests. Short selling remains disabled; it requires a separate collateralized position model.
+
+
+## Pointbreak integration checkpoint - October 14, 2026
+
+The eight stock commits through `e46dd42` were cherry-picked in order onto Pointbreak's `f36e5a1` checkpoint. The two DOGGY collector fixes remain intact. A follow-up corrects tournament warnings to distinguish delayed open valuations from realized stock scoring.
+
+Validation on the combined stock checkout: 100 focused stock, chart, tournament, leaderboard, wallet and DOGGY regression tests passed; the Points production build passed. Six live staging checks passed across two independent PostgreSQL connections, covering shared-wallet contention, duplicate execution, concurrent sell-all, sale accounting, automatic liquidation, reset contention and no carried holdings/PnL. These tests used the separate disposable verification branch and cleaned only their own fixtures.
+
+The integrated local demo is available at http://127.0.0.1:5182/points/torneo, backed by the existing isolated cofounder staging database. Its API must allow its exact localhost origin when using the Vite proxy. The existing demo cookie was reused. Browser checks confirmed the stock catalogue, clickable Portfolio monitor, single-click Apple purchase and full unit sale. The purchase left realized stock PnL at -3.049774 MXNP; the sale changed it to -3.003340 MXNP, matching Torneo's displayed -3.00 MXNP. The existing 0.048 NVDA holding was preserved, and qualification remained at zero prediction markets. The PnL chart rendered stock samples after refreshing its data; live provider requests can still time out independently of committed trades.
+
+A separate local Pointbreak change moves the October cutoff to 23:59:59 Mexico City and its daily snapshot job to midnight. The combination passed 148 tests and a Points build into a temporary output folder. Preserve those cutoff edits as uncommitted work and do not include them silently in the stock commits. No production database migration, flag activation, push or deployment has been performed as part of this integration checkpoint. Normal deployed sign-in, Vercel cron delivery, and production migration/feature activation remain release checks.
