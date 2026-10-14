@@ -27,8 +27,7 @@ export function stockOrderRequest(body = {}) {
   const hasAmount = body.amount != null;
   const hasQuantity = body.quantity != null;
   const sellAll = body.sellAll === true;
-  if (body.side === 'buy' ? (!hasAmount || hasQuantity || sellAll)
-    : Number(hasAmount) + Number(hasQuantity) + Number(sellAll) !== 1) throw stockError('invalid_amount');
+  if (Number(hasAmount) + Number(hasQuantity) + Number(sellAll) !== 1 || (body.side === 'buy' && sellAll)) throw stockError('invalid_amount');
   return { ticker: asset.ticker, side: body.side,
     ...(hasAmount ? { amount: decimal(fixed(body.amount)) } : {}),
     ...(hasQuantity ? { quantity: decimal(fixed(body.quantity, 18), 18) } : {}),

@@ -19,10 +19,10 @@ Reviewed all 10 pages of `/Users/Fran/Downloads/Pronos_Acciones_Spec_MXNP.pdf`, 
 | Orange price chart: 4H/5m, 24H/15m, 7D/1h, 30D/4h | Implemented | Config, proxy and interval tests; synthetic demo uses the same interval spacing after follow-up. Default selection is 7D. |
 | Chart hover price/time requested after PDF | Implemented in follow-up | Nearest returned candle close, crosshair, UTC interval-start timestamp; mouse, tap, keyboard support. No interpolated price is presented as a data sample. |
 | Best ask, best bid and 24-hour USD volume | Implemented | Bid/ask from `l2Book`; volume from `dayNtlVlm`, added to detail in follow-up. |
-| Buy/sell switch; amount and 100/500/1,000/5,000 presets | Implemented | Detail order card uses MXNP. |
-| Quantity, 0.10% fee and FX estimate recalculated on amount changes | Implemented in follow-up | Indicative client estimate uses the same pure fill arithmetic as the server. Review/confirm still obtains an immutable server quote. |
-| CTA updates with asset, side and amount | Implemented with deliberate extra step | Review CTA shows these fields; second click confirms an expiring quote. |
-| Prevent overselling; sell-all button | Implemented | UI indicative validation and server quantity enforcement; button added in follow-up. Small residual holdings can be sold below the purchase minimum. |
+| Buy/sell switch; amount and 100/500/1,000/5,000 presets | Implemented and expanded October 13 | Purchases retain MXNP budget presets. Both sides also accept exact asset units. Sales offer a percentage slider and 25/50/75/all shortcuts instead of fixed money presets. |
+| Quantity, 0.10% fee and FX estimate recalculated on amount changes | Implemented in follow-up | Indicative client estimate uses the same pure fill arithmetic as the server. One click obtains a fresh immutable server quote and executes it. |
+| CTA updates with asset, side and amount | Implemented | Comprar/Vender identifies the MXNP budget or actual units, with gross value, fees and net proceeds visible before clicking. One click runs quote and execution, shows Procesando and then Compra/Venta realizada. Interrupted execution retries retain the original quote and idempotency key. |
+| Prevent overselling; sell-all button | Implemented and hardened October 13 | UI and server reject excess units and money requests above the actual sale value, including coarse-precision rounding cases. All shortcut sends the existing full-sale request. Small residual holdings can be sold below the purchase minimum. |
 | Minimum 100 MXNP and sufficient balance | Implemented | 100 MXNP minimum applies to purchases. Shared wallet locked and checked in a transaction. |
 | Quotes under 10 seconds; unavailable-price button; idempotency | Implemented | Stale/future books rejected, expiring user-owned quotes, unique idempotency key, atomic writes and retry replay. Six staging scenarios were verified across three independent Postgres connections. |
 | Backend cache and public candle proxy | Implemented | Metadata TTL 5s, book TTL 3s, candles TTL 55s, FX TTL 1h; request-driven refresh. Candle cache expires ahead of the 60s chart poll. Detail price polling is every 3s, independently of 15s holdings polling; list polling is every 5s. |
@@ -41,7 +41,7 @@ Reviewed all 10 pages of `/Users/Fran/Downloads/Pronos_Acciones_Spec_MXNP.pdf`, 
 
 ## Accounting differences from the proposed formulas
 
-The implementation intentionally preserves quantity-rounding remainder in the user's wallet instead of debiting the entire entered amount for unfilled fractions. Fees are 0.10% of actual filled notional and are included in cost basis, so PnL includes entry costs. It walks available order-book depth rather than assuming all units fill at the best price. These differences are covered by accounting tests and visible in the review quote.
+The implementation intentionally preserves quantity-rounding remainder in the user's wallet instead of debiting the entire entered amount for unfilled fractions. Fees are 0.10% of actual filled notional and are included in cost basis, so PnL includes entry costs. It walks available order-book depth rather than assuming all units fill at the best price. These differences are covered by accounting tests and visible in the indicative summary and executed fill.
 
 ## Price and chart semantics
 
