@@ -5,6 +5,16 @@ import { readFile } from 'node:fs/promises';
 const source = await readFile(new URL('./points-schema.js', import.meta.url), 'utf8');
 const migrateSource = await readFile(new URL('../migrate.js', import.meta.url), 'utf8');
 
+test('Points funding audit has unique retry keys and parity in both migration paths', () => {
+  assert.match(source, /to_regclass\('public\.points_market_funding'\) IS NOT NULL AS points_market_funding/);
+  for (const migration of [source, migrateSource]) {
+    assert.match(migration, /CREATE TABLE IF NOT EXISTS points_market_funding/);
+    assert.match(migration, /request_id\s+UUID NOT NULL UNIQUE/);
+    assert.match(migration, /collateral\s+NUMERIC\(20,6\) NOT NULL CHECK \(collateral > 0\)/);
+    assert.match(migration, /idx_points_market_funding_market/);
+  }
+});
+
 test('points schema self-healing avoids hot-route migration lock pileups', () => {
   assert.match(source, /POINTS_SCHEMA_READY_PROBE/);
   assert.match(source, /to_regclass\('public\.points_publicity_daily'\)/);

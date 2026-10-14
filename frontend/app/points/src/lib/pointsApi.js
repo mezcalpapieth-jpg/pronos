@@ -987,6 +987,16 @@ export async function adminEditMarket({ marketId, question, startTime, endTime, 
   });
 }
 
+export async function adminPreviewMarketLiquidity(marketId, amount = null) {
+  const query = new URLSearchParams({ marketId: String(marketId) });
+  if (amount !== null) query.set('amount', String(amount));
+  return getJson(`/api/points/admin/market-liquidity?${query}`);
+}
+
+export async function adminAddMarketLiquidity({ marketId, amount, expectedReserves, requestId }) {
+  return postJson('/api/points/admin/market-liquidity', { marketId, amount, expectedReserves, requestId });
+}
+
 export async function adminAppendParallelOutcomes({
   marketId,
   outcomes,

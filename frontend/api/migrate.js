@@ -549,6 +549,18 @@ const MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS idx_points_distributions_user_kind_ref
     ON points_distributions(username, kind, reference_id, created_at DESC)`,
 
+  `CREATE TABLE IF NOT EXISTS points_market_funding (
+    id             BIGSERIAL PRIMARY KEY,
+    market_id      INTEGER NOT NULL REFERENCES points_markets(id),
+    request_id     UUID NOT NULL UNIQUE,
+    admin_username TEXT NOT NULL,
+    collateral     NUMERIC(20,6) NOT NULL CHECK (collateral > 0),
+    result         JSONB NOT NULL,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_market_funding_market
+    ON points_market_funding(market_id, created_at DESC)`,
+
   `CREATE TABLE IF NOT EXISTS points_resolution_corrections (
     id                  BIGSERIAL PRIMARY KEY,
     market_id           INTEGER NOT NULL REFERENCES points_markets(id) ON DELETE CASCADE,
