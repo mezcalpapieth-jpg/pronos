@@ -73,3 +73,35 @@ test('cutoff settlement closes exact quantities, fees and even sub-micropoint du
   assert.equal(applyStockFill({ quantity: dust.quantity, cost_basis: '0.000001' }, dust).realizedPnl, '-0.000001');
   assert.throws(() => buildStockClosingFill('1', { ...mark, price_usd: '0' }));
 });
+
+test('unit buys fill the exact requested quantity across depth and charge fees', () => {
+  const depth = { ...book, levels: [book.levels[0], [{ px: '100', sz: '0.1' }, { px: '110', sz: '2' }]] };
+  const fill = buildStockFill({ side: 'buy', quantity: '0.25', quote: depth });
+  assert.equal(fill.quantity, '0.25');
+  assert.equal(fill.gross, '530');
+  assert.equal(fill.fee, '0.53');
+  assert.equal(fill.total, '530.53');
+  assert.equal(fill.unspent, '0');
+  assert.equal(applyStockFill(null, fill).costBasis, '530.53');
+  assert.throws(() => buildStockFill({ side: 'buy', quantity: '3', quote: depth }), { code: 'stock_insufficient_liquidity' });
+});
+
+test('unit buys enforce minimum, precision, maximum and exactly one input', () => {
+  assert.throws(() => buildStockFill({ side: 'buy', quantity: '0.049', quote: book }), { code: 'stock_minimum_amount' });
+  assert.equal(buildStockFill({ side: 'buy', quantity: '0.05', quote: book }).total, '100.1');
+  assert.throws(() => buildStockFill({ side: 'buy', quantity: '0.0501', quote: book }), { code: 'invalid_precision' });
+  assert.throws(() => buildStockFill({ side: 'buy', quantity: '500', quote: book }), { code: 'invalid_amount' });
+  for (const request of [{}, { amount: '500', quantity: '0.25' }, { sellAll: true }]) {
+    assert.throws(() => buildStockFill({ side: 'buy', ...request, quote: book }), { code: 'invalid_amount' });
+  }
+});
+
+test('a monetary sale above the holding value is rejected even if quantity rounding would fit', () => {
+  const btc = { szDecimals: 5, fx: { rate: '18.25' }, levels: [[{ px: '83325', sz: '10' }], [{ px: '83400', sz: '10' }]] };
+  assert.throws(() => buildStockFill({ side: 'sell', amount: '500', positionQuantity: '0.00032', quote: btc }), { code: 'insufficient_stock_quantity' });
+  const all = buildStockFill({ side: 'sell', sellAll: true, positionQuantity: '0.00032', quote: btc });
+  assert.equal(all.gross, '486.618');
+  assert.equal(all.total, '486.131382');
+  assert.equal(all.quantity, '0.00032');
+  assert.equal(buildStockFill({ side: 'sell', amount: '200', positionQuantity: '0.00032', quote: btc }).quantity, '0.00013');
+});

@@ -17,6 +17,7 @@ const errors = {
   stock_price_unavailable: ['Precio no disponible. Intenta de nuevo en unos segundos.', 'Price unavailable. Try again in a few seconds.'],
   stock_fx_unavailable: ['Tipo de cambio no disponible. Intenta más tarde.', 'Exchange rate unavailable. Try later.'],
   stock_minimum_amount: ['La compra mínima es de 100 MXNP.', 'The minimum buy is 100 MXNP.'],
+  invalid_precision: ['Usa la cantidad de decimales permitida para este activo.', 'Use the allowed number of decimal places for this asset.'],
   stock_quote_expired: ['La cotización expiró. Solicita una nueva.', 'Quote expired. Request a new one.'],
   stock_cycle_closed: ['Las operaciones están pausadas o el ciclo está cerrado.', 'Trading is paused or the cycle is closed.'],
   stock_insufficient_liquidity: ['No hay suficiente liquidez para este monto. Prueba con menos.', 'Insufficient liquidity. Try a smaller amount.'],
