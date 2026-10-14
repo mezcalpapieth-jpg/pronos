@@ -1484,7 +1484,7 @@ function SeriesGameStrip({ seriesMeta, currentMarketId, navigate, t }) {
   const sequence = Array.isArray(seriesMeta?.sequence) ? seriesMeta.sequence : [];
   if (sequence.length <= 1) return null;
   return (
-    <div style={{ marginBottom: 24 }}>
+    <div role="navigation" aria-label={t('points.series.label')} style={{ marginBottom: 24 }}>
       <div style={{
         display: 'flex',
         alignItems: 'baseline',
@@ -1505,11 +1505,9 @@ function SeriesGameStrip({ seriesMeta, currentMarketId, navigate, t }) {
         )}
       </div>
       <div style={{
-        display: 'flex',
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(84px, 1fr))',
         gap: 8,
-        overflowX: 'auto',
-        WebkitOverflowScrolling: 'touch',
-        paddingBottom: 2,
       }}>
         {sequence.map((item) => {
           const isCurrent = Number(item.id) === Number(currentMarketId);
@@ -1526,15 +1524,16 @@ function SeriesGameStrip({ seriesMeta, currentMarketId, navigate, t }) {
               }}
               title={item.subtitle || formatSeriesGameLabel(item.gameNumber, { t })}
               style={{
-                minWidth: 122,
-                padding: '10px 12px',
-                borderRadius: 10,
+                minWidth: 0,
+                minHeight: 80,
+                width: '100%',
+                padding: '10px 8px',
+                borderRadius: 8,
                 border: `1px solid ${isCurrent ? 'rgba(0,232,122,0.45)' : 'var(--border)'}`,
                 background: isCurrent ? 'rgba(0,232,122,0.10)' : 'var(--surface1)',
                 opacity: muted ? 0.62 : 1,
                 cursor: clickable ? 'pointer' : 'default',
                 textAlign: 'left',
-                flex: '0 0 auto',
               }}
             >
               <span style={{
@@ -1554,10 +1553,10 @@ function SeriesGameStrip({ seriesMeta, currentMarketId, navigate, t }) {
                   : item.status === 'not_needed' ? 'var(--text-muted)'
                   : item.placeholder || item.seriesLocked || item.status === 'pending' ? 'var(--warning)'
                   : 'var(--text-secondary)',
-                letterSpacing: '0.06em',
+                letterSpacing: 0,
                 textTransform: 'uppercase',
                 marginBottom: 4,
-                whiteSpace: 'nowrap',
+                overflowWrap: 'anywhere',
               }}>
                 {status}
               </span>
@@ -1566,8 +1565,8 @@ function SeriesGameStrip({ seriesMeta, currentMarketId, navigate, t }) {
                 fontFamily: 'var(--font-mono)',
                 fontSize: 10,
                 color: 'var(--text-muted)',
-                letterSpacing: '0.02em',
-                whiteSpace: 'nowrap',
+                letterSpacing: 0,
+                overflowWrap: 'anywhere',
               }}>
                 {item.startTime ? shortGameDate(item.startTime) : t('points.series.datePending')}
               </span>
@@ -4051,6 +4050,13 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
               </div>
             </div>
 
+            <SeriesGameStrip
+              seriesMeta={market.seriesMeta}
+              currentMarketId={market.id}
+              navigate={navigate}
+              t={t}
+            />
+
             {isMobile && tradePanel}
 
             <PointsActivityTape
@@ -4076,13 +4082,6 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
                   applyFreshMarket(fresh);
                 } catch { /* best-effort */ }
               }}
-            />
-
-            <SeriesGameStrip
-              seriesMeta={market.seriesMeta}
-              currentMarketId={market.id}
-              navigate={navigate}
-              t={t}
             />
 
             {displayOutcomes.length === 2 && (

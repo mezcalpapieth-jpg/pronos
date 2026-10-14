@@ -19,6 +19,15 @@ test('MVP detail renders the shared playoff series game strip', () => {
   assert.match(source, /navigate\(`\/market\?id=\$\{encodeURIComponent\(item\.id\)\}`\)/);
 });
 
+test('MVP series navigation wraps all seven games instead of hiding them off-screen', () => {
+  const strip = source.slice(source.indexOf('function SeriesGameStrip'), source.indexOf('function outcomeInitials'));
+  assert.match(strip, /role="navigation" aria-label="Serie"/);
+  assert.match(strip, /gridTemplateColumns: 'repeat\(auto-fit, minmax\(84px, 1fr\)\)'/);
+  assert.doesNotMatch(strip, /overflowX|minWidth: 122|WebkitOverflowScrolling/);
+  assert.doesNotMatch(strip, /whiteSpace: 'nowrap'/);
+  assert.match(strip, /disabled=\{!clickable\}/);
+});
+
 test('MVP series strip treats virtual completed games as final before pending placeholders', () => {
   const statusFn = source.slice(
     source.indexOf('function seriesGameStatus'),
