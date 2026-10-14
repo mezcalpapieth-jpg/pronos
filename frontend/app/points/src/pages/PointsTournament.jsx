@@ -1474,18 +1474,17 @@ export default function PointsTournament() {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([
-      fetchCurrentCycle().catch(() => null),
-      fetchLeaderboard().catch(error => ({
-        top: [],
-        error: error?.code || error?.message || 'leaderboard_failed',
-      })),
-      fetchCycleHistory(8).catch(() => []),
-    ]).then(([cycleData, leaderboardData, historyData]) => {
-      if (cancelled) return;
-      setCycle(cycleData);
-      setLeaderboard(leaderboardData);
-      setHistory(Array.isArray(historyData) ? historyData : []);
+    fetchCurrentCycle().catch(() => null).then(data => {
+      if (!cancelled) setCycle(data);
+    });
+    fetchLeaderboard().catch(error => ({
+      top: [],
+      error: error?.code || error?.message || 'leaderboard_failed',
+    })).then(data => {
+      if (!cancelled) setLeaderboard(data);
+    });
+    fetchCycleHistory(8).catch(() => []).then(data => {
+      if (!cancelled) setHistory(Array.isArray(data) ? data : []);
     });
     const id = window.setInterval(() => setTick(t => t + 1), 1000);
     return () => {

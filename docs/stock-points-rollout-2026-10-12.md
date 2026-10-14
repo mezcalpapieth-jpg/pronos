@@ -112,3 +112,14 @@ Validation on the combined stock checkout: 100 focused stock, chart, tournament,
 The integrated local demo is available at http://127.0.0.1:5182/points/torneo, backed by the existing isolated cofounder staging database. Its API must allow its exact localhost origin when using the Vite proxy. The existing demo cookie was reused. Browser checks confirmed the stock catalogue, clickable Portfolio monitor, single-click Apple purchase and full unit sale. The purchase left realized stock PnL at -3.049774 MXNP; the sale changed it to -3.003340 MXNP, matching Torneo's displayed -3.00 MXNP. The existing 0.048 NVDA holding was preserved, and qualification remained at zero prediction markets. The PnL chart rendered stock samples after refreshing its data; live provider requests can still time out independently of committed trades.
 
 A separate local Pointbreak change moves the October cutoff to 23:59:59 Mexico City and its daily snapshot job to midnight. The combination passed 148 tests and a Points build into a temporary output folder. Preserve those cutoff edits as uncommitted work and do not include them silently in the stock commits. No production database migration, flag activation, push or deployment has been performed as part of this integration checkpoint. Normal deployed sign-in, Vercel cron delivery, and production migration/feature activation remain release checks.
+
+
+## Pointbreak preview release check - October 14, 2026
+
+- Includes the stock integration and the October cutoff at 23:59:59 Mexico City (`2026-11-01T05:59:59.000Z`); the tournament snapshot cron runs at midnight CDMX.
+- The leaderboard now transfers each market's source metadata once, uses compact trade history, and runs independent reads concurrently. FIFO conviction scoring is unchanged.
+- Read-only staging comparison: all 564 participants retained identical scores, ranks, and conviction breakdowns. The conviction-history response fell from 17,826,679 to 1,204,011 bytes (93% reduction).
+- Local staging: scoring calculation fell from 24.98 seconds to 3.25 seconds; full API responses measured 3.84-4.44 seconds uncached and 0.22 seconds cached. Cache lifetime starts after the read completes, and concurrent refreshes share one calculation.
+- The tournament countdown, current leaderboard, and past snapshots load independently.
+- Validation: 153 automated tests, six live PostgreSQL trading/liquidation/reset checks, and the Points production build passed. Browser verification retained the demo account's realized stock score of -3.00 MXNP with two active days.
+- Vercel Pointbreak preview variables use the existing isolated stock-points staging database and stock feature flags. Production variables and production data are unchanged. Preview cron delivery does not validate production scheduling.

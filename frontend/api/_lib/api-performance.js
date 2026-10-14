@@ -1,4 +1,5 @@
 const memoryCache = new Map();
+const pendingCache = new Map();
 
 function sanitizeMetricName(name) {
   return String(name || 'step').replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 48);
@@ -22,17 +23,24 @@ export function setCacheHeaders(res, {
 
 export async function cachedJson(key, ttlMs, producer) {
   const ttl = Math.max(0, Number(ttlMs) || 0);
-  const now = Date.now();
-  if (ttl > 0 && process.env.DISABLE_API_MEMORY_CACHE !== '1') {
-    const hit = memoryCache.get(key);
-    if (hit && hit.expiresAt > now) return { value: hit.value, hit: true };
+  if (ttl === 0 || process.env.DISABLE_API_MEMORY_CACHE === '1') {
+    return { value: await producer(), hit: false };
   }
+  const hit = memoryCache.get(key);
+  if (hit && hit.expiresAt > Date.now()) return { value: hit.value, hit: true };
+  const pending = pendingCache.get(key);
+  if (pending) return { value: await pending, hit: true };
 
-  const value = await producer();
-  if (ttl > 0 && process.env.DISABLE_API_MEMORY_CACHE !== '1') {
-    memoryCache.set(key, { value, expiresAt: now + ttl });
+  const production = Promise.resolve().then(producer);
+  pendingCache.set(key, production);
+  try {
+    const value = await production;
+    // Slow reads must not consume their own cache lifetime before returning.
+    memoryCache.set(key, { value, expiresAt: Date.now() + ttl });
+    return { value, hit: false };
+  } finally {
+    pendingCache.delete(key);
   }
-  return { value, hit: false };
 }
 
 export function createApiTimer(res, label, { logThresholdMs = 350 } = {}) {

@@ -80,8 +80,8 @@ test('points cycle cutoff snapshot freezes leaderboard without rolling over', ()
   assert.match(snapshotCronSource, /tournament_snapshot_failed/);
   assert.match(snapshotCronSource, /does not close the cycle/);
   assert.match(snapshotCronSource, /does not close the cycle, clear positions, cancel\s*\n \* orders, or reset balances/);
-  assert.match(vercelSource, /"path": "\/api\/cron\/points-tournament-snapshot"[\s\S]*"schedule": "59 5 \* \* \*"/);
-  assert.match(frontendVercelSource, /"path": "\/api\/cron\/points-tournament-snapshot"[\s\S]*"schedule": "59 5 \* \* \*"/);
+  assert.match(vercelSource, /"path": "\/api\/cron\/points-tournament-snapshot"[\s\S]*"schedule": "0 6 \* \* \*"/);
+  assert.match(frontendVercelSource, /"path": "\/api\/cron\/points-tournament-snapshot"[\s\S]*"schedule": "0 6 \* \* \*"/);
   assert.doesNotMatch(snapshotCronSource, /archiveAndClearPositionsForCycleReset|cancelOpenLimitOrdersForCycleReset|resetBalancesForCycle/);
 });
 

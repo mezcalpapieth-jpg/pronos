@@ -590,7 +590,7 @@ const OCTOBER_REQUIRED_CRONS = [
   ['/api/cron/points-parlay-settle', '*/15 * * * *', 'Actualiza combinadas abiertas'],
   ['/api/cron/points-maker-rewards', '0 16 * * *', 'Paga recompensas maker'],
   ['/api/cron/points-snapshot-prices', '0 * * * *', 'Guarda precios para sparklines'],
-  ['/api/cron/points-tournament-snapshot', '59 5 * * *', 'Congela el ranking del corte 11:59 PM CDMX'],
+  ['/api/cron/points-tournament-snapshot', '0 6 * * *', 'Congela el ranking del corte 23:59:59 CDMX'],
 ];
 
 function settledValue(result) {
