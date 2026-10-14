@@ -38,6 +38,7 @@ const POINTS_SCHEMA_READY_PROBE = `
     to_regclass('public.points_api_request_logs') IS NOT NULL AS points_api_request_logs,
     to_regclass('public.points_positions') IS NOT NULL AS points_positions,
     to_regclass('public.points_limit_orders') IS NOT NULL AS points_limit_orders,
+    to_regclass('public.points_market_funding') IS NOT NULL AS points_market_funding,
     to_regclass('public.points_site_time_daily') IS NOT NULL AS points_site_time_daily,
     to_regclass('public.points_publicity_daily') IS NOT NULL AS points_publicity_daily,
     to_regclass('public.points_resolution_candidates') IS NOT NULL AS points_resolution_candidates,
@@ -896,6 +897,19 @@ const POINTS_SCHEMA_MIGRATIONS = [
     ON points_distributions(created_at DESC, kind, username)`,
   `CREATE INDEX IF NOT EXISTS idx_points_distributions_user_kind_ref
     ON points_distributions(username, kind, reference_id, created_at DESC)`,
+
+  // System-funded Points liquidity; separate from user balance distributions.
+  `CREATE TABLE IF NOT EXISTS points_market_funding (
+    id             BIGSERIAL PRIMARY KEY,
+    market_id      INTEGER NOT NULL REFERENCES points_markets(id),
+    request_id     UUID NOT NULL UNIQUE,
+    admin_username TEXT NOT NULL,
+    collateral     NUMERIC(20,6) NOT NULL CHECK (collateral > 0),
+    result         JSONB NOT NULL,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_market_funding_market
+    ON points_market_funding(market_id, created_at DESC)`,
 
   // ── Resolution corrections (admin audit + idempotent payout reversals) ──
   // Used when a resolved market was settled to the wrong outcome. We keep the

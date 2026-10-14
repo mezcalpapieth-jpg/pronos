@@ -12,6 +12,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DeckAdminPanel from '../components/DeckAdminPanel.jsx';
+import MarketLiquidityPanel from '../components/MarketLiquidityPanel.jsx';
 import AdminInterestPanel from '@app/components/AdminInterestPanel.jsx';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { pointsPublicAssetSrc } from '@app/lib/publicAssets.js';
@@ -5392,11 +5393,15 @@ function EditMarketModal({ market, onClose, onSaved, onCancel }) {
           </div>
         )}
 
+        {market.status === 'active' && market.ammMode !== 'parallel' && (market.mode || 'points') === 'points' && !market.parentId && (
+          <MarketLiquidityPanel marketId={market.id} onFunded={onSaved} />
+        )}
+
         <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 16 }}>
           Pregunta, fecha de inicio, fecha de cierre y categoría son editables.
           {canEditParallelReserves
             ? ' En mercados paralelos también puedes reparar reservas Sí/No.'
-            : ' Opciones y reservas del AMM no se pueden cambiar después de crear el mercado.'}
+            : ' Las opciones no cambian. Los aportes de liquidez conservan las probabilidades actuales.'}
         </p>
 
         {actionMode === 'cancel' && (
