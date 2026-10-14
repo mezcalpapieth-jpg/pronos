@@ -12,6 +12,7 @@ import {
   applySeriesDetailGateToMarket,
   buildSeriesDetail,
   normalizeSeriesMeta,
+  seriesMetaForGame,
   seriesSubtitle,
   teamPairKeyFromMeta,
 } from '../_lib/series-markets.js';
@@ -293,11 +294,7 @@ function summarizeSeriesMarketRow(row, fallbackMeta, rawMeta = null) {
     finalScore: row.final_score || null,
     startTime: row.start_time,
     endTime: row.end_time,
-    seriesMeta: {
-      ...fallbackMeta,
-      gameNumber: resolvedMeta?.gameNumber || null,
-      espnSeriesWins: resolvedMeta?.espnSeriesWins || fallbackMeta?.espnSeriesWins || null,
-    },
+    seriesMeta: seriesMetaForGame(fallbackMeta, resolvedMeta),
   };
 }
 
@@ -317,11 +314,7 @@ function summarizePendingSeriesRow(row, fallbackMeta, rawMeta = null) {
     finalScore: null,
     startTime: row.start_time,
     endTime: row.end_time,
-    seriesMeta: {
-      ...fallbackMeta,
-      gameNumber: resolvedMeta?.gameNumber || null,
-      espnSeriesWins: resolvedMeta?.espnSeriesWins || fallbackMeta?.espnSeriesWins || null,
-    },
+    seriesMeta: seriesMetaForGame(fallbackMeta, resolvedMeta),
   };
 }
 

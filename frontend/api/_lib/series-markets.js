@@ -423,6 +423,19 @@ export function applySeriesDetailGateToMarket(market, seriesMeta = market?.serie
   };
 }
 
+export function seriesMetaForGame(fallbackMeta, gameMeta) {
+  const source = gameMeta || fallbackMeta;
+  // Home/away win counts must stay paired with that game's team identities.
+  return {
+    ...fallbackMeta,
+    homeTeam: source?.homeTeam,
+    awayTeam: source?.awayTeam,
+    teams: source?.teams,
+    gameNumber: gameMeta?.gameNumber || null,
+    espnSeriesWins: source?.espnSeriesWins || null,
+  };
+}
+
 function summarizeSeriesGateRow(row, fallbackMeta, rawMeta = null) {
   const outcomes = parseJsonMaybe(row?.outcomes, row?.outcomes || ['Sí', 'No']);
   const meta = rawMeta || normalizeSeriesMeta({
@@ -440,11 +453,7 @@ function summarizeSeriesGateRow(row, fallbackMeta, rawMeta = null) {
     finalScore: row?.final_score ?? row?.finalScore ?? null,
     startTime: row?.start_time ?? row?.startTime ?? null,
     endTime: row?.end_time ?? row?.endTime ?? null,
-    seriesMeta: {
-      ...fallbackMeta,
-      gameNumber: meta?.gameNumber || null,
-      espnSeriesWins: meta?.espnSeriesWins || fallbackMeta?.espnSeriesWins || null,
-    },
+    seriesMeta: seriesMetaForGame(fallbackMeta, meta),
   };
 }
 
