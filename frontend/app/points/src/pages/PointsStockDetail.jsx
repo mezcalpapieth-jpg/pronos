@@ -6,8 +6,10 @@ import { fetchStockAssets, fetchStockCandles, fetchStockHoldings, quoteStock, tr
 import { StockBadge, StockChart, stockMoney, stockPercent } from '../components/StockShared.jsx';
 import { emitPointsRefresh } from '../lib/pointsLiveRefresh.js';
 import { STOCK_CHART_RANGES, stockAsset } from '../../../../api/_lib/stock-assets.js';
-import { buildStockFill } from '../../../../api/_lib/stock-math.js';
+import { buildStockFill, decimal, fixed } from '../../../../api/_lib/stock-math.js';
 import { priceTimeLabel } from '../lib/stockChart.js';
+import { stockFormRequest, stockQuantityAtPercent, stockSalePercent } from '../lib/stockOrder.js';
+import { executeStockOrder, stockTradeNeedsRetry } from '../lib/stockExecution.js';
 
 export default function PointsStockDetail({ onOpenLogin }) {
   const { ticker: rawTicker } = useParams();
@@ -24,7 +26,9 @@ export default function PointsStockDetail({ onOpenLogin }) {
   const [chartFetchedAt, setChartFetchedAt] = useState(null);
   const [side, setSide] = useState(params.get('side') === 'sell' ? 'sell' : 'buy');
   const [amount, setAmount] = useState('500');
-  const [sellAll, setSellAll] = useState(false);
+  const [quantity, setQuantity] = useState('');
+  const [unitMode, setUnitMode] = useState(params.get('side') === 'sell' ? 'units' : 'money');
+  const [sellPercent, setSellPercent] = useState(params.get('side') === 'sell' ? 100 : null);
   const [holding, setHolding] = useState(null);
   const [quote, setQuote] = useState(null);
   const [message, setMessage] = useState(null);
@@ -37,28 +41,65 @@ export default function PointsStockDetail({ onOpenLogin }) {
   const lock = useRef(false);
   const holdingRevision = useRef(0);
   const screenRevision = useRef(0);
+  const formTicker = useRef(ticker);
   const lastEstimate = useRef(null);
   const asset = data?.assets.find(item => item.ticker === ticker) || stockAsset(ticker);
-  const canReview = stocksEnabled && data?.tradingEnabled !== false && asset?.available;
+  const canTrade = stocksEnabled && data?.tradingEnabled !== false && asset?.available;
   const bookFresh = data?.book && now - data.book.bookTime >= -2000 && now - data.book.bookTime < 10000;
-  const available = canReview && bookFresh;
+  const available = canTrade && bookFresh;
   const balance = filledBalance ?? user?.balance;
-  const expired = quote && now >= quote.expiresAt;
   const choose = fn => { if (busy || retry) return; fn(); setQuote(null); attempt.current = null; setMessage(null); };
-  // Indicative only; confirmation always uses the server's immutable quote.
+  const precision = data?.book?.szDecimals ?? 8;
+  const heldQuantity = holding?.quantity || '0';
+  let orderRequest;
+  try { orderRequest = stockFormRequest({ ticker, side, unitMode, amount, quantity, sellPercent, positionQuantity: heldQuantity, precision }); }
+  catch { orderRequest = { ticker, side, quantity: '0' }; }
+  let fullSale = null;
+  if (holding && data?.book) {
+    try { fullSale = buildStockFill({ side: 'sell', sellAll: true, positionQuantity: heldQuantity, quote: data.book }); }
+    catch { /* The server still checks current holdings and depth at execution. */ }
+  }
+  // Indicative only; execution always uses a fresh immutable server quote.
   let estimate = null;
   let estimateError = null;
   if (available) {
     try {
-      estimate = buildStockFill({ side, ...(sellAll && side === 'sell' ? { sellAll: true } : { amount }),
-        positionQuantity: holding?.quantity || '0', quote: data.book });
+      estimate = buildStockFill({ ...orderRequest, positionQuantity: heldQuantity, quote: data.book });
       if (side === 'buy' && authenticated && Number(estimate.total) > Number(balance || 0)) estimateError = { code: 'insufficient_balance' };
     } catch (error) { estimateError = error; }
   }
   const summary = quote || estimate || (busy ? lastEstimate.current : null);
+  const selectedPercent = sellPercent ?? stockSalePercent(orderRequest.quantity ?? summary?.quantity, heldQuantity);
+  const inputValue = side === 'sell' && sellPercent !== null
+    ? unitMode === 'units' ? stockQuantityAtPercent(heldQuantity, sellPercent, precision)
+      : summary ? decimal(fixed(summary.gross) / 10000n, 2) : ''
+    : unitMode === 'units' ? quantity : amount;
+
+  function switchUnitMode(value) {
+    choose(() => {
+      setUnitMode(value);
+      if (estimate) {
+        setQuantity(estimate.quantity);
+        setAmount(side === 'buy' ? estimate.total : estimate.gross);
+      }
+    });
+  }
+
+  function chooseSide(value) {
+    choose(() => {
+      setSide(value); setUnitMode(value === 'sell' ? 'units' : 'money');
+      setSellPercent(value === 'sell' ? 100 : null); setAmount('500'); setQuantity('');
+    });
+  }
 
   useEffect(() => { if (estimate) lastEstimate.current = estimate; }, [estimate]);
   useEffect(() => { setFilledBalance(null); }, [user?.balance, user?.username]);
+  useEffect(() => {
+    if (formTicker.current === ticker) return;
+    formTicker.current = ticker;
+    setAmount('500'); setQuantity(''); setUnitMode(side === 'sell' ? 'units' : 'money');
+    setSellPercent(side === 'sell' ? 100 : null);
+  }, [ticker, side]);
 
   useEffect(() => {
     if (!stocksEnabled) return;
@@ -123,40 +164,43 @@ export default function PointsStockDetail({ onOpenLogin }) {
     lock.current = true; setBusy(true); setMessage(null);
     const screen = screenRevision.current;
     let completed = false;
+    let tradeAttempt = retry ? attempt.current : null;
     try {
-      if (!quote || (expired && !retry)) {
-        const preview = await quoteStock({ ticker, side, ...(sellAll && side === 'sell' ? { sellAll: true } : { amount }) });
-        if (screen !== screenRevision.current) return;
-        setQuote(preview); setNow(Date.now()); attempt.current = { quoteId: preview.quoteId, idempotencyKey: crypto.randomUUID() };
-      } else {
-        const result = await tradeStock(side, attempt.current);
-        completed = true;
-        if (screen !== screenRevision.current) { refresh(); emitPointsRefresh({ source: `stock_${side}` }); return; }
-        holdingRevision.current++;
-        setFilledBalance(result.balance);
-        setHolding(Number(result.position?.quantity) > 0 ? { ...asset, ...result.position } : null);
-        setQuote(null); setRetry(false); attempt.current = null;
-        setMessage({ type: 'success', text: `${side === 'sell' ? en ? 'Received' : 'Cobraste' : en ? 'Operation completed' : 'Operación completada'} ${stockMoney(result.total)} MXNP · ${result.quantity} ${ticker}` });
-        emitPointsRefresh({ source: `stock_${side}` });
-        // The trade is committed. Refresh the wallet without holding the order
-        // form in its processing state or waiting on portfolio valuation SQL.
-        refresh();
-      }
+      const result = await executeStockOrder({ request: orderRequest, pendingAttempt: tradeAttempt, quoteStock, tradeStock,
+        isCurrent: () => screen === screenRevision.current,
+        onQuote: (preview, nextAttempt) => {
+          tradeAttempt = nextAttempt; attempt.current = nextAttempt;
+          setQuote(preview); setNow(Date.now());
+        },
+      });
+      if (!result) return;
+      completed = true;
+      if (screen !== screenRevision.current) { refresh(); emitPointsRefresh({ source: `stock_${side}` }); return; }
+      holdingRevision.current++;
+      setFilledBalance(result.balance);
+      setHolding(Number(result.position?.quantity) > 0 ? { ...asset, ...result.position } : null);
+      setQuote(null); setRetry(false); attempt.current = null;
+      if (side === 'sell') { setSellPercent(100); setUnitMode('units'); setQuantity(''); }
+      setMessage({ type: 'success', text: `${side === 'sell' ? en ? 'Sale completed · Received' : 'Venta realizada · Recibiste' : en ? 'Purchase completed · Spent' : 'Compra realizada · Cargo'} ${stockMoney(result.total)} MXNP · ${result.quantity} ${ticker}` });
+      emitPointsRefresh({ source: `stock_${side}` });
+      // The trade is committed. Refresh the wallet without holding the order
+      // form in its processing state or waiting on portfolio valuation SQL.
+      refresh();
     } catch (e) {
       // Keep the exact request for uncertain transport failures. Retrying it
       // replays the committed result instead of creating another purchase.
       if (completed || screen !== screenRevision.current) return;
-      const uncertain = quote && (!e.status || e.status >= 500);
-      setRetry(Boolean(uncertain));
+      const uncertain = stockTradeNeedsRetry(e, tradeAttempt);
+      setRetry(uncertain);
       if (!uncertain) { setQuote(null); attempt.current = null; }
-      setMessage({ type: 'error', text: uncertain ? en ? 'Confirmation interrupted. Retry to verify this same operation.' : 'La confirmación se interrumpió. Reintenta para verificar esta misma operación.' : stockErrorMessage(e, lang) });
+      setMessage({ type: 'error', text: uncertain ? en ? 'Response interrupted. Retry to verify this same operation.' : 'La respuesta se interrumpió. Reintenta para verificar esta misma operación.' : stockErrorMessage(e, lang) });
     } finally { lock.current = false; setBusy(false); }
   }
 
   const category = asset?.category === 'crypto' ? 'Crypto' : asset?.category === 'indices' ? en ? 'Indices' : 'Índices' : asset?.category === 'materias-primas' ? en ? 'Commodities' : 'Materias primas' : en ? 'Technology' : 'Tecnología';
-  const buttonLabel = busy ? en ? 'Processing…' : 'Procesando…' : retry ? en ? 'Retry confirmation' : 'Reintentar confirmación'
-    : quote && !expired ? `${en ? 'Confirm' : 'Confirmar'} ${side === 'buy' ? en ? 'buy' : 'compra' : en ? 'sell' : 'venta'}`
-      : `${en ? 'Review' : 'Revisar'} ${side === 'buy' ? en ? 'buy' : 'compra' : en ? 'sell' : 'venta'} ${sellAll && side === 'sell' ? en ? 'all' : 'total' : stockMoney(amount)} ${en ? 'of' : 'de'} ${asset?.name || ticker}`;
+  const buttonLabel = busy ? en ? 'Processing…' : 'Procesando…' : retry ? en ? 'Retry operation' : 'Reintentar operación'
+    : side === 'sell' ? `${en ? 'Sell' : 'Vender'}${summary ? ` · ${summary.quantity} ${ticker}` : ''}`
+      : `${en ? 'Buy' : 'Comprar'} · ${unitMode === 'units' ? `${inputValue || '0'} ${ticker}` : `${stockMoney(orderRequest.amount)} MXNP`}`;
   return <main className="stocks-page stock-detail-page"><Link className="stock-back" to="/stocks">← {en ? 'STOCKS' : 'ACCIONES'}</Link>
     <div className="stock-eyebrow">{category} · {en ? 'POINTS SIMULATOR' : 'SIMULADOR DE PUNTOS'}</div>
     <div className="stock-detail-heading">{asset && <StockBadge asset={asset} />}<h1>{asset?.name || ticker} ({ticker})</h1></div>
@@ -176,27 +220,41 @@ export default function PointsStockDetail({ onOpenLogin }) {
       <div className="stock-book-labels"><span>{en ? 'Buy' : 'Compra'} <strong>{stockMoney(data?.book?.levels[1][0].px)} USD</strong></span><span>{en ? 'Sell' : 'Venta'} <strong>{stockMoney(data?.book?.levels[0][0].px)} USD</strong></span>
         <span>Vol. 24H <strong>{asset?.volumeUsd == null ? '—' : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 2 }).format(asset.volumeUsd)} USD</strong></span></div>
       <p className="stock-note">{data?.demo ? 'DEMO' : asset?.dex ? `Hyperliquid / ${asset.dex}` : 'Hyperliquid'} · {en ? 'Candle prices; axis times show each candle’s start, not the latest update. A candle covering the current time is still forming.' : 'Precios de vela; el eje indica el inicio de cada vela, no su última actualización. Una vela que incluye la hora actual sigue en curso.'}</p>
-      {data?.book && <p className="stock-note" role="status">{en ? 'Live buy/sell prices' : 'Precios de compra/venta en vivo'} · <time dateTime={new Date(data.book.bookTime).toISOString()}>{priceTimeLabel(data.book.bookTime, lang)}</time> · {bookFresh ? `${Math.max(0, Math.floor((now - data.book.bookTime) / 1000))}s` : en ? 'Refreshing…' : 'Actualizando…'}<br />{en ? 'Refreshes every 3s. Review fetches a new confirmed quote.' : 'Actualiza cada 3s. Revisar solicita una nueva cotización confirmada.'}</p>}
+      {data?.book && <p className="stock-note" role="status">{en ? 'Live buy/sell prices' : 'Precios de compra/venta en vivo'} · <time dateTime={new Date(data.book.bookTime).toISOString()}>{priceTimeLabel(data.book.bookTime, lang)}</time> · {bookFresh ? `${Math.max(0, Math.floor((now - data.book.bookTime) / 1000))}s` : en ? 'Refreshing…' : 'Actualizando…'}<br />{en ? 'Refreshes every 3s. Trading validates a new quote automatically.' : 'Actualiza cada 3s. Al operar se valida una nueva cotización automáticamente.'}</p>}
     </section><section className="stock-order-card">
       <div className="stock-eyebrow">{en ? 'CHOOSE AN OPERATION' : 'ELIGE UNA OPERACIÓN'}</div>
-      <div className="stock-side-switch">{['buy', 'sell'].map(value => <button type="button" disabled={busy || retry} key={value} className={side === value ? 'active' : ''} aria-pressed={side === value} onClick={() => choose(() => { setSide(value); setSellAll(false); })}>{value === 'buy' ? en ? 'Buy' : 'Comprar' : en ? 'Sell' : 'Vender'}</button>)}</div>
-      <div className="stock-order-balance">{en ? 'Available' : 'Disponible'} <strong>{stockMoney(balance)} MXNP</strong></div>
-      {side === 'sell' && <div className="stock-order-balance">{en ? 'You hold' : 'Tienes'} <strong>{Number(holding?.quantity || 0).toLocaleString('es-MX', { maximumFractionDigits: 8 })} {ticker}</strong></div>}
-      <label className="stock-amount-label" htmlFor="stock-amount">{en ? 'AMOUNT IN POINTS' : 'MONTO EN PUNTOS'}</label>
-      <div className="stock-amount-wrap"><span>$</span><input id="stock-amount" inputMode="decimal" autoComplete="off" value={amount} disabled={busy || retry || sellAll} onChange={e => choose(() => setAmount(e.target.value))} /><span>MXNP</span></div>
-      <div className="stock-presets">{[100, 500, 1000, 5000].map(value => <button type="button" disabled={busy || retry} key={value} onClick={() => choose(() => { setAmount(String(value)); setSellAll(false); })}>{stockMoney(value).replace('.00', '')}</button>)}</div>
-      {side === 'sell' && <button type="button" className={`stock-secondary stock-sell-all ${sellAll ? 'active' : ''}`} aria-pressed={sellAll} disabled={busy || retry || !holding} onClick={() => choose(() => setSellAll(!sellAll))}>{en ? 'Sell all units' : 'Vender todo'}</button>}
+      <div className="stock-side-switch">{['buy', 'sell'].map(value => <button type="button" disabled={busy || retry} key={value} className={side === value ? 'active' : ''} aria-pressed={side === value} onClick={() => chooseSide(value)}>{value === 'buy' ? en ? 'Buy' : 'Comprar' : en ? 'Sell' : 'Vender'}</button>)}</div>
+      <div className="stock-order-balance">{en ? 'Wallet balance' : 'Saldo en puntos'} <strong>{stockMoney(balance)} MXNP</strong></div>
+      {side === 'sell' && <>
+        <div className="stock-order-balance">{en ? 'You hold' : 'Tienes'} <strong>{decimal(fixed(heldQuantity, 18), 18)} {ticker}</strong></div>
+        <div className="stock-order-balance">{en ? 'Available sale value' : 'Valor disponible para vender'} <strong>{fullSale ? `${stockMoney(fullSale.gross)} MXNP` : '—'}</strong></div>
+      </>}
+      <div className="stock-unit-switch" role="group" aria-label={en ? 'Enter order in' : 'Ingresar operación en'}>{['money', 'units'].map(value => <button type="button" key={value} disabled={busy || retry} aria-pressed={unitMode === value} className={unitMode === value ? 'active' : ''} onClick={() => switchUnitMode(value)}>{value === 'money' ? 'MXNP' : `${en ? 'Units' : 'Unidades'} · ${ticker}`}</button>)}</div>
+      <label className="stock-amount-label" htmlFor="stock-amount">{unitMode === 'units' ? `${en ? 'UNITS TO' : 'UNIDADES A'} ${side === 'buy' ? en ? 'BUY' : 'COMPRAR' : en ? 'SELL' : 'VENDER'}` : side === 'buy' ? en ? 'BUDGET IN MXNP' : 'PRESUPUESTO EN MXNP' : en ? 'SALE VALUE IN MXNP' : 'VALOR A VENDER EN MXNP'}</label>
+      <div className={`stock-amount-wrap ${unitMode === 'units' ? 'stock-amount-units' : ''}`}>
+        {unitMode === 'money' && <span>$</span>}
+        <input id="stock-amount" inputMode="decimal" autoComplete="off" value={inputValue} disabled={busy || retry} onChange={e => choose(() => { setSellPercent(null); unitMode === 'units' ? setQuantity(e.target.value) : setAmount(e.target.value); })} />
+        <span>{unitMode === 'units' ? ticker : 'MXNP'}</span>
+      </div>
+      {side === 'buy' && unitMode === 'money' && <div className="stock-presets">{[100, 500, 1000, 5000].map(value => <button type="button" disabled={busy || retry} key={value} onClick={() => choose(() => setAmount(String(value)))}>{stockMoney(value).replace('.00', '')}</button>)}</div>}
+      {side === 'sell' && <div className="stock-sell-selector">
+        <div className="stock-slider-label"><label htmlFor="stock-sell-percent">{en ? 'Percentage of your holding' : 'Porcentaje de tu posición'}</label><output htmlFor="stock-sell-percent">{selectedPercent}%</output></div>
+        <input id="stock-sell-percent" type="range" min="0" max="100" step="1" value={selectedPercent} disabled={busy || retry || !holding} onChange={e => choose(() => setSellPercent(Number(e.target.value)))} aria-valuetext={`${selectedPercent}% ${en ? 'of your holding' : 'de tu posición'}`} />
+        <div className="stock-presets">{[25, 50, 75, 100].map(value => <button type="button" key={value} aria-pressed={sellPercent === value} className={sellPercent === value ? 'active' : ''} disabled={busy || retry || !holding} onClick={() => choose(() => setSellPercent(value))}>{value === 100 ? en ? 'Sell all' : 'Todo' : `${value}%`}</button>)}</div>
+      </div>}
+      <p className="stock-note stock-input-note">{side === 'sell' ? en ? 'Your sale uses the current price. Percentages round down to the asset’s minimum fraction.' : 'Vendes al precio actual. El porcentaje se ajusta hacia abajo a la fracción mínima del activo.' : en ? `Minimum buy: 100 MXNP. Units allow up to ${precision} decimal places.` : `Compra mínima: 100 MXNP. Las unidades permiten hasta ${precision} decimales.`}</p>
       <dl className="stock-estimate"><div><dt>{side === 'buy' ? en ? 'Approx. units received' : 'Recibes aprox.' : en ? 'Units sold' : 'Unidades a vender'}</dt><dd>{summary ? `${summary.quantity} ${ticker}` : '—'}</dd></div>
+        <div><dt>{side === 'buy' ? en ? 'Purchase value' : 'Valor de compra' : en ? 'Sale value' : 'Valor de venta'}</dt><dd>{summary ? `${stockMoney(summary.gross)} MXNP` : '—'}</dd></div>
         <div><dt>{en ? 'Pronos fee' : 'Comisión Pronos'} 0.10%</dt><dd>{summary ? `${stockMoney(summary.fee)} MXNP` : '—'}</dd></div>
         <div><dt>{side === 'buy' ? en ? 'Total debit' : 'Cargo total' : en ? 'Net proceeds' : 'Recibes neto'}</dt><dd>{summary ? `${stockMoney(summary.total)} MXNP` : '—'}</dd></div>
         <div><dt>{en ? 'Exchange rate' : 'Tipo de cambio'}</dt><dd>{stockMoney(quote?.fx?.rate || data?.fx?.rate)} MXN / USD</dd></div>
       </dl>
-      {!quote && estimate && <p className="stock-note">{en ? 'Estimate updates with your amount. Review to get a confirmed quote.' : 'La estimación cambia con tu monto. Revisa para obtener una cotización confirmada.'}</p>}
+      {!quote && estimate && <p className="stock-note">{en ? 'Estimate updates with your amount. The final price is validated when you trade.' : 'La estimación cambia con tu monto. El precio final se valida al operar.'}</p>}
       {!quote && estimateError && <p className="stock-note" role="status">{stockErrorMessage(estimateError, lang)}</p>}
-      {quote && <p className="stock-note" role="status">{expired ? en ? 'Quote expired. Review again.' : 'Cotización vencida. Revisa de nuevo.' : `${en ? 'Quote valid for' : 'Cotización válida por'} ${Math.max(0, Math.ceil((quote.expiresAt - now) / 1000))}s`}
+      {quote && <p className="stock-note" role="status">{retry ? en ? 'Keep this operation to verify its result safely.' : 'Conservamos esta operación para verificar su resultado.' : en ? 'Updated quote. Processing operation…' : 'Cotización actualizada. Procesando operación…'}
         {side === 'buy' && Number(quote.unspent) > 0 && <><br />{en ? 'Remainder kept in your balance' : 'Remanente en tu balance'}: {stockMoney(quote.unspent)} MXNP</>}</p>}
       {message && <p className={`stock-alert ${message.type === 'success' ? 'stock-success' : ''}`} role="status">{message.text}</p>}
-      <button type="button" className="stock-primary" onClick={submit} disabled={busy || (authenticated && !retry && (!canReview || (side === 'sell' && !holding) || (!quote && estimateError) || (!sellAll && !(Number(amount) > 0))))}>{authenticated ? !canReview && !busy && !retry ? !data && !marketError ? en ? 'Loading prices…' : 'Cargando precios…' : en ? 'Price unavailable' : 'Precio no disponible' : buttonLabel : en ? 'Sign in to trade' : 'Inicia sesión para operar'}</button>
+      <button type="button" className="stock-primary" onClick={submit} disabled={busy || (authenticated && !retry && (!canTrade || (side === 'sell' && !holding) || (!quote && estimateError) || (!orderRequest.sellAll && !(Number(orderRequest.amount ?? orderRequest.quantity) > 0))))}>{authenticated ? !canTrade && !busy && !retry ? !data && !marketError ? en ? 'Loading prices…' : 'Cargando precios…' : en ? 'Price unavailable' : 'Precio no disponible' : buttonLabel : en ? 'Sign in to trade' : 'Inicia sesión para operar'}</button>
       <p className="stock-note">{en ? 'Simulated holdings with MXNP points. No real shares or cash withdrawals. Holdings reset with the points cycle.' : 'Posiciones simuladas con puntos MXNP. Sin acciones reales ni retiros de dinero. Las posiciones se reinician con el ciclo de puntos.'}
         {data?.fx && <><br />{data.fx.source} · {data.fx.date}</>}</p>
     </section></div>

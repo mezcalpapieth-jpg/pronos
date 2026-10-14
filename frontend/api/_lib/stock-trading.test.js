@@ -125,3 +125,25 @@ test('unavailable marks preserve holdings and flag the previous valuation as sta
   assert.equal(result.positions[0].stale, true);
   assert.equal(result.summary.currentValue, 498);
 });
+
+test('unit orders preserve the server quote through execution and prevent overselling', async t => {
+  const { db, quote, trade } = await setup(t);
+  const bought = await trade(await quote({ side: 'buy', quantity: '0.25' }));
+  assert.equal(bought.quantity, '0.25');
+  assert.equal(bought.total, '500.5');
+  assert.equal(bought.balance, '9499.5');
+  const sold = await trade(await quote({ side: 'sell', quantity: '0.1' }));
+  assert.equal(sold.position.quantity, '0.15');
+  assert.equal(sold.position.realizedPnl, '-2.398');
+  await assert.rejects(quote({ side: 'sell', quantity: '0.151' }), { code: 'insufficient_stock_quantity' });
+  await assert.rejects(quote({ side: 'sell', amount: '298' }), { code: 'insufficient_stock_quantity' });
+  await trade(await quote({ side: 'sell', sellAll: true }));
+  assert.equal((await db.query('SELECT quantity FROM points_stock_positions')).rows[0].quantity, '0.000000000000000000');
+});
+
+test('orders accept one sizing method and reject mixed or unsupported requests', () => {
+  assert.deepEqual(stockOrderRequest({ ticker: 'BTC', side: 'buy', quantity: '0.00032' }), { ticker: 'BTC', side: 'buy', quantity: '0.00032' });
+  for (const request of [{ amount: '500', quantity: '0.25' }, {}, { sellAll: true }]) {
+    assert.throws(() => stockOrderRequest({ ticker: 'AAPL', side: 'buy', ...request }), { code: 'invalid_amount' });
+  }
+});

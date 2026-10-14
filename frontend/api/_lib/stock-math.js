@@ -51,17 +51,37 @@ export function buildStockFill({ side, amount, quantity, sellAll = false, positi
   const denominator = scale * PRICE * PRICE;
   const available = fixed(positionQuantity, 18);
   const budget = amount != null ? fixed(amount) : null;
+  const quantityOrder = quantity != null;
+  if (Number(budget !== null) + Number(quantityOrder) + Number(sellAll) !== 1 || (side === 'buy' && sellAll)) {
+    throw stockError('invalid_amount');
+  }
   if (budget !== null && (budget <= 0n || budget > 1000000n * MONEY)) throw stockError('invalid_amount');
-  if (side === 'buy' && (budget === null || budget < 100n * MONEY)) throw stockError('stock_minimum_amount');
+  if (side === 'buy' && budget !== null && budget < 100n * MONEY) throw stockError('stock_minimum_amount');
   // Keep quantity arithmetic typed as BigInt, including during Vercel's static tracing.
-  let requested = 0n;
+  let requested = quantityOrder ? fixed(quantity, precision) : 0n;
   if (side === 'sell') {
     if (available <= 0n) throw stockError('insufficient_stock_quantity');
     if (sellAll) requested = available * scale / QTY;
-    else if (quantity != null) requested = fixed(quantity, precision);
+    else if (quantityOrder) requested = fixed(quantity, precision);
     else if (budget !== null) requested = budget * denominator / (fixed(levels[0].px, 8) * fx * MONEY);
     else throw stockError('invalid_amount');
     if (requested * QTY / scale > available) throw stockError('insufficient_stock_quantity');
+    // A points request must fit the holding's actual sale value even when a
+    // coarse quantity step would round an excessive request down to all units.
+    if (budget !== null) {
+      let remaining = available * scale / QTY;
+      let maximumGross = 0n;
+      for (const level of levels) {
+        const price = fixed(level.px, 8);
+        const size = fixed(level.sz, precision);
+        if (price <= 0n || size <= 0n) continue;
+        const take = size < remaining ? size : remaining;
+        maximumGross += take * price * fx * MONEY / denominator;
+        remaining -= take;
+        if (remaining === 0n) break;
+      }
+      if (remaining === 0n && budget > maximumGross) throw stockError('insufficient_stock_quantity');
+    }
   }
   let filled = 0n;
   let gross = 0n;
@@ -74,7 +94,7 @@ export function buildStockFill({ side, amount, quantity, sellAll = false, positi
     const size = fixed(level.sz, precision);
     if (price <= 0n || size <= 0n) continue;
     let take = size;
-    if (side === 'buy') {
+    if (side === 'buy' && budget !== null) {
       const room = grossLimit - gross;
       const affordable = room * denominator / (price * fx * MONEY);
       if (take > affordable) take = affordable;
@@ -85,20 +105,21 @@ export function buildStockFill({ side, amount, quantity, sellAll = false, positi
     usdNumerator += take * price;
     filled += take;
     fills.push({ quantity: decimal(take, precision), priceUsd: decimal(price, 8) });
-    if (side === 'sell' && filled === requested) break;
+    if ((side === 'sell' || quantityOrder) && filled === requested) break;
   }
   if (filled <= 0n) throw stockError('stock_order_too_small');
-  if (side === 'sell' && filled !== requested) throw stockError('stock_insufficient_liquidity', 409);
+  if ((side === 'sell' || quantityOrder) && filled !== requested) throw stockError('stock_insufficient_liquidity', 409);
   // For buys, dust smaller than one step is fine; unfilled material size is not.
   const lastPrice = fixed(levels[levels.length - 1].px, 8);
   const dustLimit = ceil(lastPrice * fx * MONEY, denominator);
-  if (side === 'buy' && grossLimit - gross >= dustLimit) throw stockError('stock_insufficient_liquidity', 409);
+  if (side === 'buy' && budget !== null && grossLimit - gross >= dustLimit) throw stockError('stock_insufficient_liquidity', 409);
   const fee = ceil(gross, 1000n);
   const total = side === 'buy' ? gross + fee : gross - fee;
-  if (total <= 0n || (side === 'buy' && total > budget)) throw stockError('invalid_amount');
+  if (side === 'buy' && quantityOrder && total < 100n * MONEY) throw stockError('stock_minimum_amount');
+  if (total <= 0n || (side === 'buy' && total > (budget ?? 1000000n * MONEY))) throw stockError('invalid_amount');
   return {
     side, quantity: decimal(filled, precision), gross: decimal(gross), fee: decimal(fee),
-    total: decimal(total), unspent: side === 'buy' ? decimal(budget - total) : '0',
+    total: decimal(total), unspent: side === 'buy' && budget !== null ? decimal(budget - total) : '0',
     priceUsd: decimal(usdNumerator / filled, 8), fx: quote.fx,
     szDecimals: precision, fills,
   };
