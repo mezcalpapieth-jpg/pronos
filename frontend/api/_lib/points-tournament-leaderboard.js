@@ -579,7 +579,7 @@ export async function buildTournamentLeaderboardRows(
   db,
   { limit = 500, now = new Date(), window = null, includeConvictionBreakdown = false } = {},
 ) {
-  const users = await queryRows(db, `
+  const usersQuery = queryRows(db, `
     SELECT u.username, u.created_at, u.profile_image_url, COALESCE(b.balance, 0) AS balance
     FROM points_users u
     LEFT JOIN points_balances b ON b.username = u.username
@@ -587,7 +587,10 @@ export async function buildTournamentLeaderboardRows(
     LIMIT 5000
   `);
 
-  const scoringWindow = window || await resolveTournamentScoringWindow(db, { now });
+  const [users, scoringWindow] = await Promise.all([
+    usersQuery,
+    window || resolveTournamentScoringWindow(db, { now }),
+  ]);
   if (!scoringWindow) {
     return buildNeutralLeaderboardRows(users, limit);
   }
@@ -596,7 +599,7 @@ export async function buildTournamentLeaderboardRows(
   const cutoffIso = scoringWindow.rankingCutoffAt || TOURNAMENT_RANKING_CUTOFF_ISO;
   const qualifyingMinimum = TOURNAMENT_MIN_ENTRY_MXNP;
 
-  const activityRows = await queryRows(db, `
+  const activityQuery = queryRows(db, `
     SELECT t.username,
            COUNT(*) FILTER (WHERE t.side IN ('buy', 'sell', 'redeem')) AS total_actions,
            COUNT(*) FILTER (WHERE t.side = 'buy') AS buy_count,
@@ -622,7 +625,7 @@ export async function buildTournamentLeaderboardRows(
     GROUP BY t.username
   `, [startIso, cutoffIso, qualifyingMinimum, TOURNAMENT_APPROVED_MARKET_START_ISO]);
 
-  const positionRows = await queryRows(db, `
+  const positionQuery = queryRows(db, `
     SELECT p.username, p.market_id, p.outcome_index, p.shares, p.cost_basis, p.realized_pnl,
            m.status, m.outcome, m.reserves, m.outcomes,
            COALESCE(m.parent_id, m.id) AS exposure_group_id,
@@ -650,9 +653,20 @@ export async function buildTournamentLeaderboardRows(
       )
   `, [startIso, cutoffIso, TOURNAMENT_APPROVED_MARKET_START_ISO]);
 
-  const holdTradeRows = await queryRows(db, `
-    SELECT t.id, t.username, t.market_id, t.outcome_index, t.side,
-           t.shares, t.collateral, t.price_at_trade, t.created_at,
+  const holdMarketQuery = queryRows(db, `
+    WITH trade_history AS (
+      SELECT t.market_id,
+             JSONB_AGG(JSONB_BUILD_ARRAY(
+               t.id, t.username, t.outcome_index, t.side, t.shares,
+               t.collateral, t.price_at_trade, t.created_at
+             ) ORDER BY t.created_at ASC, t.id ASC) AS trades
+      FROM points_trades t
+      WHERE t.created_at >= $1
+        AND t.created_at <= $2
+        AND t.side IN ('buy', 'sell', 'redeem')
+      GROUP BY t.market_id
+    )
+    SELECT m.id AS market_id, h.trades,
            m.status AS market_status, m.outcome AS market_outcome,
            COALESCE(m.start_time, parent.start_time) AS market_start_time,
            COALESCE(m.end_time, parent.end_time) AS market_end_time,
@@ -665,20 +679,29 @@ export async function buildTournamentLeaderboardRows(
              OR parent.tournament_featured IS TRUE
              OR COALESCE(pm.reviewed_at, parent.created_at, m.created_at) >= $3::timestamptz
            ) AS tournament_featured
-    FROM points_trades t
-    JOIN points_markets m ON m.id = t.market_id
+    FROM trade_history h
+    JOIN points_markets m ON m.id = h.market_id
     LEFT JOIN points_markets parent ON parent.id = m.parent_id
     LEFT JOIN points_pending_markets pm ON pm.approved_market_id = COALESCE(m.parent_id, m.id)
-    WHERE t.created_at >= $1
-      AND t.created_at <= $2
-      AND t.side IN ('buy', 'sell', 'redeem')
-      AND (
+    WHERE (
         m.tournament_featured IS TRUE
         OR parent.tournament_featured IS TRUE
         OR COALESCE(pm.reviewed_at, parent.created_at, m.created_at) >= $3::timestamptz
       )
-    ORDER BY t.created_at ASC, t.id ASC
   `, [startIso, cutoffIso, TOURNAMENT_APPROVED_MARKET_START_ISO]);
+  const [activityRows, positionRows, holdMarketRows, parlayRows, liquidityRows, stocks] = await Promise.all([
+    activityQuery,
+    positionQuery,
+    holdMarketQuery,
+    readParlayScoreRows(db, startIso, cutoffIso),
+    readLiquidityRewardRows(db, startIso, cutoffIso),
+    readStockTournamentRows(db, { window: scoringWindow, now: new Date(now).getTime() }),
+  ]);
+  // Source articles transfer once per market. Compact trade tuples avoid
+  // repeating JSON field names, then restore the unchanged FIFO input rows.
+  const holdTradeRows = holdMarketRows.flatMap(({ trades, ...market }) =>
+    parseJson(trades, []).map(([id, username, outcome_index, side, shares, collateral, price_at_trade, created_at]) =>
+      ({ ...market, id, username, outcome_index, side, shares, collateral, price_at_trade, created_at })));
 
   const activityByUser = new Map(activityRows.map(row => [row.username, row]));
   const pnlByUser = new Map();
@@ -698,11 +721,8 @@ export async function buildTournamentLeaderboardRows(
     marketBreakdownByUser: convictionBreakdownByUser,
   } = buildConvictionBonusByUser(holdTradeRows, pnlByUserMarket, { window: scoringWindow });
 
-  const parlayRows = await readParlayScoreRows(db, startIso, cutoffIso);
   const parlayByUser = new Map(parlayRows.map(row => [row.username, row]));
-  const liquidityRows = await readLiquidityRewardRows(db, startIso, cutoffIso);
   const liquidityByUser = new Map(liquidityRows.map(row => [row.username, row]));
-  const stocks = await readStockTournamentRows(db, { window: scoringWindow, now: new Date(now).getTime() });
 
   const ranked = users.map(user => {
     const predictionActivity = activityByUser.get(user.username) || {};

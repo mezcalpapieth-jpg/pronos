@@ -85,8 +85,8 @@ test('current points tournament closes at 11:59pm Mexico City on August 26', () 
 test('October points tournament starts at midnight Mexico City and lasts through October', () => {
   assert.equal(NEXT_TOURNAMENT_START_ISO, '2026-10-01T06:00:00.000Z');
   assert.equal(NEXT_TOURNAMENT_SCORING_START_ISO, '2026-10-01T15:00:00.000Z');
-  assert.equal(NEXT_TOURNAMENT_OPERATION_CLOSE_ISO, '2026-11-01T05:59:00.000Z');
-  assert.equal(NEXT_TOURNAMENT_RANKING_CUTOFF_ISO, '2026-11-01T05:59:00.000Z');
+  assert.equal(NEXT_TOURNAMENT_OPERATION_CLOSE_ISO, '2026-11-01T05:59:59.000Z');
+  assert.equal(NEXT_TOURNAMENT_RANKING_CUTOFF_ISO, '2026-11-01T05:59:59.000Z');
   assert.equal(configuredCycleEndIso('2026-10-01T06:00:00.000Z'), NEXT_TOURNAMENT_OPERATION_CLOSE_ISO);
 
   const window = getTournamentWindow(new Date('2026-09-24T18:00:00.000Z'));
@@ -94,6 +94,29 @@ test('October points tournament starts at midnight Mexico City and lasts through
   assert.equal(window.startsAt, NEXT_TOURNAMENT_START_ISO);
   assert.equal(window.scoringStartsAt, NEXT_TOURNAMENT_SCORING_START_ISO);
   assert.equal(tournamentScoringStartsAt(window), NEXT_TOURNAMENT_SCORING_START_ISO);
+});
+
+test('October tournament remains active in the final minute and closes at 23:59:59 Mexico City', () => {
+  for (const iso of ['2026-11-01T05:59:00.000Z', '2026-11-01T05:59:58.999Z']) {
+    const window = getTournamentWindow(new Date(iso));
+    assert.equal(window.status, 'active');
+    assert.equal(window.rankingCutoffAt, NEXT_TOURNAMENT_RANKING_CUTOFF_ISO);
+    assert.equal(tournamentRulesActive(new Date(iso)), true);
+  }
+  assert.equal(getTournamentWindow(new Date(NEXT_TOURNAMENT_RANKING_CUTOFF_ISO)).status, 'closed');
+  assert.equal(tournamentRulesActive(new Date(NEXT_TOURNAMENT_RANKING_CUTOFF_ISO)), false);
+});
+
+test('configured October cycle extends the existing minute-only database cutoff by 59 seconds', () => {
+  const row = configuredCycleWindowFromRow({
+    id: 5,
+    label: 'Torneo Octubre 2026',
+    started_at: NEXT_TOURNAMENT_START_ISO,
+    ends_at: '2026-11-01T05:59:00.000Z',
+  });
+  assert.equal(row.rankingCutoffAt, NEXT_TOURNAMENT_RANKING_CUTOFF_ISO);
+  assert.equal(row.operationCloseAt, NEXT_TOURNAMENT_OPERATION_CLOSE_ISO);
+  assert.equal(row.endsAt, NEXT_TOURNAMENT_RANKING_CUTOFF_ISO);
 });
 
 test('configured cycle rows extend stale stored ends to the current tournament close', () => {

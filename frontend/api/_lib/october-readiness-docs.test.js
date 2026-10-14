@@ -23,5 +23,5 @@ test('Vercel config keeps October tournament production crons declared', () => {
   assert.match(vercelConfig, /"path": "\/api\/cron\/points-parlay-settle"[\s\S]*"schedule": "\*\/15 \* \* \* \*"/);
   assert.match(vercelConfig, /"path": "\/api\/cron\/points-maker-rewards"[\s\S]*"schedule": "0 16 \* \* \*"/);
   assert.match(vercelConfig, /"path": "\/api\/cron\/points-snapshot-prices"[\s\S]*"schedule": "0 \* \* \* \*"/);
-  assert.match(vercelConfig, /"path": "\/api\/cron\/points-tournament-snapshot"[\s\S]*"schedule": "59 5 \* \* \*"/);
+  assert.match(vercelConfig, /"path": "\/api\/cron\/points-tournament-snapshot"[\s\S]*"schedule": "0 6 \* \* \*"/);
 });

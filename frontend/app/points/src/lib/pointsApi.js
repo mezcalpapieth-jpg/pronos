@@ -61,8 +61,8 @@ const PUBLIC_ERROR_COPY = {
     en: 'The tournament is not active yet.',
   },
   tournament_market_after_cutoff: {
-    es: 'Este mercado termina después del cierre del torneo. Usa uno que cierre antes de las 11:59pm.',
-    en: 'This market settles after the tournament closes. Pick one that closes before 11:59pm.',
+    es: 'Este mercado se evalúa después del cierre del torneo. Usa uno cuyo resultado se mida a más tardar a las 23:59:59 (hora CDMX).',
+    en: 'This market is evaluated after the tournament closes. Pick one measured no later than 11:59:59pm Mexico City time.',
   },
   invalid_stake: {
     es: 'Ingresa un stake válido para la combinada.',

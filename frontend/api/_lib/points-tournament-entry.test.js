@@ -55,6 +55,20 @@ test('tournament settlement guard ignores non-tournament markets', () => {
   assert.equal(lock, null);
 });
 
+test('October tournament allows DOGGY measurement at 23:59:59 with an earlier trading close', () => {
+  const market = {
+    tournament_featured: true,
+    end_time: '2026-11-01T04:59:00.000Z',
+    resolver_config: { closesAt: '2026-11-01T05:59:59.000Z' },
+  };
+  const now = new Date('2026-10-14T13:28:40.000Z');
+  assert.equal(tournamentSettlementLock(market, now), null);
+  assert.equal(tournamentSettlementLock({
+    ...market,
+    resolver_config: { closesAt: '2026-11-01T05:59:59.001Z' },
+  }, now)?.error, 'tournament_market_after_cutoff');
+});
+
 function snapshotStatusDb({ activeCycle = true, snapshotCount = 0 } = {}) {
   return {
     async query(text) {

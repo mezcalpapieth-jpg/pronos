@@ -44,9 +44,10 @@ curl "$PROD_URL/api/cron/points-maker-rewards?dry=1&key=$CRON_SECRET"
 curl "$PROD_URL/api/cron/points-snapshot-prices?dry=1&key=$CRON_SECRET"
 ```
 
-Do not invoke `/api/cron/points-tournament-snapshot` before cutoff unless the
-team intentionally wants to write a snapshot. Its production schedule is
-`59 5 * * *`, matching the 11:59 PM Mexico City cutoff during October.
+The October cutoff is October 31 at 23:59:59 Mexico City time
+(`2026-11-01T05:59:59.000Z`). `/api/cron/points-tournament-snapshot` skips calls
+before the cutoff. Its production schedule is `0 6 * * *`, running at midnight
+Mexico City, just after the cutoff; scoring uses the exact cutoff timestamp.
 
 Required production schedules:
 
@@ -57,7 +58,7 @@ Required production schedules:
 | `/api/cron/points-parlay-settle` | `*/15 * * * *` | Settle parlays after legs resolve |
 | `/api/cron/points-maker-rewards` | `0 16 * * *` | Pay maker rewards |
 | `/api/cron/points-snapshot-prices` | `0 * * * *` | Store price snapshots |
-| `/api/cron/points-tournament-snapshot` | `59 5 * * *` | Freeze tournament standings at cutoff |
+| `/api/cron/points-tournament-snapshot` | `0 6 * * *` | Freeze standings using the 23:59:59 CDMX cutoff |
 
 ## Market Drop Sequence
 
@@ -93,8 +94,8 @@ Required production schedules:
 
 ## Cutoff And Rollover
 
-1. At the 11:59 PM Mexico City cutoff, confirm that the tournament snapshot was
-   created by cron or intentionally trigger it from admin.
+1. After the 23:59:59 Mexico City cutoff and the midnight cron run, confirm that
+   the tournament snapshot was created or intentionally trigger it from admin.
 2. Verify the snapshot row count and top positions before rollover.
 3. Do not rollover while the snapshot is missing, incomplete, or still under
    dispute.
