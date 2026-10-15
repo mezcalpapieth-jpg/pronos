@@ -7,11 +7,15 @@ does not authorize production deployment or changes to live market data.
 The live inventory was read-only: 26 active manual/manual-review parent markets,
 12 with the tournament trophy and 14 hidden without it.
 
-Existing published rules, prices, reserves, balances, and share quantities are
-unchanged. Legacy upgrades below require an exact match of source, event identity,
+Prices, reserves, balances, and share quantities are unchanged. The four rule
+clarifications approved later on October 15 are implemented below but have not
+been applied to live records. Earlier legacy upgrades require an exact match of source, event identity,
 published criteria, and the applicable outcome/configuration guards. Customized
 contracts remain manual. Upgrades run when a market becomes due; they do not
 rewrite every market in advance.
+
+The GDP, Astra, Rotten Tomatoes and AI-lab contracts use an explicit Admin
+preview/apply transition instead. They are not silently upgraded when due.
 
 ## Implemented automatic readers
 
@@ -71,18 +75,76 @@ Official evidence:
 - [October 12 Capataz finalists](https://www.tvazteca.com/aztecauno/la-granja-vip/quienes-fueron-los-finalistas-estos-granjeros-lucharan-por-quedarse-el-puesto-de-capataz-en-la-granja-vip/).
 - [Official show schedule and videos](https://www.tvazteca.com/aztecauno/la-granja-vip/videos).
 
-## Visible markets still requiring manual handling
+## Four newly approved automated contracts
+
+Implemented locally, including generator rules and readers. Not deployed or
+activated on existing live markets in this change.
+
+| Market | Approved rule and automated evidence |
+| --- | --- |
+| #317495, Q3 Mexican GDP | INEGI's first Estimacion Oportuna release: Total GDP, original-series real year-over-year change for Q3 2026. Not seasonally adjusted, quarterly or cumulative growth. Read the official Word bulletin's original-series table. No extra rounding; lower bounds inclusive, upper bounds exclusive. Delayed publication waits with trading closed; ambiguous identity or revisions require review. |
+| #337989, GPT Astra 6.1+ | Deadline October 31, 2026, 23:59:59 CDMX, not December 31. Official announcement plus public access through ChatGPT or OpenAI API; paid and self-service public previews count. Sol, older Astra, renames, private/waitlist access and future-access announcements do not. Unclear successors require review. No requires complete official announcements, model documentation and ChatGPT release notes in a closing bundle from the final 60 seconds. |
+| #317675, Street Fighter Rotten Tomatoes | Exact [2026 movie page](https://www.rottentomatoes.com/m/street_fighter_2026), All Critics integer Tomatometer only. Snapshot at October 19, 08:00:00 CDMX: last verified completed capture, request started within the previous 60 seconds. Top Critics, Popcornmeter and average ratings do not count. A valid page explicitly lacking a score cancels and refunds remaining cost basis using the existing Admin procedure. Blocked or incomplete pages require review. |
+| #332179, best AI lab | Complete, unfiltered [Artificial Analysis text-model table](https://artificialanalysis.ai/leaderboards/models), descending Intelligence Index, October 31, 23:59:59 CDMX. Use visible scores and official visible row order for visible ties, with each reasoning configuration listed separately. Preserve the current primary index version and methodology. Last complete capture must be no more than five minutes old. Map the verified leader's creator to the listed lab, or Otro. Missing rows, disputed ordering or changed methodology during capture require review. |
+
+Closing-time evidence is not reconstructed from a later live page. A new
+authenticated minutely cron, `/api/cron/points-official-snapshots`, fetches only
+contracts in their final ten minutes and retains only eligible closing captures.
+Original source documents are privately gzip-archived with SHA-256 hashes in
+`points_official_result_snapshots`; public market responses receive evidence
+metadata, not complete archived pages. Settlement replays evidence for the exact
+configuration and outcome hash. Config/outcome changes invalidate previous
+captures and are guarded again in the settlement transaction.
+Edited criteria or a changed cutoff hour also disable automatic settlement,
+even if an Admin leaves the old rule-version field in place.
+
+The public HTML reader for Artificial Analysis does not require an API key and
+does not infer ranking from undocumented API array order. Operators still need
+to confirm applicable automated-access and archival permissions with the source.
+
+Read-only source checks on October 15 confirmed:
+
+- INEGI's Q2 2026 original-series annual GDP value of 2.2%, distinct from the
+  adjusted 2.1% and cumulative 1.2% values in the same bulletin.
+- Structured and visible All Critics scores agree on the Street Fighter page.
+- The complete Artificial Analysis table, leader and methodology version agree.
+- OpenAI RSS is readable, but direct announcement pages returned HTTP 403 from
+  this environment. No bypass was attempted. If production access also fails,
+  Astra goes to review, never to No. Unattended Astra settlement is not proven.
+
+These checks are parser smoke tests, not evidence of future closing outcomes.
+
+### Activation runbook
+
+After a separately authorized, SHA-verified deployment:
+
+1. As an authenticated Points Admin, GET `/api/points/admin/official-contracts`
+   for a read-only preview and `planHash`. It covers exactly #317495, #317675,
+   #332179 and #337989. Review the before/after rules and Astra closing date.
+2. Only after approval, POST the reviewed `planHash` to the same endpoint. All
+   four changes are transactional. Changed identities, outcomes, modes, status,
+   rules or dates invalidate the preview. Old pending resolution suggestions are
+   denied, while the previous configuration and approving admin are preserved.
+3. This operation updates rules, resolver metadata, approved-draft metadata and
+   Astra's question/closing time only. It never changes reserves, odds, balances,
+   shares or the three markets deliberately left manual.
+4. Verify `CRON_SECRET`, the new cron schedule, its runtime authorization and
+   readable source access on the production host. A cron dry run (`?dry=1`)
+   reads candidate configuration only; it does not create tables, fetch pages
+   or write evidence.
+5. Before a real deadline, verify a stored eligible snapshot with matching
+   contract hash, source hashes, start/completion times and private archive.
+   After the deadline, verify one real resolution or the appropriate review/
+   refund path. Missing snapshots cannot be repaired with post-deadline scores.
+
+## Visible markets kept manual
 
 | Market | Why it is not safely automatic yet |
 | --- | --- |
 | #317488, CDMX seismic alert in October | Need a complete authoritative archive of actual CDMX activations, not earthquakes or alerts for other cities. No record found is not sufficient proof of No. |
-| #317495, Q3 Mexican GDP flash estimate | The published rule does not distinguish the original annual-change series from the seasonally adjusted series. Specify the intended measure before adding an initial-release parser. |
 | #317524, Gilberto Mora transfer to Europe | Binding transfer/loan, geographic destination, timing, and announcement conditions require semantic verification. A matching news headline is insufficient. |
-| #317675, Street Fighter Rotten Tomatoes score | Requires the exact movie URL and a snapshot at the published 08:00 CDMX cutoff. A current score read later cannot reconstruct that historical score. |
 | #332130, return of Jesus Christ | Consensus/judgment condition without an objective API settlement criterion. |
 | #332178, UIF/FGR investigation of Amilcar Olan | Requires a qualifying official investigation announcement, correct identity and scope. Keyword matches and incomplete negative coverage are unsafe. |
-| #332179, best AI lab at month end | Needs a closing-time Artificial Analysis Intelligence Index snapshot, index version, public ranking tie order and suitable data-use permission. Today's API response is not a historical cutoff snapshot. |
-| #337989, GPT Astra 6.1+ release | Title says October, but the published criteria reference December 31. Resolve that discrepancy before automating; public release, private access and renaming also need explicit treatment. |
 
 The other 14 active manual parents lack the trophy and are hidden: #42537 annual
 inflation, #65882 GTA VI, #65883 Avengers Doomsday, and #161676 through #161686
@@ -95,7 +157,13 @@ be paid by a generic scraper.
 Focused tests cover archive completeness and audit policies, official release
 identity, exact legacy-rule guards, bucket boundaries, unsafe redirects, stale or
 speculative articles, changing nominee fields, and label-based parallel settlement.
-The focused run passed all 99 tests with no failures or skips.
+The earlier focused run passed all 99 tests with no failures or skips. After the
+four newly approved contracts were implemented, the expanded regression run
+passed all 210 tests with no failures or skips, including PGlite snapshot replay,
+refund accounting, unchanged balances/shares/reserves, activation rollback,
+modified-rule guards, deadline boundaries, and Vercel dependency tracing. The
+Points production build also passed; existing dependency-annotation and chunk-size
+warnings remain. No production build output was deployed.
 
 Read-only historical/live source checks succeeded for:
 

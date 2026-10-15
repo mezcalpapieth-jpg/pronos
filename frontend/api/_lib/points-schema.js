@@ -53,6 +53,7 @@ const POINTS_SCHEMA_READY_PROBE = `
     to_regclass('public.points_aicm_timetable_runs') IS NOT NULL AS points_aicm_timetable_runs,
     to_regclass('public.points_aicm_timetable_observations') IS NOT NULL AS points_aicm_timetable_observations,
     to_regclass('public.points_token_mcap_snapshots') IS NOT NULL AS points_token_mcap_snapshots,
+    to_regclass('public.points_official_result_snapshots') IS NOT NULL AS points_official_result_snapshots,
     to_regclass('public.points_top_holder_snapshots') IS NOT NULL AS points_top_holder_snapshots,
     to_regclass('public.points_resolution_corrections') IS NOT NULL AS points_resolution_corrections,
     to_regclass('public.points_redemption_reversals') IS NOT NULL AS points_redemption_reversals,
@@ -1120,6 +1121,20 @@ const POINTS_SCHEMA_MIGRATIONS = [
     ON points_token_mcap_snapshots(market_id, captured_at DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_points_token_mcap_snapshots_coin_time
     ON points_token_mcap_snapshots(coin_id, token_address, captured_at DESC)`,
+
+  // Deadline evidence is private and immutable; never return archived source pages in market APIs.
+  `CREATE TABLE IF NOT EXISTS points_official_result_snapshots (
+    id BIGSERIAL PRIMARY KEY,
+    market_id INTEGER NOT NULL REFERENCES points_markets(id) ON DELETE CASCADE,
+    contract_hash TEXT NOT NULL,
+    started_at TIMESTAMPTZ NOT NULL,
+    captured_at TIMESTAMPTZ NOT NULL CHECK (captured_at >= started_at),
+    payload JSONB NOT NULL,
+    archive JSONB NOT NULL,
+    UNIQUE(market_id, contract_hash, captured_at)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_official_result_snapshots_lookup
+    ON points_official_result_snapshots(market_id, contract_hash, captured_at DESC)`,
 
   // ── Lightweight app settings ────────────────────────────────────────────
   // Small feature switches that need to survive deploys without introducing

@@ -62,6 +62,14 @@ test('points schema stores resolver checkpoints off market rows', () => {
   }
 });
 
+test('closing evidence has matching private immutable snapshot storage in both migration paths', () => {
+  assert.match(source, /to_regclass\('public\.points_official_result_snapshots'\)/);
+  const definitions = [source, migrateSource].map(text => text.match(/`(CREATE TABLE IF NOT EXISTS points_official_result_snapshots[\s\S]*?)`/)[1]);
+  assert.equal(definitions[0], definitions[1]);
+  assert.match(definitions[0], /UNIQUE\(market_id, contract_hash, captured_at\)/);
+  assert.match(definitions[0], /CHECK \(captured_at >= started_at\)/);
+});
+
 test('points schema supports public api keys, idempotency, and api trade audit fields', () => {
   assert.match(source, /to_regclass\('public\.points_api_keys'\) IS NOT NULL AS points_api_keys/);
   assert.match(source, /to_regclass\('public\.points_api_idempotency_keys'\) IS NOT NULL AS points_api_idempotency_keys/);

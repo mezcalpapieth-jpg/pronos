@@ -230,9 +230,14 @@ export async function resolveAutoResolverCandidate(candidate = {}, { sql = null 
   let result = null;
 
   if (resolverType === 'api_chart' && cfg.source === OFFICIAL_RESULT_SOURCE) {
+    // Points snapshots cannot authorize settlement of a protocol market with a coincidentally equal ID.
     const official = await readOfficialResult(cfg, parseAutoResolverJsonb(candidate.outcomes, []));
+    if (official.cancel) {
+      throw Object.assign(new Error('official_result_cancellation_requires_protocol_review'), { benign: true, manualReview: true, info: official.resolverInfo });
+    }
     winningIdx = official.winningIdx;
     resolverInfo = official.resolverInfo;
+    resolverConfigPatch = { settlementEvidence: official.resolverInfo };
   } else if (resolverType === 'chainlink_price') {
     if (cfg.shape === 'binary-direction') {
       if (!cfg.feedAddress || cfg.threshold == null) {
