@@ -1,6 +1,9 @@
 import { parseHTML } from 'linkedom';
 import { readGranjaVipOfficialResult } from './granja-vip-official.js';
 import { readInitialInpcRelease, INPC_FIRST_RELEASE_CRITERIA, INPC_RELEASE_OUTCOMES } from './inegi-inpc-release.js';
+import { readInitialGdpRelease } from './inegi-gdp-release.js';
+import { CUTOFF_KINDS, readCutoffResult } from './official-cutoff-snapshots.js';
+import { isAutomaticContract } from './automated-market-rules.js';
 
 export const OFFICIAL_RESULT_SOURCE = 'official-result';
 const FED_CRITERIA = 'Se resuelve con el comunicado FOMC publicado el 28 de octubre de 2026 a las 14:00 ET. Recorta si el rango objetivo baja, Mantiene si no cambia, Sube si aumenta.';
@@ -168,7 +171,7 @@ export function pickWorldSeriesWinner(payload, { season, outcomes }) {
   return { winningIdx, champion: champions[0].name, wins: [...wins.values()], gameIds: final.map(game => game.gamePk) };
 }
 
-export async function readOfficialResult(cfg, outcomes, { fetchImpl = fetch, now = new Date() } = {}) {
+export async function readOfficialResult(cfg, outcomes, { fetchImpl = fetch, now = new Date(), sql = null, marketId = null } = {}) {
   const readyAt = new Date(cfg.resolveAt);
   if (!Number.isFinite(readyAt.getTime()) || now < readyAt) throw pendingOfficialResult('official_result_not_due');
   if (cfg.kind === 'fed-target-range') {
@@ -194,6 +197,11 @@ export async function readOfficialResult(cfg, outcomes, { fetchImpl = fetch, now
   }
   if (cfg.kind === 'ballon-dor-men') return readBallonDorWinner(cfg, outcomes, { fetchImpl, now });
   if (cfg.kind === 'inegi-inpc-first-release') return readInitialInpcRelease(cfg, outcomes, { fetchImpl, now });
+  if (cfg.kind === 'inegi-gdp-first-release') {
+    if (!isAutomaticContract(cfg)) throw Object.assign(pendingOfficialResult('gdp_contract_invalid_or_modified'), { manualReview: true });
+    return readInitialGdpRelease(cfg, outcomes, { fetchImpl, now });
+  }
+  if (CUTOFF_KINDS.includes(cfg.kind)) return readCutoffResult(cfg, outcomes, { sql, marketId, now });
   if (['granja-vip-capataz', 'granja-vip-elimination'].includes(cfg.kind)) {
     return readGranjaVipOfficialResult(cfg, outcomes, { fetchImpl, now });
   }

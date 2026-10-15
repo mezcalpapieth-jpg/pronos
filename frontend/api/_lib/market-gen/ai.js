@@ -1,13 +1,12 @@
 /**
  * AI market generator.
  *
- * Emits monthly manual-review markets for model-launch questions and a
- * benchmark winner question. These intentionally do not auto-resolve:
- * model launches need official announcement/access checks, and leaderboards
- * can change methodology or lab ownership labels.
+ * General launch/top-model questions stay manual. Named Astra releases and
+ * the global benchmark use versioned official-source contracts and cutoff evidence.
  */
 
 import { attachSuggestedPricing } from '../market-pricing.js';
+import { automaticConfig, applyAutomaticContract } from '../automated-market-rules.js';
 import {
   dateAtMexicoCityTime,
   endOfMexicoMonthClose,
@@ -250,7 +249,7 @@ function namedReleaseMarket(config, window) {
   const { criteriaEs, criteriaEn } = namedReleaseCriteria(config, window);
   const questionEs = `¿${config.modelLabel} será lanzado públicamente antes de que termine ${window.yearLabelEs}?`;
   const questionEn = `Will ${config.modelLabel} be publicly released before the end of ${window.yearLabelEn}?`;
-  return withPricing({
+  const spec = withPricing({
     source: SOURCE_NAMED_RELEASE,
     source_event_id: `ai-named-release:${window.year}:${config.key}`,
     question: questionEs,
@@ -310,6 +309,15 @@ function namedReleaseMarket(config, window) {
       },
     },
   }, [config.probability, 1 - config.probability]);
+  if (config.key !== 'gpt-astra-6-1') return spec;
+  const cutoff = dateAtMexicoCityTime({ year: window.year, month: 10, day: 31, hour: 23, minute: 59, second: 59 }).toISOString();
+  const resolveAt = new Date(Date.parse(cutoff) + 12 * 3600000).toISOString();
+  const question = `¿GPT Astra 6.1+ será lanzado públicamente antes del cierre del 31 de octubre de ${window.year}?`;
+  const astraQuestionEn = `Will GPT Astra 6.1+ be publicly released by the end of October 31, ${window.year}?`;
+  return applyAutomaticContract({ ...spec, question, end_time: cutoff,
+    source_data: { ...spec.source_data, resolvesAt: resolveAt,
+      translations: { es: { question, outcomes: ['Sí', 'No'] }, en: { question: astraQuestionEn, outcomes: ['Yes', 'No'] } } },
+  }, automaticConfig('openai-astra-release', { cutoff, resolveAt, openedAt: window.startIso }));
 }
 
 function labTopModelMarket(config, window) {
@@ -410,7 +418,7 @@ function benchmarkMarket(window) {
   const questionEs = `¿Quién tendrá el mejor modelo de IA en Artificial Analysis al cierre de ${window.monthEs}?`;
   const questionEn = `Who will have the top AI model on Artificial Analysis at the end of ${window.monthEn}?`;
 
-  return withPricing({
+  const spec = withPricing({
     source: SOURCE_BENCHMARK,
     source_event_id: `ai-benchmark:${window.monthKey}:artificial-analysis-index-lab`,
     question: questionEs,
@@ -463,6 +471,11 @@ function benchmarkMarket(window) {
       },
     },
   }, BENCHMARK.probabilities);
+  const cutoff = new Date(Date.parse(window.closeIso) + 59000).toISOString();
+  const resolveAt = new Date(Date.parse(cutoff) + 12 * 3600000).toISOString();
+  return applyAutomaticContract({ ...spec, end_time: cutoff,
+    source_data: { ...spec.source_data, resolvesAt: resolveAt },
+  }, automaticConfig('artificial-analysis-cutoff', { cutoff, resolveAt }));
 }
 
 export async function generateAiMarkets({ now = new Date() } = {}) {

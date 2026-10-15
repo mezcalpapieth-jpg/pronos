@@ -51,17 +51,26 @@ test('AI generator emits monthly release, named release, lab model, and benchmar
   assert.deepEqual(astra.outcomes, ['Sí', 'No']);
   assert.match(astra.question, /GPT Astra 6\.1\+/);
   assert.match(astra.resolver_config.criteria, /versión 6\.1 o superior/);
+  assert.equal(astra.resolver_type, 'api_chart');
+  assert.equal(astra.end_time, '2026-11-01T05:59:59.000Z');
+  assert.equal(astra.resolver_config.cutoff, astra.end_time);
+  assert.equal(astra.resolver_config.kind, 'openai-astra-release');
+  assert.match(astra.source_data.resolutionCriteriaEn, /October|2026-10-31/);
   assert.match(astra.source_data.pricingHints.polymarketQuery, /GPT Astra 6\.1\+ released by 2026/);
   assert.match(astra.source_data.evidence[1].url, /polymarket\.com\/all\/astra/);
 
   const fable = byId['ai-named-release:2026:claude-fable-5-2'];
   assert.ok(fable);
+  assert.equal(fable.resolver_type, 'manual_review');
   assert.match(fable.question, /Claude Fable 5\.2\+/);
   assert.match(fable.source_data.evidence[1].url, /polymarket\.com\/predictions\/fable/);
 
   const benchmark = byId['ai-benchmark:2026-10:artificial-analysis-index-lab'];
   assert.ok(benchmark);
   assert.equal(benchmark.source, 'ai-benchmark');
+  assert.equal(benchmark.resolver_type, 'api_chart');
+  assert.equal(benchmark.resolver_config.kind, 'artificial-analysis-cutoff');
+  assert.equal(benchmark.resolver_config.cutoff, '2026-11-01T05:59:59.000Z');
   assert.deepEqual(benchmark.outcomes, ['OpenAI', 'Google', 'Anthropic', 'xAI', 'Meta', 'Otro']);
   assert.equal(benchmark.resolver_config.benchmark, _internal.BENCHMARK.key);
   assert.match(benchmark.resolver_config.leaderboardUrl, /artificialanalysis\.ai\/leaderboards\/models/);

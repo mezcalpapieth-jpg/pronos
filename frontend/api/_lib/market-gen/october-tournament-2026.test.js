@@ -186,6 +186,16 @@ test('October tournament generator emits bilingual auto and review specs when co
   assert.match(amilcar.resolver_config.criteria, /No cuentan/);
   assert.deepEqual(amilcar.source_data.allowedAuthorities, ['UIF/SHCP', 'FGR/Fiscalía General de la República']);
 
+  const gdp = byEventId['october-2026:mexico-gdp-q3-yoy'];
+  assert.equal(gdp.resolver_type, 'api_chart');
+  assert.equal(gdp.resolver_config.kind, 'inegi-gdp-first-release');
+  assert.equal(gdp.resolver_config.targetPeriod, '2026-Q3');
+  assert.match(gdp.resolver_config.criteria, /serie original/);
+  const rt = byEventId['october-2026:street-fighter-rotten-tomatoes'];
+  assert.equal(rt.resolver_type, 'api_chart');
+  assert.equal(rt.resolver_config.cutoff, '2026-10-19T14:00:00.000Z');
+  assert.match(rt.source_data.resolutionCriteria, /All Critics Tomatometer/);
+
   const tortilla = byEventId['october-2026:tortilla-national-tortilleria-close'];
   assert.equal(tortilla.resolver_type, 'api_price');
   assert.equal(tortilla.resolver_config.source, 'sniim-food-price');

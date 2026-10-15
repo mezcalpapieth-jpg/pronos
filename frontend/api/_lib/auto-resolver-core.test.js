@@ -5,6 +5,13 @@ import { MANANERA_TRANSCRIPT_SOURCE } from './mananera.js';
 import { INEGI_INPC_SOURCE } from './inegi-inpc.js';
 import { popocatepetlResolverConfig } from './cenapred-popocatepetl.js';
 import { buildAutoResolverFinalScore, resolveAutoResolverCandidate } from './auto-resolver-core.js';
+import { automaticConfig, RT_OUTCOMES } from './automated-market-rules.js';
+
+test('protocol resolver cannot read a Points snapshot with a colliding market ID', async () => {
+  await assert.rejects(resolveAutoResolverCandidate({ id: 317675, resolver_type: 'api_chart', outcomes: RT_OUTCOMES,
+    resolver_config: automaticConfig('rotten-tomatoes-cutoff', { cutoff: '2020-01-01T14:00:00Z' }) },
+  { sql: { query: () => assert.fail('Points snapshot lookup from protocol resolver') } }), e => e.manualReview && /store_unavailable/.test(e.message));
+});
 
 function jsonResponse(body) {
   return {

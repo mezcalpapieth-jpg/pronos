@@ -28,7 +28,7 @@ function periodParts(targetPeriod) {
     label: `primera quincena de ${MONTHS[Number(match[2]) - 1]} de ${match[1]}` };
 }
 
-async function queryNews(method, params, fetchImpl) {
+export async function queryNews(method, params, fetchImpl) {
   // These POST endpoints are the public site's read-only news queries, not mutations.
   const response = await fetchImpl(`${API}${method}/v3`, {
     method: 'POST', redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(10000),

@@ -6,6 +6,7 @@ import { IBTRACS_PRODUCT_PAGE } from '../hurricanes.js';
 import { SNIIM_FOOD_PRICE_SOURCE } from '../sniim-food-prices.js';
 import { CENAPRED_ARCHIVE_URL, popocatepetlResolverConfig } from '../cenapred-popocatepetl.js';
 import { OFFICIAL_RESULT_SOURCE, upgradeLegacyOfficialResult } from '../official-results.js';
+import { automaticConfig, applyAutomaticContract, RT_URL } from '../automated-market-rules.js';
 import {
   INEGI_API_DOCS_URL,
   INEGI_FEEDS_URL,
@@ -418,6 +419,12 @@ function buildManualSpec({
       },
     }),
   });
+  if (key === 'mexico-gdp-q3-yoy') return applyAutomaticContract(spec, automaticConfig('inegi-gdp-first-release', {
+    targetPeriod: '2026-Q3', resolveAt: resolveIso,
+  }));
+  if (key === 'street-fighter-rotten-tomatoes') return applyAutomaticContract(spec, automaticConfig('rotten-tomatoes-cutoff', {
+    cutoff: resolveIso,
+  }));
   const automatic = upgradeLegacyOfficialResult({
     resolverType: spec.resolver_type, cfg: spec.resolver_config, source: spec.source,
     sourceEventId: spec.source_event_id, outcomes: spec.outcomes, endTime: spec.end_time,
@@ -956,10 +963,9 @@ function manualMarkets(env = process.env, { now = new Date() } = {}) {
     resolveIso: STREET_FIGHTER_RESOLVE_ISO,
     criteriaEs: 'Se toma el Tomatometer visible en Rotten Tomatoes a las 08:00 CDMX del 19 de octubre de 2026. Si no hay score publicado a esa hora, requiere anulacion o regla admin antes de aprobar.',
     criteriaEn: 'Use the Tomatometer visible on Rotten Tomatoes at 08:00 Mexico City time on October 19, 2026. If no score is published at that time, cancellation or an admin rule must be decided before approval.',
-    evidence: [{ title: 'Rotten Tomatoes', url: env.OCTOBER_STREET_FIGHTER_RT_URL || EVIDENCE.rottenTomatoes }],
+    evidence: [{ title: 'Street Fighter (2026): All Critics Tomatometer', url: RT_URL }],
     extraSourceData: {
       snapshotAt: STREET_FIGHTER_RESOLVE_ISO,
-      pendingSetup: 'Confirmar URL canonica de Rotten Tomatoes antes de aprobar.',
     },
   }));
 
@@ -981,8 +987,8 @@ function manualMarkets(env = process.env, { now = new Date() } = {}) {
 
   specs.push(buildManualSpec({
     key: 'mexico-gdp-q3-yoy',
-    questionEs: 'PIB Mexico Q3 2026: variacion anual de la estimacion oportuna',
-    questionEn: 'Mexico Q3 2026 GDP: annual change in the flash estimate',
+    questionEs: 'PIB México Q3 2026: variación real anual original de la estimación oportuna',
+    questionEn: 'Mexico Q3 2026 GDP: original-series real annual flash estimate',
     category: 'finanzas',
     tags: { categoryTags: ['finanzas', 'mexico'], geoTags: ['mexico'], topicTags: ['finanzas'] },
     icon: 'INEGI',

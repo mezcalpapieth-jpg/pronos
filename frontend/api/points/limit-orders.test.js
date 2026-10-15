@@ -43,6 +43,7 @@ const topHoldersHelperSource = await readFile(new URL('../_lib/points-top-holder
 const sellSource = await readFile(new URL('./sell.js', import.meta.url), 'utf8');
 const resolveSource = await readFile(new URL('./admin/resolve-market.js', import.meta.url), 'utf8');
 const cancelMarketSource = await readFile(new URL('./admin/cancel-market.js', import.meta.url), 'utf8');
+const cancelHelperSource = await readFile(new URL('../_lib/points-cancel-market.js', import.meta.url), 'utf8');
 const voidMarketSource = await readFile(new URL('./admin/void-market.js', import.meta.url), 'utf8');
 const cronResolveSource = await readFile(new URL('../cron/points-auto-resolve.js', import.meta.url), 'utf8');
 const crypto5MinSource = await readFile(new URL('../_lib/crypto-5min.js', import.meta.url), 'utf8');
@@ -817,7 +818,8 @@ test('market writes trigger orders and close paths release open reserves', () =>
   assert.match(tradeServiceSource, /assertCryptoTradeAllowed/);
   assert.match(helperSource, /const outcomeIndices = await resolveTriggeredOutcomeIndices/);
   assert.match(tradeServiceSource, /lockedReservedShares/);
-  for (const source of [resolveSource, cancelMarketSource, voidMarketSource, cronResolveSource]) {
+  assert.match(cancelMarketSource, /cancelPointsMarket/);
+  for (const source of [resolveSource, cancelHelperSource, voidMarketSource, cronResolveSource]) {
     assert.match(source, /releaseOpenLimitOrdersForMarkets/);
   }
 });

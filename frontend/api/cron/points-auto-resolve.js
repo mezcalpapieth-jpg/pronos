@@ -48,6 +48,7 @@ import { readCreAverageFor } from '../_lib/fuel.js';
 import { readSniimFoodPrice, SNIIM_FOOD_PRICE_SOURCE } from '../_lib/sniim-food-prices.js';
 import { readInegiInpcAnnualInflation, INEGI_INPC_SOURCE } from '../_lib/inegi-inpc.js';
 import { OFFICIAL_RESULT_SOURCE, readOfficialResult, upgradeLegacyOfficialResult } from '../_lib/official-results.js';
+import { cancelPointsMarket } from '../_lib/points-cancel-market.js';
 import { parallelLegResolutions } from '../_lib/parallel-resolution.js';
 import {
   readCenapredPopocatepetlExhalations,
@@ -1893,9 +1894,20 @@ export async function runAutoResolve({ dry = false } = {}) {
       let manualReviewCandidate = null;
       try {
         if (resolverType === 'api_chart' && cfg.source === OFFICIAL_RESULT_SOURCE) {
-          const official = await readOfficialResult(cfg, marketOutcomes);
+          const official = await readOfficialResult(cfg, marketOutcomes, { sql: schemaSql, marketId: Number(m.id) });
+          if (official.cancel) {
+            if (!dry) await withTransaction(async client => {
+              await cancelPointsMarket(client, Number(m.id), { actor: 'resolver:official-result',
+                reason: 'Sin Tomatometer publicado en la captura oficial al cierre', expectedConfig: cfg, expectedOutcomes: marketOutcomes });
+              await client.query(`UPDATE points_markets SET resolver_config = resolver_config || $2::jsonb WHERE id = $1`,
+                [m.id, JSON.stringify({ settlementEvidence: official.resolverInfo })]);
+            });
+            report.resolved.push({ id: m.id, canceled: true, ...official.resolverInfo, ...(dry ? { dry: true } : {}) });
+            continue;
+          }
           winningIdx = official.winningIdx;
           resolverInfo = official.resolverInfo;
+          resolverConfigPatch = { settlementEvidence: official.resolverInfo };
         } else if (resolverType === 'chainlink_price') {
           if (cfg.shape === 'binary-direction') {
             if (!cfg.feedAddress || cfg.threshold == null) {
@@ -3198,8 +3210,10 @@ export async function runAutoResolve({ dry = false } = {}) {
                    resolver_type = CASE WHEN $6 THEN $4 ELSE COALESCE(resolver_type, $4) END,
                    resolver_config = CASE WHEN $6 THEN $5::jsonb ELSE COALESCE(resolver_config, $5::jsonb) END
              WHERE id = $3 AND status = 'active'
+               AND (NOT $7::boolean OR (resolver_type = $4 AND resolver_config = $5::jsonb AND outcomes = $8::jsonb))
              RETURNING id, amm_mode`,
-            [winningIdx, `resolver:${resolverType}`, m.id, resolverType, JSON.stringify(cfg), Boolean(legacyPopocatepetlCfg || legacyOfficialCfg)],
+            [winningIdx, `resolver:${resolverType}`, m.id, resolverType, JSON.stringify(cfg), Boolean(legacyPopocatepetlCfg || legacyOfficialCfg),
+              cfg.source === OFFICIAL_RESULT_SOURCE && Boolean(cfg.rulesVersion), JSON.stringify(marketOutcomes)],
           );
           if (r.rows.length === 0) {
             const err = new Error('not_active_at_write'); err.benign = true; throw err;

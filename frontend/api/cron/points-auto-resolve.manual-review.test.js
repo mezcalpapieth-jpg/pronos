@@ -17,7 +17,9 @@ test('points auto-resolver upgrades legacy Popocatepetl markets before manual qu
 test('points auto-resolver upgrades guarded official results before manual queuing and dispatches their reader', () => {
   assert.ok(SOURCE.indexOf('const legacyOfficialCfg = upgradeLegacyOfficialResult') < SOURCE.indexOf('if (isManualReviewMarket({ resolverType, cfg, row: m, sourceData }))'));
   assert.match(SOURCE, /if \(legacyOfficialCfg\) \{\s*cfg = legacyOfficialCfg;\s*resolverType = 'api_chart';/);
-  assert.match(SOURCE, /cfg\.source === OFFICIAL_RESULT_SOURCE[\s\S]{0,100}readOfficialResult\(cfg, marketOutcomes\)/);
+  assert.match(SOURCE, /cfg\.source === OFFICIAL_RESULT_SOURCE[\s\S]{0,100}readOfficialResult\(cfg, marketOutcomes, \{ sql: schemaSql, marketId: Number\(m.id\) \}\)/);
+  assert.match(SOURCE, /resolver_config = \$5::jsonb AND outcomes = \$8::jsonb/);
+  assert.match(SOURCE, /expectedConfig: cfg, expectedOutcomes: marketOutcomes/);
   assert.match(SOURCE, /SELECT id, leg_label, status, outcome FROM points_markets\s+WHERE parent_id = \$1\s+ORDER BY id ASC\s+FOR UPDATE/);
   assert.match(SOURCE, /parallelLegResolutions\(legs.rows, marketOutcomes, winningIdx\)/);
 });

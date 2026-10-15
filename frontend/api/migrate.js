@@ -902,6 +902,19 @@ const MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS idx_points_cycle_position_snapshots_market
     ON points_cycle_position_snapshots(market_id, outcome_index)`,
 
+  `CREATE TABLE IF NOT EXISTS points_official_result_snapshots (
+    id BIGSERIAL PRIMARY KEY,
+    market_id INTEGER NOT NULL REFERENCES points_markets(id) ON DELETE CASCADE,
+    contract_hash TEXT NOT NULL,
+    started_at TIMESTAMPTZ NOT NULL,
+    captured_at TIMESTAMPTZ NOT NULL CHECK (captured_at >= started_at),
+    payload JSONB NOT NULL,
+    archive JSONB NOT NULL,
+    UNIQUE(market_id, contract_hash, captured_at)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_official_result_snapshots_lookup
+    ON points_official_result_snapshots(market_id, contract_hash, captured_at DESC)`,
+
   `CREATE TABLE IF NOT EXISTS points_top_holder_snapshots (
     market_id      INTEGER PRIMARY KEY REFERENCES points_markets(id) ON DELETE CASCADE,
     amm_mode       TEXT NOT NULL DEFAULT 'unified',

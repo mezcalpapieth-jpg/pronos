@@ -9,7 +9,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const source = await readFile(new URL('./cancel-market.js', import.meta.url), 'utf8');
+const routeSource = await readFile(new URL('./cancel-market.js', import.meta.url), 'utf8');
+const source = `${routeSource}\n${await readFile(new URL('../../_lib/points-cancel-market.js', import.meta.url), 'utf8')}`;
 const historySource = await readFile(new URL('../history.js', import.meta.url), 'utf8');
 const voidSource = await readFile(new URL('./void-market.js', import.meta.url), 'utf8');
 
@@ -18,7 +19,8 @@ test('cancel-market refunds open cost basis and marks the market canceled', () =
   assert.match(source, /requirePointsAdmin/);
   assert.match(source, /cannot_cancel_leg_directly/);
   assert.match(source, /market_not_active/);
-  assert.match(source, /SELECT id, status, amm_mode, parent_id/);
+  assert.match(routeSource, /withTransaction\(client => cancelPointsMarket/);
+  assert.match(source, /SELECT id, status, parent_id, resolver_config/);
   assert.match(source, /id = \$1 OR parent_id = \$1/);
   assert.match(source, /points_positions/);
   assert.match(source, /FOR UPDATE/);
