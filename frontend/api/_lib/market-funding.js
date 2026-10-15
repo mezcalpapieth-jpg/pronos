@@ -2,8 +2,12 @@ import { binaryBuyQuote, binaryPrices, multiBuyQuote, multiPrices, toRaw, fromRa
 
 export const MAX_FUNDING_AMOUNT = 10_000_000;
 export const MAX_FUNDED_RESERVE = 10_000_000;
-export const LIQUIDITY_TEST_BUY = 100;
+export const LIQUIDITY_TEST_BUY = 500;
 export const LIQUIDITY_TARGET_IMPACT = 5;
+export const LIQUIDITY_TARGETS = Object.freeze([
+  Object.freeze({ collateral: LIQUIDITY_TEST_BUY, maxImpactPts: LIQUIDITY_TARGET_IMPACT }),
+  Object.freeze({ collateral: 1000, maxImpactPts: 10 }),
+]);
 
 function invalid(message) {
   const error = new Error(message);
@@ -66,15 +70,16 @@ export function marketBuyImpacts(reserves, collateral = LIQUIDITY_TEST_BUY) {
 
 export function recommendMarketFunding(reserves) {
   const before = fundingReserves(reserves);
-  const worst = values => Math.max(...marketBuyImpacts(values).map(row => row.impactPts));
-  if (worst(before) <= LIQUIDITY_TARGET_IMPACT) return 0;
+  const meetsTargets = values => LIQUIDITY_TARGETS.every(target =>
+    marketBuyImpacts(values, target.collateral).every(row => row.impactPts <= target.maxImpactPts));
+  if (meetsTargets(before)) return 0;
   const max = Math.floor(Math.min(MAX_FUNDING_AMOUNT, MAX_FUNDED_RESERVE - Math.max(...before)));
-  if (max < 1 || worst(planMarketFunding(before, max).reservesAfter) > LIQUIDITY_TARGET_IMPACT) return null;
+  if (max < 1 || !meetsTargets(planMarketFunding(before, max).reservesAfter)) return null;
   let lo = 1;
   let hi = max;
   while (lo < hi) {
     const mid = Math.floor((lo + hi) / 2);
-    if (worst(planMarketFunding(before, mid).reservesAfter) <= LIQUIDITY_TARGET_IMPACT) hi = mid;
+    if (meetsTargets(planMarketFunding(before, mid).reservesAfter)) hi = mid;
     else lo = mid + 1;
   }
   return hi;
@@ -89,5 +94,9 @@ export function marketFundingPreview(reserves, amount = null) {
     targetImpactPts: LIQUIDITY_TARGET_IMPACT, recommendedAmount,
     impactsBefore: marketBuyImpacts(before),
     plan, impactsAfter: plan ? marketBuyImpacts(plan.reservesAfter) : null,
+    targets: LIQUIDITY_TARGETS.map(target => ({ ...target,
+      impactsBefore: marketBuyImpacts(before, target.collateral),
+      impactsAfter: plan ? marketBuyImpacts(plan.reservesAfter, target.collateral) : null,
+    })),
   };
 }

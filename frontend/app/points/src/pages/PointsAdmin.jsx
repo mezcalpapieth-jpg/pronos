@@ -16,6 +16,7 @@ import MarketLiquidityPanel from '../components/MarketLiquidityPanel.jsx';
 import AdminInterestPanel from '@app/components/AdminInterestPanel.jsx';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { pointsPublicAssetSrc } from '@app/lib/publicAssets.js';
+import { defaultPointsSeedLiquidity } from '../../../../api/_lib/market-liquidity.js';
 import {
   MARKET_CATEGORY_IMAGE_PLACEHOLDERS,
   marketImageSrc,
@@ -2829,19 +2830,29 @@ function CreateMarketForm({ prefill }) {
     resolutionSource: prefill?.resolutionSource || prefill?.sourceUrl || '',
     resolutionCriteria: prefill?.resolutionCriteria || '',
     outcomes: ['Sí', 'No'],
-    seedLiquidities: [500, 500],
+    seedLiquidities: Array(2).fill(defaultPointsSeedLiquidity({ category: prefill?.category || 'deportes' })),
   });
+  const [liquidityCustomized, setLiquidityCustomized] = useState(false);
+  const defaultSeed = defaultPointsSeedLiquidity({ category: form.category,
+    outcomeCount: form.outcomes.length, ammMode: mode === 'binary' ? 'unified' : ammMode });
+  useEffect(() => {
+    if (!liquidityCustomized) setForm(f => ({ ...f, seedLiquidities: Array(f.outcomes.length).fill(defaultSeed) }));
+  }, [defaultSeed, form.outcomes.length, liquidityCustomized]);
   const [state, setState] = useState({ submitting: false, msg: null, err: null });
 
   function switchMode(next) {
     if (next === mode) return;
     setMode(next);
+    setLiquidityCustomized(false);
     setForm(f => ({
       ...f,
       // Reset outcomes to a sane default for the chosen mode so users
       // don't accidentally submit leftover binary labels as a multi.
       outcomes: next === 'binary' ? ['Sí', 'No'] : ['', '', ''],
-      seedLiquidities: next === 'binary' ? [500, 500] : [500, 500, 500],
+      seedLiquidities: Array(next === 'binary' ? 2 : 3).fill(defaultPointsSeedLiquidity({
+        category: f.category, outcomeCount: next === 'binary' ? 2 : 3,
+        ammMode: next === 'binary' ? 'unified' : ammMode,
+      })),
     }));
     // chartStyle only applies at N=2 — drop a stale pick on the way out.
     if (next !== 'binary') setChartStyle('auto');
@@ -2858,7 +2869,8 @@ function CreateMarketForm({ prefill }) {
   function addOutcome() {
     setForm(f => {
       if (f.outcomes.length >= 10) return f;
-      return { ...f, outcomes: [...f.outcomes, ''], seedLiquidities: [...f.seedLiquidities, 500] };
+      return { ...f, outcomes: [...f.outcomes, ''], seedLiquidities: [...f.seedLiquidities,
+        defaultPointsSeedLiquidity({ category: f.category, outcomeCount: f.outcomes.length + 1, ammMode })] };
     });
   }
 
@@ -2872,6 +2884,7 @@ function CreateMarketForm({ prefill }) {
   }
 
   function updateOutcomeLiquidity(idx, value) {
+    setLiquidityCustomized(true);
     setForm(f => {
       const next = [...f.seedLiquidities];
       next[idx] = value;
@@ -2938,7 +2951,7 @@ function CreateMarketForm({ prefill }) {
         imageUrl: form.imageUrl.trim() || null,
         endTime: endIso,
         outcomes: cleaned,
-        seedLiquidity: cleanedLiquidities[0] || 500,
+        seedLiquidity: cleanedLiquidities[0] || defaultSeed,
         seedLiquidities: cleanedLiquidities,
         ammMode: effectiveAmmMode,
         chartStyle: effectiveChartStyle,
@@ -2960,8 +2973,12 @@ function CreateMarketForm({ prefill }) {
         resolutionSource: '',
         resolutionCriteria: '',
         outcomes: mode === 'binary' ? ['Sí', 'No'] : ['', '', ''],
-        seedLiquidities: mode === 'binary' ? [500, 500] : [500, 500, 500],
+        seedLiquidities: Array(mode === 'binary' ? 2 : 3).fill(defaultPointsSeedLiquidity({
+          category: f.category, outcomeCount: mode === 'binary' ? 2 : 3,
+          ammMode: mode === 'binary' ? 'unified' : ammMode,
+        })),
       }));
+      setLiquidityCustomized(false);
       setChartStyle('auto');
     } catch (e) {
       setState({ submitting: false, msg: null, err: e.code || e.message });
@@ -3249,7 +3266,7 @@ function CreateMarketForm({ prefill }) {
                 type="number"
                 min="100"
                 step="100"
-                value={form.seedLiquidities[i] ?? 500}
+                value={form.seedLiquidities[i] ?? defaultSeed}
                 onChange={e => updateOutcomeLiquidity(i, e.target.value)}
                 aria-label={`Liquidez opción ${i + 1}`}
                 title="Liquidez inicial de esta opción"
@@ -4839,6 +4856,7 @@ function EditMarketModal({ market, onClose, onSaved, onCancel }) {
   const [outcomeImages, setOutcomeImages] = useState(initialOutcomeImages);
   const initialParallelReserveRows = normalizeParallelReserveRows(market);
   const [parallelReserveRows, setParallelReserveRows] = useState(initialParallelReserveRows);
+  const [liquidityLegId, setLiquidityLegId] = useState(() => initialParallelReserveRows.find(row => row.status === 'active')?.id || '');
   // Split date + time into three plain inputs so format is stable
   // across browser locales. Hour/minute are number inputs clamped to
   // 0-23 / 0-59 via their native min/max attributes.
@@ -5395,6 +5413,17 @@ function EditMarketModal({ market, onClose, onSaved, onCancel }) {
 
         {market.status === 'active' && market.ammMode !== 'parallel' && (market.mode || 'points') === 'points' && !market.parentId && (
           <MarketLiquidityPanel marketId={market.id} onFunded={onSaved} />
+        )}
+
+        {market.status === 'active' && market.ammMode === 'parallel' && (market.mode || 'points') === 'points' && liquidityLegId && (
+          <div>
+            <label htmlFor={`liquidity-leg-${market.id}`} style={{ display: 'block', fontSize: 12, marginBottom: 6 }}>Liquidez por opción</label>
+            <select id={`liquidity-leg-${market.id}`} value={liquidityLegId} onChange={event => setLiquidityLegId(Number(event.target.value))}
+              style={{ width: '100%', marginBottom: 12, padding: '10px 12px', borderRadius: 6, background: 'var(--surface1)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}>
+              {initialParallelReserveRows.filter(row => row.status === 'active').map(row => <option key={row.id} value={row.id}>{row.label}</option>)}
+            </select>
+            <MarketLiquidityPanel key={liquidityLegId} marketId={liquidityLegId} onFunded={onSaved} />
+          </div>
         )}
 
         <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 16 }}>
@@ -8465,7 +8494,11 @@ function PendingMarketsTable({ onQueueChange }) {
       r.id === row.id ? { ...r, pendingTournamentFeatured: next } : r,
     ));
     try {
-      await adminToggleFeatured({ pendingId: row.id, tournamentFeatured: next });
+      const updated = await adminToggleFeatured({ pendingId: row.id, tournamentFeatured: next });
+      if (updated.seedLiquidity != null) setRows(prev => (prev || []).map(r => r.id === row.id ? {
+        ...r, seedLiquidity: updated.seedLiquidity, seedLiquidities: updated.seedLiquidities,
+        suggestedPricing: updated.suggestedPricing || r.suggestedPricing,
+      } : r));
     } catch (e) {
       setRows(prev => (prev || []).map(r =>
         r.id === row.id ? { ...r, pendingTournamentFeatured: !next } : r,

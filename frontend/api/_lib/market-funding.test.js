@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { binaryBuyQuote, binarySellQuote, multiBuyQuote, multiPrices, multiSellQuote } from './amm-math.js';
-import { fundingAmount, marketFundingPreview, planMarketFunding, recommendMarketFunding } from './market-funding.js';
+import { fundingAmount, LIQUIDITY_TARGETS, marketFundingPreview, planMarketFunding, recommendMarketFunding } from './market-funding.js';
 
 export const BALLON_RESERVES = [319.139211, 11.707936, 2619.071733, 2619.071733, 2619.071733, 115.646882, 2619.071733, 3346.351733, 3346.351733];
 const near = (a, b, tolerance = 0.000003) => assert.ok(Math.abs(a - b) <= tolerance, `${a} != ${b}`);
@@ -42,12 +42,34 @@ test('proportional funding keeps odds and accounts for every complete-set share'
 
 test('recommendation protects every candidate, not only the selected or leading one', () => {
   const recommended = recommendMarketFunding(BALLON_RESERVES);
-  assert.equal(recommended, 90873);
+  assert.equal(recommended, 493060);
   const preview = marketFundingPreview(BALLON_RESERVES, recommended);
-  assert.ok(preview.impactsAfter.every(row => row.impactPts <= 5.000001));
+  assert.equal(preview.testBuy, 500);
+  assert.deepEqual(preview.targets.map(({ collateral, maxImpactPts }) => ({ collateral, maxImpactPts })), LIQUIDITY_TARGETS);
+  for (const target of preview.targets) assert.ok(target.impactsAfter.every(row => row.impactPts <= target.maxImpactPts));
   near(preview.impactsAfter[5].priceBefore, 0.087064);
-  near(preview.impactsAfter[5].priceAfter, 0.137064);
-  assert.ok(marketFundingPreview(BALLON_RESERVES, recommended - 1).impactsAfter.some(row => row.impactPts > 5));
+  assert.ok(marketFundingPreview(BALLON_RESERVES, recommended - 1).targets.some(target => target.impactsAfter.some(row => row.impactPts > target.maxImpactPts)));
+});
+
+test('Roma draw Madrid reversal is controlled at both reference sizes without moving odds', () => {
+  const reserves = [2709.692091, 138.659066, 2661.532817];
+  const original = multiBuyQuote(reserves, 2, 1700);
+  near(original.priceBefore, 0.047220);
+  near(original.priceAfter, 0.909839);
+  const amount = recommendMarketFunding(reserves);
+  assert.equal(amount, 18953);
+  const preview = marketFundingPreview(reserves, amount);
+  for (const target of preview.targets) assert.ok(target.impactsAfter.every(row => row.impactPts <= target.maxImpactPts));
+  for (let i = 0; i < reserves.length; i++) near(preview.plan.pricesBefore[i], preview.plan.pricesAfter[i]);
+  assert.ok(multiBuyQuote(preview.plan.reservesAfter, 2, 1700).priceAfter < 0.24);
+});
+
+test('100 MXNP alone no longer qualifies an otherwise shallow pool as healthy', () => {
+  const preview = marketFundingPreview([1000, 1000]);
+  assert.ok(binaryBuyQuote([1000, 1000], 0, 100).priceImpactPts < 5);
+  assert.ok(preview.recommendedAmount > 0);
+  const funded = marketFundingPreview([1000, 1000], preview.recommendedAmount);
+  for (const target of funded.targets) assert.ok(target.impactsAfter.every(row => row.impactPts <= target.maxImpactPts));
 });
 
 test('deep pools need no additional funding and targets beyond the safety cap are explicit', () => {

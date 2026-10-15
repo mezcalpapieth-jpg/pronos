@@ -49,6 +49,7 @@
 
 import { FEEDS_ARBITRUM_ONE } from './chainlink.js';
 import { initialReserves } from './amm-math.js';
+import { defaultPointsSeedLiquidity } from './market-liquidity.js';
 import { withTransaction } from './db-tx.js';
 import { bestEffortPersistResolvedCryptoMarketSnapshot } from './crypto-chart-snapshot.js';
 import { bestEffortPersistTopHolderSnapshot } from './points-top-holders.js';
@@ -625,22 +626,11 @@ export async function runCrypto5MinTick({ sql, dry = false, force = false } = {}
 
     if (!dry && assetEnabled) {
       try {
-        const activateRows = await sql`
-          UPDATE points_markets
-          SET status = 'active',
-              resolver_config = resolver_config
-                || jsonb_build_object(
-                  'threshold',  ${threshold}::numeric,
-                  'openPrice',  ${price}::numeric,
-                  'openedAt',   ${openingStart.toISOString()}::text,
-                  'openPriceSource', ${pr.source}::text,
-                  'openPriceAt', ${pr.capturedAt}::text
-                )
-          WHERE source = ${opening.source}
-            AND source_event_id = ${opening.source_event_id}
-            AND status = 'pending'
-          RETURNING id
-        `;
+        const activateRows = await activatePendingCryptoMarket(sql, {
+          sourceEventId: opening.source_event_id,
+          metadata: { threshold, openPrice: price, openedAt: openingStart.toISOString(),
+            openPriceSource: pr.source, openPriceAt: pr.capturedAt },
+        });
         if (activateRows.length > 0) {
           entry.activatedId = activateRows[0].id;
         } else {
@@ -880,26 +870,12 @@ export async function catchUpCurrentPendingCryptoMarkets(sql, {
         continue;
       }
 
-      const updated = await sql`
-        UPDATE points_markets
-           SET status = 'active',
-               resolver_config = COALESCE(resolver_config, '{}'::jsonb)
-                 || ${JSON.stringify({
-                   threshold,
-                   openPrice,
-                   openedAt: windowStart,
-                   openPriceSource: openBoundary.source,
-                   openPriceAt: openBoundary.capturedAt,
-                   activationCatchup: true,
-                   activationCaughtUpAt: nowIso,
-                 })}::jsonb
-         WHERE id = ${Number(rows[0].id)}
-           AND source = 'chainlink-5min'
-           AND status = 'pending'
-           AND outcome IS NULL
-           AND COALESCE(resolver_config->>'threshold', '') = ''
-         RETURNING id
-      `;
+      const updated = await activatePendingCryptoMarket(sql, {
+        sourceEventId: key.source_event_id,
+        metadata: { threshold, openPrice, openedAt: windowStart,
+          openPriceSource: openBoundary.source, openPriceAt: openBoundary.capturedAt,
+          activationCatchup: true, activationCaughtUpAt: nowIso },
+      });
 
       if (rowsFromQuery(updated).length > 0) {
         report.activated.push(entry);
@@ -1193,6 +1169,36 @@ export async function catchUpMissedPendingCryptoMarkets(sql, {
   return report;
 }
 
+export async function activatePendingCryptoMarket(sql, { sourceEventId, metadata }) {
+  const seed = defaultPointsSeedLiquidity({ category: 'crypto', outcomeCount: OUTCOMES.length });
+  const reserves = JSON.stringify(initialReserves(seed, 2));
+  // Already-precreated windows may still have the old default. Only untouched
+  // pending pools can adopt the new seed; activation never resets a traded pool.
+  return sql`
+    WITH opening AS (
+      SELECT m.id,
+             (m.seed_liquidity = 1000 AND m.reserves = '[1000,1000]'::jsonb
+              AND (m.seed_liquidities IS NULL OR m.seed_liquidities = '[1000,1000]'::jsonb)
+              AND NOT EXISTS (SELECT 1 FROM points_trades t WHERE t.market_id = m.id)
+              AND NOT EXISTS (SELECT 1 FROM points_positions p WHERE p.market_id = m.id)) AS use_default
+        FROM points_markets m
+       WHERE m.source = 'chainlink-5min' AND m.source_event_id = ${sourceEventId}
+         AND m.status = 'pending' AND m.outcome IS NULL AND m.archived_at IS NULL
+         AND m.parent_id IS NULL AND m.mode = 'points' AND m.chain_id IS NULL AND m.chain_address IS NULL
+         AND COALESCE(m.resolver_config->>'threshold', '') = ''
+       FOR UPDATE OF m
+    )
+    UPDATE points_markets m
+       SET status = 'active',
+           resolver_config = COALESCE(m.resolver_config, '{}'::jsonb) || ${JSON.stringify(metadata)}::jsonb,
+           reserves = CASE WHEN opening.use_default THEN ${reserves}::jsonb ELSE m.reserves END,
+           seed_liquidity = CASE WHEN opening.use_default THEN ${seed} ELSE m.seed_liquidity END,
+           seed_liquidities = CASE WHEN opening.use_default THEN ${reserves}::jsonb ELSE m.seed_liquidities END
+      FROM opening WHERE m.id = opening.id
+    RETURNING m.id
+  `;
+}
+
 // Insert a 5-min crypto market. ON CONFLICT DO NOTHING on the
 // (source, source_event_id) pair — re-running the cron can't dupe rows.
 // We use the "raw" points_markets row shape so this bypasses the admin
@@ -1231,17 +1237,16 @@ async function insertCryptoMarket(sql, {
     rounding: 1, // dollars
   };
 
-  // Seed reserves: [1000, 1000] for binary direction markets (50/50
-  // initial pricing). The buy/sell endpoints rebalance these via the
-  // audited binary CPMM the same way every other binary market works.
-  const reserves = initialReserves(1000, 2);
+  // Rolling windows bypass approval, but use the same non-sports opening depth.
+  const seed = defaultPointsSeedLiquidity({ category: 'crypto', outcomeCount: OUTCOMES.length });
+  const reserves = initialReserves(seed, 2);
 
   const rows = await sql`
     INSERT INTO points_markets (
       source, source_event_id,
       sport, league, category, icon,
       question, outcomes, outcome_images,
-      reserves, seed_liquidity, start_time, end_time,
+      reserves, seed_liquidity, seed_liquidities, start_time, end_time,
       amm_mode, status,
       resolver_type, resolver_config,
       featured, auto_featured, hidden_from_home,
@@ -1251,7 +1256,7 @@ async function insertCryptoMarket(sql, {
       ${key.source}, ${key.source_event_id},
       'crypto', NULL, 'crypto', ${asset.icon},
       ${question}, ${JSON.stringify(OUTCOMES)}::jsonb, NULL,
-      ${JSON.stringify(reserves)}::jsonb, 1000, ${windowStart.toISOString()}, ${windowEnd.toISOString()},
+      ${JSON.stringify(reserves)}::jsonb, ${seed}, ${JSON.stringify(reserves)}::jsonb, ${windowStart.toISOString()}, ${windowEnd.toISOString()},
       'unified', ${status},
       'chainlink_price', ${JSON.stringify(resolverConfig)}::jsonb,
       ${hiddenFromHome ? false : true}, false, ${hiddenFromHome ? true : false},

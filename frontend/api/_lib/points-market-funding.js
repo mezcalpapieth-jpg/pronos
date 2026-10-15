@@ -13,12 +13,19 @@ function json(value) {
 
 function requireFundableMarket(market) {
   if ((market.mode || 'points') !== 'points' || market.chain_id || market.chain_address) fail('points_funding_only');
-  if (market.parent_id || market.amm_mode === 'parallel') fail('unified_parent_required');
+  if (!market.parent_id && market.amm_mode === 'parallel') fail('unified_parent_required');
   if (market.status !== 'active') fail('market_not_active');
   if (market.archived_at || (market.end_time && new Date(market.end_time) <= new Date())) fail('market_expired');
   const reserves = fundingReserves(json(market.reserves));
   const outcomes = json(market.outcomes);
   if (!Array.isArray(outcomes) || outcomes.length !== reserves.length) fail('outcomes_reserves_mismatch');
+  if (market.parent_id) {
+    const parent = market.parent;
+    if (!parent || parent.parent_id || parent.amm_mode !== 'parallel' || reserves.length !== 2) fail('invalid_parallel_leg');
+    if ((parent.mode || 'points') !== 'points' || parent.chain_id || parent.chain_address) fail('points_funding_only');
+    if (parent.status !== 'active') fail('market_not_active');
+    if (parent.archived_at || (parent.end_time && new Date(parent.end_time) <= new Date())) fail('market_expired');
+  }
   return { reserves, outcomes };
 }
 
@@ -29,7 +36,15 @@ async function readMarket(client, marketId, lock = false) {
        FROM points_markets WHERE id = $1 ${lock ? 'FOR UPDATE' : ''}`, [marketId],
   );
   if (!result.rows.length) fail('market_not_found', 404);
-  return result.rows[0];
+  const market = result.rows[0];
+  if (market.parent_id) {
+    const parent = await client.query(
+      `SELECT id, mode, chain_id, chain_address, parent_id, amm_mode, status, end_time, archived_at
+         FROM points_markets WHERE id = $1`, [market.parent_id],
+    );
+    market.parent = parent.rows[0];
+  }
+  return market;
 }
 
 export async function previewPointsMarketFunding(client, { marketId, amount = null }) {

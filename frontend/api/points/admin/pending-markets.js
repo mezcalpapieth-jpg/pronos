@@ -21,7 +21,7 @@ import { withTransaction } from '../../_lib/db-tx.js';
 import { initialReserves } from '../../_lib/amm-math.js';
 import { deriveMarketTags, matchesMarketTaxonomy } from '../../_lib/category-tags.js';
 import { normalizeSeedLiquidities } from '../../_lib/market-liquidity.js';
-import { attachDefaultSuggestedPricing, seedLiquiditiesFromProbabilities } from '../../_lib/market-pricing.js';
+import { attachDefaultSuggestedPricing, attachPointsOpeningLiquidity, seedLiquiditiesFromProbabilities } from '../../_lib/market-pricing.js';
 import { tryAttachPolymarketPricing } from '../../_lib/polymarket-pricing.js';
 import { LCDLF_SOURCE } from '../../_lib/lcdlf-official.js';
 import { syncMananeraPhraseFromQuestion } from '../../_lib/mananera-market-sync.js';
@@ -60,6 +60,14 @@ function parseJsonb(v, fb) {
   if (v && typeof v === 'object') return v;
   if (typeof v !== 'string') return fb;
   try { return JSON.parse(v); } catch { return fb; }
+}
+
+export function pendingRowWithOpeningLiquidity(row, { mode = 'points' } = {}) {
+  return attachPointsOpeningLiquidity({ ...row, mode,
+    outcomes: parseJsonb(row.outcomes, []),
+    seed_liquidities: parseJsonb(row.seed_liquidities, null),
+    source_data: parseJsonb(row.source_data, {}),
+  });
 }
 
 function normalizeLabelKey(value) {
@@ -477,7 +485,8 @@ async function list(req, res) {
 
   return res.status(200).json({
     approvalSettings: pendingApprovalSettings(),
-    pending: filteredRows.map(r => {
+    pending: filteredRows.map(row => {
+      const r = pendingRowWithOpeningLiquidity(row);
       const sourceData = parseJsonb(r.source_data, {});
       return {
         id: r.id,
@@ -612,7 +621,7 @@ export async function approveOne(pid, reviewer, note, opts = {}) {
     if (rowRes.rows.length === 0) {
       const err = new Error('pending_not_found'); err.status = 404; throw err;
     }
-    const r = rowRes.rows[0];
+    const r = pendingRowWithOpeningLiquidity(rowRes.rows[0], { mode: marketMode });
     if (r.status !== 'pending') {
       const err = new Error('already_reviewed'); err.status = 400;
       err.detail = `status=${r.status}`;
@@ -928,7 +937,8 @@ export async function approveOne(pid, reviewer, note, opts = {}) {
          SET status = 'approved', admin_note = $1, reviewer = $2,
              reviewed_at = NOW(), approved_market_id = $3,
              source_data = $4::jsonb,
-             resolver_config = $5::jsonb
+             resolver_config = $5::jsonb,
+             seed_liquidity = $7, seed_liquidities = $8::jsonb
        WHERE id = $6`,
       [
         note || null,
@@ -937,6 +947,8 @@ export async function approveOne(pid, reviewer, note, opts = {}) {
         JSON.stringify(sourceData),
         resolverConfig ? JSON.stringify(resolverConfig) : null,
         pid,
+        seed,
+        seedLiquiditiesJson,
       ],
     );
     return { id: pid, marketId: createdMarketId };
