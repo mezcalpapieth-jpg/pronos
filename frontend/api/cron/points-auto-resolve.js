@@ -47,6 +47,8 @@ import { FRANKFURTER_SOURCE, frankfurterTargetDateYmd, readFrankfurterRate } fro
 import { readCreAverageFor } from '../_lib/fuel.js';
 import { readSniimFoodPrice, SNIIM_FOOD_PRICE_SOURCE } from '../_lib/sniim-food-prices.js';
 import { readInegiInpcAnnualInflation, INEGI_INPC_SOURCE } from '../_lib/inegi-inpc.js';
+import { OFFICIAL_RESULT_SOURCE, readOfficialResult, upgradeLegacyOfficialResult } from '../_lib/official-results.js';
+import { parallelLegResolutions } from '../_lib/parallel-resolution.js';
 import {
   readCenapredPopocatepetlExhalations,
   CENAPRED_POPOCATEPETL_SOURCE,
@@ -99,6 +101,7 @@ const schemaSql = neon(process.env.DATABASE_URL);
 const readSql   = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const MAX_BINARY_DIRECTION_CATCHUP_PER_RUN = 12;
 const AUTO_RESOLVABLE_API_CHART_SOURCES = new Set([
+  OFFICIAL_RESULT_SOURCE,
   'apple-mx-songs',
   'youtube-trending-mx',
 ]);
@@ -1545,7 +1548,9 @@ async function queueApiChartFallbackReview({ market, cfg, sourceData, outcomes, 
     ...(cfg || {}),
     confidenceBps: 0,
     suggestedOutcomeIndex: null,
-    rationale: `El lector automático de charts no pudo confirmar el resultado: ${message}. Requiere revisión manual antes de pagar MXNP.`,
+    rationale: cfg?.source === OFFICIAL_RESULT_SOURCE
+      ? `Las fuentes oficiales no pudieron confirmar el resultado: ${message}. Requiere revisión manual antes de pagar MXNP.`
+      : `El lector automático de charts no pudo confirmar el resultado: ${message}. Requiere revisión manual antes de pagar MXNP.`,
   };
   await queueManualReviewCandidate({
     market,
@@ -1795,6 +1800,14 @@ export async function runAutoResolve({ dry = false } = {}) {
         cfg = legacyPopocatepetlCfg;
         resolverType = 'api_price';
       }
+      const legacyOfficialCfg = upgradeLegacyOfficialResult({
+        resolverType, cfg, source: m.source, sourceEventId: m.source_event_id,
+        outcomes: marketOutcomes, endTime: m.end_time,
+      });
+      if (legacyOfficialCfg) {
+        cfg = legacyOfficialCfg;
+        resolverType = 'api_chart';
+      }
       if (!cfg) {
         const fallbackCfg = buildEspnLiveScoreConfig({
           resolverType: null,
@@ -1879,7 +1892,11 @@ export async function runAutoResolve({ dry = false } = {}) {
       let result = null;
       let manualReviewCandidate = null;
       try {
-        if (resolverType === 'chainlink_price') {
+        if (resolverType === 'api_chart' && cfg.source === OFFICIAL_RESULT_SOURCE) {
+          const official = await readOfficialResult(cfg, marketOutcomes);
+          winningIdx = official.winningIdx;
+          resolverInfo = official.resolverInfo;
+        } else if (resolverType === 'chainlink_price') {
           if (cfg.shape === 'binary-direction') {
             if (!cfg.feedAddress || cfg.threshold == null) {
               throw new Error('invalid chainlink_price binary-direction config');
@@ -2172,6 +2189,7 @@ export async function runAutoResolve({ dry = false } = {}) {
           if (cfg.resolutionSource === 'open-meteo-archive') {
             const reviewDeltaC = Number(cfg.manualReviewDeltaC);
             const weather = await resolveObservedWeatherMaxTempC({
+              modelAuditPolicy: cfg.modelAuditPolicy,
               lat: cfg.lat,
               lng: cfg.lng,
               dateYmd: cfg.forecastDateYmd,
@@ -3181,7 +3199,7 @@ export async function runAutoResolve({ dry = false } = {}) {
                    resolver_config = CASE WHEN $6 THEN $5::jsonb ELSE COALESCE(resolver_config, $5::jsonb) END
              WHERE id = $3 AND status = 'active'
              RETURNING id, amm_mode`,
-            [winningIdx, `resolver:${resolverType}`, m.id, resolverType, JSON.stringify(cfg), Boolean(legacyPopocatepetlCfg)],
+            [winningIdx, `resolver:${resolverType}`, m.id, resolverType, JSON.stringify(cfg), Boolean(legacyPopocatepetlCfg || legacyOfficialCfg)],
           );
           if (r.rows.length === 0) {
             const err = new Error('not_active_at_write'); err.benign = true; throw err;
@@ -3211,9 +3229,8 @@ export async function runAutoResolve({ dry = false } = {}) {
           // winning leg's YES side pays out; losing legs' NO side pays.
           if (m.amm_mode === 'parallel') {
             const legs = await client.query(
-              `SELECT id FROM points_markets
+              `SELECT id, leg_label, status, outcome FROM points_markets
                  WHERE parent_id = $1
-                   AND status <> 'canceled'
                  ORDER BY id ASC
                  FOR UPDATE`,
               [m.id],
@@ -3221,14 +3238,13 @@ export async function runAutoResolve({ dry = false } = {}) {
             await releaseOpenLimitOrdersForMarkets(client, legs.rows.map(row => Number(row.id)), {
               reason: 'market_resolved',
             });
-            for (let i = 0; i < legs.rows.length; i++) {
-              const legWinningOutcome = i === winningIdx ? 0 : 1;
+            for (const leg of parallelLegResolutions(legs.rows, marketOutcomes, winningIdx)) {
               await client.query(
                 `UPDATE points_markets
                    SET status = 'resolved', outcome = $1,
                        resolved_at = NOW(), resolved_by = $2
                  WHERE id = $3 AND status = 'active'`,
-                [legWinningOutcome, `resolver:${resolverType}`, legs.rows[i].id],
+                [leg.winningOutcome, `resolver:${resolverType}`, leg.id],
               );
             }
           }

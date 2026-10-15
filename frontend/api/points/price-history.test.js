@@ -8,7 +8,10 @@ test('points price history supports short hour windows for detail charts', () =>
   assert.match(source, /GET \/api\/points\/price-history\?ids=1,2,3&hours=4/);
   assert.match(source, /const hoursRaw = parseInt\(req\.query\.hours, 10\)/);
   assert.match(source, /const windowHours = Number\.isInteger\(hoursRaw\)/);
-  assert.match(source, /\|\| ' hours'/);
+  assert.match(source, /loadChartWindows\(sql, ids, windowHours\)/);
+  assert.match(source, /s\.snapshotted_at <= w\.window_end/);
+  assert.match(source, /t\.created_at <= w\.window_end/);
+  assert.doesNotMatch(source, /NOW\(\)/);
 });
 
 test('points price history adds averaged book-only execution bursts to probability movement', () => {

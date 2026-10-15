@@ -73,6 +73,7 @@ import { marketInterestPayload, trackInterest } from '@app/lib/interest.js';
 import { pointsPublicAssetSrc } from '@app/lib/publicAssets.js';
 import { marketArtworkHidden, marketImageSrc, marketPlaceholderImageSrc } from '../lib/marketImages.js';
 import { isClosingSoonNonSportsMarket, isLiveSportsMarket } from '../lib/marketStatus.js';
+import { marketChartClock } from '../../../../api/_lib/points-chart-clock.js';
 import { emitPointsRefresh } from '../lib/pointsLiveRefresh.js';
 import { isVideoDemoActive, videoDemoPollMs } from '../demo/demoFlag.js';
 
@@ -311,6 +312,7 @@ function marketLiveSignature(market) {
     status: market.status,
     outcome: market.outcome ?? null,
     resolvedAt: market.resolvedAt ?? null,
+    endTime: market.endTime ?? null,
     lastTradeAt: market.lastTradeAt ?? null,
     tradeVolume: signatureNumber(market.tradeVolume || market.volume, 2),
     prices,
@@ -333,7 +335,7 @@ function ChartWatermark() {
   );
 }
 
-function MarketActivityStrip({ summary, rangeLabel, lastTradeAt, locale = 'es-MX', t }) {
+function MarketActivityStrip({ summary, rangeLabel, lastTradeAt, frozen = false, locale = 'es-MX', t }) {
   const safeSummary = summary || {
     count: 0,
     volume: 0,
@@ -394,7 +396,9 @@ function MarketActivityStrip({ summary, rangeLabel, lastTradeAt, locale = 'es-MX
       />
       <ActivityMetric
         label={t('points.detail.activityLast')}
-        value={formatActivityAge(latestTradeAt, t)}
+        value={frozen && latestTradeAt > 0
+          ? new Date(latestTradeAt * 1000).toLocaleString(locale, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+          : formatActivityAge(latestTradeAt, t)}
       />
     </div>
   );
@@ -2673,6 +2677,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
   const [activityByOutcome, setActivityByOutcome] = useState(null);
   const [liveScore, setLiveScore] = useState(null);
   const [chartRange, setChartRange] = useState('1');
+  const [chartClockTick, setChartClockTick] = useState(0);
   const chartRangeTouchedRef = useRef(false);
   const [userPositions, setUserPositions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -2705,6 +2710,9 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
     ? cryptoMarketSequenceSignature(buildCryptoMarketSequence(market))
     : '';
   const marketLiveSig = useMemo(() => marketLiveSignature(market), [market]);
+  const chartClock = marketChartClock(market);
+  const chartFrozen = chartClock.frozen;
+  const chartRefreshKey = chartFrozen ? 'closed' : `${marketLiveSig}:${orderBookRefresh}`;
   const leagueTableTeams = useMemo(() => leagueTableTeamsForMarket(market), [market]);
   const tradeTapeIds = useMemo(() => tradeTapeIdsForMarket(market), [market]);
   const tradeTapeIdsKey = tradeTapeIds.join(',');
@@ -2718,6 +2726,14 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
   useEffect(() => () => {
     if (sellQuoteTimerRef.current) window.clearTimeout(sellQuoteTimerRef.current);
   }, []);
+
+  useEffect(() => {
+    if (!market?.endTime || chartFrozen) return undefined;
+    const delay = new Date(market.endTime).getTime() - Date.now();
+    if (!Number.isFinite(delay) || delay <= 0) return undefined;
+    const timer = window.setTimeout(() => setChartClockTick(value => value + 1), Math.min(delay + 10, 2_147_483_647));
+    return () => window.clearTimeout(timer);
+  }, [market?.id, market?.endTime, chartFrozen, chartClockTick]);
 
   useEffect(() => {
     storeParlaySlip(parlaySlip);
@@ -2786,7 +2802,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
     if (!market?.id) return undefined;
 
     if (!chartRangeTouchedRef.current) {
-      const preferredRange = market.status === 'resolved' ? '30' : '1';
+      const preferredRange = '1';
       if (chartRange !== preferredRange) {
         setChartRange(preferredRange);
         return undefined;
@@ -2797,11 +2813,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
     const range = detailChartRangeFor(chartRange);
 
     const livePctFor = (outcomeIdx, leg = null) => {
-      if (market.status === 'resolved') {
-        return market.ammMode === 'parallel' && leg
-          ? (Number(leg.outcome) === 0 ? 100 : 0)
-          : (market.outcome != null && Number(market.outcome) === outcomeIdx ? 100 : 0);
-      }
+      if (chartFrozen) return null;
       if (market.status !== 'active') return null;
       const price = market.ammMode === 'parallel' && leg
         ? leg?.prices?.[0]
@@ -2812,9 +2824,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
     const tailPointFor = (outcomeIdx, leg = null) => {
       const p = livePctFor(outcomeIdx, leg);
       if (p == null) return null;
-      const t = market.status === 'resolved' && market.resolvedAt
-        ? Math.floor(new Date(market.resolvedAt).getTime() / 1000)
-        : Math.floor(Date.now() / 1000);
+      const t = Math.floor(chartClock.endMs / 1000);
       return { t, p };
     };
     const withTail = (series, outcomeIdx, leg = null) => {
@@ -2902,8 +2912,9 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
     market?.outcome,
     market?.resolvedAt,
     market?.status,
-    marketLiveSig,
-    orderBookRefresh,
+    market?.endTime,
+    chartFrozen,
+    chartRefreshKey,
   ]);
 
   useEffect(() => {
@@ -2939,7 +2950,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
   useEffect(() => {
     if (!id || !market) return undefined;
     const isCryptoMarket = Boolean(market.cryptoMeta);
-    if (market.status === 'resolved' && !isCryptoMarket) return undefined;
+    if (['resolved', 'canceled'].includes(market.status) && !isCryptoMarket) return undefined;
     // 15s is right for real users but reads as a frozen page on camera, so
     // the video demo (/points/video) polls fast enough that the probability
     // visibly ticks. Guarded by the demo session flag — normal traffic keeps
@@ -3367,12 +3378,12 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
   const marketOpenedAt = market.createdAt
     ? Math.floor(new Date(market.createdAt).getTime() / 1000)
     : null;
-  // Both bounds come off one `now` so the window can't skew, and both the
-  // opening-baseline seed and the chart axis describe the same span.
+  // Closed charts count backward from the trading cutoff, never today.
+  // The APIs use the same clock for prices and activity.
   // Polymarket-style clamp: a market younger than the selected range
   // charts its own life (created 8:22 → axis starts 8:22), so every line
   // is born at the left edge instead of floating in an empty canvas.
-  const chartWindowEnd = Math.floor(Date.now() / 1000);
+  const chartWindowEnd = Math.floor(chartClock.endMs / 1000);
   const chartRangeStart = chartWindowEnd - (
     activeChartRange.hours != null
       ? activeChartRange.hours * 3600
@@ -3447,6 +3458,10 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
       return displayWinnerIndex === i ? 100 : 0;
     }
     return Math.round((displayPrices[i] ?? 0) * 100);
+  }
+  function chartPctFor(i) {
+    const last = displayHistoryByOutcome?.[i]?.at(-1);
+    return chartFrozen && last && Number.isFinite(Number(last.p)) ? Number(last.p) : pctFor(i);
   }
   // isLive wins over isPendingResolution when start_time has passed
   // but end_time hasn't — the game is in progress and trading stays
@@ -3881,12 +3896,14 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: 12,
                 fontFamily: 'var(--font-mono)',
                 fontSize: 10,
                 letterSpacing: '0.1em',
                 color: 'var(--text-muted)',
               }}>
-                <span>{isResolved ? t('points.detail.priceHistory') : t('points.detail.priceRealtime')}</span>
+                <span>{chartFrozen ? t('points.detail.priceBeforeClose') : t('points.detail.priceRealtime')}</span>
                 <div
                   role="group"
                   aria-label={t('points.detail.chartRange')}
@@ -3952,7 +3969,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
                       color: OUTCOME_COLORS[0],
                       fontVariantNumeric: 'tabular-nums',
                     }}>
-                      {Math.round(pctFor(0))}%
+                      {Math.round(chartPctFor(0))}%
                     </span>
                     {chartDelta != null && chartDelta !== 0 && (
                       <span style={{
@@ -3997,7 +4014,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
                     timeMax={chartWindowEnd}
                     data={displayHistoryByOutcome?.[0] || []}
                     activity={displayActivityByOutcome?.[0] || []}
-                    targetPct={pctFor(0)}
+                    targetPct={chartPctFor(0)}
                     seed={`points-detail-${market.id}-${displayOutcomes[0] || 'yes'}`}
                     emptyLabel="Sin actividad todavía"
                     emptySubLabel="El precio se moverá con el primer trade."
@@ -4030,7 +4047,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
                           data: Array.isArray(displayHistoryByOutcome?.[i])
                             ? displayHistoryByOutcome[i]
                             : [],
-                          targetPct: pctFor(i),
+                          targetPct: chartPctFor(i),
                         }))}
                         activity={chartIndices.map(i => displayActivityByOutcome?.[i] || [])}
                         annotations={liveScoreAnnotations}
@@ -4055,6 +4072,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
                   summary={activitySummary}
                   rangeLabel={t(activeChartRange.labelKey)}
                   lastTradeAt={latestTradeAt}
+                  frozen={chartFrozen}
                   locale={numberLocale}
                   t={t}
                 />

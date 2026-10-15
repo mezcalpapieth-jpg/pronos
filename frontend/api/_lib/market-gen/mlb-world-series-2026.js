@@ -72,9 +72,11 @@ export async function generateMlbWorldSeries2026Markets() {
     start_time: null,
     end_time: CLOSE_ISO,
     amm_mode: 'parallel',
-    resolver_type: 'manual',
+    resolver_type: 'api_chart',
     resolver_config: {
-      source: 'manual',
+      source: 'official-result',
+      kind: 'mlb-world-series',
+      resolveAt: CLOSE_ISO,
       shape: 'parallel',
       competition: 'mlb-world-series',
       season: 2026,

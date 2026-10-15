@@ -4,11 +4,79 @@ import assert from 'node:assert/strict';
 import {
   adaptiveBuckets,
   buildWeatherModelAudit,
+  fetchForecastModelMaxTempsC,
+  fetchObservedMaxTempC,
   isWeatherArchiveDateComplete,
   resolveObservedWeatherMaxTempC,
   weatherBucketIndexFor,
   weatherResolutionCriteriaForBuckets,
 } from './weather.js';
+
+function archivePayload({ dateYmd = '2026-10-14', maxC = 24.1 } = {}) {
+  return {
+    daily: { temperature_2m_max: [maxC] },
+    hourly: {
+      time: Array.from({ length: 24 }, (_, hour) =>
+        `${dateYmd}T${String(hour).padStart(2, '0')}:00`),
+      temperature_2m: Array.from({ length: 24 }, (_, hour) => hour === 14 ? maxC : 15),
+    },
+  };
+}
+
+async function withWeatherResponse(payload, run) {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, json: async () => payload });
+  try {
+    return await run();
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
+function readArchive() {
+  return fetchObservedMaxTempC({
+    lat: 19.4326,
+    lng: -99.1332,
+    dateYmd: '2026-10-14',
+    timezone: 'America/Mexico_City',
+    now: new Date('2026-10-15T15:00:00.000Z'),
+  });
+}
+
+test('archive-only policy resolves without consulting conflicting or unavailable forecasts', async () => {
+  let requests = 0;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async url => {
+    requests++;
+    assert.match(String(url), /archive-api/);
+    return { ok: true, json: async () => archivePayload() };
+  };
+  try {
+    const result = await resolveObservedWeatherMaxTempC({
+      lat: 19.4326, lng: -99.1332, dateYmd: '2026-10-14', buckets: adaptiveBuckets(23.5),
+      modelAuditPolicy: 'archive-only', now: new Date('2026-10-15T15:00:00Z'),
+    });
+    assert.equal(result.winningIdx, 2);
+    assert.equal(result.requiresManualReview, false);
+    assert.equal(result.tempC, 24.1);
+    assert.equal(requests, 1);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test('legacy agreement policy does not silently pay when the forecast audit is unavailable', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async url => {
+    if (!String(url).includes('archive-api')) throw new Error('forecast unavailable');
+    return { ok: true, json: async () => archivePayload() };
+  };
+  try {
+    const result = await resolveObservedWeatherMaxTempC({
+      lat: 19.4326, lng: -99.1332, dateYmd: '2026-10-14', buckets: adaptiveBuckets(23.5),
+      now: new Date('2026-10-15T15:00:00Z'),
+    });
+    assert.equal(result.requiresManualReview, true);
+  } finally { globalThis.fetch = originalFetch; }
+});
 
 test('weather adaptive buckets use one-degree floor ranges', () => {
   const buckets = adaptiveBuckets(25.6);
@@ -57,6 +125,89 @@ test('weather archive only resolves after the local market date is complete', ()
     timezone: 'America/Mexico_City',
     now: new Date('2026-08-27T12:00:00.000Z'),
   }), true);
+});
+
+test('weather archive rejects missing or invalid hourly temperatures instead of treating them as zero', async () => {
+  for (const missing of [null, undefined, '', ' ', false, NaN, Infinity]) {
+    const payload = archivePayload();
+    payload.hourly.temperature_2m[14] = missing;
+    await withWeatherResponse(payload, async () => {
+      await assert.rejects(readArchive(), error =>
+        error.message === 'weather_archive_hourly_incomplete' && error.benign === true);
+    });
+  }
+
+  const payload = archivePayload();
+  payload.hourly.temperature_2m.fill(null);
+  payload.daily.temperature_2m_max = [null];
+  await withWeatherResponse(payload, async () => {
+    await assert.rejects(readArchive(), /weather_archive_hourly_incomplete/);
+  });
+});
+
+test('weather archive requires every hour of the requested date exactly once', async () => {
+  const wrongDay = archivePayload({ dateYmd: '2026-10-13' });
+  const duplicate = archivePayload();
+  duplicate.hourly.time[23] = duplicate.hourly.time[22];
+  const truncated = archivePayload();
+  truncated.hourly.time.pop();
+  truncated.hourly.temperature_2m.pop();
+  const missingTemperatures = archivePayload();
+  missingTemperatures.hourly.temperature_2m.pop();
+
+  for (const payload of [wrongDay, duplicate, truncated, missingTemperatures]) {
+    await withWeatherResponse(payload, async () => {
+      await assert.rejects(readArchive(), error =>
+        error.message === 'weather_archive_hourly_incomplete' && error.benign === true);
+    });
+  }
+});
+
+test('weather archive uses the complete hourly maximum when the daily summary is missing', async () => {
+  const payload = archivePayload();
+  payload.daily.temperature_2m_max = [null];
+  await withWeatherResponse(payload, async () => {
+    const observed = await readArchive();
+    assert.equal(observed.maxC, 24.1);
+    assert.equal(observed.dailyMaxC, null);
+    assert.deepEqual(observed.peakHours, ['2026-10-14T14:00']);
+  });
+});
+
+test('weather archive defers contradictory daily and hourly maxima', async () => {
+  const payload = archivePayload();
+  payload.daily.temperature_2m_max = [26.1];
+  await withWeatherResponse(payload, async () => {
+    await assert.rejects(readArchive(), error =>
+      error.message === 'weather_archive_daily_hourly_mismatch'
+      && error.benign === true
+      && error.info.dailyMaxC === 26.1
+      && error.info.hourlyMaxC === 24.1);
+  });
+});
+
+test('weather readings accept a genuine zero but do not assign missing values to a bucket', async () => {
+  const payload = archivePayload({ maxC: 0 });
+  payload.hourly.temperature_2m.fill(-2);
+  payload.hourly.temperature_2m[14] = 0;
+  await withWeatherResponse(payload, async () => {
+    const observed = await readArchive();
+    assert.equal(observed.maxC, 0);
+  });
+  assert.equal(weatherBucketIndexFor(0, adaptiveBuckets(23)), 0);
+  for (const missing of [null, undefined, '', false]) {
+    assert.equal(weatherBucketIndexFor(missing, adaptiveBuckets(23)), -1);
+  }
+});
+
+test('forecast probing rejects an entirely missing model response', async () => {
+  await withWeatherResponse({ daily: { temperature_2m_max_best_match: [null] } }, async () => {
+    await assert.rejects(fetchForecastModelMaxTempsC({
+      lat: 19.4326,
+      lng: -99.1332,
+      dateYmd: '2026-10-14',
+    }), /missing temp for 2026-10-14/);
+  });
 });
 
 test('observed weather resolver uses archive max and flags model bucket mismatch', async () => {

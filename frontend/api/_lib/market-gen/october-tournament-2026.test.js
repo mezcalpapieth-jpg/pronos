@@ -136,16 +136,18 @@ test('October tournament generator emits bilingual auto and review specs when co
   assert.equal(hurricane.source_data.translations.en.question, 'Will a Category 4 or 5 hurricane make landfall in Mexico during October 2026?');
 
   const fed = byEventId['october-2026:fed-october-decision'];
-  assert.equal(fed.resolver_type, 'manual_review');
+  assert.equal(fed.resolver_type, 'api_chart');
+  assert.equal(fed.resolver_config.kind, 'fed-target-range');
   assert.deepEqual(fed.outcomes, ['Recorta', 'Mantiene', 'Sube']);
   assert.deepEqual(fed.source_data.translations.en.outcomes, ['Cut', 'Hold', 'Hike']);
 
   const inpc = byEventId['october-2026:inpc-first-half-october-annual-inflation'];
-  assert.equal(inpc.resolver_type, 'api_price');
+  assert.equal(inpc.resolver_type, 'api_chart');
   assert.equal(inpc.category, 'mexico');
   assert.equal(inpc.start_time, '2026-10-21T11:59:00.000Z');
   assert.equal(inpc.end_time, '2026-10-22T11:59:00.000Z');
-  assert.equal(inpc.resolver_config.source, 'inegi-inpc');
+  assert.equal(inpc.resolver_config.source, 'official-result');
+  assert.equal(inpc.resolver_config.kind, 'inegi-inpc-first-release');
   assert.equal(inpc.resolver_config.indicatorId, '910438');
   assert.equal(inpc.resolver_config.targetPeriod, '2026-10-1Q');
   assert.equal(inpc.resolver_config.resolveAt, '2026-10-23T18:00:00.000Z');
@@ -248,6 +250,8 @@ test('October award markets have default candidates when env lists are not confi
 
   const ballonDor = byEventId['october-2026:ballon-dor-men'];
   assert.ok(ballonDor);
+  assert.equal(ballonDor.resolver_type, 'api_chart');
+  assert.equal(ballonDor.resolver_config.kind, 'ballon-dor-men');
   assert.deepEqual(ballonDor.outcomes, [
     ..._internal.DEFAULT_BALLON_DOR_CANDIDATES,
     'Otro',

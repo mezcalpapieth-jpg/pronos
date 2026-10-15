@@ -2,12 +2,12 @@
  * Hourly price-history snapshot for off-chain points markets.
  *
  * Runs on a Vercel cron (see vercel.json — schedule `0 * * * *`). Flow:
- *   1. Load every active (not resolved) market.
+ *   1. Load markets that are still open for trading.
  *   2. For each, compute the current prices from its reserves using the
  *      same AMM helpers the frontend does.
  *   3. Insert one row per market into `points_price_snapshots`.
- *   4. Garbage-collect snapshots older than 60 days so the table stays
- *      bounded even if we run hourly forever.
+ *   4. Garbage-collect old live history, preserving each closed market's
+ *      last 60 days and one carry-forward anchor for historical charts.
  *
  * The result powers the sparkline on each market card — the UI fetches
  * the last 30 days of snapshots via /api/points/markets/price-history.
@@ -65,20 +65,21 @@ export default async function handler(req, res) {
   try {
     await ensurePointsSchema(sql);
 
-    // Snapshot every market that's still active OR was resolved within the
-    // last 24h — this gives the sparkline a "final" point to flatten against
-    // right after resolution.
+    // A closed market's clock stops; repeatedly snapshotting its old
+    // reserves after closing only adds flat history and unnecessary writes.
     // Parallel parents have empty reserves ([]) and exist only as display
     // containers — snapshotting them would produce garbage (uniform-prior
     // fallback). Legs snapshot normally because they're proper binary
     // markets (amm_mode='parallel' but parent_id IS NOT NULL).
     const markets = await sql`
-      SELECT id, outcomes, reserves, status
-      FROM points_markets
-      WHERE (status = 'active'
-         OR (status = 'resolved' AND resolved_at > NOW() - INTERVAL '24 hours'))
-        AND NOT (amm_mode = 'parallel' AND parent_id IS NULL)
-      ORDER BY id ASC
+      SELECT m.id, m.outcomes, m.reserves, m.status
+      FROM points_markets m
+      LEFT JOIN points_markets p ON p.id = m.parent_id
+      WHERE m.status = 'active'
+        AND (m.end_time IS NULL OR m.end_time > NOW())
+        AND (p.id IS NULL OR (p.status = 'active' AND (p.end_time IS NULL OR p.end_time > NOW())))
+        AND NOT (m.amm_mode = 'parallel' AND m.parent_id IS NULL)
+      ORDER BY m.id ASC
     `;
 
     if (dryRun) {
@@ -93,8 +94,7 @@ export default async function handler(req, res) {
       });
     }
 
-    // Batch-insert one row per market. We use a single multi-row INSERT to
-    // keep this to one round-trip over Neon HTTP.
+    // Insert one periodic snapshot per open pool.
     let inserted = 0;
     for (const m of markets) {
       const outcomes = parseJsonb(m.outcomes, ['Sí', 'No']);
@@ -108,12 +108,32 @@ export default async function handler(req, res) {
       inserted += 1;
     }
 
-    // Bounded retention — drop anything older than 60 days. 60×24 = 1440
-    // snapshots per market at peak, fine for Neon free tier.
+    // Keep the existing closing history, not a second chart blob. Older
+    // resolved charts must not disappear when the live retention advances.
     const purged = await sql`
-      DELETE FROM points_price_snapshots
-      WHERE snapshotted_at < NOW() - INTERVAL '60 days'
-      RETURNING id
+      WITH cutoffs AS (
+        SELECT m.id,
+               LEAST(m.end_time, p.end_time,
+                 CASE WHEN m.status IN ('resolved', 'canceled') THEN COALESCE(m.resolved_at, m.end_time, m.created_at) END,
+                 CASE WHEN p.status IN ('resolved', 'canceled') THEN COALESCE(p.resolved_at, p.end_time, p.created_at) END
+               ) AS closed_at
+          FROM points_markets m
+          LEFT JOIN points_markets p ON p.id = m.parent_id
+      ), closed AS (
+        SELECT c.id, c.closed_at,
+               (SELECT s.id FROM points_price_snapshots s
+                 WHERE s.market_id = c.id AND s.snapshotted_at < c.closed_at - INTERVAL '60 days'
+                 ORDER BY s.snapshotted_at DESC, s.id DESC LIMIT 1) AS boundary_id
+          FROM cutoffs c WHERE c.closed_at <= NOW()
+      )
+      DELETE FROM points_price_snapshots s
+      WHERE s.snapshotted_at < NOW() - INTERVAL '60 days'
+        AND NOT EXISTS (
+          SELECT 1 FROM closed c WHERE c.id = s.market_id
+            AND ((s.snapshotted_at >= c.closed_at - INTERVAL '60 days' AND s.snapshotted_at <= c.closed_at)
+              OR s.id = c.boundary_id)
+        )
+      RETURNING s.id
     `;
 
     return res.status(200).json({

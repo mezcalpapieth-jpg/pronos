@@ -30,7 +30,7 @@ test('points market detail overlays real activity and range controls on the char
   assert.match(detailSource, /points\.detail\.range30d/);
   assert.match(detailSource, /hours: 4/);
   assert.match(detailSource, /chartRangeTouchedRef/);
-  assert.match(detailSource, /market\.status === 'resolved' \? '30' : '1'/);
+  assert.match(detailSource, /const preferredRange = '1'/);
   assert.match(detailSource, /activityByOutcome/);
   assert.match(detailSource, /summarizeActivity/);
   assert.match(detailSource, /unixSecondsFromDateLike\(market\.lastTradeAt\) \|\| activitySummary\.lastAt/);
@@ -105,7 +105,7 @@ test('active charts append the live executable price as their tail', () => {
   assert.match(detailSource, /market\.ammMode === 'parallel' && leg\s+\? leg\?\.prices\?\.\[0\]/);
   assert.match(detailSource, /: market\.prices\?\.\[outcomeIdx\]/);
   assert.match(detailSource, /const p = livePctFor\(outcomeIdx, leg\)/);
-  assert.match(detailSource, /Math\.floor\(Date\.now\(\) \/ 1000\)/);
+  assert.match(detailSource, /Math\.floor\(chartClock\.endMs \/ 1000\)/);
 });
 
 test('outcome logos fall back to initials when a supplied image fails', () => {
@@ -206,7 +206,8 @@ test('points surfaces refresh live after trades, claims, and remote market movem
   assert.match(detailSource, /const marketLiveSig = useMemo\(\(\) => marketLiveSignature\(market\), \[market\]\)/);
   assert.match(detailSource, /prices\.map\(p => signatureNumber\(p\)\)/);
   assert.match(detailSource, /reserves\.map\(r => signatureNumber\(r, 2\)\)/);
-  assert.match(detailSource, /marketLiveSig,/);
+  assert.match(detailSource, /chartFrozen \? 'closed' : `\$\{marketLiveSig\}:\$\{orderBookRefresh\}`/);
+  assert.match(detailSource, /chartRefreshKey,/);
   assert.match(detailSource, /window\.setInterval\(\(\) => \{/);
   assert.match(detailSource, /15_000/);
   assert.match(detailSource, /setOrderBookRefresh\(v => v \+ 1\)/);
@@ -231,6 +232,17 @@ test('points surfaces refresh live after trades, claims, and remote market movem
   assert.match(portfolioSource, /emitPointsRefresh\(\{ source: 'redeem'/);
 
   assert.match(buyModalSource, /emitPointsRefresh\(\{ source: 'buy'/);
+});
+
+test('closed charts preserve trading prices and stop extending their clock', () => {
+  assert.match(detailSource, /const chartClock = marketChartClock\(market\)/);
+  assert.match(detailSource, /if \(chartFrozen\) return null/);
+  assert.match(detailSource, /chartFrozen \? t\('points\.detail\.priceBeforeClose'\)/);
+  assert.match(detailSource, /frozen=\{chartFrozen\}/);
+  assert.match(detailSource, /\['resolved', 'canceled'\]\.includes\(market\.status\) && !isCryptoMarket/);
+  assert.match(detailSource, /chartFrozen && last && Number\.isFinite\(Number\(last\.p\)\)/);
+  assert.match(i18nSource, /es: 'Últimas horas antes del cierre'/);
+  assert.match(i18nSource, /en: 'Final hours before close'/);
 });
 
 test('points market cards display seed liquidity plus traded volume', () => {

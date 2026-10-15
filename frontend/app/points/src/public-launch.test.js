@@ -65,8 +65,6 @@ test('public points errors use safe user copy instead of backend details', () =>
 
 test('buy modal mirrors tournament minimum before submitting', () => {
   assert.match(buyModalSource, /TOURNAMENT_MIN_BUY_MXNP = 100/);
-  assert.match(buyModalSource, /const FIRST_ENTRY_QUICK_AMOUNTS = \[100, 200, 500, 1000\]/);
-  assert.match(buyModalSource, /const TOP_UP_QUICK_AMOUNTS = \[5, 10, 25, 50, 100\]/);
   assert.match(buyModalSource, /minimumEntrySatisfied = false/);
   assert.match(buyModalSource, /const requiresMinimumEntry = !minimumEntrySatisfied/);
   assert.match(buyModalSource, /requiresMinimumEntry && numAmount > 0 && numAmount < TOURNAMENT_MIN_BUY_MXNP/);
@@ -77,6 +75,15 @@ test('buy modal mirrors tournament minimum before submitting', () => {
   assert.match(translationLine('points.buy.minimumEntryHint'), /Mínimo \{amount\} MXNP/);
   assert.match(translationLine('points.buy.topUpHint'), /Ya cubriste este mercado/);
   assert.match(translationLine('points.buy.errorTournamentMin'), /mínimo para cubrir un mercado/);
+});
+
+test('first entries and repeat buys share presets while smaller top-ups stay available', () => {
+  assert.match(buyModalSource, /const QUICK_AMOUNTS = \[100, 200, 500, 1000\]/);
+  assert.match(buyModalSource, /QUICK_AMOUNTS\.map\(v =>/);
+  assert.doesNotMatch(buyModalSource, /FIRST_ENTRY_QUICK_AMOUNTS|TOP_UP_QUICK_AMOUNTS/);
+  assert.match(buyModalSource, /const inputMin = requiresMinimumEntry \? TOURNAMENT_MIN_BUY_MXNP : 1/);
+  assert.match(buyModalSource, /onChange=\{\(e\) => setAmount\(e\.target\.value\)\}/);
+  assert.match(buyModalSource, /: t\('points\.buy\.topUpHint'\)/);
 });
 
 test('public sharing, news links, and generated market fallbacks are text-only', () => {

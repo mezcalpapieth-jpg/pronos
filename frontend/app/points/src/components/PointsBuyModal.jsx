@@ -11,8 +11,7 @@ import { emitPointsRefresh } from '../lib/pointsLiveRefresh.js';
 import { useExecutionBalance } from '../lib/PointsExecution.jsx';
 
 const TOURNAMENT_MIN_BUY_MXNP = 100;
-const FIRST_ENTRY_QUICK_AMOUNTS = [100, 200, 500, 1000];
-const TOP_UP_QUICK_AMOUNTS = [5, 10, 25, 50, 100];
+const QUICK_AMOUNTS = [100, 200, 500, 1000];
 
 function formatMxnp(value, locale) {
   const numeric = Number(value || 0);
@@ -51,7 +50,6 @@ export default function PointsBuyModal({
   const balance = executionBalance.balance;
   const numAmount = parseFloat(amount) || 0;
   const requiresMinimumEntry = market?.mode !== 'onchain' && !minimumEntrySatisfied;
-  const quickAmounts = requiresMinimumEntry ? FIRST_ENTRY_QUICK_AMOUNTS : TOP_UP_QUICK_AMOUNTS;
   const defaultAmount = requiresMinimumEntry ? TOURNAMENT_MIN_BUY_MXNP : 50;
   const inputMin = requiresMinimumEntry ? TOURNAMENT_MIN_BUY_MXNP : 1;
   const belowMinimum = requiresMinimumEntry && numAmount > 0 && numAmount < TOURNAMENT_MIN_BUY_MXNP;
@@ -277,7 +275,7 @@ export default function PointsBuyModal({
         </div>
 
         <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
-          {quickAmounts.map(v => (
+          {QUICK_AMOUNTS.map(v => (
             <button
               key={v}
               onClick={() => setAmount(String(v))}

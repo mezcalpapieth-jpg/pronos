@@ -27,6 +27,9 @@ test('weather generator creates one-degree floor buckets with criteria', async (
     assert.equal(cdmx.resolver_config.buckets[1].minC, 25);
     assert.equal(cdmx.resolver_config.buckets[1].maxC, 26);
     assert.equal(cdmx.resolver_config.resolutionSource, 'open-meteo-archive');
+    assert.equal(cdmx.resolver_config.modelAuditPolicy, 'archive-only');
+    assert.match(cdmx.resolver_config.criteria, /única fuente/);
+    assert.doesNotMatch(cdmx.resolver_config.criteria, /auditoría de modelos/);
     assert.equal(cdmx.resolver_config.forecastModel, 'best_match');
     assert.equal(cdmx.resolver_config.forecastAtGeneration, 25.6);
     assert.equal(cdmx.resolver_config.forecastAuditModels.icon_seamless, 28.1);

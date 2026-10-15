@@ -7,6 +7,7 @@ import { FRANKFURTER_SOURCE, frankfurterTargetDateYmd, readFrankfurterRate } fro
 import { readCreAverageFor } from './fuel.js';
 import { readSniimFoodPrice, SNIIM_FOOD_PRICE_SOURCE } from './sniim-food-prices.js';
 import { readInegiInpcAnnualInflation, INEGI_INPC_SOURCE } from './inegi-inpc.js';
+import { OFFICIAL_RESULT_SOURCE, readOfficialResult } from './official-results.js';
 import { readCenapredPopocatepetlExhalations, CENAPRED_POPOCATEPETL_SOURCE } from './cenapred-popocatepetl.js';
 import { deferUntilResolveAt, priceBucketIndexFor } from './price-buckets.js';
 import {
@@ -228,7 +229,11 @@ export async function resolveAutoResolverCandidate(candidate = {}, { sql = null 
   let resolverConfigPatch = null;
   let result = null;
 
-  if (resolverType === 'chainlink_price') {
+  if (resolverType === 'api_chart' && cfg.source === OFFICIAL_RESULT_SOURCE) {
+    const official = await readOfficialResult(cfg, parseAutoResolverJsonb(candidate.outcomes, []));
+    winningIdx = official.winningIdx;
+    resolverInfo = official.resolverInfo;
+  } else if (resolverType === 'chainlink_price') {
     if (cfg.shape === 'binary-direction') {
       if (!cfg.feedAddress || cfg.threshold == null) {
         throw new Error('invalid chainlink_price binary-direction config');
@@ -516,6 +521,7 @@ export async function resolveAutoResolverCandidate(candidate = {}, { sql = null 
     if (cfg.resolutionSource === 'open-meteo-archive') {
       const reviewDeltaC = Number(cfg.manualReviewDeltaC);
       const weather = await resolveObservedWeatherMaxTempC({
+        modelAuditPolicy: cfg.modelAuditPolicy,
         lat: cfg.lat,
         lng: cfg.lng,
         dateYmd: cfg.forecastDateYmd,

@@ -16,15 +16,13 @@ export async function generateGranjaVipMarkets({
   if (process.env.GRANJA_VIP_OFFICIAL_ENABLED === 'false') return [];
 
   const snapshot = await readGranjaVipOfficialSnapshot({ fetchImpl, now });
-  const weeklySpec = buildGranjaVipWeeklyMarketSpec({ snapshot, now });
-  if (!weeklySpec) return [];
-
-  return [attachSuggestedPricing(weeklySpec, {
-    probabilities: uniformProbabilities(weeklySpec.outcomes.length),
-    source: 'granja-vip-official:nominated',
-    rationale: 'Nominados visibles en TV Azteca; admin debe revisar el mercado y confirmar el resultado tras la gala.',
-    evidence: weeklySpec.resolver_config?.evidence || [],
-  })];
+  return ['elimination', 'capataz'].map(kind => buildGranjaVipWeeklyMarketSpec({ snapshot, now, kind }))
+    .filter(Boolean).map(weeklySpec => attachSuggestedPricing(weeklySpec, {
+      probabilities: uniformProbabilities(weeklySpec.outcomes.length),
+      source: `granja-vip-official:${weeklySpec.resolver_config.kind}`,
+      rationale: 'Participantes y fecha leidos de TV Azteca; admin revisa antes de aprobar. Solo se paga con un resultado oficial claro de esa semana.',
+      evidence: weeklySpec.resolver_config?.evidence || [],
+    }));
 }
 
 export const _internal = {
