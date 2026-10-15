@@ -151,6 +151,10 @@ const PUBLIC_ERROR_COPY = {
     es: 'El mercado ya cerró o fue resuelto.',
     en: 'The market already closed or resolved.',
   },
+  sports_status_unavailable: {
+    es: 'No pudimos verificar el estado del partido. Intenta de nuevo en un momento.',
+    en: 'We could not verify the game status. Please try again shortly.',
+  },
   market_expired: {
     es: 'El mercado ya cerró. No se pueden crear órdenes nuevas.',
     en: 'The market already closed. New orders are unavailable.',

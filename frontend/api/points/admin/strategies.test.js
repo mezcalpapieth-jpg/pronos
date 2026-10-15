@@ -11,7 +11,11 @@ test('admin strategies endpoint audits combinadas and long hold read-only', () =
   assert.match(source, /buildTournamentLeaderboardRows/);
   assert.match(source, /includeConvictionBreakdown:\s*true/);
   assert.match(source, /points_cycle_snapshots/);
-  assert.match(source, /derivedStatus/);
+  assert.match(source, /serializeParlayAudit/);
+  assert.match(source, /points_distributions/);
+  assert.match(source, /summaryOnly: true/);
+  assert.match(source, /summarizeParlayAudit\(allTickets\)/);
+  assert.match(source, /readStockStrategyAudit/);
   assert.doesNotMatch(source, /settleOpenParlayTickets/);
   assert.doesNotMatch(source, /INSERT INTO/);
   assert.doesNotMatch(source, /UPDATE points_/);

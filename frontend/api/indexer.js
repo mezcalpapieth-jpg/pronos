@@ -120,6 +120,8 @@ export default async function handler(req, res) {
   // keep a production safety net here because /api/indexer is the cron that
   // reliably fires every minute. Auto-resolve writes are status-guarded, so a
   // duplicate dedicated cron pass should no-op after the first resolver wins.
+  // Recent single-game markets get a lightweight pass every minute; the full
+  // manual/price/weather scan retains its 15-minute cadence.
   // Manual probe: /api/indexer?key=...&resolve=1 (add resolveDry=1 for dry-run).
   let pointsAutoResolveReport = { status: 'skipped', reason: 'not_scheduled' };
   const forceAutoResolve = req.query.resolve === '1' || req.query.autoResolve === '1';
@@ -130,11 +132,11 @@ export default async function handler(req, res) {
     || (
       pointsAutoResolveOnIndexer
       && isVercelCron
-      && shouldRunMinuteInterval({ intervalMinutes: 15 })
     );
   if (shouldRunPointsAutoResolve) {
     try {
-      const result = await runAutoResolve({ dry: dryAutoResolve });
+      const sportsOnly = !forceAutoResolve && !shouldRunMinuteInterval({ intervalMinutes: 15 });
+      const result = await runAutoResolve({ dry: dryAutoResolve, sportsOnly });
       pointsAutoResolveReport = { status: 'ok', ...result };
     } catch (e) {
       console.error('[indexer] points-auto-resolve failed', {

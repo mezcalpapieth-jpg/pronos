@@ -14,6 +14,7 @@ import { useNavigate } from 'react-router-dom';
 import DeckAdminPanel from '../components/DeckAdminPanel.jsx';
 import MarketLiquidityPanel from '../components/MarketLiquidityPanel.jsx';
 import AdminInterestPanel from '@app/components/AdminInterestPanel.jsx';
+import AdminStocksAudit from '../components/AdminStocksAudit.jsx';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { pointsPublicAssetSrc } from '@app/lib/publicAssets.js';
 import { defaultPointsSeedLiquidity } from '../../../../api/_lib/market-liquidity.js';
@@ -7833,13 +7834,14 @@ function StrategiesPanel() {
   const [cycleId, setCycleId] = useState('');
   const [err, setErr] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [strategyView, setStrategyView] = useState('combinadas');
 
   const load = useCallback(async (nextCycleId = cycleId) => {
     setLoading(true);
     setErr(null);
     try {
       const q = new URLSearchParams({
-        ticketLimit: '80',
+        ticketLimit: '200',
         longHoldLimit: '40',
       });
       if (nextCycleId) q.set('cycleId', String(nextCycleId));
@@ -7871,11 +7873,11 @@ function StrategiesPanel() {
       background: 'var(--surface1)',
     }}>
       <AdminAuditHeader
-        title="Combinadas / Long Hold"
-        subtitle="Auditoría de estrategias del torneo: tickets, multiplicadores, PnL y bonos por mantener posición."
+        title="Combinadas / Long Hold / Stock"
+        subtitle="Auditoría de estrategias del torneo: liquidaciones, bonos y actividad Stock."
         right={(
-          <button className="btn-secondary" onClick={() => load(cycleId)} disabled={loading}>
-            Actualizar
+          <button className="admin-strategy-refresh" aria-label="Actualizar" title="Actualizar" onClick={() => load(cycleId)} disabled={loading}>
+            <span aria-hidden="true">↻</span>
           </button>
         )}
       />
@@ -7921,6 +7923,12 @@ function StrategiesPanel() {
         <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Cargando…</p>
       ) : (
         <>
+          <nav className="admin-strategy-tabs" aria-label="Estrategias del torneo">
+            {[['combinadas', 'Combinadas'], ['longHold', 'Long Hold'], ['stock', 'Stock']].map(([id, label]) => (
+              <button key={id} type="button" aria-pressed={strategyView === id} onClick={() => setStrategyView(id)}>{label}</button>
+            ))}
+          </nav>
+          {strategyView === 'combinadas' && <>
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
@@ -7931,6 +7939,8 @@ function StrategiesPanel() {
             <StatCard label="Stake total" value={adminMxnp(summary.stake)} />
             <StatCard label="Pago potencial" value={adminMxnp(summary.potentialPayout)} />
             <StatCard label="PnL realizado" value={adminSignedMxnp(summary.realizedPnl)} />
+            <StatCard label="Pagado" value={adminMxnp(summary.creditedPayout)} />
+            <StatCard label="Por pagar" value={adminMxnp(summary.awaitingPayout)} />
           </div>
 
           <div style={{ marginBottom: 26 }}>
@@ -7938,6 +7948,10 @@ function StrategiesPanel() {
               title="Combinadas"
               subtitle={`${summary.open || 0} abiertas · ${summary.won || 0} ganadas · ${summary.lost || 0} perdidas · ${summary.void || 0} anuladas`}
             />
+            {(summary.awaitingSettlement > 0 || summary.auditIssues > 0) && <p role="status" style={{ color: 'var(--yellow)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+              {summary.awaitingSettlement || 0} pendientes de liquidación · {summary.auditIssues || 0} discrepancias de resultado / pago
+            </p>}
+            {summary.count > tickets.length && <p style={{ color: 'var(--text-muted)', fontSize: 12 }}>Mostrando {tickets.length} de {summary.count} combinadas. Totales del ciclo completo.</p>}
             {tickets.length === 0 ? (
               <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
                 Todavía no hay combinadas en este ciclo.
@@ -7967,15 +7981,19 @@ function StrategiesPanel() {
                         </div>
                       </div>
                       <div style={{ textAlign: 'right' }}>
-                        <StrategyStatusPill status={ticket.derivedStatus} />
+                        <StrategyStatusPill status={ticket.status} />
                         <div style={{
                           marginTop: 8,
                           fontFamily: 'var(--font-mono)',
                           fontSize: 12,
-                          color: Number(ticket.realizedPnl || 0) >= 0 ? 'var(--green)' : 'var(--red)',
+                          color: ticket.realizedPnl == null ? 'var(--text-muted)' : Number(ticket.realizedPnl) >= 0 ? 'var(--green)' : 'var(--red)',
                         }}>
-                          Realizado {adminSignedMxnp(ticket.realizedPnl)}
+                          {ticket.realizedPnl == null ? 'Sin liquidar' : `Realizado ${adminSignedMxnp(ticket.realizedPnl)}`}
                         </div>
+                        {ticket.settlementPending && <div style={{ marginTop: 6, color: 'var(--yellow)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+                          {ticket.resultStatus === 'won' ? 'Ganada · pago pendiente' : ticket.resultStatus === 'void' ? 'Anulada · reembolso pendiente' : 'Perdida · liquidación pendiente'}
+                        </div>}
+                        {ticket.auditIssues?.length > 0 && <div style={{ marginTop: 6, color: 'var(--red)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>Revisar resultado / registro de pago</div>}
                       </div>
                     </div>
                     <div style={{
@@ -7989,6 +8007,7 @@ function StrategiesPanel() {
                     }}>
                       <div>Stake: <strong style={{ color: 'var(--text-primary)' }}>{adminMxnp(ticket.stake)}</strong></div>
                       <div>Potencial: <strong style={{ color: 'var(--text-primary)' }}>{adminMxnp(ticket.potentialPayout)}</strong></div>
+                      <div>Acreditado: <strong style={{ color: 'var(--text-primary)' }}>{adminMxnp(ticket.creditedPayout)}</strong></div>
                       <div>Upside: <strong style={{ color: 'var(--green)' }}>{adminSignedMxnp(ticket.potentialPnl)}</strong></div>
                     </div>
                     <div style={{ display: 'grid', gap: 6 }}>
@@ -8031,8 +8050,9 @@ function StrategiesPanel() {
               </div>
             )}
           </div>
+          </>}
 
-          <div>
+          {strategyView === 'longHold' && <div>
             <AdminAuditHeader
               title="Long Hold"
               subtitle="Bonos de convicción calculados con la misma lógica del leaderboard."
@@ -8104,7 +8124,9 @@ function StrategiesPanel() {
                 ))}
               </div>
             )}
-          </div>
+          </div>}
+          {strategyView === 'stock' && <AdminStocksAudit data={data?.stocks}
+            formatMoney={adminMxnp} formatSigned={adminSignedMxnp} formatDate={adminDateTime} />}
         </>
       )}
     </section>

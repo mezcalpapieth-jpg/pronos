@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 const adminSource = await readFile(new URL('./PointsAdmin.jsx', import.meta.url), 'utf8');
 const apiSource = await readFile(new URL('../../../../api/points/admin/strategies.js', import.meta.url), 'utf8');
+const stocksSource = await readFile(new URL('../components/AdminStocksAudit.jsx', import.meta.url), 'utf8');
 
 test('Points admin exposes the strategies audit tab', () => {
   assert.match(adminSource, /useCallback/);
@@ -11,6 +12,23 @@ test('Points admin exposes the strategies audit tab', () => {
   assert.match(adminSource, /\{ id: 'strategies', label: 'Estrategias' \}/);
   assert.match(adminSource, /\{tab === 'strategies' && <StrategiesPanel \/>\}/);
   assert.match(adminSource, /function StrategiesPanel\(\)/);
+});
+
+test('Strategies separates results, pending settlement and real credited payments', () => {
+  assert.match(adminSource, /StrategyStatusPill status=\{ticket.status\}/);
+  assert.match(adminSource, /ticket.realizedPnl == null \? 'Sin liquidar'/);
+  assert.match(adminSource, /Ganada · pago pendiente/);
+  assert.match(adminSource, /Acreditado:/);
+  assert.match(adminSource, /summary.awaitingPayout/);
+  assert.match(adminSource, /ticket.auditIssues/);
+});
+
+test('Strategies offers a Stock view with investor, asset and activity tables', () => {
+  assert.match(adminSource, /\['stock', 'Stock'\]/);
+  assert.match(adminSource, /strategyView === 'stock' && <AdminStocksAudit/);
+  for (const label of ['Inversores', 'Participación', 'Volumen operado', 'Valor en posiciones', 'PnL realizado', 'PnL abierto', 'Por activo', 'Últimas operaciones']) assert.ok(stocksSource.includes(label));
+  assert.match(stocksSource, /summary.staleHolders/);
+  assert.match(stocksSource, /trade.origin === 'tournament_close'/);
 });
 
 test('Strategies panel audits combinadas and long hold through the admin endpoint', () => {

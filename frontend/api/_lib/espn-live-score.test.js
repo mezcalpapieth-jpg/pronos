@@ -15,6 +15,23 @@ function jsonResponse(body, ok = true, status = 200) {
   };
 }
 
+test('live-score completion requires an actual final, not just a post-state or suspended game', () => {
+  for (const [type, completed] of [
+    [{ state: 'post', completed: true, name: 'STATUS_FINAL' }, true],
+    [{ state: 'post', completed: false, name: 'STATUS_SUSPENDED' }, false],
+    [{ state: 'post', completed: true, name: 'STATUS_CANCELED' }, false],
+    [{ state: 'in', completed: false, name: 'STATUS_IN_PROGRESS' }, false],
+  ]) {
+    const live = normalizeEspnLiveScore({ leaguePath: 'baseball/mlb', event: {
+      id: 'game', status: { type, period: 9 }, competitions: [{ competitors: [
+        { homeAway: 'home', score: '3' }, { homeAway: 'away', score: '2' },
+      ] }],
+    } });
+    assert.equal(live.completed, completed);
+    assert.equal(live.statusLabel === 'Final', completed);
+  }
+});
+
 test('normalizeEspnLiveScore returns basketball period scores and current clock', () => {
   const live = normalizeEspnLiveScore({
     leaguePath: 'basketball/nba',

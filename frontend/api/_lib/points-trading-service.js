@@ -6,6 +6,7 @@ import {
   matchRestingBidsForSell,
 } from './points-limit-orders.js';
 import { assertCryptoTradeAllowed } from './points-crypto-trade-guard.js';
+import { assertSportsTradeAllowed } from './points-sports-trade-guard.js';
 import { TOURNAMENT_APPROVED_MARKET_START_ISO } from './points-tournament-config.js';
 import {
   assertTournamentCutoffSnapshotReady,
@@ -109,6 +110,7 @@ export async function executePointsBuy(client, {
   assertPointsExecution(market);
   if (market.status !== 'active') throw apiError('market_closed', 400);
   if (market.end_time && new Date(market.end_time) <= new Date()) throw apiError('market_expired', 400);
+  await assertSportsTradeAllowed(market);
 
   assertTournamentSettlementAllowed(market);
   await assertTournamentCutoffSnapshotReady(client, { market });
@@ -236,6 +238,7 @@ export async function executePointsSell(client, {
   assertPointsExecution(market);
   if (market.status !== 'active') throw apiError('market_closed', 400);
   if (market.end_time && new Date(market.end_time) <= new Date()) throw apiError('market_expired', 400);
+  await assertSportsTradeAllowed(market);
   await assertTournamentCutoffSnapshotReady(client, { market });
   assertCryptoTradeAllowed(market);
 

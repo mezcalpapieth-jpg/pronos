@@ -14,6 +14,7 @@ import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 import { seriesTradeLockFromRows } from '../_lib/series-markets.js';
 import { cryptoTradeLock } from '../_lib/points-crypto-trade-guard.js';
 import { pointsExecutionLock } from '../_lib/points-execution-mode.js';
+import { sportsTradeLock } from '../_lib/points-sports-trade-guard.js';
 import {
   tournamentCutoffSnapshotLock,
   tournamentSettlementLock,
@@ -101,6 +102,8 @@ export default async function handler(req, res) {
     if (r.end_time && new Date(r.end_time) <= new Date()) {
       return res.status(400).json({ error: 'market_expired' });
     }
+    const sportsLock = await sportsTradeLock(r);
+    if (sportsLock) return res.status(sportsLock.status).json({ error: sportsLock.error, detail: sportsLock.detail });
     const tournamentLock = tournamentSettlementLock(r);
     if (tournamentLock) {
       return res.status(tournamentLock.status).json({

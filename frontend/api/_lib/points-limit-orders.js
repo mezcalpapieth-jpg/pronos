@@ -11,6 +11,7 @@ import { previewHybridBuy, previewHybridSell } from './points-trade-router.js';
 import { bestEffortInsertPointsPriceSnapshot } from './points-price-snapshots.js';
 import { assertCryptoTradeAllowed, cryptoTradeLock } from './points-crypto-trade-guard.js';
 import { assertPointsExecution } from './points-execution-mode.js';
+import { assertSportsTradeAllowed, sportsTradeLock } from './points-sports-trade-guard.js';
 import {
   TOURNAMENT_APPROVED_MARKET_START_ISO,
   TOURNAMENT_LIQUIDITY_REWARD_MAX_DAILY_PER_USER,
@@ -315,7 +316,7 @@ async function lockMarket(client, marketId) {
   return result.rows[0];
 }
 
-function assertMarketCanTrade(market) {
+async function assertMarketCanTrade(market) {
   assertPointsExecution(market);
   if (market.status !== 'active') {
     const err = new Error('market_closed'); err.status = 400; throw err;
@@ -324,6 +325,7 @@ function assertMarketCanTrade(market) {
     const err = new Error('market_expired'); err.status = 400; throw err;
   }
   assertCryptoTradeAllowed(market);
+  await assertSportsTradeAllowed(market);
 }
 
 function reservesForMarket(market, outcomeIndex) {
@@ -2560,6 +2562,8 @@ export async function executeLimitOrderById(client, orderId) {
       detail: cryptoLock.error,
     };
   }
+  const sportsLock = await sportsTradeLock(market);
+  if (sportsLock) return { ok: true, status: 'open', triggered: false, detail: sportsLock.error };
 
   try {
     return order.side === 'buy'
@@ -2593,7 +2597,7 @@ export async function createLimitOrder(client, {
     const err = new Error('invalid_amount'); err.status = 400; throw err;
   }
   const market = await lockMarket(client, marketId);
-  assertMarketCanTrade(market);
+  await assertMarketCanTrade(market);
   await assertTournamentCutoffSnapshotReady(client, { market });
   if (normalizedSide === 'buy') {
     await assertTournamentMinimumEntry(client, {

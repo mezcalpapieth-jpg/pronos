@@ -118,6 +118,24 @@ const restingOrder = (side, price, amount) => ({
   reserved_collateral: side === 'buy' ? amount : 0,
 });
 
+test('web and API buys and sells cannot trade a finished sports event before its scheduled close', async t => {
+  const original = globalThis.fetch;
+  t.after(() => { globalThis.fetch = original; });
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ header: { id: 'game', competitions: [{
+    status: { type: { state: 'post', completed: true, name: 'STATUS_FINAL' } },
+    competitors: [{ homeAway: 'home', score: '3' }, { homeAway: 'away', score: '2' }],
+  }] } }) });
+  for (const source of ['web', 'api']) {
+    for (const side of ['buy', 'sell']) {
+      const db = ledger();
+      db.state.market.resolver_config = { source: 'espn', shape: 'binary', leaguePath: 'baseball/mlb', eventId: 'game' };
+      const before = structuredClone(db.state);
+      await assert.rejects(db.trade(side, { collateral: 100, shares: 10, source }), { message: 'market_closed' });
+      assert.deepEqual(db.state, before);
+    }
+  }
+});
+
 test('actual execution closes the original two-sided profit loop with no treasury trades', async () => {
   const db = ledger({ tournament: true });
   const yes = await db.trade('buy', { collateral: 900 });
