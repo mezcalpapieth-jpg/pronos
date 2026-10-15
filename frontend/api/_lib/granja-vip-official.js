@@ -1,3 +1,4 @@
+import { parseHTML } from 'linkedom';
 import {
   dateAtMexicoCityTime,
   formatMexicoDateYmd,
@@ -30,6 +31,7 @@ const DEFAULT_PARTICIPANTS = [
   'Julio Camejo',
   'Pascal Nadaud',
   'Pimpinela Escarlata',
+  'Pablo Montero',
 ];
 
 function stripAccents(value) {
@@ -188,7 +190,7 @@ function candidateParticipantLinks(html, { baseUrl = GRANJA_VIP_DEFAULT_BASE_URL
   const section = sectionBetween(
     source,
     /Granjeros:\s*La\s+Granja\s+VIP\s+Segunda\s+Temporada/i,
-    /Conductores|Contenido\s+Exclusivo|En\s+vivo\s+con/i,
+    /Eliminados:\s*La\s+Granja|Conductores|Contenido\s+Exclusivo|En\s+vivo\s+con/i,
   ) || source;
   const rows = [];
   const anchorRe = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
@@ -274,12 +276,14 @@ function participantAliases(row) {
   const manual = {
     'rafael mercadante': ['rafa mercadante', 'rafa'],
     'kevin contreras bicolor': ['kevyn bicolor', 'kevin bicolor', 'bicolor'],
+    'kevyn contreras bicolor': ['kevyn bicolor', 'kevin bicolor', 'bicolor'],
     'daniela alexis bebeshita': ['la bebeshita', 'bebeshita'],
     'abigail pak la coreanera': ['la coreanera', 'coreanera'],
     'manelyk gonzalez': ['mane', 'manelyk'],
     'pimpinela escarlata': ['pimpinela'],
     'mono osuna': ['mario mono osuna', 'mono'],
     'azalia la negra': ['azalia ojeda', 'azalia la negra', 'la negra'],
+    'pascal nadaud': ['pascal naud'],
   };
   const normalizedName = normalizeGranjaVipName(name);
   (manual[normalizedName] || []).forEach(alias => aliases.add(normalizeGranjaVipName(alias)));
@@ -374,13 +378,17 @@ async function fetchFreshText(url, {
   cacheBust = true,
 } = {}) {
   const target = new URL(url);
+  if (target.protocol !== 'https:' || target.hostname !== 'www.tvazteca.com'
+    || !target.pathname.startsWith('/aztecauno/la-granja-vip/') || target.username || target.password || target.port) {
+    throw new Error('granja_vip_untrusted_url');
+  }
   if (cacheBust) target.searchParams.set('_pronos', String(Date.now()));
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
   const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
   if (timer?.unref) timer.unref();
   try {
     const response = await fetchImpl(target.toString(), {
-      redirect: 'follow',
+      redirect: 'error',
       signal: controller?.signal,
       headers: {
         accept: 'text/html,application/xhtml+xml',
@@ -389,15 +397,51 @@ async function fetchFreshText(url, {
         'user-agent': 'Pronos La Granja VIP scraper (+https://pronos.io)',
       },
     });
+    const text = await response.text();
+    if (Buffer.byteLength(text) > 3_000_000) throw new Error('granja_vip_document_too_large');
     return {
       ok: Boolean(response?.ok),
       status: Number(response?.status || 0),
       url: target.toString(),
-      text: await response.text(),
+      text,
     };
   } finally {
     if (timer) clearTimeout(timer);
   }
+}
+
+export function parseOfficialGranjaArticle(html, url) {
+  const { document } = parseHTML(html);
+  const article = [...document.querySelectorAll('article')].find(node => node.querySelector('h1'));
+  const title = article?.querySelector('h1')?.textContent.trim();
+  const rawDate = document.querySelector('meta[property="article:published_time"]')?.getAttribute('content');
+  if (!title || !rawDate || /corral vip/i.test(title)) return null;
+  // Brightspot emits UTC timestamps without an offset (21:45 = 15:45 CDMX).
+  const published = new Date(/(?:Z|[+-]\d{2}:\d{2})$/.test(rawDate) ? rawDate : `${rawDate}Z`);
+  if (!Number.isFinite(published.getTime())) return null;
+  const body = article.querySelector('.articleBody') || article;
+  const paragraphs = [...body.querySelectorAll('p, li')].map(node => node.textContent.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  return { title, url, publishedAt: published.toISOString(), paragraphs };
+}
+
+function officialGranjaLinks(html, baseUrl) {
+  const { document } = parseHTML(html);
+  const links = new Map();
+  for (const node of document.querySelectorAll('a[href]')) {
+    try {
+      const url = new URL(node.getAttribute('href'), baseUrl);
+      if (url.hostname !== 'www.tvazteca.com' || url.protocol !== 'https:' || !url.pathname.startsWith('/aztecauno/la-granja-vip/')) continue;
+      const title = node.textContent.replace(/\s+/g, ' ').trim();
+      url.search = ''; url.hash = '';
+      if (title && !links.has(url.href)) links.set(url.href, { url: url.href, title });
+    } catch { /* Ignore malformed navigation links. */ }
+  }
+  return [...links.values()];
+}
+
+function matchingGranjaRows(text, rows) {
+  const normalized = ` ${normalizeGranjaVipName(text)} `;
+  return rows.filter(row => participantAliases(row).some(alias => normalized.includes(` ${alias} `)));
 }
 
 export function extractParticipantsFromOfficialHtml(html, {
@@ -412,11 +456,15 @@ export async function readGranjaVipOfficialSnapshot({
   fetchImpl = fetch,
   baseUrl = process.env.GRANJA_VIP_BASE_URL || GRANJA_VIP_DEFAULT_BASE_URL,
   now = new Date(),
+  historicalField = false,
+  articleEvidence = [],
 } = {}) {
   const sourceUrl = getBaseUrl(baseUrl);
   let discovered = [];
   let officialHtml = '';
   let nomineeEvidence = [];
+  let capatazEvidence = [];
+  let capatazFinalists = [];
   let fetchError = null;
   try {
     const response = await fetchFreshText(sourceUrl, { fetchImpl, cacheBust: true });
@@ -428,26 +476,70 @@ export async function readGranjaVipOfficialSnapshot({
   }
 
   const fallback = loadGranjaVipParticipants();
-  let rows = uniqueParticipants(discovered.length >= 6 ? discovered : fallback);
-  if (rows.filter(row => row.statusKey === 'nominado').length < 2 && officialHtml) {
-    for (const article of candidateNomineeArticleLinks(officialHtml, { baseUrl: sourceUrl })) {
+  const missing = fallback.filter(row => !discovered.some(known =>
+    participantAliases(known).some(alias => participantAliases(row).includes(alias))));
+  let rows = uniqueParticipants(discovered.length >= 6 ? [...discovered, ...missing] : fallback);
+  // Headlines elsewhere on the page are not current nomination evidence.
+  rows = rows.map(row => ({ ...row, statusKey: null, statusLabel: null, rawStatus: null }));
+  const eliminatedSection = sectionBetween(officialHtml, /Eliminados:\s*La\s+Granja\s+VIP\s+Segunda\s+Temporada/i, /Conductores/i);
+  const eliminatedNames = normalizeGranjaVipName(stripHtml(eliminatedSection));
+  rows = rows.map(row => participantAliases(row).some(alias => ` ${eliminatedNames} `.includes(` ${alias} `))
+    ? mergeStatus(row, { key: 'eliminado', label: 'Eliminado/a', raw: 'ELIMINADO' }) : row);
+  let discoveryHtml = officialHtml;
+  for (const path of ['notas-la-granja-vip', 'videos']) {
+    try {
+      const page = await fetchFreshText(new URL(path, sourceUrl).href, { fetchImpl });
+      if (page.ok) discoveryHtml += page.text;
+    } catch { /* Other official listings may still provide evidence. */ }
+  }
+  const close = nextGranjaVipSundayClose(now);
+  const weekStart = formatMexicoDateYmd(new Date(close.getTime() - 6 * 86400000));
+  const weekEnd = formatMexicoDateYmd(close);
+  const currentArticles = [];
+  const officialArticleLinks = officialGranjaLinks(discoveryHtml, sourceUrl);
+  if (discoveryHtml || articleEvidence.length) {
+    const links = [...new Map([...articleEvidence, ...officialArticleLinks].filter(link => link?.url).map(link => [link.url, link])).values()]
+      .filter(link => /nominad|capataz/i.test(`${link.title} ${link.url}`))
+      .filter(link => !/corral|primera-temporada/i.test(`${link.title} ${link.url}`));
+    for (const article of links.slice(0, 12)) {
       try {
         const articleResponse = await fetchFreshText(article.url, { fetchImpl, cacheBust: true });
         if (!articleResponse.ok) continue;
-        const articleNominees = nominatedRowsFromArticle(articleResponse.text, rows);
-        if (articleNominees.length < 2) continue;
-        const nominatedKeys = new Set(articleNominees.map(row => row.slug || slugifyGranjaVipName(row.name)));
-        rows = rows.map(row => {
-          const key = row.slug || slugifyGranjaVipName(row.name);
-          if (!nominatedKeys.has(key)) return row;
-          return mergeStatus(row, { key: 'nominado', label: 'Nominado/a', raw: 'NOMINADO' });
-        });
-        nomineeEvidence.push({ title: article.title || 'Lista de nominados', url: article.url });
-        break;
+        const parsed = parseOfficialGranjaArticle(articleResponse.text, article.url);
+        if (!parsed || parsed.publishedAt > now.toISOString()) continue;
+        currentArticles.push(parsed);
       } catch {
-        // Keep the generator quiet rather than trusting partial article reads.
+        // Missing dated evidence must never fall back to sidebar headlines.
       }
     }
+  }
+  currentArticles.sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
+  let nominationPublishedAt = null;
+  for (const article of currentArticles) {
+    const localDate = formatMexicoDateYmd(new Date(article.publishedAt));
+    if (localDate < weekStart || localDate > weekEnd || !/nominad/i.test(article.title)) continue;
+    const list = article.paragraphs.find(text => /(?:actualmente los nominados son|son los granjeros que forman parte de la lista de nominados|lista final de nominados.*(?:son|integrada por))/i.test(stripAccents(text)));
+    if (!list) continue;
+    const articleNominees = matchingGranjaRows(list, rows);
+    // Today's eliminated roster cannot invalidate a nomination article from before that gala.
+    if (articleNominees.length < 2 || (!historicalField && articleNominees.some(row => row.statusKey === 'eliminado'))) continue;
+    const keys = new Set(articleNominees.map(row => row.slug));
+    rows = rows.map(row => keys.has(row.slug)
+      ? { ...row, ...statusFields({ key: 'nominado', label: 'Nominado/a', raw: 'NOMINADO' }) } : row);
+    nomineeEvidence = [{ title: article.title, url: article.url, publishedAt: article.publishedAt }];
+    nominationPublishedAt = article.publishedAt;
+    break;
+  }
+  const capatazClose = nextGranjaVipCapatazClose(now);
+  const capatazDate = formatMexicoDateYmd(capatazClose);
+  for (const article of currentArticles) {
+    if (formatMexicoDateYmd(new Date(article.publishedAt)) !== capatazDate || !/finalistas.*capataz|capataz.*finalistas/i.test(article.title)) continue;
+    const list = article.paragraphs.find(text => /la final reunira/i.test(stripAccents(text)));
+    const finalists = list ? matchingGranjaRows(list, rows) : [];
+    if (finalists.length < 2 || (!historicalField && finalists.some(row => row.statusKey === 'eliminado'))) continue;
+    capatazFinalists = finalists;
+    capatazEvidence = [{ title: article.title, url: article.url, publishedAt: article.publishedAt }];
+    break;
   }
   const nominated = rows.filter(row => row.statusKey === 'nominado');
   const eliminated = rows.filter(row => row.statusKey === 'eliminado');
@@ -468,6 +560,10 @@ export async function readGranjaVipOfficialSnapshot({
     eliminated,
     peones,
     nomineeEvidence,
+    nominationPublishedAt,
+    capatazFinalists,
+    capatazEvidence,
+    officialArticleLinks,
     error: rows.length >= 6 ? fetchError : (fetchError || 'granja_vip_roster_parse_failed'),
   };
 }
@@ -529,6 +625,13 @@ export function nextGranjaVipSundayClose(now = new Date(), {
   });
 }
 
+export function nextGranjaVipCapatazClose(now = new Date()) {
+  const local = mexicoDateTimeParts(now);
+  let daysAhead = (8 - local.weekday) % 7;
+  if (daysAhead === 0 && (local.hour > 20 || (local.hour === 20 && local.minute >= 25))) daysAhead = 7;
+  return dateAtMexicoCityTime({ ...addDaysLocal(local, daysAhead), hour: 20, minute: 25, second: 0 });
+}
+
 function compactRows(rows = []) {
   return rows.map(row => ({
     name: row.name,
@@ -544,18 +647,30 @@ export function buildGranjaVipWeeklyMarketSpec({
   now = new Date(),
   seedLiquidity = 1000,
   seasonLabel = process.env.GRANJA_VIP_SEASON_LABEL || GRANJA_VIP_DEFAULT_SEASON_LABEL,
+  kind = 'elimination',
 } = {}) {
-  if (!snapshot?.ok || !Array.isArray(snapshot.nominated) || snapshot.nominated.length < 2) return null;
+  const capataz = kind === 'capataz';
+  const contestants = capataz ? snapshot?.capatazFinalists : snapshot?.nominated;
+  const datedEvidence = capataz ? snapshot?.capatazEvidence : snapshot?.nomineeEvidence;
+  if (!snapshot?.ok || !Array.isArray(contestants) || contestants.length < 2 || !datedEvidence?.length) return null;
   const closeHour = Number(process.env.GRANJA_VIP_CLOSE_HOUR ?? DEFAULT_CLOSE_HOUR);
   const closeMinute = Number(process.env.GRANJA_VIP_CLOSE_MINUTE ?? DEFAULT_CLOSE_MINUTE);
-  const close = nextGranjaVipSundayClose(now, { hour: closeHour, minute: closeMinute });
+  const close = capataz ? nextGranjaVipCapatazClose(now) : nextGranjaVipSundayClose(now, { hour: closeHour, minute: closeMinute });
   const weekKey = formatMexicoDateYmd(close);
-  const sourceEventId = `granja-vip-elimination:${weekKey}`;
-  const outcomes = snapshot.nominated.map(row => row.name).filter(Boolean);
+  const earliest = capataz ? weekKey : formatMexicoDateYmd(new Date(close.getTime() - 6 * 86400000));
+  if (!datedEvidence.some(item => {
+    const published = new Date(item.publishedAt);
+    if (!Number.isFinite(published.getTime()) || published > now) return false;
+    const day = formatMexicoDateYmd(published);
+    return day >= earliest && day <= weekKey;
+  })) return null;
+  const sourceEventId = `granja-vip-${kind}:${weekKey}`;
+  const outcomes = contestants.map(row => row.name).filter(Boolean);
+  if (outcomes.length !== contestants.length || new Set(outcomes.map(normalizeGranjaVipName)).size !== outcomes.length) return null;
   const evidence = [
     { title: 'La Granja VIP · TV Azteca', url: snapshot.sourceUrl },
-    ...(Array.isArray(snapshot.nomineeEvidence) ? snapshot.nomineeEvidence : []),
-    ...snapshot.nominated.map(row => ({
+    ...datedEvidence,
+    ...contestants.map(row => ({
       title: `${row.name} · ${row.statusLabel || 'Nominado/a'}`,
       url: row.url || snapshot.sourceUrl,
     })),
@@ -564,7 +679,7 @@ export function buildGranjaVipWeeklyMarketSpec({
   return {
     source: GRANJA_VIP_SOURCE,
     source_event_id: sourceEventId,
-    question: '¿Quién sale de La Granja VIP esta semana?',
+    question: capataz ? `¿Quién será Capataz de La Granja VIP el ${weekKey}?` : '¿Quién sale de La Granja VIP esta semana?',
     category: 'musica',
     icon: null,
     outcomes,
@@ -572,13 +687,19 @@ export function buildGranjaVipWeeklyMarketSpec({
     start_time: now.toISOString(),
     end_time: close.toISOString(),
     amm_mode: 'parallel',
-    resolver_type: 'manual_review',
+    resolver_type: 'api_chart',
     resolver_config: {
-      source: GRANJA_VIP_SOURCE,
+      source: 'official-result',
+      kind: `granja-vip-${kind}`,
+      weekKey,
+      resolveAt: close.toISOString(),
+      legs: outcomes.map(label => ({ label })),
       sourceEventId,
       suggestedOutcomeIndex: null,
       confidenceBps: 0,
-      criteria: 'Resolver con el resultado oficial de la Gala de Eliminación de La Granja VIP. Si TV Azteca marca claramente al eliminado dentro de las opciones, confirmar esa opción; si hay abandono o cambio de nominados antes de la gala, revisar manualmente o anular según corresponda.',
+      criteria: capataz
+        ? `Gana quien TV Azteca anuncie oficialmente como ganador de la prueba de Capataz del ${weekKey}. Solo cuenta el resultado de esa prueba, no el capataz de semanas anteriores. Si cambia la lista de finalistas, hay empate, cancelación o resultado ambiguo, requiere revisión manual.`
+        : 'Resolver con el resultado oficial de la Gala de Eliminación de La Granja VIP. Si TV Azteca marca claramente al eliminado dentro de las opciones, confirmar esa opción; si hay abandono o cambio de nominados antes de la gala, revisar manualmente o anular según corresponda.',
       evidence,
       sourceUrls: evidence.map(item => item.url).filter(Boolean),
       evidenceUrl: snapshot.sourceUrl,
@@ -586,11 +707,11 @@ export function buildGranjaVipWeeklyMarketSpec({
       staleReadPolicy: 'Usar lectura fresca de TV Azteca; no pagar automáticamente si no hay etiqueta oficial clara.',
     },
     source_data: {
-      kind: 'granja_vip_week',
+      kind: capataz ? 'granja_vip_capataz' : 'granja_vip_week',
       showLabel: 'La Granja VIP',
       seasonLabel,
       weekKey,
-      closeLocalTime: `domingo ${String(closeHour).padStart(2, '0')}:${String(closeMinute).padStart(2, '0')} ${MEXICO_CITY_TZ}`,
+      closeLocalTime: capataz ? `lunes 20:25 ${MEXICO_CITY_TZ}` : `domingo ${String(closeHour).padStart(2, '0')}:${String(closeMinute).padStart(2, '0')} ${MEXICO_CITY_TZ}`,
       snapshot: {
         sourceUrl: snapshot.sourceUrl,
         observedAt: snapshot.observedAt,
@@ -607,6 +728,57 @@ export function buildGranjaVipWeeklyMarketSpec({
     geo_tags: ['mexico'],
     topic_tags: ['tv', 'farandula'],
   };
+}
+
+export async function readGranjaVipOfficialResult(cfg, outcomes, { fetchImpl = fetch, now = new Date() } = {}) {
+  const defer = (reason, manualReview = false) => {
+    const error = new Error(reason);
+    error.benign = true;
+    error.manualReview = manualReview;
+    error.info = { source: GRANJA_VIP_SOURCE, reason, weekKey: cfg.weekKey,
+      rationale: 'TV Azteca no confirma de forma inequívoca el resultado y la lista de participantes de esta prueba. Revisar la evidencia oficial antes de pagar.' };
+    return error;
+  };
+  const close = new Date(cfg.resolveAt);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(cfg.weekKey) || !Number.isFinite(close.getTime()) || now < close) throw defer('granja_result_not_due');
+  const capataz = cfg.kind === 'granja-vip-capataz';
+  const snapshot = await readGranjaVipOfficialSnapshot({
+    fetchImpl, now: new Date(close.getTime() - 60000), historicalField: true, articleEvidence: cfg.evidence || [],
+  });
+  const field = capataz ? snapshot.capatazFinalists : snapshot.nominated;
+  const fieldNames = (field || []).map(row => normalizeGranjaVipName(row.name)).sort();
+  if (JSON.stringify(fieldNames) !== JSON.stringify(outcomes.map(normalizeGranjaVipName).sort())) {
+    throw defer('granja_contestant_field_changed_or_unavailable', fieldNames.length > 0 || now - close > 86400000);
+  }
+  const links = snapshot.officialArticleLinks.filter(link => {
+    const title = stripAccents(link.title);
+    return capataz ? /capataz/i.test(title) && /gano|ganador|nuevo|nueva|consiguio|convirtio/i.test(title)
+      : /eliminad/i.test(title) && !/salvad|nominad|riesgo|votar/i.test(title);
+  });
+  const found = [];
+  for (const link of links.slice(0, 8)) {
+    const response = await fetchFreshText(link.url, { fetchImpl });
+    if (!response.ok) continue;
+    const article = parseOfficialGranjaArticle(response.text, link.url);
+    if (!article || article.publishedAt > now.toISOString()) continue;
+    const date = formatMexicoDateYmd(new Date(article.publishedAt));
+    const resultDay = formatMexicoDateYmd(new Date(close.getTime() + 86400000));
+    if (date < cfg.weekKey || date > resultDay || new Date(article.publishedAt) < close) continue;
+    const headline = stripAccents(article.title);
+    const explicit = capataz ? /(?:gana|ganador|nuevo|nueva|se convierte|consigue|convirtio).{0,100}capataz|capataz.{0,80}(?:es |gana)/i
+      : /(?:es |fue |se convierte|se convirtio).{0,60}eliminad|eliminad[oa].{0,30}(?:es |fue )/i;
+    if (!explicit.test(headline) || /\?|empate|abandono|expulsion|cancelad|dos eliminad|doble eliminacion|recuerda|semana pasada|anterior|podria|sera|seria/i.test(headline)) continue;
+    const matches = outcomes.map((name, index) => ({ name, index })).filter(row =>
+      matchingGranjaRows(article.title, [{ name: row.name }]).length === 1);
+    if (matches.length === 1) found.push({ winningIdx: matches[0].index, article });
+  }
+  const winners = new Set(found.map(row => row.winningIdx));
+  if (winners.size !== 1) throw defer('granja_official_result_missing_or_ambiguous', winners.size > 1 || now - close > 86400000);
+  const result = found[0];
+  return { winningIdx: result.winningIdx, resolverInfo: {
+    source: GRANJA_VIP_SOURCE, evidenceUrl: result.article.url, publishedAt: result.article.publishedAt,
+    officialHeadline: result.article.title, weekKey: cfg.weekKey,
+  } };
 }
 
 export const _internal = {

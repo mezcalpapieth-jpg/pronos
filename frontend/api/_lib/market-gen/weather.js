@@ -72,6 +72,7 @@ export async function generateWeatherMarkets() {
     const buckets = adaptiveBuckets(forecastHighC);
     const resolutionCriteria = weatherResolutionCriteriaForBuckets(buckets, {
       resolutionSource: 'open-meteo-archive',
+      modelAuditPolicy: 'archive-only',
     });
 
     specs.push({
@@ -91,6 +92,7 @@ export async function generateWeatherMarkets() {
       resolver_config: {
         source: 'open-meteo',
         resolutionSource: 'open-meteo-archive',
+        modelAuditPolicy: 'archive-only',
         forecastModel: 'best_match',
         forecastAuditModels: forecast.valuesByModel,
         manualReviewDeltaC: 1.5,

@@ -29,6 +29,8 @@ function buildUrl(base, params) {
 }
 
 function finiteNumber(value) {
+  if (typeof value !== 'number' && typeof value !== 'string') return null;
+  if (typeof value === 'string' && value.trim() === '') return null;
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
 }
@@ -182,7 +184,11 @@ export async function fetchObservedMaxTempC({
     .map((time, index) => ({ time, tempC: finiteNumber(temps[index]) }))
     .filter(row => row.time && row.tempC != null);
 
-  if (hourly.length < 24) {
+  const hasCompleteDay = times.length === 24 && temps.length === 24
+    && hourly.length === 24
+    && hourly.every((row, hour) =>
+      row.time === `${dateYmd}T${String(hour).padStart(2, '0')}:00`);
+  if (!hasCompleteDay) {
     throw weatherDeferredError('weather_archive_hourly_incomplete', {
       source: 'open-meteo-archive',
       forecastDateYmd: dateYmd,
@@ -193,7 +199,16 @@ export async function fetchObservedMaxTempC({
 
   const hourlyMaxC = Math.max(...hourly.map(row => row.tempC));
   const dailyMaxC = finiteNumber(data?.daily?.temperature_2m_max?.[0]);
-  const maxC = dailyMaxC != null ? dailyMaxC : hourlyMaxC;
+  if (dailyMaxC != null && Math.abs(dailyMaxC - hourlyMaxC) > 0.0001) {
+    throw weatherDeferredError('weather_archive_daily_hourly_mismatch', {
+      source: 'open-meteo-archive',
+      forecastDateYmd: dateYmd,
+      timezone,
+      dailyMaxC,
+      hourlyMaxC,
+    });
+  }
+  const maxC = hourlyMaxC;
   const peakHours = hourly
     .filter(row => Math.abs(row.tempC - maxC) < 0.0001)
     .map(row => row.time);
@@ -280,6 +295,7 @@ export async function resolveObservedWeatherMaxTempC({
   timezone = DEFAULT_TIMEZONE,
   buckets = [],
   mismatchThresholdC = WEATHER_MODEL_AUDIT_THRESHOLD_C,
+  modelAuditPolicy = 'require-agreement',
   now = new Date(),
 } = {}) {
   const observed = await fetchObservedMaxTempC({ lat, lng, dateYmd, timezone, now });
@@ -290,8 +306,9 @@ export async function resolveObservedWeatherMaxTempC({
 
   let forecastAudit = null;
   let auditError = null;
+  const archiveOnly = modelAuditPolicy === 'archive-only';
   try {
-    forecastAudit = await fetchForecastModelMaxTempsC({ lat, lng, dateYmd, timezone });
+    if (!archiveOnly) forecastAudit = await fetchForecastModelMaxTempsC({ lat, lng, dateYmd, timezone });
   } catch (e) {
     auditError = e?.message || 'forecast_audit_failed';
   }
@@ -305,7 +322,8 @@ export async function resolveObservedWeatherMaxTempC({
       })
     : {
         observedBucketIndex: winningIdx,
-        requiresManualReview: false,
+        requiresManualReview: !archiveOnly,
+        modelAuditPolicy,
         auditError,
       };
 
@@ -363,13 +381,13 @@ export const BUCKETS = [
 ];
 
 export function weatherBucketIndexFor(tempC, buckets = BUCKETS) {
-  const value = Number(tempC);
-  if (!Number.isFinite(value)) return -1;
+  const value = finiteNumber(tempC);
+  if (value == null) return -1;
   for (let i = 0; i < buckets.length; i++) {
     const b = buckets[i] || {};
-    const minC = Number(b.minC);
-    const maxC = Number(b.maxC);
-    if (!Number.isFinite(minC) || !Number.isFinite(maxC)) continue;
+    const minC = finiteNumber(b.minC);
+    const maxC = finiteNumber(b.maxC);
+    if (minC == null || maxC == null) continue;
     if (value >= minC && value < maxC) return i;
   }
   return -1;
@@ -406,7 +424,7 @@ export function adaptiveBuckets(forecastC) {
   ];
 }
 
-export function weatherResolutionCriteriaForBuckets(buckets = [], { resolutionSource = null } = {}) {
+export function weatherResolutionCriteriaForBuckets(buckets = [], { resolutionSource = null, modelAuditPolicy = 'require-agreement' } = {}) {
   const labels = buckets.map(b => String(b?.label || '').trim()).filter(Boolean);
   const usesArchive = resolutionSource === 'open-meteo-archive';
   if (labels.length === 4) {
@@ -418,7 +436,9 @@ export function weatherResolutionCriteriaForBuckets(buckets = [], { resolutionSo
         ? 'Se resuelve con la temperatura máxima horaria registrada por Open-Meteo Archive en best_match para la fecha y ciudad del mercado.'
         : 'Se resuelve con la temperatura máxima diaria de Open-Meteo para la fecha y ciudad del mercado.';
       const review = usesArchive
-        ? ' El mercado cierra antes del cierre del día para evitar operar cuando el resultado ya es evidente. Si la auditoría de modelos cambia la opción ganadora o muestra una diferencia grande, pasa a revisión manual.'
+        ? (modelAuditPolicy === 'archive-only'
+          ? ' Archive es la única fuente de resolución; los pronósticos de otros modelos no cambian el resultado. Se espera al cierre del día local y a las 24 lecturas horarias completas y consistentes; si faltan datos, la resolución queda pendiente.'
+          : ' El mercado cierra antes del cierre del día para evitar operar cuando el resultado ya es evidente. Si la auditoría de modelos cambia la opción ganadora o muestra una diferencia grande, pasa a revisión manual.')
         : '';
       return `${intro} ${labels[0]} gana con cualquier valor menor a ${base.toFixed(2)}°C; ${labels[1]} gana desde ${base.toFixed(2)}°C hasta ${(base + 0.99).toFixed(2)}°C; ${labels[2]} gana desde ${next.toFixed(2)}°C hasta ${(next + 0.99).toFixed(2)}°C; ${labels[3]} gana con ${hot.toFixed(2)}°C o más.${review}`;
     }

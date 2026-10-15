@@ -602,6 +602,7 @@ const STRINGS = {
   'points.liveScore.title':        { es: 'MARCADOR EN VIVO',  en: 'LIVE SCORE' },
   'points.liveScore.live':         { es: 'En vivo',           en: 'Live' },
   'points.detail.priceHistory':    { es: 'HISTORIAL DE PRECIO', en: 'PRICE HISTORY' },
+  'points.detail.priceBeforeClose': { es: 'Últimas horas antes del cierre', en: 'Final hours before close' },
   'points.detail.priceRealtime':   { es: 'PRECIO EN TIEMPO REAL', en: 'REAL-TIME PRICE' },
   'points.detail.last30d':         { es: 'ÚLT. 30 DÍAS',       en: 'LAST 30 DAYS' },
   'points.detail.chartRange':      { es: 'Rango del gráfico',   en: 'Chart range' },

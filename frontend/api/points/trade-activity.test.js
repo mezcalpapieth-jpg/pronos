@@ -20,7 +20,9 @@ test('points trade activity is anonymous, bucketed, and bounded', () => {
   assert.match(source, /username <> \$\{PRONOS_TREASURY_USERNAME\}/);
   assert.match(source, /slice\(0, 200\)/);
   assert.match(source, /windowHours/);
-  assert.match(source, /\|\| ' hours'/);
+  assert.match(source, /loadChartWindows\(sql, ids, windowHours\)/);
+  assert.match(source, /created_at <= w\.window_end/);
+  assert.doesNotMatch(source, /NOW\(\)/);
   assert.match(source, /max: 60/);
   assert.match(source, /max: 120/);
   assert.doesNotMatch(source, /SELECT\s+username/);

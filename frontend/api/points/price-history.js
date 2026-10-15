@@ -3,7 +3,8 @@
  * GET /api/points/price-history?ids=1,2,3&hours=4&limit=200
  *
  * Returns sampled price snapshots for one or more markets over the
- * last `days` days (default 30, max 60). Used by the home grid and market
+ * last `days` days (default 30, max 60), ending at the trading cutoff for
+ * closed markets rather than today. Used by the home grid and market
  * detail page to render sparkline charts without replaying every trade.
  *
  * NB: path is flat (not nested under `markets/`) because Vercel's
@@ -22,13 +23,15 @@
  *
  * Only outcome 0 is returned — the sparkline on cards only shows the
  * "Sí/YES" curve. Multi-outcome markets can fetch additional indexes via
- * ?outcome=<n> (future work).
+ * ?outcome=<n>.
  *
  * No auth required — this is a public read.
  */
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
+import { loadChartWindows } from '../_lib/points-chart-windows.js';
+import { setCacheHeaders } from '../_lib/api-performance.js';
 import { PRONOS_TREASURY_USERNAME } from '../_lib/points-limit-orders.js';
 import {
   displayTradePointsFromRows,
@@ -87,6 +90,8 @@ export default async function handler(req, res) {
       : 200;
 
     await ensurePointsSchema(schemaSql);
+    const windows = await loadChartWindows(sql, ids, windowHours);
+    setCacheHeaders(res, { maxAge: windows.frozen ? 60 : 0, sMaxage: windows.frozen ? 300 : 2, staleWhileRevalidate: 10 });
 
     // One SQL round-trip for every market, filtered by the cutoff. The
     // index (market_id, snapshotted_at DESC) makes this a fast range scan;
@@ -94,15 +99,17 @@ export default async function handler(req, res) {
     const rows = await sql`
       WITH ranked AS (
         SELECT
-          id,
-          market_id,
-          prices,
-          snapshotted_at,
-          ROW_NUMBER() OVER (PARTITION BY market_id ORDER BY snapshotted_at ASC) AS rn,
-          COUNT(*) OVER (PARTITION BY market_id) AS total
-        FROM points_price_snapshots
-        WHERE market_id = ANY(${ids}::int[])
-          AND snapshotted_at >= NOW() - (${windowHours} || ' hours')::interval
+          s.id,
+          s.market_id,
+          s.prices,
+          s.snapshotted_at,
+          ROW_NUMBER() OVER (PARTITION BY s.market_id ORDER BY s.snapshotted_at ASC, s.id ASC) AS rn,
+          COUNT(*) OVER (PARTITION BY s.market_id) AS total
+        FROM UNNEST(${windows.ids}::int[], ${windows.starts}::timestamptz[], ${windows.ends}::timestamptz[])
+          AS w(market_id, window_start, window_end)
+        JOIN points_price_snapshots s ON s.market_id = w.market_id
+        WHERE s.snapshotted_at >= w.window_start
+          AND s.snapshotted_at <= w.window_end
       ),
       sampled AS (
         SELECT
@@ -135,12 +142,14 @@ export default async function handler(req, res) {
     // fills can still move displayed probability, but only as collapsed
     // execution-burst averages; AMM reserve movement remains canonical.
     const boundarySnapshotRows = await sql`
-      SELECT DISTINCT ON (market_id)
-        market_id, prices, snapshotted_at
-      FROM points_price_snapshots
-      WHERE market_id = ANY(${ids}::int[])
-        AND snapshotted_at < NOW() - (${windowHours} || ' hours')::interval
-      ORDER BY market_id ASC, snapshotted_at DESC
+      SELECT DISTINCT ON (s.market_id)
+        s.market_id, s.prices, s.snapshotted_at
+      FROM UNNEST(${windows.ids}::int[], ${windows.starts}::timestamptz[], ${windows.ends}::timestamptz[])
+        AS w(market_id, window_start, window_end)
+      JOIN points_price_snapshots s ON s.market_id = w.market_id
+      WHERE s.snapshotted_at < w.window_start
+        AND s.snapshotted_at <= w.window_end
+      ORDER BY s.market_id ASC, s.snapshotted_at DESC, s.id DESC
     `;
 
     // Public charts should move like the movement tape: one visible
@@ -168,8 +177,9 @@ export default async function handler(req, res) {
           ) AS rn
         FROM points_trades t
         JOIN points_markets m ON m.id = t.market_id
-        WHERE t.market_id = ANY(${ids}::int[])
-          AND t.username <> ${PRONOS_TREASURY_USERNAME}
+        JOIN UNNEST(${windows.ids}::int[], ${windows.starts}::timestamptz[], ${windows.ends}::timestamptz[])
+          AS w(market_id, window_start, window_end) ON w.market_id = t.market_id
+        WHERE t.username <> ${PRONOS_TREASURY_USERNAME}
           AND t.side IN ('buy', 'sell')
           AND t.price_at_trade IS NOT NULL
           AND t.outcome_index IN (0, 1)
@@ -177,7 +187,8 @@ export default async function handler(req, res) {
           AND t.reserves_after IS NOT NULL
           AND jsonb_typeof(m.outcomes) = 'array'
           AND jsonb_array_length(m.outcomes) = 2
-          AND t.created_at >= NOW() - (${windowHours} || ' hours')::interval
+          AND t.created_at >= w.window_start
+          AND t.created_at <= w.window_end
       )
       SELECT
         id,
@@ -202,7 +213,7 @@ export default async function handler(req, res) {
     }
 
     // Group by market_id and project only the requested outcome.
-    const windowStartSec = Date.now() / 1000 - windowHours * 3600;
+    const windowStarts = new Map(windows.windows.map(row => [row.id, new Date(row.start).getTime() / 1000]));
     const history = {};
     for (const id of ids) history[id] = [];
     // Per market, carry forward whichever pre-window price is most recent.
@@ -215,7 +226,7 @@ export default async function handler(req, res) {
     }
     for (const [marketId, b] of boundary) {
       history[marketId].push({
-        t: windowStartSec,
+        t: windowStarts.get(Number(marketId)),
         p: Math.round(b.p * 10000) / 100,
         // Sorts ahead of any in-window point sharing the same timestamp.
         _id: -1,

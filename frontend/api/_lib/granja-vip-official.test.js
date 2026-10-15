@@ -5,6 +5,9 @@ import {
   buildGranjaVipWeeklyMarketSpec,
   extractParticipantsFromOfficialHtml,
   nextGranjaVipSundayClose,
+  nextGranjaVipCapatazClose,
+  parseOfficialGranjaArticle,
+  readGranjaVipOfficialResult,
   readGranjaVipOfficialSnapshot,
 } from './granja-vip-official.js';
 
@@ -38,7 +41,81 @@ test('extractParticipantsFromOfficialHtml reads the official granjeros section o
   assert.ok(rows.every(row => row.url.startsWith('https://www.tvazteca.com/')));
 });
 
-test('readGranjaVipOfficialSnapshot marks nominees from scoped official links', async () => {
+const BASE = 'https://www.tvazteca.com/aztecauno/la-granja-vip/';
+
+function article(title, publishedAt, body) {
+  return `<meta property="article:published_time" content="${publishedAt}"><article><h1>${title}</h1><div class="articleBody">${body}</div></article>`;
+}
+
+function fixtureFetch(articles, extra = '') {
+  const listing = OFFICIAL_SECTION_HTML + extra + articles.map(item => `<a href="${item.path}">${item.title}</a>`).join('');
+  return async input => {
+    const url = new URL(input);
+    const found = articles.find(item => url.pathname === new URL(item.path, BASE).pathname);
+    return { ok: true, status: 200, text: async () => found ? article(found.title, found.publishedAt, found.body) : listing };
+  };
+}
+
+test('dated article parsing excludes Corral VIP and requires publication metadata', () => {
+  assert.equal(parseOfficialGranjaArticle(article('El Corral VIP: nominados', '2026-10-14T21:00:00Z', '<p>Lista</p>'), BASE), null);
+  assert.equal(parseOfficialGranjaArticle('<article><h1>Lista de nominados</h1></article>', BASE), null);
+  assert.equal(parseOfficialGranjaArticle(article('Lista de nominados', '2026-10-14T21:00:00', '<p>Lista</p>'), BASE).publishedAt, '2026-10-14T21:00:00.000Z');
+});
+
+test('stale and unrelated nominees never generate the next weeks elimination', async () => {
+  const fetchImpl = fixtureFetch([
+    { path: 'nominados-pasados/', title: 'OFICIAL: Lista de nominados', publishedAt: '2026-10-08T23:00:00Z', body: '<p>Actualmente los nominados son: Carlos Trejo, Kunno e Ivonne Montero.</p>' },
+    { path: 'corral-nominados/', title: 'El Corral VIP: nominados', publishedAt: '2026-10-14T23:00:00Z', body: '<p>Actualmente los nominados son: Carlos Trejo, Kunno e Ivonne Montero.</p>' },
+  ]);
+  const now = new Date('2026-10-15T18:00:00Z');
+  const snapshot = await readGranjaVipOfficialSnapshot({ fetchImpl, now });
+  assert.deepEqual(snapshot.nominated, []);
+  assert.equal(buildGranjaVipWeeklyMarketSpec({ snapshot, now }), null);
+});
+
+test('capataz generates only with the dated finalists for the upcoming Monday', async () => {
+  const fetchImpl = fixtureFetch([{ path: 'finalistas-capataz/', title: 'Finalistas que lucharán por ser Capataz', publishedAt: '2026-10-12T21:45:00Z',
+    body: '<p>La final reunirá a Bebeshita, Pablo Montero, Julio Camejo e Ivonne Montero.</p>' }]);
+  const now = new Date('2026-10-12T22:00:00Z');
+  const snapshot = await readGranjaVipOfficialSnapshot({ fetchImpl, now });
+  const spec = buildGranjaVipWeeklyMarketSpec({ snapshot, now, kind: 'capataz' });
+  assert.equal(spec.source_event_id, 'granja-vip-capataz:2026-10-12');
+  assert.equal(spec.end_time, '2026-10-13T02:25:00.000Z');
+  assert.equal(spec.resolver_config.kind, 'granja-vip-capataz');
+  assert.deepEqual(new Set(spec.outcomes), new Set(['Daniela Alexis "Bebeshita"', 'Pablo Montero', 'Julio Camejo', 'Ivonne Montero']));
+  const later = new Date('2026-10-15T18:00:00Z');
+  const stale = await readGranjaVipOfficialSnapshot({ fetchImpl, now: later });
+  assert.equal(buildGranjaVipWeeklyMarketSpec({ snapshot: stale, now: later, kind: 'capataz' }), null);
+  assert.equal(nextGranjaVipCapatazClose(new Date('2026-10-13T02:25:00Z')).toISOString(), '2026-10-20T02:25:00.000Z');
+});
+
+test('official elimination can resolve even after todays roster marks the winner eliminated', async () => {
+  const nominees = { path: 'nominados-actuales/', title: 'Lista oficial de nominados', publishedAt: '2026-10-14T23:00:00Z', body: '<p>Actualmente los nominados son: Carlos Trejo e Ivonne Montero.</p>' };
+  const result = { path: 'eliminado-gala/', title: 'Carlos Trejo es el eliminado de La Granja VIP', publishedAt: '2026-10-19T04:00:00Z', body: '<p>Carlos Trejo fue eliminado en la gala del domingo 18 de octubre.</p>' };
+  const fetchImpl = fixtureFetch([nominees, result], '<h3>Eliminados: La Granja VIP Segunda Temporada</h3><p>Carlos Trejo</p><h3>Conductores</h3>');
+  const cfg = { kind: 'granja-vip-elimination', weekKey: '2026-10-18', resolveAt: '2026-10-19T01:55:00Z' };
+  const options = { fetchImpl, now: new Date('2026-10-19T05:00:00Z') };
+  assert.equal((await readGranjaVipOfficialResult(cfg, ['Carlos Trejo', 'Ivonne Montero'], options)).winningIdx, 0);
+  await assert.rejects(() => readGranjaVipOfficialResult(cfg, ['Kunno', 'Ivonne Montero'], options), error => error.benign && error.manualReview);
+});
+
+test('official capataz uses that contests result, not old titles or speculative headlines', async () => {
+  const finalists = { path: 'finalistas-capataz/', title: 'Finalistas que lucharán por ser Capataz', publishedAt: '2026-10-12T21:45:00Z',
+    body: '<p>La final reunirá a Pablo Montero, Julio Camejo e Ivonne Montero.</p>' };
+  const result = { path: 'pablo-gana-capataz/', title: 'Pablo Montero se convierte en el nuevo Capataz', publishedAt: '2026-10-13T04:00:00Z', body: '<p>Pablo Montero ganó la prueba de Capataz.</p>' };
+  const cfg = { kind: 'granja-vip-capataz', weekKey: '2026-10-12', resolveAt: '2026-10-13T02:25:00Z' };
+  const now = new Date('2026-10-13T05:00:00Z');
+  const outcomes = ['Ivonne Montero', 'Julio Camejo', 'Pablo Montero'];
+  assert.equal((await readGranjaVipOfficialResult(cfg, outcomes, { fetchImpl: fixtureFetch([finalists, result]), now })).winningIdx, 2);
+  for (const invalid of [{ ...result, publishedAt: '2026-10-06T04:00:00Z' }, { ...result, title: '¿Pablo Montero será el nuevo Capataz?' }]) {
+    await assert.rejects(() => readGranjaVipOfficialResult(cfg, outcomes, { fetchImpl: fixtureFetch([finalists, invalid]), now }), /missing_or_ambiguous/);
+  }
+  const conflicting = { ...result, path: 'julio-gana-capataz/', title: 'Julio Camejo se convierte en el nuevo Capataz' };
+  await assert.rejects(() => readGranjaVipOfficialResult(cfg, outcomes, { fetchImpl: fixtureFetch([finalists, result, conflicting]), now }), error => error.benign && error.manualReview);
+  await assert.rejects(() => readGranjaVipOfficialResult(cfg, outcomes, { fetchImpl: fixtureFetch([finalists]), now: new Date('2026-10-15T05:00:00Z') }), error => error.benign && error.manualReview);
+});
+
+test('readGranjaVipOfficialSnapshot ignores undated nomination headlines', async () => {
   const fetchImpl = async () => ({
     ok: true,
     status: 200,
@@ -57,7 +134,7 @@ test('readGranjaVipOfficialSnapshot marks nominees from scoped official links', 
   });
 
   assert.equal(snapshot.ok, true);
-  assert.deepEqual(snapshot.nominated.map(row => row.name), ['Carlos Trejo', 'Ivonne Montero', 'Kunno']);
+  assert.deepEqual(snapshot.nominated, []);
   assert.equal(snapshot.eliminated.length, 0);
 });
 
@@ -67,6 +144,7 @@ test('readGranjaVipOfficialSnapshot follows official nominee article links', asy
     status: 200,
     text: async () => String(url).includes('/nominados-finales/')
       ? `
+        <meta property="article:published_time" content="2026-10-08T00:00:00Z">
         <article>
           <h1>OFICIAL: LISTA completa de NOMINADOS en la quinta semana</h1>
           <p>Aunque la Tabla final cambiará luego del viernes de Traición,
@@ -105,6 +183,7 @@ test('readGranjaVipOfficialSnapshot extracts final list after earlier nomination
     status: 200,
     text: async () => String(url).includes('/tabla-nominados/')
       ? `
+        <meta property="article:published_time" content="2026-10-08T00:00:00Z">
         <article>
           <h1>El huevo dorado cambió la Tabla de Nominados</h1>
           <p>Mónica Escobedo recibió votos, pero Mono Osuna la sacó de la tabla.</p>
@@ -144,7 +223,7 @@ test('nextGranjaVipSundayClose defaults to before the Sunday elimination gala', 
   assert.equal(close.toISOString(), '2026-09-14T01:55:00.000Z');
 });
 
-test('buildGranjaVipWeeklyMarketSpec creates a manual-review elimination draft', () => {
+test('buildGranjaVipWeeklyMarketSpec creates an automatic elimination draft with dated evidence', () => {
   const now = new Date('2026-09-09T18:00:00Z');
   const snapshot = {
     ok: true,
@@ -152,6 +231,7 @@ test('buildGranjaVipWeeklyMarketSpec creates a manual-review elimination draft',
     observedAt: now.toISOString(),
     parsedCount: 3,
     total: 6,
+    nomineeEvidence: [{ title: 'Lista de nominados', url: 'https://www.tvazteca.com/aztecauno/la-granja-vip/nominados/', publishedAt: now.toISOString() }],
     rows: [
       { name: 'Carlos Trejo', slug: 'carlos-trejo', statusKey: 'nominado', statusLabel: 'Nominado/a', url: 'https://example.com/carlos' },
       { name: 'Ivonne Montero', slug: 'ivonne-montero', statusKey: 'nominado', statusLabel: 'Nominado/a', url: 'https://example.com/ivonne' },
@@ -168,10 +248,10 @@ test('buildGranjaVipWeeklyMarketSpec creates a manual-review elimination draft',
 
   assert.equal(spec.source, 'granja-vip-official');
   assert.equal(spec.source_event_id, 'granja-vip-elimination:2026-09-13');
-  assert.equal(spec.resolver_type, 'manual_review');
+  assert.equal(spec.resolver_type, 'api_chart');
   assert.equal(spec.amm_mode, 'parallel');
   assert.deepEqual(spec.outcomes, ['Carlos Trejo', 'Ivonne Montero', 'Kunno']);
-  assert.equal(spec.resolver_config.source, 'granja-vip-official');
+  assert.equal(spec.resolver_config.source, 'official-result');
   assert.equal(spec.source_data.kind, 'granja_vip_week');
   assert.deepEqual(spec.geo_tags, ['mexico']);
   assert.deepEqual(spec.topic_tags, ['tv', 'farandula']);

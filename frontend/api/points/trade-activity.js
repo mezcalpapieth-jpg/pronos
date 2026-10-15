@@ -11,6 +11,7 @@
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
+import { loadChartWindows } from '../_lib/points-chart-windows.js';
 import { cachedJson, createApiTimer, setCacheHeaders } from '../_lib/api-performance.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 import { PRONOS_TREASURY_USERNAME } from '../_lib/points-limit-orders.js';
@@ -71,25 +72,27 @@ export default async function handler(req, res) {
 
   try {
     const cacheOutcome = allOutcomes ? 'all' : outcomeIdx;
-    const cacheKey = `points:trade-activity:v4:${ids.join(',')}:${windowHours}:${cacheOutcome}:${buckets}`;
+    const cacheKey = `points:trade-activity:v5:${ids.join(',')}:${windowHours}:${cacheOutcome}:${buckets}`;
     const { value: payload, hit } = await cachedJson(cacheKey, 2_000, async () => {
       await timer.time('schema', () => ensurePointsSchema(schemaSql));
+      const windows = await loadChartWindows(sql, ids, windowHours);
       const rows = await timer.time('db_trade_activity', () => {
         if (allOutcomes) {
           return sql`
             WITH raw AS (
               SELECT
-                market_id,
+                t.market_id,
                 side,
                 collateral,
-                TO_TIMESTAMP(
-                  FLOOR(EXTRACT(EPOCH FROM created_at) / ${bucketSeconds}) * ${bucketSeconds}
-                ) AS bucket_at
-              FROM points_trades
-              WHERE market_id = ANY(${ids}::int[])
-                AND side IN ('buy', 'sell')
+                w.window_start + FLOOR(EXTRACT(EPOCH FROM (created_at - w.window_start)) / ${bucketSeconds})
+                  * ${bucketSeconds} * INTERVAL '1 second' AS bucket_at
+              FROM points_trades t
+              JOIN UNNEST(${windows.ids}::int[], ${windows.starts}::timestamptz[], ${windows.ends}::timestamptz[])
+                AS w(market_id, window_start, window_end) ON w.market_id = t.market_id
+              WHERE side IN ('buy', 'sell')
                 AND username <> ${PRONOS_TREASURY_USERNAME}
-                AND created_at >= NOW() - (${windowHours} || ' hours')::interval
+                AND created_at >= w.window_start
+                AND created_at <= w.window_end
             )
             SELECT
               market_id,
@@ -106,18 +109,19 @@ export default async function handler(req, res) {
         return sql`
           WITH raw AS (
             SELECT
-              market_id,
+              t.market_id,
               side,
               collateral,
-              TO_TIMESTAMP(
-                FLOOR(EXTRACT(EPOCH FROM created_at) / ${bucketSeconds}) * ${bucketSeconds}
-              ) AS bucket_at
-            FROM points_trades
-            WHERE market_id = ANY(${ids}::int[])
-              AND outcome_index = ${outcomeIdx}
+              w.window_start + FLOOR(EXTRACT(EPOCH FROM (created_at - w.window_start)) / ${bucketSeconds})
+                * ${bucketSeconds} * INTERVAL '1 second' AS bucket_at
+            FROM points_trades t
+            JOIN UNNEST(${windows.ids}::int[], ${windows.starts}::timestamptz[], ${windows.ends}::timestamptz[])
+              AS w(market_id, window_start, window_end) ON w.market_id = t.market_id
+            WHERE outcome_index = ${outcomeIdx}
               AND side IN ('buy', 'sell')
               AND username <> ${PRONOS_TREASURY_USERNAME}
-              AND created_at >= NOW() - (${windowHours} || ' hours')::interval
+              AND created_at >= w.window_start
+              AND created_at <= w.window_end
           )
           SELECT
             market_id,

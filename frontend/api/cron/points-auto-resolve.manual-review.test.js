@@ -10,8 +10,16 @@ test('points auto-resolver upgrades legacy Popocatepetl markets before manual qu
   assert.match(SOURCE, /if \(legacyPopocatepetlCfg\) \{\s*cfg = legacyPopocatepetlCfg;\s*resolverType = 'api_price';/);
   assert.match(SOURCE, /cfg\.source === CENAPRED_POPOCATEPETL_SOURCE[\s\S]{0,100}readCenapredPopocatepetlExhalations\(cfg\)/);
   assert.match(SOURCE, /resolver_type = CASE WHEN \$6 THEN \$4 ELSE COALESCE\(resolver_type, \$4\) END/);
-  assert.match(SOURCE, /Boolean\(legacyPopocatepetlCfg\)/);
+  assert.match(SOURCE, /Boolean\(legacyPopocatepetlCfg \|\| legacyOfficialCfg\)/);
   assert.match(SOURCE, /reportPublishedAt: r\.reportPublishedAt/);
+});
+
+test('points auto-resolver upgrades guarded official results before manual queuing and dispatches their reader', () => {
+  assert.ok(SOURCE.indexOf('const legacyOfficialCfg = upgradeLegacyOfficialResult') < SOURCE.indexOf('if (isManualReviewMarket({ resolverType, cfg, row: m, sourceData }))'));
+  assert.match(SOURCE, /if \(legacyOfficialCfg\) \{\s*cfg = legacyOfficialCfg;\s*resolverType = 'api_chart';/);
+  assert.match(SOURCE, /cfg\.source === OFFICIAL_RESULT_SOURCE[\s\S]{0,100}readOfficialResult\(cfg, marketOutcomes\)/);
+  assert.match(SOURCE, /SELECT id, leg_label, status, outcome FROM points_markets\s+WHERE parent_id = \$1\s+ORDER BY id ASC\s+FOR UPDATE/);
+  assert.match(SOURCE, /parallelLegResolutions\(legs.rows, marketOutcomes, winningIdx\)/);
 });
 
 test('points auto-resolver queues ordinary manual-review markets', () => {

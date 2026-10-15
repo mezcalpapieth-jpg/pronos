@@ -6,7 +6,7 @@ import {
   generateMlbWorldSeries2026Markets,
 } from './mlb-world-series-2026.js';
 
-test('World Series generator creates one manual parallel winner market', async () => {
+test('World Series generator creates one automatically resolved parallel winner market', async () => {
   const specs = await generateMlbWorldSeries2026Markets();
   assert.equal(specs.length, 1);
 
@@ -19,7 +19,9 @@ test('World Series generator creates one manual parallel winner market', async (
   assert.equal(spec.league, 'mlb');
   assert.equal(spec.end_time, _internal.CLOSE_ISO);
   assert.equal(spec.amm_mode, 'parallel');
-  assert.equal(spec.resolver_type, 'manual');
+  assert.equal(spec.resolver_type, 'api_chart');
+  assert.equal(spec.resolver_config.source, 'official-result');
+  assert.equal(spec.resolver_config.kind, 'mlb-world-series');
   assert.equal(spec.featured, true);
   assert.equal(spec.tournament_featured, true);
   assert.equal(spec.is_test_market, undefined);

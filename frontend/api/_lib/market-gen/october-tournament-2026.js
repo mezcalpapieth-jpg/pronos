@@ -5,11 +5,11 @@ import { attachSuggestedPricing } from '../market-pricing.js';
 import { IBTRACS_PRODUCT_PAGE } from '../hurricanes.js';
 import { SNIIM_FOOD_PRICE_SOURCE } from '../sniim-food-prices.js';
 import { CENAPRED_ARCHIVE_URL, popocatepetlResolverConfig } from '../cenapred-popocatepetl.js';
+import { OFFICIAL_RESULT_SOURCE, upgradeLegacyOfficialResult } from '../official-results.js';
 import {
   INEGI_API_DOCS_URL,
   INEGI_FEEDS_URL,
   INEGI_INPC_BIWEEKLY_ANNUAL_INDICATOR_ID,
-  INEGI_INPC_SOURCE,
 } from '../inegi-inpc.js';
 import { dateAtMexicoCityTime, formatMexicoDateEs, formatMexicoDateYmd } from './mexico-time.js';
 
@@ -382,7 +382,7 @@ function buildManualSpec({
   extraSourceData = {},
   startIso = tradingStartOneDayBefore(closeIso),
 }) {
-  return pricedSpec({
+  const spec = pricedSpec({
     source: SOURCE,
     source_event_id: `october-2026:${key}`,
     question: questionEs,
@@ -418,6 +418,11 @@ function buildManualSpec({
       },
     }),
   });
+  const automatic = upgradeLegacyOfficialResult({
+    resolverType: spec.resolver_type, cfg: spec.resolver_config, source: spec.source,
+    sourceEventId: spec.source_event_id, outcomes: spec.outcomes, endTime: spec.end_time,
+  });
+  return automatic ? { ...spec, resolver_type: 'api_chart', resolver_config: automatic } : spec;
 }
 
 function addDaysToYmd(ymd, days) {
@@ -505,9 +510,10 @@ function inpcFirstHalfOctoberMarket() {
     outcomesEn,
     buckets,
     endTime: INPC_FIRST_HALF_OCTOBER_CLOSE_ISO,
-    resolverType: 'api_price',
+    resolverType: 'api_chart',
     resolverConfig: {
-      source: INEGI_INPC_SOURCE,
+      source: OFFICIAL_RESULT_SOURCE,
+      kind: 'inegi-inpc-first-release',
       indicatorId: INEGI_INPC_BIWEEKLY_ANNUAL_INDICATOR_ID,
       symbol: 'INPC 1Q Oct 2026',
       targetPeriod: '2026-10-1Q',
