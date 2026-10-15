@@ -1,3 +1,5 @@
+import { espnEventStatus } from './espn-event-status.js';
+
 const ESPN_BASE = 'https://site.api.espn.com/apis/site/v2/sports';
 const ESPN_SOCCER_COMPETITION_PATH = {
   WC: 'soccer/fifa.world',
@@ -197,7 +199,7 @@ function statusLabelFor({ sport, status }) {
   const clock = cleanString(status?.displayClock);
   const period = Number(status?.period);
 
-  if (state === 'post' || type.completed) return 'Final';
+  if (espnEventStatus(status).completed) return 'Final';
   if (sport === 'basketball' || sport === 'football') {
     const q = Number.isFinite(period) && period > 0 ? `${period}C` : null;
     if (q && clock) return `${q} · ${clock}`;
@@ -249,7 +251,7 @@ export function normalizeEspnLiveScore({ leaguePath, event, summary = null }) {
   const status = event?.status || comp?.status || {};
   const type = status?.type || {};
   const state = cleanString(type.state);
-  const completed = Boolean(type.completed || state === 'post');
+  const completed = espnEventStatus(status).completed;
 
   return {
     source: 'espn',

@@ -1578,14 +1578,16 @@ async function queueApiChartFallbackReview({ market, cfg, sourceData, outcomes, 
  * URLs the every-15-min schedule never fires, so admins use the
  * admin endpoint to kick this off manually.
  */
-export async function runAutoResolve({ dry = false } = {}) {
+export async function runAutoResolve({ dry = false, sportsOnly = false } = {}) {
   const started = Date.now();
   await ensurePointsSchema(schemaSql);
 
     // Only parents — parallel legs are resolved via the parent cascade
     // below (weather_api). For price resolvers the market is already
     // unified binary so there's nothing to cascade.
-    const candidates = await readSql`
+    // Read sports from the writer so a replica cannot keep a finished game active.
+    const candidateSql = sportsOnly ? schemaSql : readSql;
+    const candidates = await candidateSql`
       SELECT m.id, m.question, m.category, m.start_time, m.end_time, m.resolver_type,
              m.resolver_config, m.outcomes, m.amm_mode, m.sport, m.league,
              m.source, m.source_event_id,
@@ -1605,6 +1607,17 @@ export async function runAutoResolve({ dry = false } = {}) {
         AND m.end_time IS NOT NULL
         AND m.parent_id IS NULL
         AND (
+          NOT ${sportsOnly}::boolean
+          OR (
+            m.resolver_type = 'sports_api'
+            AND m.resolver_config->>'source' = 'espn'
+            AND m.resolver_config->>'shape' IN ('binary', 'draw3', 'total-goals-over')
+            -- Check ahead too: a rescheduled game can finish before its saved kickoff.
+            AND m.start_time <= NOW() + INTERVAL '12 hours'
+            AND m.start_time >= NOW() - INTERVAL '48 hours'
+          )
+        )
+        AND (
           (
             m.resolver_type IN ('chainlink_price', 'api_price', 'weather_api', 'api_hurricane', 'aicm_delay_count', 'aicm_delay_minutes_live', 'api_chart', 'api_transcript', 'api_lcdlf', 'sports_api')
             AND (
@@ -1612,9 +1625,9 @@ export async function runAutoResolve({ dry = false } = {}) {
               OR (
                 m.resolver_type = 'sports_api'
                 AND m.resolver_config->>'source' IN ('espn', 'football-data')
-                AND m.resolver_config->>'shape' IN ('binary', 'draw3')
+                AND m.resolver_config->>'shape' IN ('binary', 'draw3', 'total-goals-over')
                 AND m.start_time IS NOT NULL
-                AND m.start_time < NOW() - INTERVAL '90 minutes'
+                AND m.start_time <= NOW() + INTERVAL '12 hours'
               )
               OR (
                 m.resolver_type = 'sports_api'
@@ -1699,93 +1712,112 @@ export async function runAutoResolve({ dry = false } = {}) {
       errors: [],
       deferred: [],
       dryRun: dry,
+      scope: sportsOnly ? 'sports' : 'all',
     };
 
-    try {
-      await queueNextMananeraPendingMarkets({ candidates, dry, report });
-    } catch (e) {
-      report.errors.push({
-        error: `mananera_next_pending_failed: ${e?.message || 'unknown'}`,
-      });
-    }
-
-    try {
-      const cryptoActiveCatchup = await catchUpExpiredActiveCryptoMarkets(schemaSql, {
-        dry,
-        limit: MAX_BINARY_DIRECTION_CATCHUP_PER_RUN,
-      });
-      report.cryptoActiveCatchup = cryptoActiveCatchup;
-      report.checked += cryptoActiveCatchup.checked;
-      for (const row of cryptoActiveCatchup.resolved || []) {
-        report.resolved.push({
-          id: row.id,
-          winningIdx: row.outcome,
-          finalScore: row.finalScore,
-          source: 'crypto-5min-missed-active',
-          asset: row.asset,
-        });
-      }
-      for (const err of cryptoActiveCatchup.errors || []) {
+    if (!sportsOnly) {
+      try {
+        await queueNextMananeraPendingMarkets({ candidates, dry, report });
+      } catch (e) {
         report.errors.push({
-          id: err.id,
-          error: `crypto_active_catchup_failed: ${err.error}`,
+          error: `mananera_next_pending_failed: ${e?.message || 'unknown'}`,
         });
       }
-    } catch (e) {
-      report.errors.push({
-        error: `crypto_active_catchup_failed: ${e?.message || 'unknown'}`,
-      });
-    }
 
-    try {
-      const cryptoPendingCatchup = await catchUpMissedPendingCryptoMarkets(schemaSql, {
-        dry,
-        limit: MAX_BINARY_DIRECTION_CATCHUP_PER_RUN,
-      });
-      report.cryptoPendingCatchup = cryptoPendingCatchup;
-      report.checked += cryptoPendingCatchup.checked;
-      for (const row of cryptoPendingCatchup.resolved || []) {
-        report.resolved.push({
-          id: row.id,
-          winningIdx: row.outcome,
-          finalScore: row.finalScore,
-          source: 'crypto-5min-missed-pending',
-          asset: row.asset,
+      try {
+        const cryptoActiveCatchup = await catchUpExpiredActiveCryptoMarkets(schemaSql, {
+          dry,
+          limit: MAX_BINARY_DIRECTION_CATCHUP_PER_RUN,
         });
-      }
-      for (const err of cryptoPendingCatchup.errors || []) {
+        report.cryptoActiveCatchup = cryptoActiveCatchup;
+        report.checked += cryptoActiveCatchup.checked;
+        for (const row of cryptoActiveCatchup.resolved || []) {
+          report.resolved.push({
+            id: row.id,
+            winningIdx: row.outcome,
+            finalScore: row.finalScore,
+            source: 'crypto-5min-missed-active',
+            asset: row.asset,
+          });
+        }
+        for (const err of cryptoActiveCatchup.errors || []) {
+          report.errors.push({
+            id: err.id,
+            error: `crypto_active_catchup_failed: ${err.error}`,
+          });
+        }
+      } catch (e) {
         report.errors.push({
-          id: err.id,
-          error: `crypto_pending_catchup_failed: ${err.error}`,
+          error: `crypto_active_catchup_failed: ${e?.message || 'unknown'}`,
         });
       }
-    } catch (e) {
-      report.errors.push({
-        error: `crypto_pending_catchup_failed: ${e?.message || 'unknown'}`,
-      });
-    }
 
-    try {
-      const generatedHiddenFromHome = dry ? false : await readGeneratedCryptoHiddenFromHome(schemaSql);
-      const cryptoActivationCatchup = await catchUpCurrentPendingCryptoMarkets(schemaSql, {
-        dry,
-        hiddenFromHome: generatedHiddenFromHome,
-      });
-      report.cryptoActivationCatchup = cryptoActivationCatchup;
-      report.checked += cryptoActivationCatchup.checked;
-      for (const err of cryptoActivationCatchup.errors || []) {
+      try {
+        const cryptoPendingCatchup = await catchUpMissedPendingCryptoMarkets(schemaSql, {
+          dry,
+          limit: MAX_BINARY_DIRECTION_CATCHUP_PER_RUN,
+        });
+        report.cryptoPendingCatchup = cryptoPendingCatchup;
+        report.checked += cryptoPendingCatchup.checked;
+        for (const row of cryptoPendingCatchup.resolved || []) {
+          report.resolved.push({
+            id: row.id,
+            winningIdx: row.outcome,
+            finalScore: row.finalScore,
+            source: 'crypto-5min-missed-pending',
+            asset: row.asset,
+          });
+        }
+        for (const err of cryptoPendingCatchup.errors || []) {
+          report.errors.push({
+            id: err.id,
+            error: `crypto_pending_catchup_failed: ${err.error}`,
+          });
+        }
+      } catch (e) {
         report.errors.push({
-          error: `crypto_activation_catchup_failed: ${err.error}`,
-          sourceEventId: err.sourceEventId,
+          error: `crypto_pending_catchup_failed: ${e?.message || 'unknown'}`,
         });
       }
-    } catch (e) {
-      report.errors.push({
-        error: `crypto_activation_catchup_failed: ${e?.message || 'unknown'}`,
-      });
+
+      try {
+        const generatedHiddenFromHome = dry ? false : await readGeneratedCryptoHiddenFromHome(schemaSql);
+        const cryptoActivationCatchup = await catchUpCurrentPendingCryptoMarkets(schemaSql, {
+          dry,
+          hiddenFromHome: generatedHiddenFromHome,
+        });
+        report.cryptoActivationCatchup = cryptoActivationCatchup;
+        report.checked += cryptoActivationCatchup.checked;
+        for (const err of cryptoActivationCatchup.errors || []) {
+          report.errors.push({
+            error: `crypto_activation_catchup_failed: ${err.error}`,
+            sourceEventId: err.sourceEventId,
+          });
+        }
+      } catch (e) {
+        report.errors.push({
+          error: `crypto_activation_catchup_failed: ${e?.message || 'unknown'}`,
+        });
+      }
     }
 
     let binaryDirectionCatchups = 0;
+
+    // Bound the fast pass during feed outages instead of waiting 4s per game serially.
+    const sportsResults = new Map();
+    if (sportsOnly) {
+      for (let i = 0; i < candidates.length; i += 8) {
+        await Promise.all(candidates.slice(i, i + 8).map(async market => {
+          const config = parseJsonb(market.resolver_config, {});
+          if (config.source !== 'espn') return;
+          try {
+            sportsResults.set(market.id, { result: await readEspnEvent({ ...config, preferSummary: true }) });
+          } catch (error) {
+            sportsResults.set(market.id, { error });
+          }
+        }));
+      }
+    }
 
     for (const m of candidates) {
       const marketOutcomes = parseJsonb(m.outcomes, []);
@@ -2705,12 +2737,15 @@ export async function runAutoResolve({ dry = false } = {}) {
             if (cfg.shape === 'combo-win-count') {
               result = await readComboWinCountProgress(cfg);
             } else {
-              result = await readEspnEvent({
+              const prefetched = sportsResults.get(m.id);
+              if (prefetched?.error) throw prefetched.error;
+              result = prefetched ? prefetched.result : await readEspnEvent({
                 leaguePath: cfg.leaguePath,
                 eventId: cfg.eventId,
                 dateYmd: cfg.dateYmd,
                 homeName: cfg.homeName,
                 awayName: cfg.awayName,
+                preferSummary: true,
               });
             }
           } else if (cfg.source === 'football-data') {

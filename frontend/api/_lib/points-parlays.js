@@ -13,6 +13,8 @@ import {
   tournamentRulesPayload,
 } from './points-tournament-config.js';
 import { resolveTournamentScoringWindow } from './points-tournament-leaderboard.js';
+import { assertSportsTradeAllowed } from './points-sports-trade-guard.js';
+import { parlayLegResult, parlayResult } from './points-parlay-outcomes.js';
 
 const PARLAY_MIN_MULTIPLIER = 1.01;
 
@@ -126,7 +128,7 @@ async function readParlayMarkets(db, marketIds, { lock = false } = {}) {
   const lockClause = lock ? 'FOR SHARE OF m' : '';
   return queryRows(db, `
     SELECT m.id, m.question, m.status, m.outcome, m.outcomes, m.reserves,
-           m.end_time, m.parent_id,
+           m.end_time, m.parent_id, m.resolver_config,
            COALESCE(m.parent_id, m.id) AS exposure_group_id,
            (
              m.tournament_featured IS TRUE
@@ -162,6 +164,9 @@ export async function readParlayQuote(db, { legs, stake, now = new Date(), lockM
   const marketIds = [...new Set(normalizedLegs.map(leg => leg.marketId))].sort((a, b) => a - b);
   const markets = await readParlayMarkets(db, marketIds, { lock: lockMarkets });
   const marketById = new Map(markets.map(market => [Number(market.id), market]));
+  for (const market of markets) {
+    if (market.status === 'active') await assertSportsTradeAllowed(market, { now });
+  }
   const seenGroups = new Set();
   const cutoffMs = scoringWindow ? new Date(scoringWindow.rankingCutoffAt).getTime() : NaN;
   const nowMs = (now instanceof Date ? now : new Date(now)).getTime();
@@ -388,51 +393,31 @@ export async function listParlayTicketsForUser(db, { username, limit = 20 } = {}
   return rows.map(serializeParlayTicket);
 }
 
-function normalizeLegOutcomeStatus(leg) {
-  const marketStatus = String(leg.market_status || '').toLowerCase();
-  const resolvedOutcome = leg.market_outcome == null ? null : Number(leg.market_outcome);
-  if (marketStatus === 'canceled' || marketStatus === 'cancelled') {
-    return { status: 'void', resolvedOutcome: null };
-  }
-  if (marketStatus !== 'resolved') {
-    return { status: 'open', resolvedOutcome: null };
-  }
-  if (!Number.isInteger(resolvedOutcome) || resolvedOutcome < 0) {
-    return { status: 'void', resolvedOutcome: null };
-  }
-  return {
-    status: resolvedOutcome === Number(leg.outcome_index) ? 'won' : 'lost',
-    resolvedOutcome,
-  };
-}
-
 async function settleTicket(client, ticket) {
   const legs = await queryRows(client, `
     SELECT l.id, l.ticket_id, l.outcome_index, l.status AS leg_status,
            l.resolved_outcome,
            m.status AS market_status, m.outcome AS market_outcome
     FROM points_parlay_legs l
-    JOIN points_markets m ON m.id = l.market_id
+    LEFT JOIN points_markets m ON m.id = l.market_id
     WHERE l.ticket_id = $1
     ORDER BY l.id ASC
   `, [ticket.id]);
 
-  const statuses = legs.map(normalizeLegOutcomeStatus);
-  const hasLost = statuses.some(status => status.status === 'lost');
-  const hasVoid = statuses.some(status => status.status === 'void');
-  const allWon = statuses.length > 0 && statuses.every(status => status.status === 'won');
+  const statuses = legs.map(parlayLegResult);
+  const resultStatus = parlayResult(statuses.map(result => result.status));
 
   let finalStatus = null;
   let payout = 0;
   let reason = null;
-  if (hasLost) {
+  if (resultStatus === 'lost') {
     finalStatus = 'lost';
     reason = 'one_or_more_legs_lost';
-  } else if (hasVoid) {
+  } else if (resultStatus === 'void') {
     finalStatus = 'void';
     payout = Number(ticket.stake || 0);
     reason = 'one_or_more_legs_void';
-  } else if (allWon) {
+  } else if (resultStatus === 'won') {
     finalStatus = 'won';
     payout = Number(ticket.potential_payout || 0);
     reason = 'all_legs_won';

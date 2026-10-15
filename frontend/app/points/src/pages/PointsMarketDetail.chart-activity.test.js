@@ -75,7 +75,7 @@ test('multi-outcome markets draw every line on one shared axis', () => {
 
 test('live sports score changes can annotate the matching team line', () => {
   assert.match(detailSource, /const \[liveScore, setLiveScore\] = useState\(null\)/);
-  assert.match(detailSource, /<LiveScorePanel market=\{market\} onScoreUpdate=\{setLiveScore\}/);
+  assert.match(detailSource, /<LiveScorePanel market=\{market\} onScoreUpdate=\{onLiveScoreUpdate\}/);
   assert.match(detailSource, /function liveScoreGraphAnnotations/);
   assert.match(detailSource, /\['soccer', 'football', 'baseball'\]\.includes\(sport\)/);
   assert.match(detailSource, /function liveScorePeriodOffsetSeconds/);

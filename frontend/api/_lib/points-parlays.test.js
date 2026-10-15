@@ -43,6 +43,20 @@ function fakeDb({ cycleRows = [], markets = [] } = {}) {
   };
 }
 
+test('a final sports leg cannot enter a combo even if the configured end time is in the future', async t => {
+  const original = globalThis.fetch;
+  t.after(() => { globalThis.fetch = original; });
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ header: { id: 'game', competitions: [{
+    status: { type: { state: 'post', completed: true, name: 'STATUS_FINAL' } },
+    competitors: [{ homeAway: 'home', score: '3' }, { homeAway: 'away', score: '2' }],
+  }] } }) });
+  const db = fakeDb({ markets: [makeMarket(1, { resolver_config: { source: 'espn', shape: 'binary',
+    leaguePath: 'baseball/mlb', eventId: 'game' } }), makeMarket(2), makeMarket(3)] });
+  await assert.rejects(readParlayQuote(db, { now: new Date('2026-09-01T12:00:00Z'), stake: 25,
+    legs: [{ marketId: 1, outcomeIndex: 0 }, { marketId: 2, outcomeIndex: 0 },
+      { marketId: 3, outcomeIndex: 0 }] }), { message: 'market_closed' });
+});
+
 function fakeSettlementDb({ tickets = [], legs = [], markets = [] } = {}) {
   const ticketRows = tickets.map(ticket => ({ ...ticket }));
   const legRows = legs.map(leg => ({ ...leg }));
@@ -227,6 +241,60 @@ test('parlay portfolio endpoint refreshes open tickets before listing them', () 
   assert.match(parlayRouteSource, /settleOpenParlayTickets/);
   assert.match(parlayRouteSource, /withTransaction\(async \(client\) => \{/);
   assert.match(parlayRouteSource, /return listParlayTicketsForUser\(client/);
+});
+
+test('a completed winning ticket credits the recorded payout exactly once', async () => {
+  const db = fakeSettlementDb({
+    tickets: [{ id: 86, username: 'winner', stake: '100.000000', multiplier: '25.00',
+      potential_payout: '2500.000000', status: 'open' }],
+    legs: [0, 1, 2].map(index => ({ id: 861 + index, ticket_id: 86,
+      market_id: 501 + index, outcome_index: index % 2, status: 'open' })),
+    markets: [0, 1, 2].map(index => ({ id: 501 + index, status: 'resolved', outcome: String(index % 2) })),
+  });
+  const first = await settleOpenParlayTickets(db);
+  const second = await settleOpenParlayTickets(db);
+  assert.equal(first.won, 1);
+  assert.equal(first.payout, 2500);
+  assert.equal(second.settled, 0);
+  assert.equal(db.tickets[0].status, 'won');
+  assert.deepEqual(db.balanceCredits, [{ username: 'winner', payout: 2500 }]);
+  assert.equal(db.distributions.length, 1);
+  assert.equal(db.distributions[0].kind, 'parlay_payout');
+  assert.equal(db.distributions[0].referenceId, 86);
+});
+
+test('a void ticket refunds only the stake and never pays twice', async () => {
+  const db = fakeSettlementDb({
+    tickets: [{ id: 4, username: 'refund', stake: '200.000000', multiplier: 7.39,
+      potential_payout: 1478, status: 'open' }],
+    legs: [0, 1, 2].map(index => ({ id: 41 + index, ticket_id: 4,
+      market_id: 601 + index, outcome_index: 0, status: 'open' })),
+    markets: [{ id: 601, status: 'resolved', outcome: 0 },
+      { id: 602, status: 'canceled', outcome: null }, { id: 603, status: 'active', outcome: null }],
+  });
+  const first = await settleOpenParlayTickets(db);
+  const second = await settleOpenParlayTickets(db);
+  assert.equal(first.void, 1);
+  assert.equal(first.payout, 200);
+  assert.equal(second.settled, 0);
+  assert.deepEqual(db.balanceCredits, [{ username: 'refund', payout: 200 }]);
+  assert.equal(db.distributions.length, 1);
+  assert.equal(db.distributions[0].kind, 'parlay_refund');
+});
+
+test('a missing market cannot disappear from a ticket and create a false win', async () => {
+  assert.match(parlaySource, /FROM points_parlay_legs l\s+LEFT JOIN points_markets m/);
+  const db = fakeSettlementDb({
+    tickets: [{ id: 5, username: 'missing', stake: 100, multiplier: 6,
+      potential_payout: 600, status: 'open' }],
+    legs: [0, 1, 2].map(index => ({ id: 51 + index, ticket_id: 5,
+      market_id: 701 + index, outcome_index: 0, status: 'open' })),
+    markets: [{ id: 701, status: 'resolved', outcome: 0 }, { id: 702, status: 'resolved', outcome: 0 }],
+  });
+  const result = await settleOpenParlayTickets(db);
+  assert.equal(result.settled, 0);
+  assert.equal(db.tickets[0].status, 'open');
+  assert.equal(db.balanceCredits.length, 0);
 });
 
 test('parlay quote accepts active markets when no tournament cycle is active', async () => {

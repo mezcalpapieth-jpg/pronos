@@ -21,3 +21,9 @@ test('indexer keeps token market-cap snapshots alive for oracle markets', () => 
   assert.match(indexerSource, /shouldRunMinuteInterval\(\{ intervalMinutes: 5 \}\)/);
   assert.match(indexerSource, /runTokenMcapSnapshots\(\{ dryRun: dryTokenMcapSnapshots, purgeOld: false \}\)/);
 });
+
+test('every production cron runs resolution, with a sports-only pass between full 15-minute runs', () => {
+  assert.match(indexerSource, /forceAutoResolve\s*\|\|\s*\(\s*pointsAutoResolveOnIndexer\s*&&\s*isVercelCron\s*\)/);
+  assert.match(indexerSource, /const sportsOnly = !forceAutoResolve && !shouldRunMinuteInterval\(\{ intervalMinutes: 15 \}\)/);
+  assert.match(indexerSource, /runAutoResolve\(\{ dry: dryAutoResolve, sportsOnly \}\)/);
+});

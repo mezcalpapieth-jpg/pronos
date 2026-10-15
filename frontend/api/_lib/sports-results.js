@@ -20,6 +20,8 @@
 // and is consistent across sports. Using dates+eventId lookup keeps the
 // URL pattern identical across MLB / NBA / soccer / Liga MX / MLS.
 
+import { espnEventStatus } from './espn-event-status.js';
+
 const ESPN_BASE = 'https://site.api.espn.com/apis/site/v2/sports';
 
 function ymdToDateRange(ymd) {
@@ -55,15 +57,20 @@ function espnScoreboardQueries(dateYmd) {
 function normalizeEspnEvent(ev) {
   const comp = Array.isArray(ev?.competitions) ? ev.competitions[0] : null;
   const status = ev?.status || comp?.status || null;
-  const state     = status?.type?.state;
-  const completed = Boolean(status?.type?.completed);
+  const { state, completed, interrupted } = espnEventStatus(status);
   const ctors = Array.isArray(comp?.competitors) ? comp.competitors : [];
   const home = ctors.find(c => c.homeAway === 'home');
   const away = ctors.find(c => c.homeAway === 'away');
-  const homeScore = Number(home?.score);
-  const awayScore = Number(away?.score);
+  const score = value => value == null || value === '' ? NaN : Number(value);
+  const homeScore = score(home?.score);
+  const awayScore = score(away?.score);
 
-  if (!completed) return { completed: false, winner: null, state };
+  if (!completed) return { completed: false, winner: null, state, interrupted };
+  if (!home || !away || !Number.isFinite(homeScore) || !Number.isFinite(awayScore)
+    || homeScore < 0 || awayScore < 0 || (home?.winner && away?.winner)
+    || (home?.winner && awayScore > homeScore) || (away?.winner && homeScore > awayScore)) {
+    return { completed: false, winner: null, state, invalidResult: true };
+  }
 
   // Winner extraction: prefer the `winner: true` flag ESPN sets on the
   // victorious competitor. Fall back to score comparison.
@@ -223,15 +230,27 @@ function normalizeEspnEventForMarket(ev, homeName, awayName) {
   };
 }
 
-export async function readEspnEvent({ leaguePath, eventId, dateYmd, homeName, awayName }) {
+export async function readEspnEvent({ leaguePath, eventId, dateYmd, homeName, awayName, preferSummary = false }) {
   if (!leaguePath || (!eventId && !(homeName && awayName))) {
     throw new Error('espn: missing leaguePath/event lookup');
+  }
+  if (!/^[a-z0-9.-]+\/[a-z0-9.-]+$/i.test(leaguePath)) throw new Error('espn: invalid league path');
+  const fetchOptions = () => ({ headers: { Accept: 'application/json', 'Cache-Control': 'no-cache' },
+    cache: 'no-store', signal: AbortSignal.timeout(4000) });
+  // Trading guards and fast resolution use the exact event, not a cached date scoreboard.
+  if (preferSummary && eventId) {
+    const response = await fetch(`${ESPN_BASE}/${leaguePath}/summary?event=${encodeURIComponent(eventId)}`, fetchOptions());
+    if (!response.ok) throw new Error(`espn-summary: HTTP ${response.status}`);
+    const summary = await response.json();
+    if (String(summary?.header?.id || '') !== String(eventId)) throw new Error('espn-summary: event identity mismatch');
+    if (!pickCompetition(summary.header)?.status?.type && !summary.header?.status?.type) throw new Error('espn-summary: missing status');
+    return normalizeEspnEventForMarket(summary.header, homeName, awayName);
   }
   let lastScoreboardError = null;
   let sawScoreboard = false;
   for (const q of espnScoreboardQueries(dateYmd)) {
     const url = `${ESPN_BASE}/${leaguePath}/scoreboard${q}`;
-    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    const res = await fetch(url, fetchOptions());
     if (!res.ok) {
       lastScoreboardError = new Error(`espn: HTTP ${res.status}`);
       continue;
@@ -255,7 +274,7 @@ export async function readEspnEvent({ leaguePath, eventId, dateYmd, homeName, aw
   // multi-day scoreboard request for this league. The stable per-event
   // summary endpoint often still works and avoids stranding valid rows.
   const summaryUrl = `${ESPN_BASE}/${leaguePath}/summary?event=${encodeURIComponent(eventId)}`;
-  const summaryRes = await fetch(summaryUrl, { headers: { 'Accept': 'application/json' } });
+  const summaryRes = await fetch(summaryUrl, fetchOptions());
   if (!summaryRes.ok) {
     if (!sawScoreboard && lastScoreboardError) throw lastScoreboardError;
     throw new Error(`espn-summary: HTTP ${summaryRes.status}`);
@@ -281,6 +300,7 @@ export async function readFootballDataMatch(matchId) {
   if (!matchId) throw new Error('football-data: missing matchId');
   const res = await fetch(`${FD_BASE}/matches/${encodeURIComponent(matchId)}`, {
     headers: { 'X-Auth-Token': key, 'Accept': 'application/json' },
+    cache: 'no-store', signal: AbortSignal.timeout(4000),
   });
   if (!res.ok) throw new Error(`football-data: HTTP ${res.status}`);
   const match = await res.json();

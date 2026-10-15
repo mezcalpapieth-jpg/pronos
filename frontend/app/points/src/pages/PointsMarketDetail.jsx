@@ -8,7 +8,7 @@
  * Data comes from /api/points/market?id=... — the response contains
  * the market row + its current reserves, outcomes, and prices.
  */
-import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   cancelLimitOrder,
@@ -2674,6 +2674,12 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
   const [historyByOutcome, setHistoryByOutcome] = useState(null);
   const [activityByOutcome, setActivityByOutcome] = useState(null);
   const [liveScore, setLiveScore] = useState(null);
+  const [finishedGameId, setFinishedGameId] = useState(null);
+  const onLiveScoreUpdate = useCallback(score => {
+    setLiveScore(score ? { ...score, marketId: id } : null);
+    if (score?.completed === true) setFinishedGameId(id);
+  }, [id]);
+  const gameFinished = finishedGameId === id;
   const [chartRange, setChartRange] = useState('1');
   const [chartClockTick, setChartClockTick] = useState(0);
   const chartRangeTouchedRef = useRef(false);
@@ -2697,6 +2703,13 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
     quote: null,
   });
   const [sellPreview, setSellPreview] = useState(null);
+  useEffect(() => {
+    if (!gameFinished) return;
+    sellQuoteSeqRef.current += 1;
+    if (sellQuoteTimerRef.current) window.clearTimeout(sellQuoteTimerRef.current);
+    setBuyState(null);
+    setSellPreview(null);
+  }, [gameFinished]);
   const [tradeTape, setTradeTape] = useState([]);
   const [orderBookRefresh, setOrderBookRefresh] = useState(0);
   const [positionRefreshNonce, setPositionRefreshNonce] = useState(0);
@@ -3036,7 +3049,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
     // fields. Fall back to the parent's status rather than treating a
     // missing one as "not active" — that silently kills the click.
     const targetStatus = lockTarget?.status ?? market?.status;
-    if (lockTarget?.seriesLocked || targetStatus !== 'active' || market?.seriesLocked || market?.status !== 'active') {
+    if (gameFinished || lockTarget?.seriesLocked || targetStatus !== 'active' || market?.seriesLocked || market?.status !== 'active') {
       return;
     }
     setBuyState({
@@ -3184,7 +3197,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
       onOpenLogin?.();
       return;
     }
-    if (!position || market?.status !== 'active') return;
+    if (!position || market?.status !== 'active' || gameFinished) return;
     await loadSellPreviewQuote(position, position.shares);
   }
 
@@ -3205,7 +3218,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
   }
 
   async function confirmSellPreview() {
-    if (!sellPreview?.position || !sellPreview?.preview || sellPreview.submitting) return;
+    if (!sellPreview?.position || !sellPreview?.preview || sellPreview.submitting || gameFinished) return;
     const position = sellPreview.position;
     const preview = sellPreview.preview;
     setSellPreview(prev => prev ? { ...prev, submitting: true, error: null } : prev);
@@ -3441,7 +3454,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
         .filter(index => index !== null)
     : (displayWinnerIndex >= 0 ? [displayWinnerIndex] : []);
   const displayWinnerIndexSet = new Set(displayWinnerIndexes);
-  const isTradingLocked = !isResolved && (isCanceled || market.seriesLocked || market.status !== 'active');
+  const isTradingLocked = !isResolved && (isCanceled || gameFinished || market.seriesLocked || market.status !== 'active');
   const seriesSubtitle = formatSeriesSubtitle(market.seriesMeta, { t });
   function pctFor(i) {
     if (isResolved) {
@@ -3463,6 +3476,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
   const _now = new Date();
   const liveSportsMarket = isLiveSportsMarket(market);
   const isLive = !isResolved
+    && !gameFinished
     && liveSportsMarket
     && market.status === 'active'
     && market.startTime
@@ -3473,8 +3487,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
   const isPendingResolution = !isResolved
     && !showLive
     && market.status === 'active'
-    && market.endTime
-    && new Date(market.endTime) < _now;
+    && (gameFinished || (market.endTime && new Date(market.endTime) < _now));
   const showTemperatureResolutionNote = isTemperatureMarket(market);
   const canTrade = !isResolved && !isPendingResolution && !isTradingLocked;
   const modeCopy = lang === 'en'
@@ -3797,7 +3810,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
 
             <TeamMarketStrip market={market} outcomeImages={market.outcomeImages} />
             <TokenMarketStrip market={market} />
-            <LiveScorePanel market={market} onScoreUpdate={setLiveScore} />
+            <LiveScorePanel market={market} onScoreUpdate={onLiveScoreUpdate} />
 
             {isCanceled && (
               <div style={{
@@ -4489,7 +4502,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
         onAddLeg={handleAddParlayLeg}
       />
 
-      {buyState && (
+      {buyState && !gameFinished && (
         <PointsBuyModal
           open
           // buyState.market points at the leg for parallel markets and
@@ -4507,7 +4520,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
         />
       )}
       <PointsSellPreviewModal
-        state={sellPreview}
+        state={gameFinished ? null : sellPreview}
         onClose={() => {
           if (!sellPreview?.submitting) setSellPreview(null);
         }}

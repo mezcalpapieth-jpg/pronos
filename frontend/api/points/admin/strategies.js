@@ -4,6 +4,7 @@
  * Admin-only audit surface for tournament strategy mechanics:
  *   - combinada tickets + legs
  *   - long-hold / conviction multiplier leaderboard
+ *   - stock participation, holdings and activity
  */
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../../_lib/cors.js';
@@ -12,6 +13,8 @@ import { requirePointsAdmin } from '../../_lib/points-admin.js';
 import { withTransaction } from '../../_lib/db-tx.js';
 import { buildTournamentLeaderboardRows } from '../../_lib/points-tournament-leaderboard.js';
 import { configuredCycleWindowFromRow } from '../../_lib/points-tournament-config.js';
+import { serializeParlayAudit, summarizeParlayAudit } from '../../_lib/points-parlay-audit.js';
+import { readStockStrategyAudit } from '../../_lib/points-strategy-stocks.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 
@@ -28,93 +31,6 @@ function readPositiveInt(value, fallback, max = 200) {
   const n = Number.parseInt(value, 10);
   if (!Number.isInteger(n) || n <= 0) return fallback;
   return Math.min(n, max);
-}
-
-function derivedLegStatus(leg) {
-  const marketStatus = String(leg.marketStatus || '').toLowerCase();
-  if (marketStatus === 'canceled' || marketStatus === 'cancelled') return 'void';
-  if (marketStatus !== 'resolved') return 'open';
-  const marketOutcome = leg.marketOutcome == null ? null : Number(leg.marketOutcome);
-  return Number.isInteger(marketOutcome) && marketOutcome === Number(leg.outcomeIndex)
-    ? 'won'
-    : 'lost';
-}
-
-function deriveTicketStatus(ticket, legs) {
-  if (ticket.status !== 'open') return ticket.status;
-  const statuses = legs.map(derivedLegStatus);
-  if (statuses.some(status => status === 'lost')) return 'lost';
-  if (statuses.some(status => status === 'void')) return 'void';
-  if (statuses.length > 0 && statuses.every(status => status === 'won')) return 'won';
-  return 'open';
-}
-
-function serializeTicket(row) {
-  const legs = Array.isArray(row.legs) ? row.legs : [];
-  const derivedStatus = deriveTicketStatus(row, legs);
-  const stake = numeric(row.stake);
-  const payout = derivedStatus === 'won'
-    ? numeric(row.payout || row.potential_payout)
-    : derivedStatus === 'void'
-      ? stake
-      : numeric(row.payout);
-  const realizedPnl = derivedStatus === 'won'
-    ? payout - stake
-    : derivedStatus === 'lost'
-      ? -stake
-      : 0;
-
-  return {
-    id: Number(row.id),
-    username: row.username,
-    cycleId: row.cycle_id == null ? null : Number(row.cycle_id),
-    stake: round2(stake),
-    multiplier: round2(row.multiplier),
-    potentialPayout: round2(row.potential_payout),
-    potentialPnl: round2(numeric(row.potential_payout) - stake),
-    payout: round2(payout),
-    status: row.status,
-    derivedStatus,
-    realizedPnl: round2(realizedPnl),
-    submittedAt: row.submitted_at,
-    settledAt: row.settled_at,
-    reason: row.reason || null,
-    legs: legs.map(leg => ({
-      id: Number(leg.id),
-      marketId: Number(leg.marketId),
-      question: leg.question || null,
-      outcomeIndex: Number(leg.outcomeIndex),
-      outcomeLabel: leg.outcomeLabel || null,
-      price: round2(leg.price),
-      marketEndTime: leg.marketEndTime || null,
-      storedStatus: leg.storedStatus || 'open',
-      derivedStatus: derivedLegStatus(leg),
-      resolvedOutcome: leg.resolvedOutcome == null ? null : Number(leg.resolvedOutcome),
-      resolvedOutcomeLabel: leg.resolvedOutcomeLabel || null,
-      marketStatus: leg.marketStatus || null,
-      marketOutcome: leg.marketOutcome == null ? null : Number(leg.marketOutcome),
-    })),
-  };
-}
-
-function summarizeTickets(tickets) {
-  return tickets.reduce((summary, ticket) => {
-    summary.count += 1;
-    summary.stake = round2(summary.stake + ticket.stake);
-    summary.potentialPayout = round2(summary.potentialPayout + ticket.potentialPayout);
-    summary.realizedPnl = round2(summary.realizedPnl + ticket.realizedPnl);
-    summary[ticket.derivedStatus] = Number(summary[ticket.derivedStatus] || 0) + 1;
-    return summary;
-  }, {
-    count: 0,
-    stake: 0,
-    potentialPayout: 0,
-    realizedPnl: 0,
-    open: 0,
-    won: 0,
-    lost: 0,
-    void: 0,
-  });
 }
 
 async function readCycles(client) {
@@ -159,28 +75,29 @@ async function readSelectedCycle(client, requestedCycleId) {
   return rows[0] || null;
 }
 
-async function readParlayTickets(client, { cycleId, limit }) {
-  const { rows } = await client.query(
-    `SELECT t.id, t.username, t.cycle_id, t.stake, t.multiplier,
-            t.potential_payout, t.payout, t.status, t.submitted_at,
-            t.settled_at, t.reason,
-            COALESCE(
-              JSON_AGG(
-                JSON_BUILD_OBJECT(
+export async function readParlayTickets(client, { cycleId, limit, summaryOnly = false }) {
+  // Totals cover the whole cycle; only the detail query carries question snapshots.
+  const detailFields = summaryOnly ? '' : `
                   'id', l.id,
                   'marketId', l.market_id,
-                  'outcomeIndex', l.outcome_index,
                   'price', l.price_snapshot,
                   'question', COALESCE(l.question_snapshot, m.question),
                   'outcomeLabel', l.outcome_label_snapshot,
                   'marketEndTime', COALESCE(l.market_end_time, m.end_time),
                   'storedStatus', l.status,
                   'resolvedOutcome', l.resolved_outcome,
-                  'resolvedOutcomeLabel',
-                    CASE
-                      WHEN l.resolved_outcome IS NULL THEN NULL
-                      ELSE m.outcomes ->> (l.resolved_outcome::int)
-                    END,
+                  'resolvedOutcomeLabel', m.outcomes ->> (l.resolved_outcome::int),`;
+  const { rows } = await client.query(
+    `SELECT t.id, t.username, t.cycle_id, t.stake, t.multiplier,
+            t.potential_payout, t.payout, t.status, t.submitted_at,
+            t.settled_at, t.reason,
+            ledger.entry_count, ledger.entry_amount, ledger.payment_count, ledger.paid_amount,
+            ledger.wrong_user_count, ledger.wrong_payment_kind_count,
+            COALESCE(
+              JSON_AGG(
+                JSON_BUILD_OBJECT(
+                  ${detailFields}
+                  'outcomeIndex', l.outcome_index,
                   'marketStatus', m.status,
                   'marketOutcome', m.outcome
                 )
@@ -191,13 +108,25 @@ async function readParlayTickets(client, { cycleId, limit }) {
      FROM points_parlay_tickets t
      LEFT JOIN points_parlay_legs l ON l.ticket_id = t.id
      LEFT JOIN points_markets m ON m.id = l.market_id
+     LEFT JOIN LATERAL (
+       SELECT COUNT(*) FILTER (WHERE d.kind='parlay_entry') AS entry_count,
+         COALESCE(SUM(d.amount) FILTER (WHERE d.kind='parlay_entry'),0) AS entry_amount,
+         COUNT(*) FILTER (WHERE d.kind IN ('parlay_payout','parlay_refund')) AS payment_count,
+         COALESCE(SUM(d.amount) FILTER (WHERE d.kind IN ('parlay_payout','parlay_refund')),0) AS paid_amount,
+         COUNT(*) FILTER (WHERE d.username<>t.username) AS wrong_user_count,
+         COUNT(*) FILTER (WHERE (d.kind='parlay_payout' AND t.status<>'won')
+           OR (d.kind='parlay_refund' AND t.status<>'void')) AS wrong_payment_kind_count
+       FROM points_distributions d WHERE d.reference_id=t.id
+         AND d.kind IN ('parlay_entry','parlay_payout','parlay_refund')
+     ) ledger ON TRUE
      WHERE ($1::int IS NULL OR t.cycle_id = $1)
-     GROUP BY t.id
+     GROUP BY t.id, ledger.entry_count, ledger.entry_amount, ledger.payment_count, ledger.paid_amount,
+       ledger.wrong_user_count, ledger.wrong_payment_kind_count
      ORDER BY t.submitted_at DESC
-     LIMIT $2`,
-    [cycleId || null, limit],
+     ${summaryOnly ? '' : 'LIMIT $2'}`,
+    summaryOnly ? [cycleId || null] : [cycleId || null, limit],
   );
-  return rows.map(serializeTicket);
+  return rows.map(serializeParlayAudit);
 }
 
 async function readSnapshotLongHoldRows(client, { cycleId, limit }) {
@@ -290,6 +219,7 @@ export default async function handler(req, res) {
     const requestedCycleId = readPositiveInt(req.query?.cycleId, null, Number.MAX_SAFE_INTEGER);
     const ticketLimit = readPositiveInt(req.query?.ticketLimit, 80, 200);
     const longHoldLimit = readPositiveInt(req.query?.longHoldLimit, 40, 100);
+    const stockLimit = readPositiveInt(req.query?.stockLimit, 40, 100);
 
     const payload = await withTransaction(async (client) => {
       const cycles = await readCycles(client);
@@ -299,13 +229,17 @@ export default async function handler(req, res) {
           ok: true,
           cycle: null,
           cycles: [],
-          parlay: { summary: summarizeTickets([]), tickets: [] },
+          parlay: { summary: summarizeParlayAudit([]), tickets: [] },
           longHold: { source: 'none', rows: [] },
+          stocks: { available: false, summary: {}, users: [], assets: [], recentTrades: [] },
         };
       }
 
       const window = configuredCycleWindowFromRow(cycle);
       const tickets = await readParlayTickets(client, { cycleId: cycle.id, limit: ticketLimit });
+      const allTickets = await readParlayTickets(client, { cycleId: cycle.id, summaryOnly: true });
+      const stocks = await readStockStrategyAudit(client, { cycleId: cycle.id,
+        startsAt: window.startsAt, endsAt: window.rankingCutoffAt, limit: stockLimit });
       const snapshotCountResult = await client.query(
         `SELECT COUNT(*)::int AS count
          FROM points_cycle_snapshots
@@ -341,13 +275,14 @@ export default async function handler(req, res) {
           };
         }),
         parlay: {
-          summary: summarizeTickets(tickets),
+          summary: summarizeParlayAudit(allTickets),
           tickets,
         },
         longHold: {
           source: useSnapshot ? 'cycle_snapshot' : 'live_leaderboard',
           rows: longHoldRows,
         },
+        stocks,
       };
     });
 
