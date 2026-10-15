@@ -16,8 +16,25 @@ import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../../_lib/cors.js';
 import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { requirePointsAdmin } from '../../_lib/points-admin.js';
+import { withTransaction } from '../../_lib/db-tx.js';
+import { attachPointsOpeningLiquidity } from '../../_lib/market-pricing.js';
 
 const sql = neon(process.env.DATABASE_URL);
+
+export async function updatePendingTournamentFeature(client, pendingId, tournamentFeatured) {
+  const selected = await client.query('SELECT * FROM points_pending_markets WHERE id = $1 FOR UPDATE', [pendingId]);
+  const row = selected.rows[0];
+  if (!row) return [];
+  const parse = value => typeof value === 'string' ? JSON.parse(value) : value;
+  const outcomes = parse(row.outcomes);
+  const priced = attachPointsOpeningLiquidity({ ...row, outcomes,
+    seed_liquidities: parse(row.seed_liquidities), source_data: parse(row.source_data) });
+  const updated = await client.query(`UPDATE points_pending_markets
+    SET tournament_featured = $2, seed_liquidity = $3, seed_liquidities = $4::jsonb, source_data = $5::jsonb
+    WHERE id = $1 RETURNING id, featured, tournament_featured, seed_liquidity, seed_liquidities, source_data`,
+  [pendingId, tournamentFeatured, priced.seed_liquidity, JSON.stringify(priced.seed_liquidities), JSON.stringify(priced.source_data)]);
+  return updated.rows;
+}
 
 export default async function handler(req, res) {
   try {
@@ -92,12 +109,7 @@ export default async function handler(req, res) {
     }
 
     const rows = hasTournamentFeatured
-      ? await sql`
-          UPDATE points_pending_markets
-          SET tournament_featured = ${tournamentFeatured}
-          WHERE id = ${pid}
-          RETURNING id, featured, tournament_featured
-        `
+      ? await withTransaction(client => updatePendingTournamentFeature(client, pid, tournamentFeatured))
       : await sql`
           UPDATE points_pending_markets
           SET featured = ${featured}
@@ -112,6 +124,9 @@ export default async function handler(req, res) {
       pendingId: rows[0].id,
       featured: rows[0].featured,
       tournamentFeatured: rows[0].tournament_featured,
+      seedLiquidity: rows[0].seed_liquidity == null ? null : Number(rows[0].seed_liquidity),
+      seedLiquidities: rows[0].seed_liquidities,
+      suggestedPricing: rows[0].source_data?.suggestedPricing || null,
       reviewer: admin.username,
     });
   } catch (e) {

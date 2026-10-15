@@ -11,6 +11,13 @@ import { readFile } from 'node:fs/promises';
 
 const source = await readFile(new URL('./pending-markets.js', import.meta.url), 'utf8');
 
+test('all approval paths and the pending display share opening defaults independently of trophies', () => {
+  assert.match(source, /const r = pendingRowWithOpeningLiquidity\(row\)/);
+  assert.match(source, /const r = pendingRowWithOpeningLiquidity\(rowRes\.rows\[0\], \{ mode: marketMode \}\)/);
+  assert.match(source, /attachPointsOpeningLiquidity\(\{ \.\.\.row, mode,/);
+  assert.match(source, /seed_liquidity = \$7, seed_liquidities = \$8::jsonb/);
+});
+
 test('rejected pending markets list newest reviewed rows first', () => {
   assert.match(
     source,

@@ -36,6 +36,13 @@ test('points pending upsert persists per-option seed liquidities', () => {
   assert.match(source, /seed_liquidities\s*=\s*EXCLUDED\.seed_liquidities/);
 });
 
+test('larger generated reserve floors apply only to the Points pending queue', () => {
+  const points = source.split('export async function upsertPending')[1].split('export async function upsertProtocolPending')[0];
+  const protocol = source.split('export async function upsertProtocolPending')[1];
+  assert.match(points, /const s = attachGeneratedPointsLiquidity\(spec\)/);
+  assert.doesNotMatch(protocol, /attachGeneratedPointsLiquidity\(/);
+});
+
 test('points pending upsert preserves generator featured flags', () => {
   assert.match(source, /featured,\s*tournament_featured,\s*category_tags/);
   assert.match(source, /\$\{s\.featured === true\}/);

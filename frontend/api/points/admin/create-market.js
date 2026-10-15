@@ -34,7 +34,7 @@ import { requirePointsAdmin } from '../../_lib/points-admin.js';
 import { initialReserves } from '../../_lib/amm-math.js';
 import { withTransaction } from '../../_lib/db-tx.js';
 import { deriveMarketTags } from '../../_lib/category-tags.js';
-import { normalizeSeedLiquidities } from '../../_lib/market-liquidity.js';
+import { defaultPointsSeedLiquidity, normalizeSeedLiquidities } from '../../_lib/market-liquidity.js';
 import { buildMarketContextBlocks } from '../../_lib/market-context-blocks.js';
 import { validateBeforeMonthDeadline } from '../../_lib/manual-deadline-sanity.js';
 import { neon } from '@neondatabase/serverless';
@@ -283,7 +283,7 @@ export default async function handler(req, res) {
   }
   const normalizedLiquidity = normalizeSeedLiquidities({
     outcomes: normalizedOutcomes,
-    seedLiquidity,
+    seedLiquidity: seedLiquidity ?? defaultPointsSeedLiquidity({ category, outcomeCount: normalizedOutcomes.length, ammMode: mode }),
     seedLiquidities,
   });
   if (normalizedLiquidity.error) {

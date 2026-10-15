@@ -1,3 +1,5 @@
+import { defaultPointsSeedLiquidity, normalizeSeedLiquidities } from './market-liquidity.js';
+
 const DEFAULT_SEED_LIQUIDITY = 1000;
 const MIN_PROBABILITY = 0.05;
 
@@ -208,4 +210,30 @@ export function attachUniformGeneratedPricing(spec = {}) {
     ...priced,
     source_data: sourceData,
   };
+}
+
+// Pending/default seeds only. Custom asymmetric pricing and live reserves are never rewritten.
+export function attachPointsOpeningLiquidity(spec = {}) {
+  const count = Array.isArray(spec.outcomes) ? spec.outcomes.length : 0;
+  if (count < 2 || (spec.mode && spec.mode !== 'points') || spec.chain_id || spec.chain_address
+    || (spec.status && spec.status !== 'pending')) return spec;
+  const floor = defaultPointsSeedLiquidity({ category: spec.category, outcomeCount: count,
+    ammMode: spec.amm_mode || spec.ammMode });
+  const normalized = normalizeSeedLiquidities({ outcomes: spec.outcomes,
+    seedLiquidity: spec.seed_liquidity ?? spec.seedLiquidity ?? floor,
+    seedLiquidities: spec.seed_liquidities ?? spec.seedLiquidities });
+  if (normalized.error || !normalized.uniform) return spec;
+  const seed = Math.max(floor, normalized.fallback);
+  const values = Array(count).fill(seed);
+  const sourceData = { ...spec.source_data };
+  if (sourceData.suggestedPricing) sourceData.suggestedPricing = {
+    ...sourceData.suggestedPricing, seedLiquidities: values,
+  };
+  return { ...spec, seed_liquidity: seed, seedLiquidity: seed,
+    seed_liquidities: values, seedLiquidities: values, source_data: sourceData };
+}
+
+// Points only: protocol generation retains its separately funded seed policy.
+export function attachGeneratedPointsLiquidity(spec = {}) {
+  return attachPointsOpeningLiquidity(attachUniformGeneratedPricing(spec));
 }

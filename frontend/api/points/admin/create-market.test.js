@@ -4,6 +4,10 @@ import test from 'node:test';
 
 const source = await readFile(new URL('./create-market.js', import.meta.url), 'utf8');
 
+test('manual market creation uses the shared default only when no explicit scalar is supplied', () => {
+  assert.match(source, /seedLiquidity: seedLiquidity \?\? defaultPointsSeedLiquidity\(\{ category, outcomeCount: normalizedOutcomes\.length, ammMode: mode \}\)/);
+});
+
 test('points admin direct create stores manual review resolver metadata', () => {
   assert.match(source, /resolutionSource/);
   assert.match(source, /resolutionCriteria/);

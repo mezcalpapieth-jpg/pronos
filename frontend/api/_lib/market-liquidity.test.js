@@ -3,8 +3,18 @@ import assert from 'node:assert/strict';
 
 import {
   normalizeSeedLiquidities,
+  defaultPointsSeedLiquidity,
   seedLiquiditiesFromRow,
 } from './market-liquidity.js';
+
+test('Points opening defaults depend on category and pool type, not a trophy or tournament date', () => {
+  for (const [outcomeCount, ammMode, sports] of [[2,'unified',5000], [3,'unified',10000], [8,'unified',20000], [8,'parallel',5000]]) {
+    assert.equal(defaultPointsSeedLiquidity({ category: 'deportes', outcomeCount, ammMode }), sports);
+    for (const category of ['crypto','finanzas','mexico','ai']) {
+      assert.equal(defaultPointsSeedLiquidity({ category, outcomeCount, ammMode }), sports / 2);
+    }
+  }
+});
 
 test('normalizeSeedLiquidities defaults to 500 per option', () => {
   const result = normalizeSeedLiquidities({ outcomes: ['PSG', 'Arsenal'] });

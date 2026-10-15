@@ -90,8 +90,20 @@ export default function MarketLiquidityPanel({ marketId, onFunded }) {
             <>
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12, fontSize: 12, color: 'var(--text-secondary)' }}>
                 <span>Compra de referencia: {number(preview.testBuy)} MXNP</span>
-                <span>Objetivo: máximo {number(preview.targetImpactPts)} puntos de movimiento</span>
+                <span>Objetivos: {(preview.targets || [{ collateral: preview.testBuy, maxImpactPts: preview.targetImpactPts }])
+                  .map(target => `${number(target.collateral)} MXNP / ${number(target.maxImpactPts)} puntos`).join(' · ')}</span>
               </div>
+              {preview.targets?.length > 1 && (
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12, fontSize: 12 }}>
+                  {preview.targets.map(target => {
+                    const before = Math.max(...target.impactsBefore.map(row => row.impactPts));
+                    const after = planReady ? Math.max(...target.impactsAfter.map(row => row.impactPts)) : null;
+                    return <span key={target.collateral} style={{ color: (after ?? before) > target.maxImpactPts ? 'var(--orange)' : 'var(--green)' }}>
+                      {number(target.collateral)} MXNP: {number(before)} pts{after != null ? ` / ${number(after)} con aporte` : ''}
+                    </span>;
+                  })}
+                </div>
+              )}
               <div style={{ overflowX: 'auto', maxHeight: 300, marginBottom: 14 }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead style={{ color: 'var(--text-secondary)', textAlign: 'right' }}>

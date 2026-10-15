@@ -59,7 +59,7 @@ import { generateGilbertoMoraTransfer2026Markets } from './market-gen/gilberto-m
 import { generateOctoberTournament2026Markets } from './market-gen/october-tournament-2026.js';
 import { generateAiMarkets }              from './market-gen/ai.js';
 import { deriveMarketTags }             from './category-tags.js';
-import { attachUniformGeneratedPricing } from './market-pricing.js';
+import { attachGeneratedPointsLiquidity, attachUniformGeneratedPricing } from './market-pricing.js';
 import { attachMarketContextBlocks }      from './market-context-blocks.js';
 import { attachMarketTranslations }       from './market-translations.js';
 
@@ -144,7 +144,8 @@ export async function upsertPending(sql, allSpecs) {
   let inserted = 0;
   let updated = 0;
   let skipped = 0;
-  for (const s of allSpecs) {
+  for (const spec of allSpecs) {
+    const s = attachGeneratedPointsLiquidity(spec);
     try {
       const tags = deriveMarketTags(s);
       const result = await sql`
