@@ -352,6 +352,34 @@ test('readEspnLiveScore can find a soccer event by teams when no event id is sto
   assert.equal(live.away.score, 2);
 });
 
+test('Libertadores live scores find the previous calendar day after a rejected range and an empty UTC day', async t => {
+  const originalFetch = globalThis.fetch;
+  const urls = [];
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const event = {
+    id: '401912523',
+    status: { type: { state: 'post', completed: true, name: 'STATUS_FULL_TIME' } },
+    competitions: [{ competitors: [
+      { homeAway: 'home', score: '0', team: { displayName: 'Estudiantes de La Plata', shortDisplayName: 'Estudiantes' } },
+      { homeAway: 'away', score: '0', team: { displayName: 'Flamengo' } },
+    ] }],
+  };
+  globalThis.fetch = async url => {
+    urls.push(String(url));
+    if (String(url).includes('dates=20261015-20261017')) return jsonResponse({}, false, 400);
+    if (String(url).includes('summary?event=401912523')) return jsonResponse({ header: event, scoringPlays: [] });
+    return jsonResponse({ events: String(url).includes('dates=20261015&') ? [event] : [] });
+  };
+  const live = await readEspnLiveScore({ leaguePath: 'soccer/conmebol.libertadores',
+    dateYmd: '2026-10-16', homeName: 'Estudiantes LP', awayName: 'Flamengo' });
+  assert.equal(live.eventId, '401912523');
+  assert.equal(live.completed, true);
+  assert.equal(live.home.score, 0);
+  assert.equal(live.away.score, 0);
+  assert.equal(urls.length, 4);
+  assert.ok(urls[2].includes('dates=20261015&'));
+});
+
 test('readEspnLiveScore falls back to summary when ESPN rejects the date-window scoreboard', async (t) => {
   const originalFetch = globalThis.fetch;
   const urls = [];

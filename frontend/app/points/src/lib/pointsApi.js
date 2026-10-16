@@ -615,6 +615,10 @@ export async function createParlay({ legs, stake }) {
   return postJson('/api/points/parlays', { legs, stake });
 }
 
+export async function claimParlay(ticketId) {
+  return postJson('/api/points/parlays', { action: 'claim', ticketId });
+}
+
 export async function fetchMyParlays(limit = 20) {
   const q = new URLSearchParams({ limit: String(limit) });
   return getJson(`/api/points/parlays?${q}`);

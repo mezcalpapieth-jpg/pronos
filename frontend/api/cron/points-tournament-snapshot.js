@@ -1,11 +1,11 @@
 /**
  * GET /api/cron/points-tournament-snapshot
  *
- * Non-destructive tournament cutoff photo. It freezes the active cycle
+ * Tournament cutoff collection and photo. It freezes the active cycle
  * leaderboard in points_cycle_snapshots once the configured Mexico City
- * cutoff has passed, but does not close the cycle, clear positions, cancel
- * orders, or reset balances. The full rollover remains an admin action for
- * the September 1 cycle reset.
+ * cutoff has passed, after collecting confirmed unclaimed winnings. It does
+ * not close the cycle, cancel orders, reset balances or settle unresolved
+ * outcomes. The full rollover remains an admin action.
  */
 import { neon } from '@neondatabase/serverless';
 

@@ -17,6 +17,11 @@ export function buildFootballDataEspnFallbackConfig({
   const cfg = parseJsonb(resolverConfig, null);
   if (cfg?.source !== 'football-data') return null;
 
+  if (cfg.espnFallback?.leaguePath && cfg.espnFallback?.homeName && cfg.espnFallback?.awayName) {
+    return { ...cfg.espnFallback, source: 'espn', shape: cfg.shape,
+      originalSource: 'football-data', originalMatchId: String(cfg.matchId) };
+  }
+
   const fallback = buildEspnLiveScoreConfig({
     resolverType: null,
     resolverConfig: null,

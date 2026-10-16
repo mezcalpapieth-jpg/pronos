@@ -33,13 +33,14 @@ function hydrateCycleWindow(row, scope) {
   };
 }
 
-export async function readActiveCycleWindow(db) {
+export async function readActiveCycleWindow(db, { forUpdate = false } = {}) {
   const rows = await queryRows(db, `
     SELECT id, label, started_at, ends_at, status, closed_at
     FROM points_cycles
     WHERE status = 'active'
     ORDER BY ends_at DESC
     LIMIT 1
+    ${forUpdate ? 'FOR UPDATE' : ''}
   `);
   return hydrateCycleWindow(rows[0], 'current');
 }

@@ -1,12 +1,15 @@
 /**
  * GET /api/cron/points-parlay-settle
  *
- * Settles open tournament parlay tickets after their legs resolve.
+ * Compatibility route for cutoff collection and the atomic tournament freeze.
+ * Before cutoff, winnings remain available for manual collection.
  */
 import { neon } from '@neondatabase/serverless';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { withTransaction } from '../_lib/db-tx.js';
-import { settleOpenParlayTickets } from '../_lib/points-parlays.js';
+import { snapshotActiveCycleAtCutoff } from '../_lib/points-cycle-snapshot.js';
+import { stocksAreEnabled } from '../_lib/stock-marks.js';
+import { ensureStockSchema } from '../_lib/stock-schema.js';
 
 const sql = neon(process.env.DATABASE_URL);
 
@@ -26,10 +29,11 @@ export default async function handler(req, res) {
   }
 
   const started = Date.now();
-  const limit = Number.parseInt(req.query?.limit, 10) || 200;
   try {
     await ensurePointsSchema(sql);
-    const result = await withTransaction((client) => settleOpenParlayTickets(client, { limit }));
+    if (stocksAreEnabled()) await ensureStockSchema(withTransaction);
+    // Preserve manual collection until cutoff; use the same atomic freeze path.
+    const result = await withTransaction(client => snapshotActiveCycleAtCutoff(client));
     return res.status(200).json({
       ok: true,
       ...result,

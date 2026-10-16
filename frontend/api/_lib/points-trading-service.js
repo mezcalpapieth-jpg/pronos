@@ -108,7 +108,7 @@ export async function executePointsBuy(client, {
   const market = marketResult.rows[0];
   if (market.status !== 'active') throw apiError('market_closed', 400);
   if (market.end_time && new Date(market.end_time) <= new Date()) throw apiError('market_expired', 400);
-  await assertSportsTradeAllowed(market);
+  await assertSportsTradeAllowed(market, { db: client });
 
   assertTournamentSettlementAllowed(market);
   await assertTournamentCutoffSnapshotReady(client, { market });
@@ -235,7 +235,7 @@ export async function executePointsSell(client, {
   const market = marketResult.rows[0];
   if (market.status !== 'active') throw apiError('market_closed', 400);
   if (market.end_time && new Date(market.end_time) <= new Date()) throw apiError('market_expired', 400);
-  await assertSportsTradeAllowed(market);
+  await assertSportsTradeAllowed(market, { db: client });
   await assertTournamentCutoffSnapshotReady(client, { market });
   assertCryptoTradeAllowed(market);
 

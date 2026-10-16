@@ -2,10 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const source = await readFile(new URL('./redeem.js', import.meta.url), 'utf8');
+const source = await readFile(new URL('../_lib/points-redemption.js', import.meta.url), 'utf8');
 
 test('redeem is gated to shares from the active scoring window', () => {
-  assert.match(source, /readActiveCycleWindow\(client\)/);
+  assert.match(source, /readActiveCycleWindow\(client, \{ forUpdate: true \}\)/);
   assert.match(source, /scoringStartIsoForWindow\(activeWindow\)/);
   assert.match(source, /position_outside_current_cycle/);
   assert.match(source, /current_cycle_shares/);

@@ -34,6 +34,7 @@ import {
   acknowledgeResolutionCorrection,
   fetchPnlHistory,
   fetchMyParlays,
+  claimParlay,
   publicErrorMessage,
 } from '../lib/pointsApi.js';
 import PnlChartCard from '../components/PnlChartCard.jsx';
@@ -742,7 +743,7 @@ function parlayLegStatusMeta(status) {
 
 function parlayTicketPnl(ticket) {
   const status = String(ticket?.status || '').toLowerCase();
-  if (status === 'won') return Number(ticket?.payout || 0) - Number(ticket?.stake || 0);
+  if (status === 'won') return Number(ticket?.resultPayout ?? ticket?.payout ?? 0) - Number(ticket?.stake || 0);
   if (status === 'lost') return -Number(ticket?.stake || 0);
   if (status === 'void') return 0;
   return Number(ticket?.potentialProfit || 0);
@@ -776,7 +777,7 @@ function parlayResolvedOutcomeText(leg) {
   return Number.isInteger(index) && index >= 0 ? `Resultado ${index + 1}` : null;
 }
 
-function ParlayTicketCard({ ticket }) {
+function ParlayTicketCard({ ticket, onClaim, actionState }) {
   const status = parlayStatusMeta(ticket.status);
   const statusKey = String(ticket.status || '').toLowerCase();
   const isOpen = !statusKey || statusKey === 'open';
@@ -842,7 +843,7 @@ function ParlayTicketCard({ ticket }) {
       <div className="points-history-summary-grid" style={{ marginBottom: 14 }}>
         {[
           ['Stake', `${fmt(ticket.stake)} MXNP`, 'var(--text-primary)'],
-          [isOpen ? 'Pago posible' : 'Pago', `${fmt(isOpen ? ticket.potentialPayout : ticket.payout)} MXNP`, 'var(--green)'],
+          [isOpen ? 'Pago posible' : ticket.claimable ? 'Por cobrar' : 'Cobrado', `${fmt(isOpen ? ticket.potentialPayout : ticket.resultPayout ?? ticket.payout)} MXNP`, 'var(--green)'],
           [isOpen ? 'Ganancia posible' : 'PnL', signedFmt(pnl), pnlPositive ? 'var(--success)' : 'var(--danger)'],
         ].map(([label, value, color]) => (
           <div key={label} className="points-history-summary-card">
@@ -855,6 +856,17 @@ function ParlayTicketCard({ ticket }) {
           </div>
         ))}
       </div>
+
+      {ticket.claimable && (
+        <button type="button" className="btn-primary"
+          disabled={actionState?.type === 'parlay-claim'}
+          onClick={() => onClaim(ticket)}
+          style={{ width: '100%', marginBottom: 14, minHeight: 44 }}>
+          {actionState?.id === ticket.id && actionState?.type === 'parlay-claim'
+            ? 'Cobrando...'
+            : `${statusKey === 'void' ? 'Cobrar reembolso' : 'Cobrar ganancias'} · ${fmt(ticket.claimAmount)} MXNP`}
+        </button>
+      )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {legs.map((leg, index) => {
@@ -955,7 +967,7 @@ function ParlayTicketCard({ ticket }) {
   );
 }
 
-function ParlayTicketSection({ title, tickets }) {
+function ParlayTicketSection({ title, tickets, onClaim, actionState }) {
   if (!tickets.length) return null;
   return (
     <section style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -969,12 +981,12 @@ function ParlayTicketSection({ title, tickets }) {
       }}>
         {title}
       </h2>
-      {tickets.map(ticket => <ParlayTicketCard key={ticket.id} ticket={ticket} />)}
+      {tickets.map(ticket => <ParlayTicketCard key={ticket.id} ticket={ticket} onClaim={onClaim} actionState={actionState} />)}
     </section>
   );
 }
 
-function ParlaysView({ parlays, loading }) {
+function ParlaysView({ parlays, loading, onClaim, actionState }) {
   if (loading) {
     return <HistorySkeleton count={3} />;
   }
@@ -995,9 +1007,10 @@ function ParlaysView({ parlays, loading }) {
   }
 
   const open = parlays.filter(ticket => String(ticket.status || '').toLowerCase() === 'open');
-  const settled = parlays.filter(ticket => String(ticket.status || '').toLowerCase() !== 'open');
+  const claimable = parlays.filter(ticket => ticket.claimable);
+  const settled = parlays.filter(ticket => String(ticket.status || '').toLowerCase() !== 'open' && !ticket.claimable);
   const openPayout = open.reduce((sum, ticket) => sum + Number(ticket.potentialPayout || 0), 0);
-  const settledPnl = settled.reduce((sum, ticket) => sum + parlayTicketPnl(ticket), 0);
+  const settledPnl = [...settled, ...claimable].reduce((sum, ticket) => sum + parlayTicketPnl(ticket), 0);
 
   return (
     <>
@@ -1005,8 +1018,8 @@ function ParlaysView({ parlays, loading }) {
         {[
           ['Abiertas', open.length, 'var(--gold)'],
           ['Pago posible', `${fmt(openPayout)} MXNP`, 'var(--green)'],
-          ['Liquidadas', settled.length, 'var(--text-primary)'],
-          ['PnL liquidado', signedFmt(settledPnl), settledPnl >= 0 ? 'var(--success)' : 'var(--danger)'],
+          ['Por cobrar', `${fmt(claimable.reduce((sum, ticket) => sum + Number(ticket.claimAmount || 0), 0))} MXNP`, 'var(--green)'],
+          ['PnL confirmado', signedFmt(settledPnl), settledPnl >= 0 ? 'var(--success)' : 'var(--danger)'],
         ].map(([label, value, color]) => (
           <div key={label} className="points-history-summary-card">
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', letterSpacing: '0.1em', marginBottom: 4, textTransform: 'uppercase' }}>
@@ -1020,8 +1033,9 @@ function ParlaysView({ parlays, loading }) {
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+        <ParlayTicketSection title="Por cobrar" tickets={claimable} onClaim={onClaim} actionState={actionState} />
         <ParlayTicketSection title="En curso" tickets={open} />
-        <ParlayTicketSection title="Liquidadas" tickets={settled} />
+        <ParlayTicketSection title="Resultados" tickets={settled} />
       </div>
     </>
   );
@@ -1256,6 +1270,23 @@ export default function PointsPortfolio() {
     }
   }
 
+  async function handleParlayClaim(ticket) {
+    if (actionState.type === 'parlay-claim') return;
+    setMsg(null);
+    setActionState({ id: ticket.id, type: 'parlay-claim' });
+    try {
+      const result = await claimParlay(ticket.id);
+      setMsg({ type: 'success', text: result.alreadyClaimed ? 'Esta combinada ya fue cobrada.' : `Cobraste ${fmt(result.payout)} MXNP` });
+      await refresh();
+      await load();
+      emitPointsRefresh({ source: 'parlay-claim' });
+    } catch (error) {
+      setMsg({ type: 'error', text: publicErrorMessage(error, lang, 'default') });
+    } finally {
+      setActionState({ id: null, type: null });
+    }
+  }
+
   // Acknowledge a losing resolved position. Drops it off the Active
   // tab immediately (optimistic) and persists via
   // /api/points/dismiss-position so the dismissal stays across
@@ -1352,6 +1383,17 @@ export default function PointsPortfolio() {
       <div className="points-portfolio-layout">
         {/* Left: main content */}
         <div className="points-portfolio-main">
+          {msg && (
+            <div role="status" style={{
+              background: msg.type === 'error' ? 'rgba(239,68,68,0.08)' : 'rgba(0,232,122,0.08)',
+              border: `1px solid ${msg.type === 'error' ? 'rgba(239,68,68,0.3)' : 'rgba(0,232,122,0.3)'}`,
+              color: msg.type === 'error' ? 'var(--danger)' : 'var(--green)',
+              padding: '12px 14px', borderRadius: 8, marginBottom: 20,
+              fontFamily: 'var(--font-mono)', fontSize: 12,
+            }}>
+              {msg.text}
+            </div>
+          )}
           {tab === 'activo' && (
             <>
               <div className="points-portfolio-stats">
@@ -1386,18 +1428,6 @@ export default function PointsPortfolio() {
                 {assetFilter !== 'markets' && <StockPositions data={stockPortfolio} />}
                 <p className="stock-note">{lang === 'en' ? 'Stock valuations update every minute, including while you are offline. The chart combines the latest available stock and market observations.' : 'La valuación de acciones se actualiza cada minuto, incluso sin conexión. La gráfica combina las últimas observaciones disponibles de acciones y mercados.'}</p>
               </>}
-
-              {msg && (
-                <div style={{
-                  background: msg.type === 'error' ? 'rgba(239,68,68,0.08)' : 'rgba(0,232,122,0.08)',
-                  border: `1px solid ${msg.type === 'error' ? 'rgba(239,68,68,0.3)' : 'rgba(0,232,122,0.3)'}`,
-                  color: msg.type === 'error' ? 'var(--danger)' : 'var(--green)',
-                  padding: '12px 14px', borderRadius: 10, marginBottom: 20,
-                  fontFamily: 'var(--font-mono)', fontSize: 12,
-                }}>
-                  {msg.text}
-                </div>
-              )}
 
               {assetFilter !== 'stocks' && loading && positions.length === 0 && <PositionSkeleton count={2} />}
               {assetFilter !== 'stocks' && !loading && positions.length === 0 && (
@@ -1461,7 +1491,7 @@ export default function PointsPortfolio() {
           )}
 
           {tab === 'combinadas' && (
-            <ParlaysView parlays={parlays} loading={loading} />
+            <ParlaysView parlays={parlays} loading={loading} onClaim={handleParlayClaim} actionState={actionState} />
           )}
 
           {tab === 'recompensas' && (

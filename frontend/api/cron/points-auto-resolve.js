@@ -1610,7 +1610,7 @@ export async function runAutoResolve({ dry = false, sportsOnly = false } = {}) {
           NOT ${sportsOnly}::boolean
           OR (
             m.resolver_type = 'sports_api'
-            AND m.resolver_config->>'source' = 'espn'
+            AND m.resolver_config->>'source' IN ('espn', 'football-data')
             AND m.resolver_config->>'shape' IN ('binary', 'draw3', 'total-goals-over')
             -- Check ahead too: a rescheduled game can finish before its saved kickoff.
             AND m.start_time <= NOW() + INTERVAL '12 hours'
@@ -1808,8 +1808,13 @@ export async function runAutoResolve({ dry = false, sportsOnly = false } = {}) {
     if (sportsOnly) {
       for (let i = 0; i < candidates.length; i += 8) {
         await Promise.all(candidates.slice(i, i + 8).map(async market => {
-          const config = parseJsonb(market.resolver_config, {});
-          if (config.source !== 'espn') return;
+          let config = parseJsonb(market.resolver_config, {});
+          if (config.source === 'football-data') {
+            config = buildFootballDataEspnFallbackConfig({ resolverConfig: config,
+              sourceData: market.pending_source_data, sport: market.sport,
+              league: market.league, startTime: market.start_time });
+          }
+          if (config?.source !== 'espn') return;
           try {
             sportsResults.set(market.id, { result: await readEspnEvent({ ...config, preferSummary: true }) });
           } catch (error) {
@@ -2763,12 +2768,16 @@ export async function runAutoResolve({ dry = false, sportsOnly = false } = {}) {
                 originalSource: 'football-data',
                 originalMatchId: cfg.matchId == null ? null : String(cfg.matchId),
               };
+              const prefetched = sportsResults.get(m.id);
+              if (prefetched?.error) throw prefetched.error;
+              if (prefetched) return prefetched.result;
               return readEspnEvent({
                 leaguePath: cfg.leaguePath,
                 eventId: cfg.eventId,
                 dateYmd: cfg.dateYmd,
                 homeName: cfg.homeName,
                 awayName: cfg.awayName,
+                preferSummary: true,
               });
             };
 

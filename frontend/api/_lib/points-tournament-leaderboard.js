@@ -1,5 +1,6 @@
 import { binaryPrices, multiPrices } from './amm-math.js';
 import { readStockTournamentRows } from './stock-marks.js';
+import { parlayTicketResult } from './points-parlay-outcomes.js';
 import {
   TOURNAMENT_CONVICTION_BONUS_RATE,
   TOURNAMENT_CONVICTION_DAILY_BONUS_RATE,
@@ -508,20 +509,18 @@ export function buildHoldBonusByUser(tradeRows, options = {}) {
   return buildConvictionBonusByUser(tradeRows, options.pnlByUserMarket || new Map(), options).bonusByUser;
 }
 
-async function readParlayScoreRows(db, startIso, cutoffIso) {
+export async function readParlayScoreRows(db, startIso, cutoffIso) {
   try {
-    return await queryRows(db, `
-      SELECT t.username,
-             COALESCE(SUM(
-               CASE
-                 WHEN t.status = 'won' THEN COALESCE(NULLIF(t.payout, 0), t.potential_payout, 0) - t.stake
-                 WHEN t.status = 'lost' THEN -t.stake
-                 ELSE 0
-               END
-             ), 0) AS parlay_pnl,
-             COUNT(*)::int AS parlay_tickets,
-             COUNT(*) FILTER (WHERE t.status = 'won')::int AS parlay_wins
+    const tickets = await queryRows(db, `
+      SELECT t.id, t.username, t.status, t.stake, t.payout, t.potential_payout,
+             JSON_AGG(JSON_BUILD_OBJECT(
+               'outcomeIndex', leg.outcome_index,
+               'marketStatus', market.status,
+               'marketOutcome', market.outcome
+             )) AS legs
       FROM points_parlay_tickets t
+      JOIN points_parlay_legs leg ON leg.ticket_id = t.id
+      LEFT JOIN points_markets market ON market.id = leg.market_id
       WHERE t.submitted_at >= $1
         AND t.submitted_at <= $2
         AND EXISTS (
@@ -532,18 +531,30 @@ async function readParlayScoreRows(db, startIso, cutoffIso) {
         AND NOT EXISTS (
           SELECT 1
           FROM points_parlay_legs l
-          JOIN points_markets m ON m.id = l.market_id
+          LEFT JOIN points_markets m ON m.id = l.market_id
           LEFT JOIN points_markets parent ON parent.id = m.parent_id
           LEFT JOIN points_pending_markets pm ON pm.approved_market_id = COALESCE(m.parent_id, m.id)
           WHERE l.ticket_id = t.id
-            AND NOT (
+            AND (m.id IS NULL OR NOT (
               m.tournament_featured IS TRUE
               OR parent.tournament_featured IS TRUE
               OR COALESCE(pm.reviewed_at, parent.created_at, m.created_at) >= $3::timestamptz
-            )
+            ))
         )
-      GROUP BY t.username
+      GROUP BY t.id
     `, [startIso, cutoffIso, TOURNAMENT_APPROVED_MARKET_START_ISO]);
+    const byUser = new Map();
+    for (const ticket of tickets) {
+      const result = parlayTicketResult(ticket, parseJson(ticket.legs, []));
+      const row = byUser.get(ticket.username) || {
+        username: ticket.username, parlay_pnl: 0, parlay_tickets: 0, parlay_wins: 0,
+      };
+      row.parlay_pnl += result.pnl;
+      row.parlay_tickets += 1;
+      if (result.status === 'won') row.parlay_wins += 1;
+      byUser.set(ticket.username, row);
+    }
+    return [...byUser.values()];
   } catch (error) {
     if (error?.code === '42P01') return [];
     throw error;
@@ -617,6 +628,7 @@ export async function buildTournamentLeaderboardRows(
     LEFT JOIN points_pending_markets pm ON pm.approved_market_id = COALESCE(m.parent_id, m.id)
     WHERE t.created_at >= $1
       AND t.created_at <= $2
+      AND t.source IS DISTINCT FROM 'tournament_auto_claim'
       AND (
         m.tournament_featured IS TRUE
         OR parent.tournament_featured IS TRUE

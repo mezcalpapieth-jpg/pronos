@@ -46,7 +46,7 @@ test('the minute sports pass finds early finals and rescheduled games without wa
   const run = new Function('candidateSql', 'sportsOnly', 'NEXT_OPPONENT_RECHECK_INTERVAL_HOURS', `return candidateSql\`${query}\`;`);
   assert.ok(query);
   const fast = await run(sql, true, 6);
-  assert.deepEqual(fast.map(row => row.id).sort((a, b) => a - b), [1, 2, 3, 11]);
+  assert.deepEqual(fast.map(row => row.id).sort((a, b) => a - b), [1, 2, 3, 11, 12]);
   const full = await run(sql, false, 6);
   assert.deepEqual(full.map(row => row.id).sort((a, b) => a - b), [1, 2, 3, 5, 6, 7, 11, 12]);
 });

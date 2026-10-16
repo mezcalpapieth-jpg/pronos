@@ -13,7 +13,7 @@ import { capturePointsRiskEvent } from '../../_lib/points-risk.js';
 import {
   createParlayTicket,
   listParlayTicketsForUser,
-  settleOpenParlayTickets,
+  claimParlayTicket,
 } from '../../_lib/points-parlays.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -35,10 +35,6 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       const limit = Number.parseInt(req.query?.limit, 10) || 20;
       const tickets = await withTransaction(async (client) => {
-        await settleOpenParlayTickets(client, {
-          username: session.username,
-          limit: Math.max(limit, 100),
-        });
         return listParlayTicketsForUser(client, {
           username: session.username,
           limit,
@@ -54,7 +50,11 @@ export default async function handler(req, res) {
     });
     if (limited) return;
 
-    const result = await withTransaction((client) => createParlayTicket(client, {
+    const claiming = req.body?.action === 'claim';
+    const result = await withTransaction((client) => claiming ? claimParlayTicket(client, {
+      username: session.username,
+      ticketId: req.body?.ticketId,
+    }) : createParlayTicket(client, {
       username: session.username,
       legs: req.body?.legs,
       stake: req.body?.stake,
@@ -64,9 +64,10 @@ export default async function handler(req, res) {
     await capturePointsRiskEvent(schemaSql, req, {
       username: session.username,
       accountId: session.sub,
-      eventType: 'trade:parlay',
-      amount: result.quote?.stake,
+      eventType: claiming ? 'trade:parlay_claim' : 'trade:parlay',
+      amount: claiming ? result.payout : result.quote?.stake,
       metadata: {
+        ticketId: claiming ? req.body?.ticketId : result.ticket?.id,
         legCount: result.quote?.legs?.length || 0,
         multiplier: result.quote?.multiplier,
         potentialPayout: result.quote?.potentialPayout,
