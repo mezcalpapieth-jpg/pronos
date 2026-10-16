@@ -1172,13 +1172,14 @@ export async function catchUpMissedPendingCryptoMarkets(sql, {
 export async function activatePendingCryptoMarket(sql, { sourceEventId, metadata }) {
   const seed = defaultPointsSeedLiquidity({ category: 'crypto', outcomeCount: OUTCOMES.length });
   const reserves = JSON.stringify(initialReserves(seed, 2));
-  // Already-precreated windows may still have the old default. Only untouched
-  // pending pools can adopt the new seed; activation never resets a traded pool.
+  // Adopt the current default for untouched rolling windows precreated under
+  // either earlier default. Never reset active, traded or custom-seeded pools.
   return sql`
     WITH opening AS (
       SELECT m.id,
-             (m.seed_liquidity = 1000 AND m.reserves = '[1000,1000]'::jsonb
-              AND (m.seed_liquidities IS NULL OR m.seed_liquidities = '[1000,1000]'::jsonb)
+             (m.seed_liquidity IN (1000, 2500)
+              AND m.reserves = jsonb_build_array(m.seed_liquidity, m.seed_liquidity)
+              AND (m.seed_liquidities IS NULL OR m.seed_liquidities = m.reserves)
               AND NOT EXISTS (SELECT 1 FROM points_trades t WHERE t.market_id = m.id)
               AND NOT EXISTS (SELECT 1 FROM points_positions p WHERE p.market_id = m.id)) AS use_default
         FROM points_markets m

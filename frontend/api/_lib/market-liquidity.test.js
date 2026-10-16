@@ -7,8 +7,9 @@ import {
   seedLiquiditiesFromRow,
 } from './market-liquidity.js';
 
-test('Points opening defaults depend on category and pool type, not a trophy or tournament date', () => {
-  for (const [outcomeCount, ammMode, sports] of [[2,'unified',5000], [3,'unified',10000], [8,'unified',20000], [8,'parallel',5000]]) {
+test('Points opening defaults are 25% lower, with non-sports at half, independent of trophy or date', () => {
+  for (const [outcomeCount, ammMode, previousSports] of [[2,'unified',5000], [3,'unified',10000], [8,'unified',20000], [8,'parallel',5000]]) {
+    const sports = previousSports * 0.75;
     assert.equal(defaultPointsSeedLiquidity({ category: 'deportes', outcomeCount, ammMode }), sports);
     for (const category of ['crypto','finanzas','mexico','ai']) {
       assert.equal(defaultPointsSeedLiquidity({ category, outcomeCount, ammMode }), sports / 2);
