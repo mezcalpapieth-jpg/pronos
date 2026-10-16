@@ -30,16 +30,16 @@ test('daily and minute rolling markets use the non-sports default without a trop
     assert.equal(queries.length, 2);
     for (const { text, values } of queries) {
       assert.match(text, /ON CONFLICT[\s\S]*DO NOTHING/);
-      const reservesIndex = values.indexOf('[2500,2500]');
+      const reservesIndex = values.indexOf('[1875,1875]');
       assert.ok(reservesIndex >= 0);
-      assert.equal(values[reservesIndex + 1], 2500);
-      assert.equal(values[reservesIndex + 2], '[2500,2500]');
+      assert.equal(values[reservesIndex + 1], 1875);
+      assert.equal(values[reservesIndex + 2], '[1875,1875]');
       assert.equal(text.includes('tournament_featured'), false);
     }
   }
 });
 
-test('activation upgrades only untouched pending crypto seeds, never active pools or user exposure', async () => {
+test('activation adopts reduced defaults only for untouched pending crypto windows', async () => {
   const db = new PGlite();
   try {
     await db.exec(`CREATE TABLE points_markets (
@@ -53,13 +53,22 @@ test('activation upgrades only untouched pending crypto seeds, never active pool
     CREATE TABLE points_trades (market_id INTEGER);
     CREATE TABLE points_positions (market_id INTEGER, shares NUMERIC);
     INSERT INTO points_markets (id,source_event_id) VALUES (1,'btc-next'),(2,'btc-current'),
-      (3,'btc-traded'),(4,'btc-position'),(5,'btc-custom'),(6,'btc-chain'),(7,'btc-altered');
+      (3,'btc-traded'),(4,'btc-position'),(5,'btc-custom'),(6,'btc-chain'),(7,'btc-altered'),
+      (8,'btc-previous-default'),(9,'btc-previous-traded'),(10,'btc-previous-position'),
+      (11,'btc-mismatched-seed'),(12,'btc-previous-active'),(13,'btc-previous-null-seed');
     UPDATE points_markets SET status='active',reserves='[4544.160363,220.06267]' WHERE id=2;
     INSERT INTO points_trades VALUES (3);
     INSERT INTO points_positions VALUES (4,25);
     UPDATE points_markets SET seed_liquidity=8000,reserves='[8000,8000]' WHERE id=5;
     UPDATE points_markets SET mode='onchain',chain_id=42161 WHERE id=6;
-    UPDATE points_markets SET reserves='[1100,900]' WHERE id=7;`);
+    UPDATE points_markets SET reserves='[1100,900]' WHERE id=7;
+    UPDATE points_markets SET seed_liquidity=2500,reserves='[2500,2500]',seed_liquidities='[2500,2500]'
+      WHERE id IN (8,9,10,11,12,13);
+    INSERT INTO points_trades VALUES (9);
+    INSERT INTO points_positions VALUES (10,25);
+    UPDATE points_markets SET seed_liquidities='[1000,1000]' WHERE id=11;
+    UPDATE points_markets SET status='active' WHERE id=12;
+    UPDATE points_markets SET seed_liquidities=NULL WHERE id=13;`);
     const sql = async (strings, ...values) => {
       const query = strings.reduce((text, part, i) => text + part + (i < values.length ? `$${i + 1}` : ''), '');
       return (await db.query(query, values)).rows;
@@ -69,22 +78,34 @@ test('activation upgrades only untouched pending crypto seeds, never active pool
     assert.deepEqual(await activate('btc-next'), [{ id: 1 }]);
     const read = async id => (await db.query('SELECT * FROM points_markets WHERE id=$1', [id])).rows[0];
     const next = await read(1);
-    assert.deepEqual(next.reserves, [2500,2500]);
-    assert.deepEqual(next.seed_liquidities, [2500,2500]);
+    assert.deepEqual(next.reserves, [1875,1875]);
+    assert.deepEqual(next.seed_liquidities, [1875,1875]);
+    assert.equal(Number(next.seed_liquidity), 1875);
     assert.equal(next.resolver_config.evidence, 'kept');
     assert.equal(next.status, 'active');
     assert.deepEqual(await activate('btc-next'), []);
-    for (const [id,key] of [[2,'btc-current'],[3,'btc-traded'],[4,'btc-position'],[5,'btc-custom'],[6,'btc-chain'],[7,'btc-altered']]) {
+    for (const [id,key] of [[8,'btc-previous-default'],[13,'btc-previous-null-seed']]) {
+      assert.deepEqual(await activate(key), [{ id }]);
+      const opened = await read(id);
+      assert.deepEqual(opened.reserves, [1875,1875]);
+      assert.deepEqual(opened.seed_liquidities, [1875,1875]);
+      assert.equal(Number(opened.seed_liquidity), 1875);
+      assert.deepEqual(await activate(key), []);
+    }
+    for (const [id,key] of [[2,'btc-current'],[3,'btc-traded'],[4,'btc-position'],[5,'btc-custom'],[6,'btc-chain'],[7,'btc-altered'],
+      [9,'btc-previous-traded'],[10,'btc-previous-position'],[11,'btc-mismatched-seed'],[12,'btc-previous-active']]) {
       const before = await read(id);
       await activate(key);
       const after = await read(id);
       assert.deepEqual(after.reserves, before.reserves);
       assert.equal(after.seed_liquidity, before.seed_liquidity);
       assert.deepEqual(after.seed_liquidities, before.seed_liquidities);
-      if ([2,6].includes(id)) assert.deepEqual(after, before);
+      if ([2,6,12].includes(id)) assert.deepEqual(after, before);
     }
-    assert.deepEqual((await db.query('SELECT * FROM points_positions')).rows, [{ market_id: 4, shares: '25' }]);
-    assert.deepEqual((await db.query('SELECT * FROM points_trades')).rows, [{ market_id: 3 }]);
+    assert.deepEqual((await db.query('SELECT * FROM points_positions ORDER BY market_id')).rows,
+      [{ market_id: 4, shares: '25' }, { market_id: 10, shares: '25' }]);
+    assert.deepEqual((await db.query('SELECT * FROM points_trades ORDER BY market_id')).rows,
+      [{ market_id: 3 }, { market_id: 9 }]);
   } finally { await db.close(); }
 });
 

@@ -18,10 +18,10 @@ test('normalizeProbabilities accepts percentages and returns outcome-aligned pct
   assert.deepEqual(result.probabilities.map(v => Math.round(v * 100)), [60, 40]);
 });
 
-test('Points generator reserves use larger type-specific floors without changing opening odds', () => {
+test('Points generator reserves use reduced type-specific floors without changing opening odds', () => {
   const tournament = { category: 'deportes', tournament_featured: true, end_time: '2026-10-25T18:00:00Z' };
   const options = { now: new Date('2026-10-15T12:00:00Z') };
-  for (const [count, mode, expected] of [[2, 'unified', 5000], [3, 'unified', 10000], [7, 'unified', 20000], [9, 'parallel', 5000]]) {
+  for (const [count, mode, expected] of [[2, 'unified', 3750], [3, 'unified', 7500], [7, 'unified', 15000], [9, 'parallel', 3750]]) {
     const original = { ...tournament, outcomes: Array.from({ length: count }, (_, i) => `Option ${i}`), amm_mode: mode, seed_liquidity: 1000 };
     const priced = attachGeneratedPointsLiquidity(original, options);
     assert.deepEqual(priced.seed_liquidities, Array(count).fill(expected));
@@ -34,11 +34,11 @@ test('Points generator reserves use larger type-specific floors without changing
   }
   assert.equal(attachGeneratedPointsLiquidity({ ...tournament, outcomes: ['Yes', 'No'], seed_liquidity: 25000 }, options).seed_liquidity, 25000);
   assert.equal(attachUniformGeneratedPricing({ outcomes: ['Yes', 'No'], seed_liquidity: 1000 }).seed_liquidity, 1000);
-  assert.equal(attachGeneratedPointsLiquidity({ ...tournament, tournament_featured: false, outcomes: ['Yes', 'No'], seed_liquidity: 1000 }, options).seed_liquidity, 5000);
+  assert.equal(attachGeneratedPointsLiquidity({ ...tournament, tournament_featured: false, outcomes: ['Yes', 'No'], seed_liquidity: 1000 }, options).seed_liquidity, 3750);
   for (const end_time of [null, '2026-09-01T18:00:00Z', '2026-11-05T18:00:00Z']) {
-    assert.equal(attachGeneratedPointsLiquidity({ ...tournament, end_time, outcomes: ['Yes', 'No'], seed_liquidity: 1000 }, options).seed_liquidity, 5000);
+    assert.equal(attachGeneratedPointsLiquidity({ ...tournament, end_time, outcomes: ['Yes', 'No'], seed_liquidity: 1000 }, options).seed_liquidity, 3750);
   }
-  assert.equal(attachGeneratedPointsLiquidity({ ...tournament, outcomes: ['Yes', 'No'], seed_liquidity: 1000 }, { now: new Date('2026-11-02') }).seed_liquidity, 5000);
+  assert.equal(attachGeneratedPointsLiquidity({ ...tournament, outcomes: ['Yes', 'No'], seed_liquidity: 1000 }, { now: new Date('2026-11-02') }).seed_liquidity, 3750);
 });
 
 test('legacy pending defaults gain depth without changing custom pricing or touching live/onchain rows', () => {
@@ -48,10 +48,10 @@ test('legacy pending defaults gain depth without changing custom pricing or touc
       legProbabilities: [0.3,0.7], legProbabilityPct: [30,70], seedLiquidities: [1000,1000],
     } } };
   const priced = attachPointsOpeningLiquidity(row);
-  assert.deepEqual(priced.seed_liquidities, [2500,2500]);
+  assert.deepEqual(priced.seed_liquidities, [1875,1875]);
   assert.deepEqual(priced.source_data.suggestedPricing.legProbabilities, [0.3,0.7]);
   assert.equal(priced.source_data.sourceEvidence, 'preserved');
-  assert.deepEqual(priced.source_data.suggestedPricing.seedLiquidities, [2500,2500]);
+  assert.deepEqual(priced.source_data.suggestedPricing.seedLiquidities, [1875,1875]);
   assert.deepEqual(attachPointsOpeningLiquidity(priced), priced);
   for (const patch of [{ status: 'active' }, { status: 'approved' }, { mode: 'onchain' },
     { chain_id: 42161 }, { chain_address: '0xabc' }, { seed_liquidities: [1000,2000] }]) {
@@ -61,6 +61,12 @@ test('legacy pending defaults gain depth without changing custom pricing or touc
   assert.deepEqual(attachPointsOpeningLiquidity({ ...row, seed_liquidity: 12000,
     seed_liquidities: [12000,12000] }).seed_liquidities, [12000,12000]);
   assert.deepEqual(row.seed_liquidities, [1000,1000]);
+});
+
+test('lower opening defaults do not reduce explicitly configured pending seeds', () => {
+  const pending = { status: 'pending', category: 'deportes', outcomes: ['A', 'B'],
+    seed_liquidity: 5000, seed_liquidities: [5000,5000] };
+  assert.deepEqual(attachPointsOpeningLiquidity(pending).seed_liquidities, [5000,5000]);
 });
 
 test('seedLiquiditiesFromProbabilities opens skewed CPMM odds with inverse reserves', () => {

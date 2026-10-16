@@ -1,5 +1,5 @@
 export function defaultPointsSeedLiquidity({ category, outcomeCount = 2, ammMode = 'unified' } = {}) {
-  const sportsSeed = ammMode === 'parallel' || outcomeCount === 2 ? 5000 : outcomeCount === 3 ? 10000 : 20000;
+  const sportsSeed = ammMode === 'parallel' || outcomeCount === 2 ? 3750 : outcomeCount === 3 ? 7500 : 15000;
   return sportsSeed * (category === 'deportes' ? 1 : 0.5);
 }
 
