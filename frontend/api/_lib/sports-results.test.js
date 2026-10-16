@@ -18,6 +18,33 @@ function jsonResponse(body, ok = true, status = 200) {
   };
 }
 
+test('Libertadores lookup checks the previous local calendar day and refreshes an identified event from summary', async t => {
+  const original = globalThis.fetch;
+  t.after(() => { globalThis.fetch = original; });
+  const calls = [];
+  const event = { id: '401912523', status: { type: { state: 'in', completed: false } }, competitions: [{
+    competitors: [
+      { homeAway: 'home', score: '0', team: { shortDisplayName: 'Estudiantes', displayName: 'Estudiantes de La Plata' } },
+      { homeAway: 'away', score: '0', team: { displayName: 'Flamengo' } },
+    ],
+  }] };
+  globalThis.fetch = async url => {
+    calls.push(String(url));
+    if (url.includes('summary?event=401912523')) return jsonResponse({ header: {
+      ...event, status: { type: { state: 'post', completed: true, name: 'STATUS_FULL_TIME' } },
+    } });
+    if (url.includes('20261015-20261017')) return jsonResponse({}, false, 400);
+    return jsonResponse({ events: url.includes('dates=20261015&') ? [event] : [] });
+  };
+  const result = await readEspnEvent({ leaguePath: 'soccer/conmebol.libertadores', dateYmd: '2026-10-16',
+    homeName: 'Estudiantes LP', awayName: 'Flamengo', preferSummary: true });
+  assert.equal(result.completed, true);
+  assert.equal(result.winner, 'draw');
+  assert.equal(result.homeScore, 0);
+  assert.ok(calls.some(url => url.includes('dates=20261015&')));
+  assert.equal(calls.at(-1).split('/').at(-1), 'summary?event=401912523');
+});
+
 const finalSummary = {
   header: {
     id: '401871326',

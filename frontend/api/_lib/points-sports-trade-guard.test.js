@@ -10,6 +10,22 @@ const cfg = { source: 'espn', shape: 'binary', leaguePath: 'baseball/mlb', event
 const market = { id: 1, status: 'active', start_time: '2026-10-15T17:00:00Z', end_time: '2099-10-15T22:00:00Z',
   resolver_type: 'sports_api', resolver_config: cfg, outcomes: ['Guardians', 'Rays'], reserves: [500, 500] };
 
+test('football-data trades are guarded through persisted fallback metadata, including legacy markets', async () => {
+  const football = { id: 355387, resolver_config: { source: 'football-data', shape: 'draw3', matchId: 576423 } };
+  const db = { query: async () => ({ rows: [{ sport: 'soccer', start_time: '2026-10-16T00:30Z',
+    pending_source_data: { competitionCode: 'CLI', home: { name: 'Estudiantes LP' }, away: { name: 'Flamengo' }, kickoffUtc: '2026-10-16T00:30Z' } }] }) };
+  const readEvent = async config => {
+    assert.equal(config.leaguePath, 'soccer/conmebol.libertadores');
+    assert.equal(config.homeName, 'Estudiantes LP');
+    assert.equal(config.preferSummary, true);
+    return { completed: true, state: 'post' };
+  };
+  assert.equal((await sportsTradeLock(football, { db, readEvent })).error, 'market_closed');
+  football.resolver_config.espnFallback = { leaguePath: 'soccer/conmebol.libertadores', homeName: 'Estudiantes LP', awayName: 'Flamengo', dateYmd: '2026-10-16' };
+  assert.equal((await sportsTradeLock(football, { readEvent })).error, 'market_closed');
+  assert.equal((await sportsTradeLock({ ...football, resolver_config: { source: 'football-data', shape: 'draw3' } })).error, 'sports_status_unavailable');
+});
+
 function summary({ state = 'post', completed = true, name = 'STATUS_FINAL', home = '3', away = '2', period = 9 } = {}) {
   return { header: { id: cfg.eventId, competitions: [{ status: { period, type: { state, completed, name } },
     competitors: [{ homeAway: 'home', score: home, team: { name: 'Guardians' } },

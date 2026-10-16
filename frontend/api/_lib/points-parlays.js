@@ -15,7 +15,8 @@ import {
 } from './points-tournament-config.js';
 import { resolveTournamentScoringWindow } from './points-tournament-leaderboard.js';
 import { assertSportsTradeAllowed } from './points-sports-trade-guard.js';
-import { parlayLegResult, parlayResult } from './points-parlay-outcomes.js';
+import { parlayLegResult, parlayResult, parlayTicketResult } from './points-parlay-outcomes.js';
+import { readActiveCycleWindow, scoringStartIsoForWindow } from './points-cycle-window.js';
 
 const PARLAY_MIN_MULTIPLIER = 1.01;
 
@@ -166,7 +167,7 @@ export async function readParlayQuote(db, { legs, stake, now = new Date(), lockM
   const markets = await readParlayMarkets(db, marketIds, { lock: lockMarkets });
   const marketById = new Map(markets.map(market => [Number(market.id), market]));
   for (const market of markets) {
-    if (market.status === 'active') await assertSportsTradeAllowed(market, { now });
+    if (market.status === 'active') await assertSportsTradeAllowed(market, { db });
   }
   const seenGroups = new Set();
   const cutoffMs = scoringWindow ? new Date(scoringWindow.rankingCutoffAt).getTime() : NaN;
@@ -238,7 +239,11 @@ export async function readParlayQuote(db, { legs, stake, now = new Date(), lockM
 }
 
 export function serializeParlayTicket(row) {
-  const legs = parseJson(row.legs, []);
+  const storedLegs = parseJson(row.legs, []);
+  const result = parlayTicketResult(row, storedLegs);
+  const legs = row.status === 'open'
+    ? storedLegs.map(leg => ({ ...leg, ...parlayLegResult(leg) }))
+    : storedLegs;
   const legStatuses = legs.map(leg => String(leg.status || 'open').toLowerCase());
   const legCount = legs.length;
   const wonLegs = legStatuses.filter(status => status === 'won').length;
@@ -253,7 +258,12 @@ export function serializeParlayTicket(row) {
     potentialPayout: roundTournamentAmount(row.potential_payout),
     potentialProfit: roundTournamentAmount(Number(row.potential_payout || 0) - Number(row.stake || 0)),
     payout: roundTournamentAmount(row.payout || 0),
-    status: row.status,
+    status: result.status,
+    storedStatus: row.status,
+    claimable: result.claimable,
+    claimAmount: result.claimable ? roundTournamentAmount(result.payout) : 0,
+    resultPayout: roundTournamentAmount(result.payout),
+    scorePnl: roundTournamentAmount(result.pnl),
     submittedAt: row.submitted_at || null,
     settledAt: row.settled_at || null,
     reason: row.reason || null,
@@ -371,10 +381,12 @@ export async function listParlayTicketsForUser(db, { username, limit = 20 } = {}
                  'question', l.question_snapshot,
                  'outcomeLabel', l.outcome_label_snapshot,
                  'marketEndTime', l.market_end_time,
-                 'resolvedOutcome', l.resolved_outcome,
+                 'marketStatus', m.status,
+                 'marketOutcome', m.outcome,
+                 'resolvedOutcome', CASE WHEN t.status = 'open' THEN m.outcome ELSE l.resolved_outcome END,
                  'resolvedOutcomeLabel',
                    CASE
-                     WHEN l.resolved_outcome IS NULL THEN NULL
+                     WHEN t.status = 'open' THEN m.outcomes ->> (m.outcome::int)
                      ELSE m.outcomes ->> (l.resolved_outcome::int)
                    END,
                  'status', l.status,
@@ -395,7 +407,56 @@ export async function listParlayTicketsForUser(db, { username, limit = 20 } = {}
   return rows.map(serializeParlayTicket);
 }
 
+export async function claimParlayTicket(client, { username, ticketId } = {}) {
+  const id = Number(ticketId);
+  if (!Number.isSafeInteger(id) || id <= 0) throw apiError('invalid_ticket_id');
+  const window = await readActiveCycleWindow(client, { forUpdate: true });
+  if (!window) throw apiError('no_active_cycle', 409);
+  const tickets = await queryRows(client, `
+    SELECT id, username, cycle_id, stake, multiplier, potential_payout, payout, status, submitted_at
+    FROM points_parlay_tickets WHERE id = $1 AND username = $2 FOR UPDATE
+  `, [id, username]);
+  const ticket = tickets[0];
+  if (!ticket) throw apiError('ticket_not_found', 404);
+  const submitted = new Date(ticket.submitted_at).getTime();
+  if ((ticket.cycle_id != null && Number(ticket.cycle_id) !== Number(window.id))
+      || !Number.isFinite(submitted)
+      || submitted < new Date(scoringStartIsoForWindow(window)).getTime()
+      || submitted > new Date(window.rankingCutoffAt).getTime()) {
+    throw apiError('ticket_outside_current_cycle', 409);
+  }
+  if (ticket.status !== 'open') return { ok: true, alreadyClaimed: true, payout: 0 };
+  const result = await settleTicket(client, ticket);
+  if (!result.settled) throw apiError('ticket_not_resolved', 409);
+  return { ok: true, alreadyClaimed: false, status: result.status, payout: result.payout };
+}
+
+export async function collectCycleParlayWinnings(client, { cycleId, startIso, cutoffIso }) {
+  // No batch limit: unresolved old tickets must not starve confirmed winners.
+  const tickets = await queryRows(client, `
+    SELECT id, username, stake, multiplier, potential_payout
+    FROM points_parlay_tickets
+    WHERE status = 'open'
+      AND (cycle_id = $1 OR cycle_id IS NULL)
+      AND submitted_at >= $2::timestamptz AND submitted_at <= $3::timestamptz
+    ORDER BY id FOR UPDATE
+  `, [cycleId, startIso, cutoffIso]);
+  let payout = 0;
+  let collected = 0;
+  for (const ticket of tickets) {
+    const result = await settleTicket(client, ticket);
+    if (result.settled) collected += 1;
+    payout += result.settled ? Number(result.payout || 0) : 0;
+  }
+  return { collected, payout: round6(payout) };
+}
+
 async function settleTicket(client, ticket) {
+  await client.query(`
+    SELECT m.id FROM points_markets m
+    JOIN points_parlay_legs l ON l.market_id = m.id
+    WHERE l.ticket_id = $1 ORDER BY m.id FOR SHARE OF m
+  `, [ticket.id]);
   const legs = await queryRows(client, `
     SELECT l.id, l.ticket_id, l.outcome_index, l.status AS leg_status,
            l.resolved_outcome,

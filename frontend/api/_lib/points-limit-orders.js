@@ -316,7 +316,7 @@ async function lockMarket(client, marketId) {
   return result.rows[0];
 }
 
-async function assertMarketCanTrade(market) {
+async function assertMarketCanTrade(market, client) {
   assertPointsExecution(market);
   if (market.status !== 'active') {
     const err = new Error('market_closed'); err.status = 400; throw err;
@@ -325,7 +325,7 @@ async function assertMarketCanTrade(market) {
     const err = new Error('market_expired'); err.status = 400; throw err;
   }
   assertCryptoTradeAllowed(market);
-  await assertSportsTradeAllowed(market);
+  await assertSportsTradeAllowed(market, { db: client });
 }
 
 function reservesForMarket(market, outcomeIndex) {
@@ -2562,7 +2562,7 @@ export async function executeLimitOrderById(client, orderId) {
       detail: cryptoLock.error,
     };
   }
-  const sportsLock = await sportsTradeLock(market);
+  const sportsLock = await sportsTradeLock(market, { db: client });
   if (sportsLock) return { ok: true, status: 'open', triggered: false, detail: sportsLock.error };
 
   try {
@@ -2597,7 +2597,7 @@ export async function createLimitOrder(client, {
     const err = new Error('invalid_amount'); err.status = 400; throw err;
   }
   const market = await lockMarket(client, marketId);
-  await assertMarketCanTrade(market);
+  await assertMarketCanTrade(market, client);
   await assertTournamentCutoffSnapshotReady(client, { market });
   if (normalizedSide === 'buy') {
     await assertTournamentMinimumEntry(client, {

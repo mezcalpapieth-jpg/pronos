@@ -44,12 +44,19 @@ function ymdToCompact(ymd) {
   return `${String(y).padStart(4, '0')}${String(m).padStart(2, '0')}${String(d).padStart(2, '0')}`;
 }
 
-function espnScoreboardQueries(dateYmd) {
+function espnScoreboardQueries(dateYmd, adjacentDays = false) {
   const queries = [];
   const dateRange = ymdToDateRange(dateYmd);
   const singleDate = ymdToCompact(dateYmd);
   if (dateRange) queries.push(`?dates=${dateRange}&limit=500`);
   if (singleDate && singleDate !== dateRange) queries.push(`?dates=${singleDate}&limit=500`);
+  if (singleDate && adjacentDays) {
+    for (const offset of [-1, 1]) {
+      const day = new Date(`${dateYmd}T12:00:00Z`);
+      day.setUTCDate(day.getUTCDate() + offset);
+      queries.push(`?dates=${ymdToCompact(day.toISOString().slice(0, 10))}&limit=500`);
+    }
+  }
   if (!queries.length) queries.push('?limit=500');
   return queries;
 }
@@ -235,8 +242,9 @@ export async function readEspnEvent({ leaguePath, eventId, dateYmd, homeName, aw
     throw new Error('espn: missing leaguePath/event lookup');
   }
   if (!/^[a-z0-9.-]+\/[a-z0-9.-]+$/i.test(leaguePath)) throw new Error('espn: invalid league path');
+  const signal = AbortSignal.timeout(4000);
   const fetchOptions = () => ({ headers: { Accept: 'application/json', 'Cache-Control': 'no-cache' },
-    cache: 'no-store', signal: AbortSignal.timeout(4000) });
+    cache: 'no-store', signal });
   // Trading guards and fast resolution use the exact event, not a cached date scoreboard.
   if (preferSummary && eventId) {
     const response = await fetch(`${ESPN_BASE}/${leaguePath}/summary?event=${encodeURIComponent(eventId)}`, fetchOptions());
@@ -248,7 +256,7 @@ export async function readEspnEvent({ leaguePath, eventId, dateYmd, homeName, aw
   }
   let lastScoreboardError = null;
   let sawScoreboard = false;
-  for (const q of espnScoreboardQueries(dateYmd)) {
+  for (const q of espnScoreboardQueries(dateYmd, !eventId)) {
     const url = `${ESPN_BASE}/${leaguePath}/scoreboard${q}`;
     const res = await fetch(url, fetchOptions());
     if (!res.ok) {
@@ -261,8 +269,10 @@ export async function readEspnEvent({ leaguePath, eventId, dateYmd, homeName, aw
     const ev = eventId
       ? events.find(e => String(e.id) === String(eventId))
       : events.find(e => eventMatchesTeams(e, homeName, awayName));
-    if (ev) return normalizeEspnEventForMarket(ev, homeName, awayName);
-    if (!eventId) return { completed: false, winner: null, notFound: true };
+    if (ev) {
+      if (preferSummary && ev.id) return readEspnEvent({ leaguePath, eventId: ev.id, homeName, awayName, preferSummary: true });
+      return normalizeEspnEventForMarket(ev, homeName, awayName);
+    }
   }
 
   if (!eventId) {

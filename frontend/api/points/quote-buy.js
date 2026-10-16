@@ -102,7 +102,7 @@ export default async function handler(req, res) {
     if (r.end_time && new Date(r.end_time) <= new Date()) {
       return res.status(400).json({ error: 'market_expired' });
     }
-    const sportsLock = await sportsTradeLock(r);
+    const sportsLock = await sportsTradeLock(r, { db: sql });
     if (sportsLock) return res.status(sportsLock.status).json({ error: sportsLock.error, detail: sportsLock.detail });
     const tournamentLock = tournamentSettlementLock(r);
     if (tournamentLock) {

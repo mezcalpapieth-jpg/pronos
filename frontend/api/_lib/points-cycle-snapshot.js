@@ -2,7 +2,9 @@ import {
   buildTournamentLeaderboardRows,
   cycleWindowFromRow,
 } from './points-tournament-leaderboard.js';
-import { roundTournamentAmount } from './points-tournament-config.js';
+import { roundTournamentAmount, tournamentScoringStartsAt } from './points-tournament-config.js';
+import { collectCycleParlayWinnings } from './points-parlays.js';
+import { collectCyclePositionWinnings } from './points-redemption.js';
 import { stocksAreEnabled } from './stock-marks.js';
 import { liquidateStockCyclePositions } from './stock-liquidation.js';
 
@@ -102,19 +104,24 @@ export async function snapshotCycleLeaderboard(
   if (!activeCycle?.id) return [];
 
   const stocksEnabled = stocksAreEnabled();
-  if (stocksEnabled) await client.query('SELECT id FROM points_cycles WHERE id=$1 FOR UPDATE', [activeCycle.id]);
+  await client.query('SELECT id FROM points_cycles WHERE id=$1 FOR UPDATE', [activeCycle.id]);
 
   const existingCount = await countCycleSnapshots(client, activeCycle.id);
   if (existingCount > 0) {
     return readCycleSnapshotRows(client, { cycleId: activeCycle.id, limit });
   }
 
+  const window = cycleWindowFromRow(activeCycle);
+  await collectCycleParlayWinnings(client, {
+    cycleId: activeCycle.id, startIso: tournamentScoringStartsAt(window), cutoffIso: window.rankingCutoffAt,
+  });
+  await collectCyclePositionWinnings(client, window);
   if (stocksEnabled) await liquidateStockCyclePositions(client, activeCycle, { now });
 
   const top = await buildTournamentLeaderboardRows(client, {
     limit,
     now,
-    window: cycleWindowFromRow(activeCycle),
+    window,
   });
 
   let rank = 0;

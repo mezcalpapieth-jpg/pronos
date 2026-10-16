@@ -71,6 +71,7 @@ function fakeSettlementDb({ tickets = [], legs = [], markets = [] } = {}) {
     distributions,
     async query(text, params = []) {
       const sql = String(text);
+      if (sql.includes('FOR SHARE OF m')) return { rows: [] };
       if (sql.includes('FROM points_parlay_tickets')) {
         const max = Number(params[0]) || 200;
         const username = params[1] || null;
@@ -245,8 +246,10 @@ test('parlay settlement liquidates the ticket immediately after one wrong leg cl
   assert.equal(db.distributions.length, 0);
 });
 
-test('parlay portfolio endpoint refreshes open tickets before listing them', () => {
-  assert.match(parlayRouteSource, /settleOpenParlayTickets/);
+test('parlay portfolio GET never collects cash; POST exposes authenticated manual claims', () => {
+  assert.doesNotMatch(parlayRouteSource, /settleOpenParlayTickets/);
+  assert.match(parlayRouteSource, /claimParlayTicket\(client/);
+  assert.match(parlayRouteSource, /action === 'claim'/);
   assert.match(parlayRouteSource, /withTransaction\(async \(client\) => \{/);
   assert.match(parlayRouteSource, /return listParlayTicketsForUser\(client/);
 });

@@ -355,6 +355,9 @@ function matchToMarketSpec(match, competitionCode) {
       source: 'football-data',
       matchId: match.id,
       shape: winnerOnly ? 'binary' : 'draw3',
+      ...(espnLeaguePath ? { espnFallback: {
+        leaguePath: espnLeaguePath, dateYmd: startTime.slice(0, 10), homeName, awayName,
+      } } : {}),
     };
 
   // Team crests aligned with the 3-way W/D/L outcomes. Draw has no

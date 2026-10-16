@@ -32,6 +32,7 @@ async function fixture(t, { parent = false, touch = false } = {}) {
       (2,'ana',10,0,'sell',250,200,0.8,'2026-10-01T20:00:00Z'),
       (3,'ana',10,0,'redeem',750,750,1,'2026-10-02T15:10:00Z');
     INSERT INTO points_positions VALUES('ana',10,0,0,0,350);
+    ALTER TABLE points_trades ADD COLUMN source TEXT DEFAULT 'web';
   `);
   if (parent) await db.exec(`
     INSERT INTO points_markets SELECT 20,NULL,created_at,true,status,outcome,reserves,outcomes,

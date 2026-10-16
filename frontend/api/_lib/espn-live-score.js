@@ -30,12 +30,19 @@ function ymdToCompact(ymd) {
   return `${String(y).padStart(4, '0')}${String(m).padStart(2, '0')}${String(d).padStart(2, '0')}`;
 }
 
-function espnScoreboardQueries(dateYmd) {
+function espnScoreboardQueries(dateYmd, adjacentDays = false) {
   const queries = [];
   const dateRange = ymdToDateRange(dateYmd);
   const singleDate = ymdToCompact(dateYmd);
   if (dateRange) queries.push(`?dates=${dateRange}&limit=500`);
   if (singleDate && singleDate !== dateRange) queries.push(`?dates=${singleDate}&limit=500`);
+  if (singleDate && adjacentDays) {
+    for (const offset of [-1, 1]) {
+      const day = new Date(`${dateYmd}T12:00:00Z`);
+      day.setUTCDate(day.getUTCDate() + offset);
+      queries.push(`?dates=${ymdToCompact(day.toISOString().slice(0, 10))}&limit=500`);
+    }
+  }
   if (!queries.length) queries.push('?limit=500');
   return queries;
 }
@@ -334,7 +341,7 @@ export async function readEspnLiveScore({ leaguePath, eventId, dateYmd, homeName
   }
   let lastScoreboardError = null;
   let sawScoreboard = false;
-  for (const q of espnScoreboardQueries(dateYmd)) {
+  for (const q of espnScoreboardQueries(dateYmd, !eventId)) {
     const scoreboardUrl = `${ESPN_BASE}/${leaguePath}/scoreboard${q}`;
     const res = await fetch(scoreboardUrl, { headers: { Accept: 'application/json' } });
     if (!res.ok) {
@@ -351,7 +358,6 @@ export async function readEspnLiveScore({ leaguePath, eventId, dateYmd, homeName
       const summary = await readEspnSummary({ leaguePath, eventId: event.id || eventId }).catch(() => null);
       return normalizeEspnLiveScore({ leaguePath, event, summary });
     }
-    if (!eventId) return null;
   }
   if (!eventId) {
     if (!sawScoreboard && lastScoreboardError) throw lastScoreboardError;
