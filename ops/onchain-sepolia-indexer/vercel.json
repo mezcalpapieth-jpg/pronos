@@ -1,0 +1,6 @@
+{
+  "buildCommand": "npm run build",
+  "functions": { "api/tick.js": { "maxDuration": 300 } },
+  "regions": ["iad1"],
+  "crons": [{ "path": "/api/tick", "schedule": "* * * * *" }]
+}

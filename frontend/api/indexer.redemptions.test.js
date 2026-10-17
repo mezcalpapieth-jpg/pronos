@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { ethers } from 'ethers';
 
-const source = await readFile(new URL('./indexer.js', import.meta.url), 'utf8');
+const source = await readFile(new URL('./_lib/protocol-event-indexer.js', import.meta.url), 'utf8');
 const extract = (start, end) => source.slice(source.indexOf(start), source.indexOf(end));
 const factorySource = extract('async function indexFactoryRange(', 'async function indexV1Pool(');
 const poolSource = extract('async function indexV1Pool(', 'async function updateSeedLiquidity(');
