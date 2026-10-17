@@ -1,0 +1,612 @@
+{
+  "schemaVersion": 1,
+  "verifiedAt": "2026-10-17T12:08:41.083Z",
+  "scope": {
+    "branch": "onchain-sepolia",
+    "environment": "preview",
+    "chainId": 421614,
+    "productionChanged": false,
+    "pointbreakChanged": false
+  },
+  "applicationCommits": [
+    "eafdeb0965c1e523a5fd27d47ae710a2ff939e7f",
+    "e10f66f50ab8b27990cbdc27d9c13b9bc31718a3"
+  ],
+  "verifiedApplicationDeployment": {
+    "id": "dpl_26kQSDhyCeRo5k6CxYLDc75CNjB2",
+    "url": "https://pronos-37azy28u1-mezcalpapieth-jpgs-projects.vercel.app",
+    "state": "READY",
+    "target": "preview",
+    "gitBranch": "onchain-sepolia",
+    "gitSha": "e10f66f50ab8b27990cbdc27d9c13b9bc31718a3",
+    "branchAlias": "https://pronos-git-onchain-sepolia-mezcalpapieth-jpgs-projects.vercel.app"
+  },
+  "activation": {
+    "configuredAt": "2026-10-17T11:56:35.849Z",
+    "target": "preview",
+    "branch": "onchain-sepolia",
+    "flags": {
+      "TURNKEY_POLICIES_ENABLED": true,
+      "ONCHAIN_PREVIEW_APPROVALS_ENABLED": true,
+      "GAS_SPONSORSHIP_ENABLED": false
+    },
+    "indexerKeyRotated": true,
+    "sessionSecretRotated": true,
+    "outsideBranchUnchanged": 100,
+    "pointbreakRecordsUnchanged": 9
+  },
+  "readinessAfterRehearsal": {
+    "ok": true,
+    "env": {
+      "rpc": true,
+      "chainId": 421614,
+      "factoryV1": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+      "factoryV2": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+      "collateral": "0x6ed6c00c2b4cf9f5989866f4c5862d4cded67ef9",
+      "shareTokenV1": "0xc26f94e86da1193dade6d798acdf8c0bc4d68946",
+      "shareTokenV2": "0x2748e2d6e64aa6aabb368c4e9d844c87fe615caf",
+      "deployerSuborgId": true,
+      "deployerAddress": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "resolverSuborgId": true,
+      "resolverAddress": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "policiesEnabled": true,
+      "databaseUrl": true,
+      "databaseReadUrl": true,
+      "indexerKey": true,
+      "cronSecret": true
+    },
+    "ownerControls": {
+      "adminSafe": "0x0000000000000000000000000000000000000000",
+      "resolverSafe": "0x0000000000000000000000000000000000000000",
+      "ownerSuborgId": true,
+      "ownerAddress": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "safeConfigured": false,
+      "resolverSafeConfigured": false,
+      "ownerSignerConfigured": true,
+      "configured": true
+    },
+    "deployment": {
+      "profile": "sepolia",
+      "networkName": "Arbitrum Sepolia",
+      "testnet": true,
+      "expectedChainId": 421614,
+      "expectedMainnetChainId": 42161,
+      "clientChainId": 421614,
+      "indexerChainId": 421614,
+      "protocolChainId": 421614,
+      "indexerRpc": true,
+      "indexerFactoryV1": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+      "indexerFactoryV2": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+      "clientFactoryV1": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+      "clientFactoryV2": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+      "clientCollateral": "0x6ed6c00c2b4cf9f5989866f4c5862d4cded67ef9",
+      "clientShareTokenV1": "0xc26f94e86da1193dade6d798acdf8c0bc4d68946",
+      "clientShareTokenV2": "0x2748e2d6e64aa6aabb368c4e9d844c87fe615caf"
+    },
+    "turnkey": {
+      "policiesEnabled": true,
+      "organizationId": true,
+      "apiPublicKey": true,
+      "apiPrivateKey": true,
+      "apiBaseUrl": "https://api.turnkey.com",
+      "clientOrganizationId": true,
+      "serverConfigured": true,
+      "clientConfigured": true
+    },
+    "juno": {
+      "apiKey": false,
+      "apiSecret": false,
+      "bearerToken": false,
+      "apiBaseUrl": null,
+      "webhookSecret": false,
+      "cardCheckoutEnabled": false,
+      "applePayEnabled": false,
+      "withdrawalsEnabled": false,
+      "configured": false
+    },
+    "cre": {
+      "webhookSecret": false,
+      "minConfidenceBps": 9000,
+      "maxAgeMs": 21600000
+    },
+    "gas": {
+      "sponsorshipEnabled": false
+    },
+    "policy": {
+      "configuredPoolCount": 0,
+      "indexedPoolCount": 2,
+      "missingPools": [
+        "0x1aca9bc8ce8b8f2eef41fa4f4b39ee8a7bb0d6e7",
+        "0x1de8137b670fe25c79ac199fb4e0e6182ac39aa9"
+      ],
+      "coverageError": null,
+      "autoIncludesIndexedPools": true
+    },
+    "launch": {
+      "ready": true,
+      "blockerCount": 0,
+      "reviewCount": 2,
+      "blockers": [],
+      "reviews": [
+        {
+          "id": "cre_webhook_dry_run",
+          "title": "CRE sigue en modo revisión",
+          "detail": "Sin secreto, Chainlink CRE no puede enviar resoluciones al webhook.",
+          "fix": "Set CRE_RESOLUTION_WEBHOOK_SECRET before enabling CRE workflows"
+        },
+        {
+          "id": "gas_sponsorship_unset",
+          "title": "Gas sponsorship no configurado",
+          "detail": "Turnkey quita popups, pero no cubre gas de Arbitrum Sepolia para el usuario.",
+          "fix": "Set GAS_SPONSORSHIP_ENABLED=true only after relayer/paymaster/funded-wallet support exists"
+        }
+      ],
+      "nextSteps": [
+        "Set CRE_RESOLUTION_WEBHOOK_SECRET before enabling CRE workflows",
+        "Set GAS_SPONSORSHIP_ENABLED=true only after relayer/paymaster/funded-wallet support exists"
+      ]
+    },
+    "v1": {
+      "address": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+      "reachable": true,
+      "owner": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "marketCreator": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "resolver": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "collateral": "0x6ed6C00C2B4cF9f5989866f4c5862D4cdeD67ef9",
+      "deployerIsOwner": true,
+      "deployerIsMarketCreator": true,
+      "deployerCanCreate": true,
+      "resolverMatches": true,
+      "collateralMatches": true,
+      "error": null
+    },
+    "v2": {
+      "address": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+      "reachable": true,
+      "owner": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "marketCreator": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "resolver": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "collateral": "0x6ed6C00C2B4cF9f5989866f4c5862D4cdeD67ef9",
+      "deployerIsOwner": true,
+      "deployerIsMarketCreator": true,
+      "deployerCanCreate": true,
+      "resolverMatches": true,
+      "collateralMatches": true,
+      "error": null
+    },
+    "deployer": {
+      "address": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "ethBalanceWei": "921453963816000",
+      "ethBalanceEther": 0.000921453963816,
+      "collateralSymbol": "MXNP",
+      "collateralDecimals": 6,
+      "collateralBalanceRaw": "49999500000000",
+      "collateralBalanceUnits": 49999500
+    },
+    "warnings": []
+  },
+  "servedAssets": {
+    "pageStatus": 200,
+    "entry": "/points/assets/index-BRRLbzRf.js",
+    "adminChunk": "PointsAdmin-UWqtmNir.js",
+    "adminChunkSha256": "4a45fc4fd94a21e859e83b9f4ac51d90ab53011de7a215994da2094f02c54c61",
+    "previewSelectorPresent": true
+  },
+  "rehearsal": {
+    "before": {
+      "checkedAt": "2026-10-17T12:01:28.340Z",
+      "chainId": 421614,
+      "block": 320068632,
+      "ops": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "token": "0x6ed6C00C2B4cF9f5989866f4c5862D4cdeD67ef9",
+      "v1": "0x69440742A168635D9fA7cC0cfb0935AFFFe79Ad3",
+      "v2": "0xFcac9cfCF22Df809ba365C85dD767C90BB260FD6",
+      "marketCountV1": 0,
+      "marketCountV2": 0,
+      "opsMxnp": "50000000.0",
+      "supplyMxnp": "50000000.0",
+      "opsEth": "0.000997846123816",
+      "v1AllowanceRaw": "0"
+    },
+    "approval": {
+      "requestedAt": "2026-10-17T12:05:50.666Z",
+      "previewUrl": "https://pronos-37azy28u1-mezcalpapieth-jpgs-projects.vercel.app",
+      "pendingId": 37694,
+      "status": 200,
+      "response": {
+        "ok": true,
+        "action": "approve",
+        "id": 37694,
+        "marketId": 360636
+      }
+    },
+    "chain": {
+      "verifiedAt": "2026-10-17T12:06:06.175Z",
+      "chainId": 421614,
+      "block": 320069716,
+      "pendingId": 37694,
+      "pointsMarketId": 360636,
+      "contractMarketId": "0",
+      "pool": "0x1aca9bC8ce8b8f2Eef41fa4F4b39Ee8a7Bb0d6E7",
+      "collateral": "0x6ed6C00C2B4cF9f5989866f4c5862D4cdeD67ef9",
+      "shareToken": "0xc26F94E86da1193DADE6d798AcDF8C0BC4d68946",
+      "factory": "0x69440742A168635D9fA7cC0cfb0935AFFFe79Ad3",
+      "question": "PRUEBA TÉCNICA: ¿queda verificada la creación de un mercado en Arbitrum Sepolia?",
+      "seedMxnp": "500",
+      "prices": [
+        0.5,
+        0.5
+      ],
+      "reservesMxnp": [
+        "500",
+        "500"
+      ],
+      "collateralApproval": {
+        "hash": "0xeca00606aa8cf916e75483f8d3013b41460cbe03f29eb8d5a0ad4feaf2a03e6b",
+        "from": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+        "to": "0x6ed6C00C2B4cF9f5989866f4c5862D4cdeD67ef9",
+        "blockNumber": 320069628,
+        "status": 1,
+        "gasUsed": "46679",
+        "effectiveGasPriceWei": "20000000",
+        "feeEth": "0.00000093358"
+      },
+      "marketCreation": {
+        "hash": "0x0f6b7c53d106bc8002303f8152ecd1ea6a4dc2bd3cb05a3d671da26fedfb903f",
+        "from": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+        "to": "0x69440742A168635D9fA7cC0cfb0935AFFFe79Ad3",
+        "blockNumber": 320069647,
+        "status": 1,
+        "gasUsed": "3772929",
+        "effectiveGasPriceWei": "20000000",
+        "feeEth": "0.00007545858"
+      },
+      "factoryCounts": {
+        "v1": 1,
+        "v2": 0
+      },
+      "balances": {
+        "opsMxnp": "49999500.0",
+        "poolMxnp": "500.0",
+        "totalSupplyMxnp": "50000000.0",
+        "opsEth": "0.000921453963816"
+      },
+      "v1AllowanceIsMax": true
+    },
+    "indexer": {
+      "checkedAt": "2026-10-17T12:07:03.952Z",
+      "scope": "Preview / onchain-sepolia",
+      "manual": true,
+      "fromBlock": 320069646,
+      "toBlock": 320069663,
+      "status": 200,
+      "response": {
+        "status": "ok",
+        "block": 320069825,
+        "factories": [
+          {
+            "version": "v1",
+            "address": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+            "status": "ok",
+            "fromBlock": 320069646,
+            "toBlock": 320069663,
+            "processed": {
+              "markets": 1,
+              "liquidity": 1,
+              "trades": 0,
+              "resolutions": 0,
+              "redemptions": 0,
+              "lifecycle": 0
+            }
+          },
+          {
+            "version": "v2",
+            "address": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+            "status": "ok",
+            "fromBlock": 320069646,
+            "toBlock": 320069663,
+            "processed": {
+              "markets": 0,
+              "liquidity": 0,
+              "trades": 0,
+              "resolutions": 0,
+              "redemptions": 0,
+              "lifecycle": 0
+            }
+          }
+        ],
+        "processed": {
+          "markets": 1,
+          "liquidity": 1,
+          "trades": 0,
+          "resolutions": 0,
+          "redemptions": 0,
+          "lifecycle": 0
+        },
+        "crypto5Min": {
+          "processed": false,
+          "reason": "not_production"
+        },
+        "tokenMcapSnapshots": {
+          "status": "skipped",
+          "reason": "not_scheduled"
+        },
+        "pointsAutoResolve": {
+          "status": "skipped",
+          "reason": "not_scheduled"
+        },
+        "protocolAutoResolve": {
+          "status": "skipped",
+          "reason": "not_scheduled"
+        }
+      }
+    },
+    "database": {
+      "verifiedAt": "2026-10-17T12:08:24.973Z",
+      "previewBranchId": "br-sweet-dream-amb6hlfe",
+      "rows": [
+        {
+          "pending_id": 37694,
+          "pending_status": "approved",
+          "points_market_id": 360636,
+          "mode": "onchain",
+          "chain_id": 421614,
+          "chain_address": "0x1aca9bc8ce8b8f2eef41fa4f4b39ee8a7bb0d6e7",
+          "chain_market_id": "0",
+          "seed_liquidity": "500.000000",
+          "is_test_market": true,
+          "featured": false,
+          "tournament_featured": false,
+          "resolver_type": null,
+          "protocol_market_id": 3,
+          "factory_address": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+          "pool_address": "0x1aca9bc8ce8b8f2eef41fa4f4b39ee8a7bb0d6e7",
+          "contract_market_id": 0,
+          "protocol_status": "active",
+          "protocol_seed_liquidity": "500.000000",
+          "indexed_through_block": "320069663"
+        }
+      ],
+      "productionMatchingRehearsalRows": 0
+    },
+    "publicMarket": {
+      "checkedAt": "2026-10-17T12:07:05.337Z",
+      "status": 200,
+      "market": {
+        "id": 3,
+        "marketId": 0,
+        "poolAddress": "0x1aca9bc8ce8b8f2eef41fa4f4b39ee8a7bb0d6e7",
+        "factoryAddress": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+        "chainId": 421614,
+        "title": "PRUEBA TÉCNICA: ¿queda verificada la creación de un mercado en Arbitrum Sepolia?",
+        "title_es": "PRUEBA TÉCNICA: ¿queda verificada la creación de un mercado en Arbitrum Sepolia?",
+        "title_en": "PRUEBA TÉCNICA: ¿queda verificada la creación de un mercado en Arbitrum Sepolia?",
+        "outcomes_es": [
+          "Sí",
+          "No"
+        ],
+        "outcomes_en": [
+          "Yes",
+          "No"
+        ],
+        "options_es": [
+          {
+            "label": "Sí"
+          },
+          {
+            "label": "No"
+          }
+        ],
+        "options_en": [
+          {
+            "label": "Yes"
+          },
+          {
+            "label": "No"
+          }
+        ],
+        "question": "PRUEBA TÉCNICA: ¿queda verificada la creación de un mercado en Arbitrum Sepolia?",
+        "category": "general",
+        "icon": null,
+        "outcomes": [
+          "Sí",
+          "No"
+        ],
+        "outcomeCount": 2,
+        "protocolVersion": "v1",
+        "startTime": null,
+        "endTime": "2026-10-18T12:00:54.000Z",
+        "live": false,
+        "featured": false,
+        "trending": false,
+        "status": "active",
+        "previousStatus": null,
+        "lifecycleNote": null,
+        "lifecycleUpdatedAt": null,
+        "lifecycleUpdatedBy": null,
+        "canceledAt": null,
+        "disputeOpenedAt": null,
+        "outcome": 0,
+        "seedLiquidity": 500,
+        "prices": [
+          0.5,
+          0.5
+        ],
+        "liquidity": 500,
+        "volume24h": 0,
+        "snapshotAt": "2026-10-17T12:06:34.493Z",
+        "resolutionSource": null,
+        "resolverType": null,
+        "resolverSource": null,
+        "liveScoreConfig": null,
+        "txHash": "0x0f6b7c53d106bc8002303f8152ecd1ea6a4dc2bd3cb05a3d671da26fedfb903f",
+        "createdAt": "2026-10-17T12:06:34.022Z",
+        "resolvedAt": null,
+        "finalScore": null,
+        "source": "codex_preview",
+        "sourceEventId": "onchain-sepolia-rehearsal-2026-10-17-e10f66f",
+        "sport": null,
+        "league": null,
+        "categoryTags": [
+          "general"
+        ],
+        "geoTags": [],
+        "topicTags": [
+          "general"
+        ],
+        "outcomeImages": null,
+        "outcomeCountryLabels": null,
+        "resolutionCandidate": null,
+        "seriesMeta": null,
+        "crypto5min": false,
+        "mode": "onchain"
+      }
+    },
+    "protocolQuotes": [
+      {
+        "path": "quote-buy",
+        "status": 200,
+        "response": {
+          "collateral": 1,
+          "fee": 0.025,
+          "feePct": 2.5,
+          "sharesOut": 1.948102,
+          "avgPrice": 0.5004871408170619,
+          "payout": 1.948102,
+          "profit": 0.948102,
+          "priceBefore": 0.5,
+          "priceAfter": null,
+          "currentPrice": 0.5,
+          "postTradePrice": null,
+          "priceImpactPts": null,
+          "pricesBefore": [
+            0.5,
+            0.5
+          ],
+          "pricesAfter": null
+        }
+      },
+      {
+        "path": "quote-sell",
+        "status": 200,
+        "response": {
+          "shares": 1,
+          "gross": 0.487257,
+          "fee": 0,
+          "feePct": 0,
+          "collateralOut": 0.487257,
+          "priceBefore": 0.5,
+          "priceAfter": null,
+          "currentPrice": 0.5,
+          "postTradePrice": null,
+          "priceImpactPts": null,
+          "pricesBefore": [
+            0.5,
+            0.5
+          ],
+          "pricesAfter": null
+        }
+      }
+    ],
+    "pointsExecutionGuards": [
+      {
+        "path": "quote-buy",
+        "status": 409,
+        "error": "onchain_market_requires_protocol"
+      },
+      {
+        "path": "quote-sell",
+        "status": 409,
+        "error": "onchain_market_requires_protocol"
+      },
+      {
+        "path": "buy",
+        "status": 409,
+        "error": "onchain_market_requires_protocol"
+      },
+      {
+        "path": "sell",
+        "status": 409,
+        "error": "onchain_market_requires_protocol"
+      },
+      {
+        "path": "redeem",
+        "status": 409,
+        "error": "onchain_market_requires_protocol"
+      },
+      {
+        "path": "limit-orders",
+        "status": 409,
+        "error": "onchain_market_requires_protocol"
+      }
+    ],
+    "bulkApprovalGuard": {
+      "status": 400,
+      "error": "bulk_approve_onchain_unsupported",
+      "detail": "On-chain approvals must be done one at a time so each market gets its own chain_address.",
+      "code": null
+    }
+  },
+  "unchangedScope": {
+    "verifiedAt": "2026-10-17T12:07:31.347Z",
+    "pointbreakRefs": {
+      "pointbreak": "47aa9e19115d64bc36a2684e5eeb685caef117ba",
+      "origin/pointbreak": "47aa9e19115d64bc36a2684e5eeb685caef117ba",
+      "remote": "47aa9e19115d64bc36a2684e5eeb685caef117ba"
+    },
+    "outsideBranchEnvironmentRecordsUnchanged": 100,
+    "pointbreakEnvironmentRecordsUnchanged": 9,
+    "production": {
+      "deploymentId": "dpl_C4bVYurgBRwVYqZAJJChri7uQpzz",
+      "url": "pronos-fw1lqtni2-mezcalpapieth-jpgs-projects.vercel.app",
+      "state": "READY",
+      "target": "production",
+      "sha": "47aa9e19115d64bc36a2684e5eeb685caef117ba",
+      "aliases": [
+        "pronos-chi.vercel.app",
+        "pronos-mezcalpapieth-jpgs-projects.vercel.app",
+        "pronos.io",
+        "www.pronos.io"
+      ]
+    }
+  },
+  "automatedValidation": {
+    "solidity": {
+      "passed": 122,
+      "command": "forge test --offline"
+    },
+    "focusedJavaScript": {
+      "passed": 86
+    },
+    "executionBoundaryAndRelatedJavaScript": {
+      "passed": 51
+    },
+    "frontendBuilds": [
+      "points",
+      "mvp"
+    ],
+    "diffCheckPassed": true
+  },
+  "limits": {
+    "configurationReadinessIsNotUserTradingReadiness": true,
+    "previewIndexerRun": "manual narrow block-range rehearsal; no automatic preview cron verified",
+    "userWalletAggregate": {
+      "users": 599,
+      "validDistinctMappedWallets": 599,
+      "currentDelegationPolicyRows": 0
+    },
+    "userTradesSigned": 0,
+    "userAllocations": 0,
+    "userResetPerformed": false,
+    "gasSponsorshipEnabled": false,
+    "creWebhookConfigured": false,
+    "operationsCredential": "Existing parent-organization root credential; dedicated operations wallet does not isolate API authority",
+    "explorerSourceVerificationSubmitted": false
+  },
+  "nextRoadmapTasks": [
+    "Points frontend market/trading/portfolio/history adapter with distinct Points, protocol DB and contract IDs",
+    "User-authorized delegation and supported wallet gas path",
+    "Separately scoped tournament reset/funding dry run before allocations",
+    "Consenting test-user buy, sell, resolve, redeem and indexed portfolio/scoring rehearsal"
+  ]
+}

@@ -2,7 +2,7 @@
 
 Branch: `onchain-sepolia`
 
-Status: design + first backend/token/readiness/reset dry-run groundwork started. This branch must stay hidden behind flags until the next tournament reset.
+Status: contracts and preview runtime shipped; the single-market approval, indexing, and quote rehearsal is verified. Points execution guards are shipped. The frontend adapter, user delegation/funding, and tournament-cycle work remain. This branch must stay hidden behind flags until the next tournament reset.
 
 ## Goal
 
@@ -445,7 +445,9 @@ Days 24-25: launch prep
 5. Done: wire admin pending approval to a branch-only on-chain default flag.
 6. Done: configure the isolated preview database, Arbitrum Sepolia runtime, and separate operational secrets.
 7. Done (2026-10-17): deploy MXNP and fresh V1/V2 factories; verify and fund the dedicated Turnkey operations wallet; replace only `onchain-sepolia` preview aliases. See the deployment checkpoint below.
-8. In progress: the reviewed preview is shipped and its contract/environment readiness checks pass. Preview-only signing/approval flags are configured for the single-market rehearsal. Finish that rehearsal and connect the Points trading adapter to the on-chain path. User delegation and the tournament reset/funding dry run remain separate checks.
+8. Done (2026-10-17): ship the preview, verify its exact source SHA and readiness, and approve/index one 500-MXNP test market through the deployed admin API. Verify live protocol quotes and Points execution guards. See the rehearsal checkpoint below.
+9. Next: connect the Points frontend adapter to protocol execution, preserving separate Points/protocol database IDs and ledger reads. Include market cards/detail, buy/sell/redeem, portfolio, and history; do not activate a partially routed tournament.
+10. Remaining: obtain user-authorized delegation, establish user wallet gas support, and run the reset/funding dry run in its own authorized scope before any allocations. Then rehearse buy, sell, resolve, and redeem with a consenting test user, and verify indexed portfolio/score updates.
 
 ### Preview Admin Approval Setting
 
@@ -581,8 +583,27 @@ The [public top-up record](./onchain-sepolia-mxnp-topup-2026-10-17.json) preserv
 
 Committed and pushed the deployment/runtime work as `eafdeb0965c1e523a5fd27d47ae710a2ff939e7f`. Its Vercel Preview deployment is READY. Authenticated `/api/points/admin/onchain-status` on the same source commit confirmed chain `421614`, matching V1/V2 factory and share-token aliases, the new MXNP collateral, owner/creator/resolver permissions, and the treasury's 50 million MXNP / `0.000997846123816 ETH`. The only configuration blocker was the deliberately disabled signing flag; CRE automation and user gas sponsorship remain review items. The served Points admin lazy bundle contains the preview approval selector. Unauthenticated admin requests return 401.
 
-Enabled `TURNKEY_POLICIES_ENABLED` and `ONCHAIN_PREVIEW_APPROVALS_ENABLED` only for Preview / `onchain-sepolia`, for the one-market rehearsal. Gas sponsorship stays false. Rotated only this preview's session secret and manual indexer key for authenticated verification; temporary verification credentials are kept outside the repository and removed after the run. All 100 environment records outside this branch, including nine Pointbreak-specific records, were compared and remain unchanged. These updated settings require the next preview deployment before use.
+Enabled `TURNKEY_POLICIES_ENABLED` and `ONCHAIN_PREVIEW_APPROVALS_ENABLED` only for Preview / `onchain-sepolia`, for the one-market rehearsal. Gas sponsorship stays false. Rotated only this preview's session secret and manual indexer key for authenticated verification; temporary verification credentials are kept outside the repository and removed after the run. All 100 environment records outside this branch, including nine Pointbreak-specific records, were compared and remain unchanged. The subsequent preview below uses these updated settings.
 
 Before integrating trading, added an explicit execution-mode boundary: Points buy/sell, quotes, redeem, limit-order creation/execution, and parlay quotes reject on-chain markets with HTTP 409 before Points balances, positions, order matching or settlement are accessed. Legacy null-mode and explicit Points markets retain their behavior. This is a prerequisite for the adapter, not an implementation of wallet trading in the Points UI.
 
 The isolated preview database's aggregate audit reports 599 distinct mapped user wallets and zero current delegation-policy rows. The runtime's `launch.ready` field checks configuration; it must not be presented as proof that users can trade. User-authorized policies, wallet gas support, the frontend adapter, and buy/sell/resolve/redeem rehearsal remain outstanding. No user allocation or reset was performed. A broader user-level export was rejected by automatic approval review; this checkpoint uses aggregate counts only.
+
+### Deployed Preview Rehearsal — 2026-10-17
+
+Pushed application commit `e10f66f50ab8b27990cbdc27d9c13b9bc31718a3` to `origin/onchain-sepolia`. Vercel deployment `dpl_26kQSDhyCeRo5k6CxYLDc75CNjB2` is READY at [the verified preview](https://pronos-37azy28u1-mezcalpapieth-jpgs-projects.vercel.app). Its Git source matches that exact commit and branch. The branch preview alias is [onchain-sepolia](https://pronos-git-onchain-sepolia-mezcalpapieth-jpgs-projects.vercel.app). Later documentation-only deployments can replace that branch alias; the machine-readable [verification record](./onchain-sepolia-preview-verification-2026-10-17.json) preserves the exact application deployment tested here.
+
+Authenticated readiness returned `ok: true`, no warnings, `launch.ready: true`, and zero configuration blockers both before and after approval. The two explicit review items remain CRE webhook configuration and user gas sponsorship. The actual served admin lazy bundle contains the preview destination selector; the pending API reports `previewEnabled: true`, `defaultMode: onchain`, and chain `421614`.
+
+The single technical test passed through the deployed pending-market admin route, using the configured Turnkey operations signer:
+
+- Pending row `37694` became Points market `360636`, with `mode=onchain`, chain `421614`, and contract market ID `0`. It is explicitly `is_test_market=true`, unfeatured, excluded from tournament featuring, and has no automatic resolver. The question identifies it as a technical test. A read-only production query found zero rows with its unique source event ID.
+- First-use [ERC20 approval](https://sepolia.arbiscan.io/tx/0xeca00606aa8cf916e75483f8d3013b41460cbe03f29eb8d5a0ad4feaf2a03e6b) and [factory creation](https://sepolia.arbiscan.io/tx/0x0f6b7c53d106bc8002303f8152ecd1ea6a4dc2bd3cb05a3d671da26fedfb903f) both have successful receipts from the operations wallet. Creation used 3,772,929 gas and cost `0.00007545858 ETH`; collateral approval cost `0.00000093358 ETH`.
+- Pool `0x1aca9bC8ce8b8f2Eef41fa4F4b39Ee8a7Bb0d6E7` holds exactly **500 MXNP**, with uniform 50/50 opening prices and 500/500 share reserves. Its collateral, share token, and factory getters match the deployed stack. V1 has exactly one market; V2 has zero. Treasury balance is **49,999,500 MXNP / 0.000921453963816 Sepolia ETH**; total supply remains 50,000,000 MXNP.
+- A manual preview indexer run over blocks `320069646`–`320069663` ingested one market and one liquidity event. Protocol database market ID is **`3`**, distinct from Points ID `360636` and contract ID `0`. Both factory checkpoints reached block `320069663`. All resolution/generator jobs were skipped. This proves manual preview indexing; Vercel production cron does not schedule this preview.
+- The public protocol market API returns the pool, its 500-MXNP seed and `[0.5, 0.5]` prices. A live 1-MXNP buy quote returns `1.948102` shares after a `0.025 MXNP` fee; a live 1-share sell quote returns `0.487257 MXNP`. These are read-only quotes; no user trade was signed.
+- Bulk on-chain approval returned HTTP 400. Points quote-buy, quote-sell, buy, sell, redeem, and limit-order creation each returned HTTP 409 with `onchain_market_requires_protocol` for this market. The execution boundary also covers parlay quotes and limit-order execution through focused tests.
+
+Validation passed: all 122 Solidity tests, 86 focused deployment/runtime/admin JavaScript tests, 51 execution-boundary and related trading tests, both Points and MVP Vite builds, and `git diff --check`. The proof record distinguishes automated checks from the live API/receipt evidence. No user reset, user token allocation, policy consent, or gas-sponsorship activation occurred.
+
+Pointbreak local, tracking, and remote refs remain `47aa9e19115d64bc36a2684e5eeb685caef117ba`. All 100 Vercel environment records outside this branch, including nine Pointbreak records, remain unchanged. Production deployment `dpl_C4bVYurgBRwVYqZAJJChri7uQpzz` retains that SHA and its four aliases, including `pronos.io` and `www.pronos.io`.
