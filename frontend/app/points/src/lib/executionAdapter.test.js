@@ -7,10 +7,11 @@ const chainMarket = { id: 360636, mode: 'onchain', chainId: 421614, chainMarketI
   executionReady: true, prices: [0.6, 0.4], outcomes: ['Sí', 'No'], status: 'active' };
 const pointsMarket = { id: 3, mode: 'points', outcomes: ['Sí', 'No'], prices: [0.5, 0.5] };
 
-function fixture({ enabled = true, mapping = [chainMarket, pointsMarket], requestError = null } = {}) {
+function fixture({ enabled = true, mapping = [chainMarket, pointsMarket], requestError = null, beforeTrade } = {}) {
   const requests = [];
   let portfolio = { positions: [{ mode: 'onchain', marketId: chainMarket.id }], history: [], summary: {} };
   const client = createExecutionAdapter({
+    beforeTrade,
     async get(url) {
       requests.push({ method: 'GET', url });
       const parsed = new URL(url, 'https://pronos.test');
@@ -153,4 +154,17 @@ test('config failures stop loading; only an absent legacy/demo route disables th
   assert.equal((await absent.client.config()).enabled, false);
   assert.equal((await absent.client.config()).enabled, false);
   assert.equal(absent.requests.length, 1);
+});
+
+
+test('only buy/sell/redeem wait for consent, and cancellation cannot submit a transaction', async () => {
+  const seen = [];
+  const { client, requests } = fixture({ beforeTrade: async market => { seen.push(market.protocolMarketId); throw Object.assign(Error('cancelled'), { code: 'delegation_cancelled' }); } });
+  await client.trade('quote-buy', { marketId: chainMarket.id, collateral: 5 });
+  assert.equal(seen.length, 0);
+  for (const action of ['buy', 'sell', 'redeem']) await assert.rejects(client.trade(action, { marketId: chainMarket.id, collateral: 5, shares: 1, amount: 1 }), { code: 'delegation_cancelled' });
+  assert.deepEqual(seen, [3, 3, 3]);
+  assert.deepEqual(requests.filter(r => r.method === 'POST').map(r => r.url), ['/api/protocol/quote-buy']);
+  await client.trade('buy', { marketId: pointsMarket.id, collateral: 5 });
+  assert.equal(seen.length, 3);
 });

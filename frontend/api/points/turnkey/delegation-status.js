@@ -1,96 +1,36 @@
-/**
- * GET /api/points/turnkey/delegation-status
- *
- * Lightweight read used by the client before rendering the trade
- * drawer for an on-chain market. Tells the UI whether the user has
- * an active delegation (happy path, no consent prompt needed) or
- * needs to authorize first.
- */
-
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../../_lib/cors.js';
 import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { requireSession } from '../../_lib/session.js';
-import {
-  deriveDelegationPolicyState,
-  isDelegationEnabled,
-  DELEGATION_DAYS,
-  DELEGATION_DAILY_CAP_MXNB,
-} from '../../_lib/turnkey-delegation.js';
+import { loadTradingDelegation } from '../../_lib/trading-delegation-store.js';
+import { verifyTradingPolicy } from '../../_lib/trading-delegation.js';
 
-const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
-const schemaSql = neon(process.env.DATABASE_URL);
-
-async function readLatestProtocolPoolCreatedAt() {
-  try {
-    const rows = await sql`
-      SELECT created_at
-      FROM protocol_markets
-      WHERE pool_address IS NOT NULL
-      ORDER BY created_at DESC NULLS LAST
-      LIMIT 1
-    `;
-    return rows[0]?.created_at || null;
-  } catch (e) {
-    console.warn('[turnkey/delegation-status] protocol pool lookup failed', { message: e?.message });
-    return null;
-  }
-}
-
+const sql = neon(process.env.DATABASE_URL);
 export default async function handler(req, res) {
+  res.setHeader('Cache-Control', 'private, no-store');
   try {
-    const cors = applyCors(req, res, { methods: 'GET, OPTIONS', credentials: true });
-    if (cors) return cors;
+    if (applyCors(req, res, { methods: 'GET, OPTIONS', credentials: true })) return;
     if (req.method !== 'GET') return res.status(405).json({ error: 'method_not_allowed' });
-
     const session = requireSession(req, res);
     if (!session) return;
     if (!session.sub) return res.status(400).json({ error: 'suborg_required' });
-
-    await ensurePointsSchema(schemaSql);
-
-    const rows = await sql`
-      SELECT delegation_policy_id, delegation_expires_at,
-             delegation_daily_cap_mxnb, delegation_authorized_at
-      FROM points_users
-      WHERE turnkey_sub_org_id = ${session.sub}
-      LIMIT 1
-    `;
-    const row = rows[0] || {};
-    const latestPoolCreatedAt = await readLatestProtocolPoolCreatedAt();
-    const enabled = isDelegationEnabled();
-    const policyState = deriveDelegationPolicyState({
-      policyId: row.delegation_policy_id,
-      expiresAt: row.delegation_expires_at,
-      authorizedAt: row.delegation_authorized_at,
-      latestPoolCreatedAt,
-      delegationEnabled: enabled,
-    });
-
+    await ensurePointsSchema(sql);
+    const { row, config, plan, snapshot, backendUserId, policyIds } = await loadTradingDelegation(sql, session);
+    const installed = snapshot.policies.find(p => p.policyId === row.delegation_policy_id);
+    const verified = backendUserId && verifyTradingPolicy(installed, config);
+    const active = Boolean(verified && policyIds.length === 1);
     return res.status(200).json({
-      active: policyState.active,
-      needsRefresh: policyState.needsRefresh,
-      simulated: policyState.simulated,
-      needsRealPolicy: policyState.needsRealPolicy,
-      // When delegation is disabled at the env level the active
-      // column may still be true (a simulated policy exists) but
-      // signing won't actually work. Flag this explicitly so the
-      // UI can show "pending contract deployment" rather than a
-      // misleading green tick.
-      enabled,
-      policyId: row.delegation_policy_id || null,
-      expiresAt: row.delegation_expires_at || null,
-      dailyCapMxnb: row.delegation_daily_cap_mxnb
-        ? Number(row.delegation_daily_cap_mxnb)
-        : DELEGATION_DAILY_CAP_MXNB,
+      active, enabled: true, persistent: active, simulated: false,
+      needsRefresh: !active || verified.scopeHash !== plan.scopeHash,
+      policyId: row.delegation_policy_id || null, expiresAt: row.delegation_expires_at || null,
+      dailyCapMxnb: null, dailyCapEnforced: false,
       authorizedAt: row.delegation_authorized_at || null,
-      defaults: {
-        days: DELEGATION_DAYS,
-        dailyCapMxnb: DELEGATION_DAILY_CAP_MXNB,
-      },
+      coveredPools: active ? verified.pools.map(p => p.address) : [],
+      poolCount: config.pools.length,
     });
   } catch (e) {
-    console.error('[turnkey/delegation-status] error', { message: e?.message, code: e?.code });
-    return res.status(500).json({ error: 'status_failed' });
+    if (e.message === 'delegation_not_enabled') return res.status(200).json({ active: false, enabled: false, persistent: false });
+    console.error('[turnkey/delegation-status]', { message: e?.message, code: e?.code });
+    return res.status(e.status || 502).json({ error: e.status ? e.message : 'status_failed' });
   }
 }

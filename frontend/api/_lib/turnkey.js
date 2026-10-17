@@ -298,6 +298,17 @@ export async function deleteDelegationPolicyOnSuborg({ suborgId, policyId }) {
   return { ok: true };
 }
 
+// Parent credentials may read a suborg. Only the owner's browser credential
+// creates/deletes its signing policies; the backend never manages its own grant.
+export async function readSuborgDelegation(suborgId) {
+  const [users, policies, configs] = await Promise.all([
+    api().getUsers({ organizationId: suborgId }),
+    api().getPolicies({ organizationId: suborgId }),
+    api().getOrganizationConfigs({ organizationId: suborgId }),
+  ]);
+  return { users: users.users, policies: policies.policies, quorum: configs.configs?.quorum };
+}
+
 /**
  * Fetch the verified email of the sub-org's root user.
  *

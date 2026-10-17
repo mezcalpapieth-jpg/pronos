@@ -14,6 +14,7 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { Turnkey, TurnkeyIndexedDbClient } from '@turnkey/sdk-browser';
+import { createDelegationClient } from './delegationClient.js';
 
 // ─── Turnkey browser SDK singleton ──────────────────────────────────────────
 // The browser client keeps its session + ephemeral keypair in IndexedDB
@@ -99,6 +100,7 @@ export async function verifyOtp({ otpId, suborgId, code, email }) {
     err.hint = data?.hint || null;
     throw err;
   }
+  await idb.loginWithSession(data.session);
   return data; // { ok, needsUsername, suborgId, walletAddress, username, session }
 }
 
@@ -175,8 +177,8 @@ export async function fetchDelegationStatus() {
   return data; // { active, simulated, enabled, expiresAt, dailyCapMxnb, defaults }
 }
 
-export async function authorizeDelegation() {
-  const { ok, data, status } = await postJson('/api/points/turnkey/authorize-delegation', {});
+async function delegationPost(path, body) {
+  const { ok, data, status } = await postJson(path, body);
   if (!ok) {
     const err = new Error(data?.error || `HTTP ${status}`);
     err.code = data?.error;
@@ -185,6 +187,21 @@ export async function authorizeDelegation() {
   }
   return data;
 }
+
+const delegationClient = createDelegationClient({
+  post: delegationPost,
+  ownerClient: async organizationId => {
+    const client = await getIdbClient();
+    const session = await client.getSession();
+    const publicKey = await client.getPublicKey();
+    if (!session || session.organizationId !== organizationId || session.token !== publicKey) {
+      throw Object.assign(new Error('delegation_owner_login_required'), { code: 'delegation_owner_login_required' });
+    }
+    return client;
+  },
+});
+export const authorizeDelegation = () => delegationClient.authorize();
+export const revokeDelegation = () => delegationClient.revoke();
 
 // ─── React context ──────────────────────────────────────────────────────────
 const AuthContext = createContext(null);

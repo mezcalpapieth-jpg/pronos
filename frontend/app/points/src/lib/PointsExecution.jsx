@@ -1,7 +1,8 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
-import { pointsExecution, publicErrorMessage } from './pointsApi.js';
+import { pointsExecution, publicErrorMessage, setTradingConsentHandler } from './pointsApi.js';
 import { onPointsRefresh } from './pointsLiveRefresh.js';
+import PointsDelegationModal from '../components/PointsDelegationModal.jsx';
 
 const ExecutionContext = createContext({ mode: 'points', enabled: false });
 export const usePointsExecution = () => useContext(ExecutionContext);
@@ -10,6 +11,25 @@ export function PointsExecutionProvider({ children }) {
   const { user, authenticated } = usePointsAuth();
   const [state, setState] = useState({ loading: true, enabled: false, mode: 'points', error: null });
   const [attempt, setAttempt] = useState(0);
+  const [consentOpen, setConsentOpen] = useState(false);
+  const pendingConsent = useRef(null);
+  useEffect(() => {
+    if (!authenticated) return undefined;
+    const remove = setTradingConsentHandler(() => {
+      if (pendingConsent.current) return pendingConsent.current.promise;
+      let resolve, reject;
+      const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
+      pendingConsent.current = { promise, resolve, reject };
+      setConsentOpen(true);
+      return promise;
+    });
+    return () => {
+      remove();
+      pendingConsent.current?.reject(Object.assign(new Error('delegation_cancelled'), { code: 'delegation_cancelled' }));
+      pendingConsent.current = null;
+      setConsentOpen(false);
+    };
+  }, [authenticated, user?.suborgId]);
   useEffect(() => {
     let canceled = false;
     pointsExecution.config().then(config => {
@@ -26,8 +46,14 @@ export function PointsExecutionProvider({ children }) {
     await pointsExecution.setMode(next);
     setState(prev => ({ ...prev, mode: next }));
   };
-  return <ExecutionContext.Provider value={{ ...state, setMode }}>
+  return <ExecutionContext.Provider value={{ ...state, setMode, openTradingAuthorization: () => setConsentOpen(true) }}>
     <React.Fragment key={`${state.mode}:${authenticated ? user?.username || '' : ''}`}>{children}</React.Fragment>
+    {authenticated && state.enabled && <PointsDelegationModal key={user?.suborgId} open={consentOpen} manage
+      onClose={() => {
+        pendingConsent.current?.reject(Object.assign(new Error('delegation_cancelled'), { code: 'delegation_cancelled' }));
+        pendingConsent.current = null; setConsentOpen(false);
+      }}
+      onAuthorized={() => { pendingConsent.current?.resolve(); pendingConsent.current = null; setConsentOpen(false); }} />}
   </ExecutionContext.Provider>;
 }
 

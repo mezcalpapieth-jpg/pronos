@@ -3,7 +3,7 @@ const modes = new Set(['points', 'onchain']);
 
 // Transport injection keeps routing/identity behavior testable without React or
 // a wallet. A failed protocol request must never fall back to the Points ledger.
-export function createExecutionAdapter({ get, post }) {
+export function createExecutionAdapter({ get, post, beforeTrade }) {
   let configPromise;
   let mode = 'points';
   const identities = new Map(); // public metadata only; no wallet/account data
@@ -112,6 +112,7 @@ export function createExecutionAdapter({ get, post }) {
       if (!(Number(body.amount) > 0)) fail('invalid_amount');
       delete body.outcomeIndex;
     }
+    if (target.mode === 'onchain' && ['buy', 'sell', 'redeem'].includes(action)) await beforeTrade?.(target);
     return post(`/api/${target.mode === 'onchain' ? 'protocol' : 'points'}/${action}`, body);
   }
   async function publicRead(action, ids, options, legacy) {

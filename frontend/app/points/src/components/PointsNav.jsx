@@ -605,6 +605,9 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
                 <Link to="/support" onClick={() => setDropdownOpen(false)}>
                   {lang === 'en' ? 'Support' : 'Soporte'}
                 </Link>
+                {execution.enabled && <button onClick={() => { setDropdownOpen(false); execution.openTradingAuthorization(); }}>
+                  {lang === 'en' ? 'Trading authorization' : 'Autorización de operaciones'}
+                </button>}
                 {execution.mode !== 'onchain' && <Link to="/earn" onClick={() => setDropdownOpen(false)}>
                   {t('points.nav.earn')}
                 </Link>}

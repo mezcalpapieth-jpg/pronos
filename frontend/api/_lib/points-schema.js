@@ -284,12 +284,9 @@ const POINTS_SCHEMA_MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS idx_points_users_wallet ON points_users(wallet_address)`,
   `CREATE INDEX IF NOT EXISTS idx_points_users_created_at
     ON points_users(created_at DESC)`,
-  // Turnkey delegated-signing policy (M2). When non-null, the Pronos
-  // backend API key can sign on-chain trades on this user's behalf
-  // within the policy's scope — up to `delegation_daily_cap_mxnb`
-  // per 24h against whitelisted contracts, valid until
-  // `delegation_expires_at`. Withdrawals + policy changes still
-  // require fresh user signature.
+  // Turnkey policy references. A verified persistent grant has NULL expiry;
+  // policy contents and revocation are checked against Turnkey, not DB flags.
+  // daily_cap is legacy metadata and is not an enforced spending limit.
   `ALTER TABLE points_users ADD COLUMN IF NOT EXISTS delegation_policy_id TEXT`,
   `ALTER TABLE points_users ADD COLUMN IF NOT EXISTS delegation_expires_at TIMESTAMPTZ`,
   `ALTER TABLE points_users ADD COLUMN IF NOT EXISTS delegation_daily_cap_mxnb NUMERIC(20,6)`,

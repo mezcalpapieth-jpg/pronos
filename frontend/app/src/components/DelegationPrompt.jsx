@@ -31,7 +31,7 @@ const BULLETS = [
   { icon: '02', title: 'Sin retiros automáticos', body: 'La autorización no permite enviar MXNB a wallets externas ni exportar llaves.' },
   { icon: '03', title: 'Solo contratos de Pronos', body: 'La firma queda limitada a Arbitrum, contratos permitidos y funciones de trading autorizadas.' },
   { icon: '04', title: 'Tus retiros siguen en tus manos', body: 'Para mover MXNB fuera de Pronos vas a confirmar con tu correo. Eso no cambia.' },
-  { icon: '05', title: 'Vigencia: 180 días', body: 'Después de medio año te volvemos a pedir autorización. Puedes revocar antes desde tu perfil.' },
+  { icon: '05', title: 'Sin vencimiento', body: 'Permanece activa hasta que la revoques desde Autorización de operaciones. Nuevos contratos pueden requerir ampliar el permiso.' },
 ];
 
 const AUTHORIZATION_ERROR = 'No pudimos completar la autorización. Intenta más tarde o continúa sin autorizar por ahora.';
@@ -86,7 +86,7 @@ export default function DelegationPrompt({ variant = 'inline', onAuthorized, onS
           lineHeight: 1.55, margin: 0,
         }}>
           Autoriza a Pronos una sola vez a firmar tus órdenes on-chain.
-          Vigencia de 6 meses, solo en Arbitrum y solo contra contratos y
+          Sin vencimiento, solo en Arbitrum Sepolia y contra contratos y
           funciones de trading autorizadas. Tus retiros siguen requiriendo tu firma.
         </p>
         {err && (

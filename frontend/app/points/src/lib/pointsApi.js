@@ -6,8 +6,23 @@
  * with an `.code` property matching the backend's short error codes.
  */
 import { createExecutionAdapter } from './executionAdapter.js';
+export { authorizeDelegation, revokeDelegation } from '@app/lib/pointsAuth.js';
 
-export const pointsExecution = createExecutionAdapter({ get: getJson, post: postJson });
+let tradingConsentHandler;
+export function setTradingConsentHandler(handler) {
+  tradingConsentHandler = handler;
+  return () => { if (tradingConsentHandler === handler) tradingConsentHandler = null; };
+}
+export const pointsExecution = createExecutionAdapter({ get: getJson, post: postJson, beforeTrade: async target => {
+  const status = await fetchDelegationStatus();
+  if (status.active && status.coveredPools?.includes(target.chainAddress?.toLowerCase())) return;
+  if (!tradingConsentHandler) throw Object.assign(new Error('delegation_required'), { code: 'delegation_required' });
+  await tradingConsentHandler(target);
+  const verified = await fetchDelegationStatus();
+  if (!verified.active || !verified.coveredPools?.includes(target.chainAddress?.toLowerCase())) {
+    throw Object.assign(new Error('delegation_required'), { code: 'delegation_required' });
+  }
+} });
 
 async function handle(res) {
   const data = await res.json().catch(() => ({}));
@@ -227,6 +242,8 @@ const PUBLIC_ERROR_COPY = {
     es: 'El torneo de prueba no está disponible ahora. Actualiza la página e intenta otra vez.',
     en: 'The test tournament is unavailable right now. Refresh and try again.',
   },
+  delegation_cancelled: { es: 'Autorización cancelada. No se envió la operación.', en: 'Authorization cancelled. No trade was sent.' },
+  delegation_owner_login_required: { es: 'Verifica tu correo para cambiar la autorización.', en: 'Verify your email to change authorization.' },
   delegation_required: {
     es: 'Tu cuenta necesita autorizar las operaciones del torneo de prueba antes de continuar.',
     en: 'Your account needs to authorize test tournament trading before continuing.',
@@ -395,17 +412,11 @@ export async function acknowledgeResolutionCorrection({ correctionId }) {
 // ─── Turnkey delegated signing (M2) ──────────────────────────────────
 // First on-chain trade prompts a one-time consent: the user
 // authorizes Pronos to sign their trades within defined scope
-// (200k MXNB/day, 180d, whitelisted contracts). After that, zero
+// (persistent, revocable, restricted to known market contracts). After that, zero
 // popups per trade. Status tells the UI which state to render;
 // revoke clears the policy.
 export async function fetchDelegationStatus() {
   return getJson('/api/points/turnkey/delegation-status');
-}
-export async function authorizeDelegation() {
-  return postJson('/api/points/turnkey/authorize-delegation', {});
-}
-export async function revokeDelegation() {
-  return postJson('/api/points/turnkey/revoke-delegation', {});
 }
 
 // ─── Social links (OAuth + manual profile handles) ───────────────────
