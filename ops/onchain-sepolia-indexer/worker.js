@@ -4,6 +4,11 @@ const factories = [
   '0x69440742a168635d9fa7cc0cfb0935afffe79ad3',
   '0xfcac9cfcf22df809ba365c85dd767c90bb260fd6',
 ];
+// Retain these historical factories when activation replaces the current pair.
+const legacyFactories = [
+  '0x69440742a168635d9fa7cc0cfb0935afffe79ad3',
+  '0xfcac9cfcf22df809ba365c85dd767c90bb260fd6',
+];
 export function validateWorker(env, source) {
   const db = new URL(env.DATABASE_URL);
   if (env.VERCEL_ENV !== 'production'
@@ -12,6 +17,8 @@ export function validateWorker(env, source) {
     || Number(env.CHAIN_ID) !== 421614 || Number(env.PROTOCOL_CHAIN_ID) !== 421614
     || String(env.FACTORY_ADDRESS).toLowerCase() !== factories[0]
     || String(env.FACTORY_V2_ADDRESS).toLowerCase() !== factories[1]
+    || (env.ONCHAIN_LEGACY_MARKET_FACTORY_ADDRESS && env.ONCHAIN_LEGACY_MARKET_FACTORY_ADDRESS.toLowerCase() !== legacyFactories[0])
+    || (env.ONCHAIN_LEGACY_MARKET_FACTORY_V2_ADDRESS && env.ONCHAIN_LEGACY_MARKET_FACTORY_V2_ADDRESS.toLowerCase() !== legacyFactories[1])
     || !/^ep-delicate-glitter-amp7yrkv(-pooler)?\.c-5\.us-east-1\.aws\.neon\.tech$/.test(db.hostname)
     || decodeURIComponent(db.username) !== 'sepolia_indexer'
     || !env.CRON_SECRET || env.CRON_SECRET.length < 32

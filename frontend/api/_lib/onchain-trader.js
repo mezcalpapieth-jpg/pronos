@@ -13,11 +13,8 @@
  * Collateral flow: before buy, the AMM needs allowance on the
  * collateral (MXNB on Arbitrum One, MockMXNB on testnet). We check
  * allowance; if insufficient, we send a MAX_UINT256 approve() tx
- * first. This spends one extra tx on the user's FIRST trade against
- * a given market, then every subsequent trade against that market
- * skips the approve. In mainnet we can move the approve into the
- * delegation consent flow so it's zero-extra-txs, but M5 keeps it
- * explicit for clarity.
+ * first. The verified Sepolia router shares that approval across its
+ * future pools; legacy/direct pools retain their exact-pool approvals.
  *
  * Hard-gated: `isOnchainReady()` checks required env vars before
  * any chain call. Off by default on preview/dev.
@@ -26,6 +23,7 @@
 import { ethers } from 'ethers';
 import { onchainFeeData } from './onchain-fees.js';
 import { readSellQuoteAmounts } from './onchain-sell-quote.js';
+import { poolTradingRoute, TRADING_ROUTER_ABI } from './trading-router.js';
 import {
   isDelegationEnabled, signDelegatedTransaction,
 } from './turnkey-delegation.js';
@@ -243,7 +241,7 @@ async function signAndBroadcast({ suborgId, from, to, data, gasLimit }) {
   return receipt;
 }
 
-// ── Collateral allowance (approve once per market) ──────────────────
+// ── Collateral allowance (approve once per spender) ─────────────────
 
 async function ensureCollateralAllowance({
   suborgId, ownerAddr, ammAddress, amount, collateralAddr = process.env.ONCHAIN_COLLATERAL_ADDRESS,
@@ -685,18 +683,21 @@ export async function buyOnChain({
   if (!market?.chain_address) throw new Error('market missing chain_address');
 
   const ammAddr = market.chain_address;
+  const route = await poolTradingRoute(ammAddr, { provider: provider() });
   const collateralUnits = parseCollateralUnits(collateral);
   const minSharesUnits = minSharesOut != null
     ? parseCollateralUnits(minSharesOut)
     : ethers.constants.Zero;
+  if (route && (minSharesUnits.lte(0) || route.binary !== isBinary(market))) throw Object.assign(new Error('invalid_router_trade'), { status: 400 });
 
   await ensureCollateralAllowance({
-    suborgId, ownerAddr, ammAddress: ammAddr, amount: collateralUnits,
+    suborgId, ownerAddr, ammAddress: route?.address || ammAddr, amount: collateralUnits,
   });
 
-  const data = encodeBuyWithMinOut(market, outcomeIndex, collateralUnits, minSharesUnits);
+  const data = route ? new ethers.utils.Interface(TRADING_ROUTER_ABI).encodeFunctionData('buy', [ammAddr, outcomeIndex, collateralUnits, minSharesUnits])
+    : encodeBuyWithMinOut(market, outcomeIndex, collateralUnits, minSharesUnits);
   const receipt = await signAndBroadcast({
-    suborgId, from: ownerAddr, to: ammAddr, data,
+    suborgId, from: ownerAddr, to: route?.address || ammAddr, data,
   });
 
   const ev = parseBuyEvent(market, receipt);
@@ -726,6 +727,7 @@ export async function sellOnChain({
   if (!market?.chain_address) throw new Error('market missing chain_address');
 
   const ammAddr = market.chain_address;
+  const route = await poolTradingRoute(ammAddr, { provider: provider() });
   const amm = new ethers.Contract(
     ammAddr,
     isBinary(market) ? BINARY_AMM_ABI : MULTI_AMM_ABI,
@@ -736,14 +738,17 @@ export async function sellOnChain({
   const minCollateralUnits = minCollateralOut != null
     ? parseCollateralUnits(minCollateralOut)
     : ethers.constants.Zero;
+  if (route && (minCollateralUnits.lte(0) || route.binary !== isBinary(market)
+    || tokenAddr.toLowerCase() !== route.shares[route.binary ? 'v1' : 'v2'])) throw Object.assign(new Error('invalid_router_trade'), { status: 400 });
 
   await ensureShareOperatorApproval({
-    suborgId, ownerAddr, ammAddress: ammAddr, tokenAddr,
+    suborgId, ownerAddr, ammAddress: route?.address || ammAddr, tokenAddr,
   });
 
-  const data = encodeSellWithMinOut(market, outcomeIndex, sharesUnits, minCollateralUnits);
+  const data = route ? new ethers.utils.Interface(TRADING_ROUTER_ABI).encodeFunctionData('sell', [ammAddr, outcomeIndex, sharesUnits, minCollateralUnits])
+    : encodeSellWithMinOut(market, outcomeIndex, sharesUnits, minCollateralUnits);
   const receipt = await signAndBroadcast({
-    suborgId, from: ownerAddr, to: ammAddr, data,
+    suborgId, from: ownerAddr, to: route?.address || ammAddr, data,
   });
 
   const ev = parseSellEvent(market, receipt);
@@ -773,9 +778,10 @@ export async function redeemOnChain({
   if (!market?.chain_address) throw new Error('market missing chain_address');
 
   const units = ethers.utils.parseUnits(String(amount), COLLATERAL_DECIMALS);
-  const data = encodeRedeem(units);
+  const route = await poolTradingRoute(market.chain_address, { provider: provider() });
+  const data = route ? new ethers.utils.Interface(TRADING_ROUTER_ABI).encodeFunctionData('redeem', [market.chain_address, units]) : encodeRedeem(units);
   const receipt = await signAndBroadcast({
-    suborgId, from: ownerAddr, to: market.chain_address, data,
+    suborgId, from: ownerAddr, to: route?.address || market.chain_address, data,
   });
   return {
     txHash: receipt.transactionHash,

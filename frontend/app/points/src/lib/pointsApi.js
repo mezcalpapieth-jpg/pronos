@@ -6,6 +6,7 @@
  * with an `.code` property matching the backend's short error codes.
  */
 import { createExecutionAdapter } from './executionAdapter.js';
+import { delegationCoversMarket } from './delegationCoverage.js';
 export { authorizeDelegation, revokeDelegation } from '@app/lib/pointsAuth.js';
 
 let tradingConsentHandler;
@@ -15,11 +16,11 @@ export function setTradingConsentHandler(handler) {
 }
 export const pointsExecution = createExecutionAdapter({ get: getJson, post: postJson, beforeTrade: async target => {
   const status = await fetchDelegationStatus();
-  if (status.active && status.coveredPools?.includes(target.chainAddress?.toLowerCase())) return;
+  if (delegationCoversMarket(status, target)) return;
   if (!tradingConsentHandler) throw Object.assign(new Error('delegation_required'), { code: 'delegation_required' });
   await tradingConsentHandler(target);
   const verified = await fetchDelegationStatus();
-  if (!verified.active || !verified.coveredPools?.includes(target.chainAddress?.toLowerCase())) {
+  if (!delegationCoversMarket(verified, target)) {
     throw Object.assign(new Error('delegation_required'), { code: 'delegation_required' });
   }
 } });

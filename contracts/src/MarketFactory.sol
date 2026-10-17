@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./PronosToken.sol";
 import "./PronosAMM.sol";
 import "./PoolDeployment.sol";
+import "./TradingRouterInterfaces.sol";
 
 /**
  * @title MarketFactory
@@ -26,6 +27,9 @@ contract MarketFactory is ReentrancyGuard {
     // MockMXNB. The contract doesn't care which token it is — only
     // the deploy script and environment do.
     IERC20      public immutable collateral;
+
+    address public tradingRouter; // bound once; cannot expand an existing grant
+    event TradingRouterBound(address indexed router);
 
     address public owner;         // Safe multisig
     address public marketCreator; // Turnkey ops wallet for automatic market creation
@@ -123,6 +127,18 @@ contract MarketFactory is ReentrancyGuard {
      * @param seedAmount collateral amount to seed as initial liquidity
      * @return marketId  The new market's ID
      */
+    /// @notice Bind a reviewed immutable router once. Existing grants cannot
+    /// be redirected to a replacement router by a later owner action.
+    function setTradingRouter(address router) external onlyOwner {
+        require(tradingRouter == address(0) && router.code.length > 0, "MarketFactory: router already bound or invalid");
+        ITradingRouterBinding binding = ITradingRouterBinding(router);
+        require(binding.factoryV1() == address(this), "MarketFactory: router factory");
+        require(binding.collateral() == address(collateral), "MarketFactory: router collateral");
+        require(binding.tokenV1() == address(token), "MarketFactory: router token");
+        tradingRouter = router;
+        emit TradingRouterBound(router);
+    }
+
     function createMarket(
         string calldata question,
         string calldata category,

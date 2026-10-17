@@ -18,6 +18,11 @@ test('market mapping distinguishes all three IDs, zero contract IDs, and V1/V2 o
   assert.equal(marketView({ ...row, protocol_version: 'v2', protocol_status: 'resolved', protocol_outcome: 0 }).outcome, 0);
 });
 
+test('only linked server mappings expose factory identity for future-market consent coverage', () => {
+  assert.equal(marketView({ ...row, factory_address: '0xAbC' }).factoryAddress, '0xabc');
+  assert.equal(marketView({ ...row, factory_address: '0xAbC', protocol_id: null }).factoryAddress, null);
+});
+
 test('unlinked, inconsistent and unindexed markets have no fabricated prices or execution identity', () => {
   for (const patch of [{ protocol_id: null }, { protocol_chain_id: 84532 }, { contract_market_id: 7 }]) {
     const market = marketView({ ...row, ...patch });

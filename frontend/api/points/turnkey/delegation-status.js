@@ -26,6 +26,12 @@ export default async function handler(req, res) {
       dailyCapMxnb: null, dailyCapEnforced: false,
       authorizedAt: row.delegation_authorized_at || null,
       coveredPools: active ? verified.pools.map(p => p.address) : [],
+      chainId: config.chainId,
+      availableScope: plan.scope,
+      authorizationScope: active ? verified.scope : null,
+      coversFutureMarkets: active && verified.scope === 'router',
+      routerAddress: active ? verified.routerAddress : null,
+      coveredFactories: active ? verified.coveredFactories : [],
       poolCount: config.pools.length,
     });
   } catch (e) {

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import "./TradingRouterInterfaces.sol";
+
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
@@ -145,7 +147,7 @@ contract PronosAMMMulti is ERC1155Holder, ReentrancyGuard {
         nonReentrant
         returns (uint256 sharesOut)
     {
-        return _buy(msg.sender, outcomeIndex, collateralAmount, 0);
+        return _buy(msg.sender, outcomeIndex, collateralAmount, 0, false);
     }
 
     function buy(uint8 outcomeIndex, uint256 collateralAmount, uint256 minSharesOut)
@@ -156,10 +158,10 @@ contract PronosAMMMulti is ERC1155Holder, ReentrancyGuard {
         nonReentrant
         returns (uint256 sharesOut)
     {
-        return _buy(msg.sender, outcomeIndex, collateralAmount, minSharesOut);
+        return _buy(msg.sender, outcomeIndex, collateralAmount, minSharesOut, false);
     }
 
-    function _buy(address buyer, uint8 outcomeIndex, uint256 collateralAmount, uint256 minSharesOut)
+    function _buy(address buyer, uint8 outcomeIndex, uint256 collateralAmount, uint256 minSharesOut, bool prepaid)
         internal
         returns (uint256 sharesOut)
     {
@@ -175,7 +177,7 @@ contract PronosAMMMulti is ERC1155Holder, ReentrancyGuard {
         require(sharesOut > 0, "PronosAMMMulti: insufficient output");
         require(sharesOut >= minSharesOut, "PronosAMMMulti: price moved");
 
-        require(collateral.transferFrom(buyer, address(this), collateralAmount), "PronosAMMMulti: transfer failed");
+        if (!prepaid) require(collateral.transferFrom(buyer, address(this), collateralAmount), "PronosAMMMulti: transfer failed");
         if (fee > 0) {
             require(collateral.transfer(feeCollector, fee), "PronosAMMMulti: fee transfer failed");
             totalFeesCollected += fee;
@@ -208,7 +210,7 @@ contract PronosAMMMulti is ERC1155Holder, ReentrancyGuard {
         nonReentrant
         returns (uint256 collateralOut)
     {
-        return _sell(msg.sender, outcomeIndex, sharesAmount, 0);
+        return _sell(msg.sender, outcomeIndex, sharesAmount, 0, false);
     }
 
     function sell(uint8 outcomeIndex, uint256 sharesAmount, uint256 minCollateralOut)
@@ -219,10 +221,10 @@ contract PronosAMMMulti is ERC1155Holder, ReentrancyGuard {
         nonReentrant
         returns (uint256 collateralOut)
     {
-        return _sell(msg.sender, outcomeIndex, sharesAmount, minCollateralOut);
+        return _sell(msg.sender, outcomeIndex, sharesAmount, minCollateralOut, false);
     }
 
-    function _sell(address seller, uint8 outcomeIndex, uint256 sharesAmount, uint256 minCollateralOut)
+    function _sell(address seller, uint8 outcomeIndex, uint256 sharesAmount, uint256 minCollateralOut, bool prepaid)
         internal
         returns (uint256 collateralOut)
     {
@@ -237,10 +239,10 @@ contract PronosAMMMulti is ERC1155Holder, ReentrancyGuard {
             seller,
             outcomeIndex,
             sharesAmount,
-            token.balanceOf(seller, token.tokenId(marketId, outcomeIndex))
+            token.balanceOf(seller, token.tokenId(marketId, outcomeIndex)) + (prepaid ? sharesAmount : 0)
         );
 
-        token.safeTransferFrom(
+        if (!prepaid) token.safeTransferFrom(
             seller,
             address(this),
             token.tokenId(marketId, outcomeIndex),
@@ -371,17 +373,47 @@ contract PronosAMMMulti is ERC1155Holder, ReentrancyGuard {
         emit WinningsRedeemed(holder, outcome, amount, amount);
     }
 
+    modifier onlyTradingRouter() {
+        require(msg.sender == ITradingRouterFactory(factory).tradingRouter(), "PronosAMMMulti: not router");
+        _;
+    }
+
+    // The bound router atomically prepays collateral/shares directly into this
+    // pool. Events, cost basis and payouts still belong to the original wallet.
+    function buyRouted(address buyer, uint8 outcomeIndex, uint256 amount, uint256 minOut)
+        external onlyTradingRouter nonReentrant whenNotCanceled whenNotPaused whenNotResolved returns (uint256)
+    {
+        require(buyer != address(0), "PronosAMMMulti: zero buyer");
+        return _buy(buyer, outcomeIndex, amount, minOut, true);
+    }
+
+    function sellRouted(address seller, uint8 outcomeIndex, uint256 amount, uint256 minOut)
+        external onlyTradingRouter nonReentrant whenNotCanceled whenNotPaused whenNotResolved returns (uint256)
+    {
+        require(seller != address(0), "PronosAMMMulti: zero seller");
+        return _sell(seller, outcomeIndex, amount, minOut, true);
+    }
+
+    function redeemRouted(address holder, uint256 amount) external onlyTradingRouter nonReentrant {
+        require(holder != address(0), "PronosAMMMulti: zero holder");
+        _redeem(holder, amount);
+    }
+
     function redeem(uint256 amount) external nonReentrant {
+        _redeem(msg.sender, amount);
+    }
+
+    function _redeem(address holder, uint256 amount) internal {
         require(!canceled, "PronosAMMMulti: canceled");
         require(!disputed, "PronosAMMMulti: disputed");
         require(resolved, "PronosAMMMulti: not resolved");
         require(amount > 0, "PronosAMMMulti: zero amount");
 
-        token.burn(msg.sender, token.tokenId(marketId, outcome), amount);
-        require(collateral.transfer(msg.sender, amount), "PronosAMMMulti: transfer failed");
+        token.burn(holder, token.tokenId(marketId, outcome), amount);
+        require(collateral.transfer(holder, amount), "PronosAMMMulti: transfer failed");
         totalRedeemed += amount;
 
-        emit WinningsRedeemed(msg.sender, outcome, amount, amount);
+        emit WinningsRedeemed(holder, outcome, amount, amount);
     }
 
     function cancel() external onlyFactory {

@@ -5,6 +5,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./PronosTokenV2.sol";
 import "./PronosAMMMulti.sol";
 import "./PoolDeployment.sol";
+import "./TradingRouterInterfaces.sol";
 
 /**
  * @title MarketFactoryV2
@@ -15,6 +16,9 @@ contract MarketFactoryV2 {
     PronosTokenV2 public immutable token;
     address public immutable poolCreationCode;
     IERC20 public immutable collateral;
+
+    address public tradingRouter; // bound once; cannot expand an existing grant
+    event TradingRouterBound(address indexed router);
 
     address public owner;
     address public marketCreator;
@@ -92,6 +96,18 @@ contract MarketFactoryV2 {
         liquidityReserve = _liquidityReserve;
         emergencyReserve = _emergencyReserve;
         feeCollector = _treasury;
+    }
+
+    /// @notice Bind a reviewed immutable router once. Existing grants cannot
+    /// be redirected to a replacement router by a later owner action.
+    function setTradingRouter(address router) external onlyOwner {
+        require(tradingRouter == address(0) && router.code.length > 0, "MarketFactoryV2: router already bound or invalid");
+        ITradingRouterBinding binding = ITradingRouterBinding(router);
+        require(binding.factoryV2() == address(this), "MarketFactoryV2: router factory");
+        require(binding.collateral() == address(collateral), "MarketFactoryV2: router collateral");
+        require(binding.tokenV2() == address(token), "MarketFactoryV2: router token");
+        tradingRouter = router;
+        emit TradingRouterBound(router);
     }
 
     function createMarket(

@@ -34,3 +34,14 @@ test('existing manual handler retains explicit ranges and schema setup',async()=
   assert.deepEqual(f.schemas,['protocol','state']);
   assert.deepEqual(f.ranges,[['v1',200,210],['v2',200,210]]);
 });
+
+test('Sepolia can retain both historical factory checkpoints; mainnet ignores these preview legacy variables', () => {
+  const section = source.slice(source.indexOf('function parseInteger('), source.indexOf('// Shared protocol-only'))
+    .replace('export function', 'function');
+  const env = { FACTORY_ADDRESS: 'current-v1', FACTORY_V2_ADDRESS: 'current-v2',
+    ONCHAIN_LEGACY_MARKET_FACTORY_ADDRESS: 'legacy-v1', ONCHAIN_LEGACY_MARKET_FACTORY_V2_ADDRESS: 'legacy-v2' };
+  const configs = chain => new Function('process','CHAIN_ID','FACTORY_ABI','FACTORY_V2_ABI','DEFAULT_LOOKBACK_BLOCKS','DEFAULT_MAX_BATCHES',
+    `${section}\nreturn getIndexerConfig();`)({env},chain,['v1'],['v2'],250000,5).factories;
+  assert.deepEqual(configs(421614).map(f => [f.address,f.version]), [['current-v1','v1'],['current-v2','v2'],['legacy-v1','v1'],['legacy-v2','v2']]);
+  assert.equal(configs(42161).length, 2);
+});

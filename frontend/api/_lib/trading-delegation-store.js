@@ -2,6 +2,26 @@ import { isDelegationEnabled } from './turnkey-delegation.js';
 import { pendingApprovalSettings } from './onchain-preview-approval.js';
 import { readSuborgDelegation, authenticationCredentials } from './turnkey.js';
 import { buildTradingDelegation, inspectTradingSigner, managedPolicyIds, delegationError } from './trading-delegation.js';
+import { ethers } from 'ethers';
+import { tradingFactories, verifyTradingRouter } from './trading-router.js';
+
+export function delegationConfig(row, pools, router, env = process.env) {
+  const current = { v1: env.ONCHAIN_MARKET_FACTORY_ADDRESS?.toLowerCase(), v2: env.ONCHAIN_MARKET_FACTORY_V2_ADDRESS?.toLowerCase() };
+  const legacy = { v1: env.ONCHAIN_LEGACY_MARKET_FACTORY_ADDRESS?.toLowerCase(), v2: env.ONCHAIN_LEGACY_MARKET_FACTORY_V2_ADDRESS?.toLowerCase() };
+  const legacyShares = { v1: env.ONCHAIN_LEGACY_SHARE_TOKEN_ADDRESS, v2: env.ONCHAIN_LEGACY_SHARE_TOKEN_V2_ADDRESS };
+  const targets = pools.filter(p => ['v1', 'v2'].includes(p.protocol_version)
+    && [current[p.protocol_version], legacy[p.protocol_version]].filter(Boolean).includes(p.factory_address.toLowerCase()))
+    .map(p => ({ address: p.pool_address.toLowerCase(), version: p.protocol_version,
+      routed: Boolean(router?.factories.includes(p.factory_address.toLowerCase())),
+      ...(p.factory_address.toLowerCase() === legacy[p.protocol_version] ? { shareToken: legacyShares[p.protocol_version] || 'invalid' } : {}) }));
+  return { walletAddress: row.wallet_address, backendPublicKey: env.TURNKEY_API_PUBLIC_KEY,
+    chainId: 421614, collateral: env.ONCHAIN_COLLATERAL_ADDRESS || env.ONCHAIN_MXNB_ADDRESS,
+    shares: { v1: env.ONCHAIN_SHARE_TOKEN_ADDRESS, v2: env.ONCHAIN_SHARE_TOKEN_V2_ADDRESS }, pools: targets, router };
+}
+
+export function delegationPlan(config) {
+  return buildTradingDelegation({ ...config, pools: config.router ? config.pools.filter(p => !p.routed) : config.pools });
+}
 
 export async function loadTradingDelegationIdentity(sql, session) {
   if (!pendingApprovalSettings().previewEnabled || !isDelegationEnabled()) throw delegationError('delegation_not_enabled', 503);
@@ -22,23 +42,17 @@ export async function loadTradingDelegationIdentity(sql, session) {
 export async function loadTradingDelegation(sql, session) {
   const identity = await loadTradingDelegationIdentity(sql, session);
   const { row } = identity;
-  const factoryV1 = String(process.env.ONCHAIN_MARKET_FACTORY_ADDRESS || '').toLowerCase();
-  const factoryV2 = String(process.env.ONCHAIN_MARKET_FACTORY_V2_ADDRESS || '').toLowerCase();
+  const factories = tradingFactories();
+  const router = await verifyTradingRouter({ provider: new ethers.providers.JsonRpcProvider(process.env.ONCHAIN_RPC_URL) });
   // Include resolved markets: users must still be able to redeem later.
   // Never include pools from another chain/factory or silently truncate scope.
   const pools = await sql`
-    SELECT pool_address, protocol_version FROM protocol_markets
+    SELECT pool_address, protocol_version, factory_address FROM protocol_markets
     WHERE chain_id = 421614 AND pool_address IS NOT NULL
-      AND ((protocol_version = 'v1' AND LOWER(factory_address) = ${factoryV1})
-        OR (protocol_version = 'v2' AND LOWER(factory_address) = ${factoryV2}))
+      AND LOWER(factory_address) = ANY(${factories}::text[])
     ORDER BY pool_address
   `;
-  const config = {
-    walletAddress: row.wallet_address, backendPublicKey: process.env.TURNKEY_API_PUBLIC_KEY,
-    chainId: 421614, collateral: process.env.ONCHAIN_COLLATERAL_ADDRESS || process.env.ONCHAIN_MXNB_ADDRESS,
-    shares: { v1: process.env.ONCHAIN_SHARE_TOKEN_ADDRESS, v2: process.env.ONCHAIN_SHARE_TOKEN_V2_ADDRESS },
-    pools: pools.map(p => ({ address: p.pool_address.toLowerCase(), version: p.protocol_version })),
-  };
-  const plan = buildTradingDelegation(config);
+  const config = delegationConfig(row, pools, router);
+  const plan = delegationPlan(config);
   return { ...identity, config, plan };
 }

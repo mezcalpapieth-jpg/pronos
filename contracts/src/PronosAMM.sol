@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import "./TradingRouterInterfaces.sol";
+
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
@@ -185,7 +187,7 @@ contract PronosAMM is ERC1155Holder, ReentrancyGuard {
         whenNotResolved
         returns (uint256 sharesOut)
     {
-        return _buy(msg.sender, buyYes, collateralAmount, 0);
+        return _buy(msg.sender, buyYes, collateralAmount, 0, false);
     }
 
     function buy(bool buyYes, uint256 collateralAmount, uint256 minSharesOut)
@@ -196,10 +198,10 @@ contract PronosAMM is ERC1155Holder, ReentrancyGuard {
         whenNotResolved
         returns (uint256 sharesOut)
     {
-        return _buy(msg.sender, buyYes, collateralAmount, minSharesOut);
+        return _buy(msg.sender, buyYes, collateralAmount, minSharesOut, false);
     }
 
-    function _buy(address buyer, bool buyYes, uint256 collateralAmount, uint256 minSharesOut)
+    function _buy(address buyer, bool buyYes, uint256 collateralAmount, uint256 minSharesOut, bool prepaid)
         internal
         returns (uint256 sharesOut)
     {
@@ -244,7 +246,7 @@ contract PronosAMM is ERC1155Holder, ReentrancyGuard {
         require(sharesOut >= minSharesOut, "PronosAMM: price moved");
 
         // 3. Transfer full amount from user.
-        require(collateral.transferFrom(buyer, address(this), collateralAmount), "PronosAMM: transfer failed");
+        if (!prepaid) require(collateral.transferFrom(buyer, address(this), collateralAmount), "PronosAMM: transfer failed");
 
         // 4. Send fee directly to fee collector (never enters pool).
         if (fee > 0) {
@@ -280,7 +282,7 @@ contract PronosAMM is ERC1155Holder, ReentrancyGuard {
         whenNotResolved
         returns (uint256 collateralOut)
     {
-        return _sell(msg.sender, sellYes, sharesAmount, 0);
+        return _sell(msg.sender, sellYes, sharesAmount, 0, false);
     }
 
     function sell(bool sellYes, uint256 sharesAmount, uint256 minCollateralOut)
@@ -291,10 +293,10 @@ contract PronosAMM is ERC1155Holder, ReentrancyGuard {
         whenNotResolved
         returns (uint256 collateralOut)
     {
-        return _sell(msg.sender, sellYes, sharesAmount, minCollateralOut);
+        return _sell(msg.sender, sellYes, sharesAmount, minCollateralOut, false);
     }
 
-    function _sell(address seller, bool sellYes, uint256 sharesAmount, uint256 minCollateralOut)
+    function _sell(address seller, bool sellYes, uint256 sharesAmount, uint256 minCollateralOut, bool prepaid)
         internal
         returns (uint256 collateralOut)
     {
@@ -343,15 +345,12 @@ contract PronosAMM is ERC1155Holder, ReentrancyGuard {
         collateralOut = c - fee;
         require(collateralOut >= minCollateralOut, "PronosAMM: price moved");
 
+        _receiveSoldShares(seller, sellYes, sharesAmount, prepaid);
         // Update reserves
         if (sellYes) {
-            _reduceCostBasis(seller, 0, sharesAmount, token.balanceOf(seller, yesId));
-            token.safeTransferFrom(seller, address(this), yesId, sharesAmount, "");
             reserveYes = a - c;
             reserveNo  = b - c;
         } else {
-            _reduceCostBasis(seller, 1, sharesAmount, token.balanceOf(seller, noId));
-            token.safeTransferFrom(seller, address(this), noId, sharesAmount, "");
             reserveNo  = a - c;
             reserveYes = b - c;
         }
@@ -522,19 +521,56 @@ contract PronosAMM is ERC1155Holder, ReentrancyGuard {
         emit WinningsRedeemed(holder, amount, amount);
     }
 
+    function _receiveSoldShares(address seller, bool sellYes, uint256 amount, bool prepaid) internal {
+        uint256 id = sellYes ? yesId : noId;
+        uint256 balanceBefore = token.balanceOf(seller, id) + (prepaid ? amount : 0);
+        _reduceCostBasis(seller, sellYes ? 0 : 1, amount, balanceBefore);
+        if (!prepaid) token.safeTransferFrom(seller, address(this), id, amount, "");
+    }
+
+    modifier onlyTradingRouter() {
+        require(msg.sender == ITradingRouterFactory(factory).tradingRouter(), "PronosAMM: not router");
+        _;
+    }
+
+    // The bound router atomically prepays collateral/shares directly into this
+    // pool. Events, cost basis and payouts still belong to the original wallet.
+    function buyRouted(address buyer, bool buyYes, uint256 amount, uint256 minOut)
+        external onlyTradingRouter nonReentrant whenNotCanceled whenNotPaused whenNotResolved returns (uint256)
+    {
+        require(buyer != address(0), "PronosAMM: zero buyer");
+        return _buy(buyer, buyYes, amount, minOut, true);
+    }
+
+    function sellRouted(address seller, bool sellYes, uint256 amount, uint256 minOut)
+        external onlyTradingRouter nonReentrant whenNotCanceled whenNotPaused whenNotResolved returns (uint256)
+    {
+        require(seller != address(0), "PronosAMM: zero seller");
+        return _sell(seller, sellYes, amount, minOut, true);
+    }
+
+    function redeemRouted(address holder, uint256 amount) external onlyTradingRouter nonReentrant {
+        require(holder != address(0), "PronosAMM: zero holder");
+        _redeem(holder, amount);
+    }
+
     /// @notice Redeem winning tokens for collateral (1 token = 1 collateral unit).
     function redeem(uint256 amount) external nonReentrant {
+        _redeem(msg.sender, amount);
+    }
+
+    function _redeem(address holder, uint256 amount) internal {
         require(!canceled, "PronosAMM: canceled");
         require(!disputed, "PronosAMM: disputed");
         require(resolved, "PronosAMM: not resolved");
         require(amount > 0, "PronosAMM: zero amount");
 
         uint256 winningTokenId = outcome == 1 ? yesId : noId;
-        token.burn(msg.sender, winningTokenId, amount);
-        require(collateral.transfer(msg.sender, amount), "PronosAMM: transfer failed");
+        token.burn(holder, winningTokenId, amount);
+        require(collateral.transfer(holder, amount), "PronosAMM: transfer failed");
         totalRedeemed += amount;
 
-        emit WinningsRedeemed(msg.sender, amount, amount);
+        emit WinningsRedeemed(holder, amount, amount);
     }
 
     // ─── Admin (via factory) ─────────────────────────────────────────────────

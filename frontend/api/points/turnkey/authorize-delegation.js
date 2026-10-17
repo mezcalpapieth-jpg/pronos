@@ -25,6 +25,8 @@ export default async function handler(req, res) {
         backendPublicKey: config.backendPublicKey, backendUserId,
         policy: plan.policy, scopeHash: plan.scopeHash, previousPolicyIds: policyIds,
         persistent: true, expiresAt: null, dailyCapMxnb: null,
+        authorizationScope: plan.scope, coversFutureMarkets: plan.scope === 'router',
+        routerAddress: plan.routerAddress, coveredFactories: plan.coveredFactories,
         chainId: config.chainId, poolCount: config.pools.length,
       });
     }

@@ -7,6 +7,7 @@ import { requireSession } from '../_lib/session.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 import { pendingApprovalSettings } from '../_lib/onchain-preview-approval.js';
 import { marketView, portfolioView, jsonArray } from '../_lib/points-onchain-view.js';
+import { tradingFactories } from '../_lib/trading-router.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const addressPattern = /^0x[0-9a-f]{40}$/i;
@@ -15,9 +16,9 @@ const rowsOf = value => Array.isArray(value) ? value : value?.rows || [];
 
 export function adapterSettings(env = process.env) {
   const settings = pendingApprovalSettings(env);
-  const factories = [env.ONCHAIN_MARKET_FACTORY_ADDRESS, env.ONCHAIN_MARKET_FACTORY_V2_ADDRESS]
-    .filter(value => addressPattern.test(value || '')).map(value => value.toLowerCase());
-  return { enabled: settings.previewEnabled && factories.length === 2 && addressPattern.test(env.ONCHAIN_COLLATERAL_ADDRESS || ''),
+  const factories = tradingFactories(env);
+  const currentValid = [env.ONCHAIN_MARKET_FACTORY_ADDRESS, env.ONCHAIN_MARKET_FACTORY_V2_ADDRESS].every(value => addressPattern.test(value || '') && !/^0x0{40}$/i.test(value));
+  return { enabled: settings.previewEnabled && currentValid && addressPattern.test(env.ONCHAIN_COLLATERAL_ADDRESS || ''),
     chainId: settings.chainId, factories, collateral: env.ONCHAIN_COLLATERAL_ADDRESS || null, symbol: 'MXNP' };
 }
 
@@ -27,7 +28,7 @@ async function mappings(settings, ids = null) {
            pm.question, pm.category, pm.outcomes, pm.status, pm.end_time,
            pm.parent_id, pm.leg_label, parent.question AS parent_question,
            m.id AS protocol_id, m.market_id AS contract_market_id,
-           m.chain_id AS protocol_chain_id, m.pool_address,
+           m.chain_id AS protocol_chain_id, m.pool_address, m.factory_address,
            m.outcomes AS protocol_outcomes, m.protocol_version, m.status AS protocol_status,
            m.outcome AS protocol_outcome, m.end_time AS protocol_end_time,
            s.prices, s.yes_price, s.no_price, s.volume_24h, s.liquidity, s.snapshot_at

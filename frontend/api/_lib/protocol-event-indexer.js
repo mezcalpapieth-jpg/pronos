@@ -81,6 +81,10 @@ function getFactoryConfigs() {
   return [
     v1Factory ? { version: 'v1', address: v1Factory.toLowerCase(), abi: FACTORY_ABI } : null,
     v2Factory ? { version: 'v2', address: v2Factory.toLowerCase(), abi: FACTORY_V2_ABI } : null,
+    CHAIN_ID === 421614 && process.env.ONCHAIN_LEGACY_MARKET_FACTORY_ADDRESS
+      ? { version: 'v1', address: process.env.ONCHAIN_LEGACY_MARKET_FACTORY_ADDRESS.toLowerCase(), abi: FACTORY_ABI } : null,
+    CHAIN_ID === 421614 && process.env.ONCHAIN_LEGACY_MARKET_FACTORY_V2_ADDRESS
+      ? { version: 'v2', address: process.env.ONCHAIN_LEGACY_MARKET_FACTORY_V2_ADDRESS.toLowerCase(), abi: FACTORY_V2_ABI } : null,
   ].filter((config) => {
     if (!config || seen.has(config.address)) return false;
     seen.add(config.address);

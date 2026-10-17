@@ -31,6 +31,7 @@ import { ethers } from 'ethers';
 import { applyCors } from '../../_lib/cors.js';
 import { requirePointsAdmin } from '../../_lib/points-admin.js';
 import { collectOnchainReadiness } from '../../_lib/onchain-readiness.js';
+import { verifyTradingRouter } from '../../_lib/trading-router.js';
 import {
   appendFactoryProbeWarnings,
   buildFactoryProbeStatus,
@@ -154,6 +155,20 @@ export default async function handler(req, res) {
     }
 
     const provider = new ethers.providers.JsonRpcProvider(process.env.ONCHAIN_RPC_URL);
+    let tradingAuthorization = { scope: 'pools', routerConfigured: false };
+    if (process.env.ONCHAIN_TRADING_ROUTER_ADDRESS || process.env.ONCHAIN_TRADING_ROUTER_CODE_HASH) {
+      try {
+        const router = await verifyTradingRouter({ provider });
+        tradingAuthorization = { scope: 'router', routerConfigured: true, verified: true, ...router };
+      } catch {
+        tradingAuthorization = { scope: null, routerConfigured: true, verified: false };
+        warnings.push('Trading router verification failed: check runtime code hash, chain, immutable bindings and factory bindings.');
+        const blocker = { id: 'trading_router_unverified', title: 'Trading router unverified',
+          detail: 'Future-market trading is disabled until the pinned Sepolia router verifies.', fix: 'Verify router deployment and preview configuration' };
+        launch.blockers.push(blocker); launch.nextSteps.push(blocker.fix);
+        launch.blockerCount = launch.blockers.length; launch.ready = false;
+      }
+    }
 
     const [v1, v2] = await Promise.all([
       probeFactory({
@@ -247,6 +262,7 @@ export default async function handler(req, res) {
       policy,
       launch,
       v1,
+      tradingAuthorization,
       v2,
       deployer,
       warnings,

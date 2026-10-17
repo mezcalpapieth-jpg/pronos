@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { pendingApprovalSettings } from '../_lib/onchain-preview-approval.js';
+import { tradingFactories } from '../_lib/trading-router.js';
 import { marketView, portfolioView, jsonArray } from '../_lib/points-onchain-view.js';
 
 const source = (await readFile(new URL('./onchain.js', import.meta.url), 'utf8'))
@@ -35,7 +36,7 @@ function fixture({ patch = {}, rows = [mapping], trades = [], session = { sub: '
     neon: () => sql, applyCors: () => null, process: { env: { ...env, ...patch } },
     requireSession: (req, res) => { authCalls++; if (!session) { res.status(401).json({ error: 'not_authenticated' }); return null; } return session; },
     rateLimit: (req, res) => { if (limited) res.status(429).json({ error: 'rate_limited' }); return limited; }, clientIp: () => 'test-ip',
-    pendingApprovalSettings, marketView, portfolioView, jsonArray, console: { error() {} },
+    pendingApprovalSettings, tradingFactories, marketView, portfolioView, jsonArray, console: { error() {} },
     ethers: { providers: { JsonRpcProvider: class { async getNetwork() { if (rpcFails) throw new Error('down'); return { chainId: rpcChain }; } } },
       Contract: class { async balanceOf(owner) { assert.equal(owner, wallet); return '7500000'; } async decimals() { return 6; } },
       utils: { formatUnits: (value, decimals) => String(Number(value) / 10 ** decimals) } },
@@ -78,6 +79,15 @@ test('mapping is public, bounded and bound to the configured chain, factories an
     const invalid = await f.request({ action: 'markets', ids }); assert.equal(invalid.code, 400);
   }
   assert.equal(f.queries.length, 1);
+});
+
+test('preview migration retains explicitly configured historical factories in server mappings', async () => {
+  const legacy = `0x${'e'.repeat(40)}`;
+  const f = fixture({ patch: { ONCHAIN_LEGACY_MARKET_FACTORY_ADDRESS: legacy }, rows: [{ ...mapping, factory_address: legacy }] });
+  const res = await f.request({ action: 'markets', ids: '360636' });
+  assert.equal(res.body.markets[0].factoryAddress, legacy);
+  assert.ok(f.queries[0].values.some(v => Array.isArray(v) && v.includes(legacy)));
+  assert.equal(f.adapterSettings({ ...env, ONCHAIN_LEGACY_MARKET_FACTORY_ADDRESS: legacy }).enabled, true);
 });
 
 test('duplicate pool/Points mappings stop execution rather than choosing a row', async () => {

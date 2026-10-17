@@ -18,6 +18,7 @@ import { publicMarketTranslationFields } from '../_lib/market-translations.js';
 import { binaryPricesWithBookTrade, pricesWithBookTrades } from '../_lib/points-display-prices.js';
 import { TOURNAMENT_APPROVED_MARKET_START_ISO } from '../_lib/points-tournament-config.js';
 import { pendingApprovalSettings } from '../_lib/onchain-preview-approval.js';
+import { tradingFactories } from '../_lib/trading-router.js';
 
 // Lazy neon client init — defer until the first request so a missing
 // DATABASE_URL at module-load time surfaces as a structured JSON error
@@ -136,8 +137,7 @@ export default async function handler(req, res) {
                       : modeParam === 'all'    ? null
                       : 'points';
     const indexedCatalog = modeFilter === 'onchain' && pendingApprovalSettings().previewEnabled;
-    const catalogFactories = [process.env.ONCHAIN_MARKET_FACTORY_ADDRESS, process.env.ONCHAIN_MARKET_FACTORY_V2_ADDRESS]
-      .filter(value => /^0x[0-9a-f]{40}$/i.test(value || '')).map(value => value.toLowerCase());
+    const catalogFactories = tradingFactories();
     // Chain filter: MVP can narrow to a specific chain_id (e.g. 421614
     // for Sepolia, 42161 for Arbitrum One) so flipping env chains between
     // testnet and mainnet is a one-variable change — each chain sees only

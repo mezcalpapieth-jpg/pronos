@@ -25,6 +25,8 @@ test('isolation pins project, chain, database role/branch, factories and signing
     assert.throws(()=>validateWorker({...env,...patch},source));
   }
   assert.throws(()=>validateWorker(env,{...source,branch:'pointbreak'}));
+  assert.doesNotThrow(()=>validateWorker({...env,ONCHAIN_LEGACY_MARKET_FACTORY_ADDRESS:env.FACTORY_ADDRESS,ONCHAIN_LEGACY_MARKET_FACTORY_V2_ADDRESS:env.FACTORY_V2_ADDRESS},source));
+  assert.throws(()=>validateWorker({...env,ONCHAIN_LEGACY_MARKET_FACTORY_ADDRESS:`0x${'1'.repeat(40)}`},source));
 });
 test('unauthenticated requests and wrong methods never reach RPC, SQL or indexing',async()=>{
   for(const patch of [{headers:{}},{method:'POST'}]) {

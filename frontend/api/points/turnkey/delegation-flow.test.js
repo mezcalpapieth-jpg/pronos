@@ -46,3 +46,22 @@ test('revocation fails until all Turnkey grants are actually deleted', async () 
   const done = await run('revoke-delegation', { ...base, policyIds: [] }, { action: 'complete' });
   assert.equal(done.status, 200); assert.equal(done.writes.length, 1);
 });
+
+test('future-market status requires the real installed router grant, and migration still needs owner completion', async () => {
+  const routedConfig = { ...config, shares: { v1: a(3), v2: a(5) },
+    router: { address: a(6), factories: [a(7), a(8)] } };
+  const routedPlan = buildTradingDelegation(routedConfig);
+  const state = { ...base, config: routedConfig, plan: routedPlan };
+  const old = await run('delegation-status', state);
+  assert.equal(old.data.active, true); assert.equal(old.data.needsRefresh, true);
+  assert.equal(old.data.availableScope, 'router'); assert.equal(old.data.coversFutureMarkets, false);
+  assert.deepEqual(old.data.coveredFactories, []);
+  const prepared = await run('authorize-delegation', state);
+  assert.equal(prepared.data.coversFutureMarkets, true); assert.equal(prepared.writes.length, 0);
+  const installed = { ...state, snapshot: { policies: [{ ...routedPlan.policy, policyId: 'installed' }] } };
+  const status = await run('delegation-status', installed);
+  assert.equal(status.data.coversFutureMarkets, true); assert.equal(status.data.needsRefresh, false);
+  assert.deepEqual(status.data.coveredFactories, [a(7), a(8)]);
+  assert.equal((await run('authorize-delegation', installed, { action: 'complete', policyId: 'installed' })).writes.length, 1);
+  assert.equal((await run('delegation-status', { ...installed, policyIds: ['installed','broad'] })).data.coversFutureMarkets, false);
+});
