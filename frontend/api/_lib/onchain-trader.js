@@ -25,6 +25,7 @@
 
 import { ethers } from 'ethers';
 import { onchainFeeData } from './onchain-fees.js';
+import { readSellQuoteAmounts } from './onchain-sell-quote.js';
 import {
   isDelegationEnabled, signDelegatedTransaction,
 } from './turnkey-delegation.js';
@@ -45,6 +46,8 @@ const BINARY_AMM_ABI = [
   'function calculateFee(uint256 amount, bool buyYes) view returns (uint256)',
   'function estimateBuy(bool buyYes, uint256 collateralAmount) view returns (uint256)',
   'function estimateSell(bool sellYes, uint256 sharesAmount) view returns (uint256)',
+  'function reserveYes() view returns (uint256)',
+  'function reserveNo() view returns (uint256)',
   'function priceYes() view returns (uint256)',
   'function priceNo() view returns (uint256)',
   'event SharesBought(address indexed buyer, bool isYes, uint256 collateralIn, uint256 fee, uint256 sharesOut)',
@@ -594,16 +597,16 @@ export async function readProtocolCollateralAllowance({ ownerAddr, spenderAddr }
   };
 }
 
-async function readAmmPrices(amm, market, outcomeIndex) {
+async function readAmmPrices(amm, market, outcomeIndex, overrides = {}) {
   if (isBinary(market)) {
-    const values = await Promise.all([amm.priceYes(), amm.priceNo()]);
+    const values = await Promise.all([amm.priceYes(overrides), amm.priceNo(overrides)]);
     const prices = values.map(priceToNumber);
     return {
       priceBefore: prices[outcomeIndex] ?? null,
       pricesBefore: prices,
     };
   }
-  const values = await amm.prices();
+  const values = await amm.prices(overrides);
   const prices = values.map(priceToNumber);
   return {
     priceBefore: prices[outcomeIndex] ?? null,
@@ -646,25 +649,26 @@ export async function quoteSellOnChain({ market, outcomeIndex, shares }) {
   requireReadReady();
   if (!market?.chain_address) throw new Error('market missing chain_address');
 
+  const rpc = provider();
+  // Pin prices, reserves, net estimate and fee to one block so a concurrent
+  // trade cannot mix states and produce an incorrect fee breakdown.
+  const blockTag = await rpc.getBlockNumber();
   const amm = new ethers.Contract(
     market.chain_address,
     isBinary(market) ? BINARY_AMM_ABI : MULTI_AMM_ABI,
-    provider(),
+    rpc,
   );
   const sharesUnits = parseCollateralUnits(shares);
-  const [outUnits, prices] = await Promise.all([
-    isBinary(market)
-      ? amm.estimateSell(outcomeIndex === 0, sharesUnits)
-      : amm.estimateSell(outcomeIndex, sharesUnits),
-    readAmmPrices(amm, market, outcomeIndex),
+  const [amounts, prices] = await Promise.all([
+    readSellQuoteAmounts({ amm, binary: isBinary(market), outcomeIndex, sharesUnits, blockTag }),
+    readAmmPrices(amm, market, outcomeIndex, { blockTag }),
   ]);
-  const out = toCollateralNumber(outUnits);
 
   return formatProtocolSellQuote({
     shares: toCollateralNumber(sharesUnits),
-    gross: out,
-    fee: 0,
-    collateralOut: out,
+    gross: toCollateralNumber(amounts.gross),
+    fee: toCollateralNumber(amounts.fee),
+    collateralOut: toCollateralNumber(amounts.collateralOut),
     priceBefore: prices.priceBefore,
     priceAfter: null,
     pricesBefore: prices.pricesBefore,

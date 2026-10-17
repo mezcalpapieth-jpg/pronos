@@ -1,0 +1,133 @@
+{
+  "verifiedAt": "2026-10-17T15:58:40.070Z",
+  "chainId": 421614,
+  "mode": "read-only historical RPC; no transaction submitted",
+  "pool": "0x80aA1a6722Eb6F72647C0964b64d185c01A39433",
+  "transaction": "0x097604b54cbb81fa092079891bd2b2c36abfece588da7ce4d1e5939cd5d54b7e",
+  "quoteBlock": 320119065,
+  "receiptBlock": 320119066,
+  "reserveYes": "95351610",
+  "reserveNo": "104875000",
+  "quote": {
+    "shares": 1,
+    "gross": 0.522535,
+    "fee": 0.013684,
+    "feePct": 2.6187719482905454,
+    "collateralOut": 0.508851,
+    "priceBefore": 0.523781,
+    "priceAfter": null,
+    "currentPrice": 0.523781,
+    "postTradePrice": null,
+    "priceImpactPts": null,
+    "pricesBefore": [
+      0.523781,
+      0.476218
+    ],
+    "pricesAfter": null
+  },
+  "receipt": {
+    "shares": "1000000",
+    "net": "508851",
+    "fee": "13684"
+  },
+  "comparisons": [
+    {
+      "outcomeIndex": 0,
+      "shares": "0.000003",
+      "gross": "1",
+      "fee": "1",
+      "net": "0"
+    },
+    {
+      "outcomeIndex": 0,
+      "shares": "0.0001",
+      "gross": "52",
+      "fee": "1",
+      "net": "51"
+    },
+    {
+      "outcomeIndex": 0,
+      "shares": "1",
+      "gross": "522535",
+      "fee": "13684",
+      "net": "508851"
+    },
+    {
+      "outcomeIndex": 0,
+      "shares": "10",
+      "gross": "5113020",
+      "fee": "133905",
+      "net": "4979115"
+    },
+    {
+      "outcomeIndex": 0,
+      "shares": "50",
+      "gross": "23085911",
+      "fee": "604599",
+      "net": "22481312"
+    },
+    {
+      "outcomeIndex": 0,
+      "shares": "1000",
+      "gross": "94879716",
+      "fee": "2484814",
+      "net": "92394902"
+    },
+    {
+      "outcomeIndex": 0,
+      "shares": "50000000",
+      "gross": "104874799",
+      "fee": "2746576",
+      "net": "102128223"
+    },
+    {
+      "outcomeIndex": 1,
+      "shares": "0.000003",
+      "gross": "1",
+      "fee": "1",
+      "net": "0"
+    },
+    {
+      "outcomeIndex": 1,
+      "shares": "0.0001",
+      "gross": "47",
+      "fee": "1",
+      "net": "46"
+    },
+    {
+      "outcomeIndex": 1,
+      "shares": "1",
+      "gross": "474973",
+      "fee": "11309",
+      "net": "463664"
+    },
+    {
+      "outcomeIndex": 1,
+      "shares": "10",
+      "gross": "4637980",
+      "fee": "110434",
+      "net": "4527546"
+    },
+    {
+      "outcomeIndex": 1,
+      "shares": "50",
+      "gross": "20778466",
+      "fee": "494755",
+      "net": "20283711"
+    },
+    {
+      "outcomeIndex": 1,
+      "shares": "1000",
+      "gross": "85541280",
+      "fee": "2036819",
+      "net": "83504461"
+    },
+    {
+      "outcomeIndex": 1,
+      "shares": "50000000",
+      "gross": "95351410",
+      "fee": "2270407",
+      "net": "93081003"
+    }
+  ]
+}

@@ -715,3 +715,17 @@ Validation: **25 focused tests passed**, worker build/deployment succeeded, rece
 Operational instructions are in [`ops/onchain-sepolia-indexer/README.md`](../ops/onchain-sepolia-indexer/README.md). App and scheduler deployments are independent: redeploy the scheduler when its shared event reader changes, and remove its cron or pause the dedicated project when retiring this preview. This worker indexes resolution events; it does not choose or submit outcomes. V2 trading, cancellation/refund and resolution-correction rehearsals remain outstanding.
 
 Next roadmap work: correct sell-quote fee presentation; define a stable trading scope for future pools; provide normal-user gas funding/sponsorship; run isolated tournament reset/funding dry runs with issuance limits; implement registration/scoring/rewards; and complete the remaining lifecycle rehearsals before activation.
+
+### Sell Quote Fee Presentation — Implemented Locally, 2026-10-17
+
+Binary sell quotes now separate gross collateral, the contract's actual dynamic fee, and net collateral. Gross uses the same integer quadratic/ceiling-square-root rounding as `PronosAMM`; the fee is read with the opposite buy side, including its minimum-unit fee. All sell quote reads use one block, and an inconsistent net estimate fails rather than returning a fabricated fee. Multi-outcome pools retain their existing zero sell fee. No contract changes are required.
+
+The on-chain Points sell confirmation now shows gross and commission (amount and effective percentage), preserves the six-decimal net payout, and explains that the fee is already deducted. PnL and the existing 1% minimum-output guard continue to use net collateral once. Points-mode payouts and confirmation remain unchanged.
+
+Read-only historical RPC verification reproduced the real sell at block `320119066`: **0.522535 MXNP gross − 0.013684 MXNP fee = 0.508851 MXNP net** (effective fee `2.6187719483%`), with the same `0.503762` minimum output. Fourteen additional quotes across both sides and 0.000003–50 million shares agreed with the deployed contract's estimates and exact fee reads, including rounding/minimum-fee cases. No transaction was submitted. Evidence: [`onchain-sepolia-sell-quote-2026-10-17.json`](./onchain-sepolia-sell-quote-2026-10-17.json).
+
+Validation: **43 focused tests passed**, including actual modal rendering, both binary directions, multi-outcome zero fees, same-block reads, error propagation, net-based PnL/slippage and execution-adapter isolation. The Points build passed. The broader portfolio source-assertion suite passed 13 checks and failed two existing checks (`portfolio separates open PnL from total account PnL` and `portfolio PnL and history can switch between current and previous cycles`); the same two failures reproduced from untouched HEAD files in an isolated baseline. These stale assertions do not account for the already-shipped on-chain portfolio conditionals. Generated build output was restored.
+
+This checkpoint is local implementation and verification only: it has not been committed, pushed or deployed. Pointbreak local/tracking refs remain `47aa9e19115d64bc36a2684e5eeb685caef117ba`; no deployment, environment, database, delegation or chain state was changed.
+
+Next: ship and verify this fix in the Sepolia preview, then address stable trading scope, normal-user gas support, isolated tournament reset/funding dry runs, registration/scoring/rewards and remaining lifecycle rehearsals before activation.

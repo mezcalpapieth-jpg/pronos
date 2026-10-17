@@ -10,7 +10,9 @@ export function buildSellPreview(position = {}, quote = {}) {
   const shareRatio = maxShares > 0 ? shares / maxShares : 1;
   const markValue = round2((Number(position.currentValue) || 0) * shareRatio);
   const costBasis = round2((Number(position.costBasis) || 0) * shareRatio);
-  const collateralOut = round2(quote.collateralOut);
+  const collateralOut = position.mode === 'onchain'
+    ? Math.max(0, Number(quote.collateralOut) || 0)
+    : round2(quote.collateralOut);
   const markPnl = round2(markValue - costBasis);
   const salePnl = round2(collateralOut - costBasis);
   const slippageMxnp = round2(collateralOut - markValue);
@@ -26,6 +28,11 @@ export function buildSellPreview(position = {}, quote = {}) {
     costBasis,
     markValue,
     collateralOut,
+    ...(position.mode === 'onchain' ? {
+      gross: Math.max(0, Number(quote.gross) || 0),
+      fee: Math.max(0, Number(quote.fee) || 0),
+      feePct: Math.max(0, Number(quote.feePct) || 0),
+    } : {}),
     markPnl,
     salePnl,
     slippageMxnp,

@@ -84,7 +84,18 @@ test('on-chain sell keeps six-decimal holdings and floors slippage without inven
   const result = buildSellPreview({ mode: 'onchain', shares: 17.348493, costBasis: 8, currentValue: 8.7 },
     { shares: 17.348493, collateralOut: 8.769873, priceBefore: null, priceAfter: null });
   assert.equal(result.shares, 17.348493);
+  assert.equal(result.collateralOut, 8.769873);
   assert.equal(result.minCollateralOut, 8.682174);
   assert.equal(result.priceBeforePct, null);
   assert.equal(result.priceAfterPct, null);
+});
+
+test('Points previews keep two-decimal payouts and do not show on-chain fee fields', () => {
+  const result = buildSellPreview({ shares: 2, costBasis: 1, currentValue: 1.04 },
+    { shares: 1, gross: 0.522535, fee: 0.013684, feePct: 2.6188, collateralOut: 0.508851 });
+  assert.equal(result.collateralOut, 0.51);
+  assert.equal(result.salePnl, 0.01);
+  assert.equal(result.minCollateralOut, 0.5);
+  assert.equal('fee' in result, false);
+  assert.equal('gross' in result, false);
 });

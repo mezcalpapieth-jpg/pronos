@@ -1,9 +1,9 @@
 import React from 'react';
 
-function fmt(n) {
+function fmt(n, decimals = 2) {
   const v = Number(n) || 0;
   const sign = v >= 0 ? '' : '-';
-  return `${sign}${Math.abs(v).toFixed(2)}`;
+  return `${sign}${Math.abs(v).toFixed(decimals)}`;
 }
 
 function signedFmt(n) {
@@ -19,6 +19,7 @@ export default function PointsSellPreviewModal({ state, onClose, onConfirm, onSh
   const selectedPct = maxShares > 0 ? Math.round((selectedShares / maxShares) * 100) : 100;
   const salePositive = Number(preview?.salePnl || 0) >= 0;
   const impactNegative = Number(preview?.slippageMxnp || 0) < 0;
+  const onchain = position?.mode === 'onchain';
 
   return (
     <div
@@ -39,6 +40,8 @@ export default function PointsSellPreviewModal({ state, onClose, onConfirm, onSh
     >
       <div style={{
         width: 'min(520px, 100%)',
+        maxHeight: onchain ? 'calc(100dvh - 36px)' : undefined,
+        overflowY: onchain ? 'auto' : undefined,
         background: 'var(--surface1)',
         border: '1px solid var(--border)',
         borderRadius: 16,
@@ -184,7 +187,7 @@ export default function PointsSellPreviewModal({ state, onClose, onConfirm, onSh
             }}>
               {[
                 ['VALOR MARCADO', `${fmt(preview.markValue)} MXNP`, 'var(--text-primary)'],
-                ['SALIDA REAL', `${fmt(preview.collateralOut)} MXNP`, 'var(--green)'],
+                ['SALIDA REAL', `${fmt(preview.collateralOut, onchain ? 6 : 2)} MXNP`, 'var(--green)'],
                 ['PNL MARCADO', `${signedFmt(preview.markPnl)} MXNP`, preview.markPnl >= 0 ? 'var(--success)' : 'var(--danger)'],
                 ['PNL AL VENDER', `${signedFmt(preview.salePnl)} MXNP`, salePositive ? 'var(--success)' : 'var(--danger)'],
               ].map(([label, value, color]) => (
@@ -206,7 +209,8 @@ export default function PointsSellPreviewModal({ state, onClose, onConfirm, onSh
                   </div>
                   <div style={{
                     fontFamily: 'var(--font-mono)',
-                    fontSize: 16,
+                    fontSize: onchain ? 14 : 16,
+                    overflowWrap: onchain ? 'anywhere' : undefined,
                     color,
                     fontWeight: 800,
                   }}>
@@ -215,6 +219,22 @@ export default function PointsSellPreviewModal({ state, onClose, onConfirm, onSh
                 </div>
               ))}
             </div>
+
+            {onchain && (
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-secondary)', marginBottom: 14, lineHeight: 1.8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                  <span>Importe bruto</span>
+                  <span>{fmt(preview.gross, 6)} MXNP</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                  <span>Comisión ({fmt(preview.feePct, 4)}%)</span>
+                  <span>{fmt(preview.fee, 6)} MXNP</span>
+                </div>
+                <div style={{ color: 'var(--text-muted)', fontSize: 10, marginTop: 4 }}>
+                  La salida real ya incluye el descuento de la comisión.
+                </div>
+              </div>
+            )}
 
             <div style={{
               background: 'rgba(255,91,26,0.07)',
