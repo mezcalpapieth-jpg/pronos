@@ -10,6 +10,8 @@
  *   TURNKEY_ORGANIZATION_ID   — parent org UUID
  *   TURNKEY_API_PUBLIC_KEY    — hex-encoded P-256 public key registered with Turnkey
  *   TURNKEY_API_PRIVATE_KEY   — hex-encoded P-256 private key for stamping
+ *   TURNKEY_AUTH_API_PUBLIC_KEY / TURNKEY_AUTH_API_PRIVATE_KEY — separate,
+ *     non-root parent login credential; never installed in user sub-orgs
  *   TURNKEY_APP_NAME          — optional, defaults to 'Pronos Points'
  *   TURNKEY_API_BASE_URL      — optional, defaults to https://api.turnkey.com
  */
@@ -18,6 +20,7 @@ import { Turnkey } from '@turnkey/sdk-server';
 
 let cachedClient = null;
 let cachedApi = null;
+let cachedAuthApi = null;
 
 function missing(name) {
   return !process.env[name] || process.env[name].trim() === '';
@@ -60,6 +63,25 @@ function api() {
   return cachedApi;
 }
 
+export function authenticationCredentials(env = process.env, { requireSeparate = false } = {}) {
+  const pubKey = env.TURNKEY_AUTH_API_PUBLIC_KEY?.trim();
+  const privKey = env.TURNKEY_AUTH_API_PRIVATE_KEY?.trim();
+  if ((pubKey || privKey) && (!pubKey || !privKey)) throw new Error('incomplete_turnkey_auth_credentials');
+  if (pubKey && pubKey === env.TURNKEY_API_PUBLIC_KEY?.trim()) throw new Error('turnkey_auth_signer_must_be_separate');
+  if (requireSeparate && !pubKey) throw new Error('separate_turnkey_auth_credentials_required');
+  return { pubKey: pubKey || env.TURNKEY_API_PUBLIC_KEY, privKey: privKey || env.TURNKEY_API_PRIVATE_KEY };
+}
+
+function authApi() {
+  if (cachedAuthApi) return cachedAuthApi;
+  const { pubKey, privKey } = authenticationCredentials();
+  const { orgId, apiBase } = getEnv();
+  if (!orgId || !pubKey || !privKey) throw new Error('Turnkey authentication not configured');
+  cachedAuthApi = new Turnkey({ apiBaseUrl: apiBase, apiPublicKey: pubKey,
+    apiPrivateKey: privKey, defaultOrganizationId: orgId }).apiClient();
+  return cachedAuthApi;
+}
+
 export function buildSuborgCreationParams(email, { nowMs = Date.now() } = {}) {
   const normalized = String(email || '').toLowerCase().trim();
   return {
@@ -98,7 +120,7 @@ export async function getOrCreateSuborg(email) {
   // Step 1 — look up existing sub-orgs keyed to this email.
   let lookup;
   try {
-    lookup = await api().getVerifiedSubOrgIds({
+    lookup = await authApi().getVerifiedSubOrgIds({
       organizationId: orgId,
       filterType: 'EMAIL',
       filterValue: normalized,
@@ -106,7 +128,7 @@ export async function getOrCreateSuborg(email) {
   } catch (e) {
     // Fall back to unverified lookup — Turnkey can return an error when
     // the filter matches nothing on the verified view.
-    lookup = await api().getSubOrgIds({
+    lookup = await authApi().getSubOrgIds({
       organizationId: orgId,
       filterType: 'EMAIL',
       filterValue: normalized,
@@ -121,7 +143,7 @@ export async function getOrCreateSuborg(email) {
   // email user in the root quorum. The backend must never be installed
   // as root: day-to-day preauthorized investing should be handled by a
   // scoped Turnkey policy, not root authority.
-  const created = await api().createSubOrganization(buildSuborgCreationParams(normalized));
+  const created = await authApi().createSubOrganization(buildSuborgCreationParams(normalized));
   if (!created?.subOrganizationId) {
     throw new Error('createSubOrganization returned no subOrganizationId');
   }
@@ -149,7 +171,7 @@ export async function ensureBackendRootUser() {
  */
 export async function sendOtp(email, { otpLength = 6 } = {}) {
   const { appName } = getEnv();
-  const result = await api().initOtp({
+  const result = await authApi().initOtp({
     otpType: 'OTP_TYPE_EMAIL',
     contact: email.toLowerCase().trim(),
     appName,
@@ -162,7 +184,7 @@ export async function sendOtp(email, { otpLength = 6 } = {}) {
 }
 
 export async function verifyOtp(otpId, otpCode) {
-  const result = await api().verifyOtp({ otpId, otpCode });
+  const result = await authApi().verifyOtp({ otpId, otpCode });
   if (!result?.verificationToken) {
     throw new Error('verifyOtp returned no verificationToken');
   }
@@ -175,7 +197,7 @@ export async function verifyOtp(otpId, otpCode) {
  * it's the sub-org ID the session belongs to.
  */
 export async function otpLogin({ suborgId, verificationToken, publicKey, sessionLengthSeconds = 3600 }) {
-  const result = await api().otpLogin({
+  const result = await authApi().otpLogin({
     organizationId: suborgId,
     verificationToken,
     publicKey,
@@ -302,9 +324,9 @@ export async function deleteDelegationPolicyOnSuborg({ suborgId, policyId }) {
 // creates/deletes its signing policies; the backend never manages its own grant.
 export async function readSuborgDelegation(suborgId) {
   const [users, policies, configs] = await Promise.all([
-    api().getUsers({ organizationId: suborgId }),
-    api().getPolicies({ organizationId: suborgId }),
-    api().getOrganizationConfigs({ organizationId: suborgId }),
+    authApi().getUsers({ organizationId: suborgId }),
+    authApi().getPolicies({ organizationId: suborgId }),
+    authApi().getOrganizationConfigs({ organizationId: suborgId }),
   ]);
   return { users: users.users, policies: policies.policies, quorum: configs.configs?.quorum };
 }
@@ -326,7 +348,7 @@ export async function readSuborgDelegation(suborgId) {
 export async function getSuborgRootUserEmail(suborgId) {
   if (!suborgId) return null;
   try {
-    const result = await api().getUsers({ organizationId: suborgId });
+    const result = await authApi().getUsers({ organizationId: suborgId });
     const users = result?.users || [];
     if (users.length === 0) return null;
     // Sub-orgs created via getOrCreateSuborg() have exactly one root
@@ -347,10 +369,10 @@ export async function getSuborgRootUserEmail(suborgId) {
  */
 export async function getSuborgWalletAddress(suborgId) {
   try {
-    const wallets = await api().getWallets({ organizationId: suborgId });
+    const wallets = await authApi().getWallets({ organizationId: suborgId });
     const wallet = wallets?.wallets?.[0];
     if (!wallet?.walletId) return null;
-    const accounts = await api().getWalletAccounts({
+    const accounts = await authApi().getWalletAccounts({
       organizationId: suborgId,
       walletId: wallet.walletId,
     });

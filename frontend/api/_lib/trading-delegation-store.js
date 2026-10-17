@@ -1,10 +1,11 @@
 import { isDelegationEnabled } from './turnkey-delegation.js';
 import { pendingApprovalSettings } from './onchain-preview-approval.js';
-import { readSuborgDelegation } from './turnkey.js';
+import { readSuborgDelegation, authenticationCredentials } from './turnkey.js';
 import { buildTradingDelegation, inspectTradingSigner, managedPolicyIds, delegationError } from './trading-delegation.js';
 
 export async function loadTradingDelegationIdentity(sql, session) {
   if (!pendingApprovalSettings().previewEnabled || !isDelegationEnabled()) throw delegationError('delegation_not_enabled', 503);
+  authenticationCredentials(process.env, { requireSeparate: true });
   const [row] = await sql`
     SELECT wallet_address, delegation_policy_id, delegation_expires_at, delegation_authorized_at
     FROM points_users WHERE turnkey_sub_org_id = ${session.sub} LIMIT 1
