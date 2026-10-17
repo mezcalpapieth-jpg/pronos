@@ -26,7 +26,7 @@ test('Points admin exposes a re-add action for rejected generated markets', () =
   assert.match(source, /filter === 'rejected'/);
   assert.match(source, /review\(r\.id,\s*'readd'\)/);
   assert.match(source, /Reagregar/);
-  assert.match(apiSource, /adminReviewPendingMarket\(id,\s*action,\s*note\)/);
+  assert.match(apiSource, /adminReviewPendingMarket\(id,\s*action,\s*note,\s*previewApprovalMode\)/);
 });
 
 test('Points pending approval alerts include backend details', () => {
@@ -82,7 +82,7 @@ test('Points pending queue has taxonomy filters and filtered bulk actions', () =
   assert.match(pendingTableSource, /pendingFiltersPayload\(\)/);
   assert.match(pendingTableSource, /filters\.feature = curationFilter/);
   assert.match(pendingTableSource, /adminRefreshAllPendingPricing\(pendingFiltersPayload\(\)\)/);
-  assert.match(pendingTableSource, /adminApproveAllPendingMarkets\(null,\s*pendingFiltersPayload\(\)\)/);
+  assert.match(pendingTableSource, /adminApproveAllPendingMarkets\(null,\s*pendingFiltersPayload\(\),\s*previewApprovalMode\)/);
   assert.match(pendingTableSource, /renderFilterGroup\(MARKET_CATEGORY_FILTERS,\s*categoryFilter,\s*selectCategoryFilter\)/);
   assert.match(pendingTableSource, /renderFilterGroup\(ADMIN_SPORT_FILTERS,\s*sportFilter,\s*selectSportFilter/);
   assert.match(pendingTableSource, /renderFilterGroup\(ADMIN_CRYPTO_FILTERS,\s*cryptoTypeFilter,\s*setCryptoTypeFilter/);

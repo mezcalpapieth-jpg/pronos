@@ -1,5 +1,5 @@
 const ARBITRUM_ONE_CHAIN_ID = 42161;
-const BASE_SEPOLIA_CHAIN_ID = 84532;
+const ARBITRUM_SEPOLIA_CHAIN_ID = 421614;
 
 const MAINNET_PROFILE = Object.freeze({
   key: 'mainnet',
@@ -10,23 +10,27 @@ const MAINNET_PROFILE = Object.freeze({
   rpcEnvHints: ['ARB_RPC_URL', 'ARB_MAINNET_RPC', 'ARBITRUM_RPC_URL'],
   clientFactoryV1Env: ['VITE_PRONOS_ARBITRUM_FACTORY'],
   clientFactoryV2Env: ['VITE_PRONOS_ARBITRUM_FACTORY_V2'],
-  clientTokenEnv: ['VITE_PRONOS_ARBITRUM_TOKEN'],
+  clientCollateralEnv: ['VITE_ONCHAIN_COLLATERAL_ADDRESS'],
+  clientShareTokenV1Env: ['VITE_PRONOS_ARBITRUM_TOKEN'],
+  clientShareTokenV2Env: ['VITE_PRONOS_ARBITRUM_TOKEN_V2'],
   adminSafeEnv: ['ADMIN_SAFE_ADDRESS', 'VITE_PRONOS_ARBITRUM_ADMIN_SAFE'],
   resolverSafeEnv: ['RESOLVER_SAFE_ADDRESS', 'VITE_PRONOS_ARBITRUM_RESOLVER_SAFE'],
 });
 
 const SEPOLIA_PROFILE = Object.freeze({
   key: 'sepolia',
-  networkName: 'Base Sepolia',
-  expectedChainId: BASE_SEPOLIA_CHAIN_ID,
+  networkName: 'Arbitrum Sepolia',
+  expectedChainId: ARBITRUM_SEPOLIA_CHAIN_ID,
   testnet: true,
   junoRequired: false,
-  rpcEnvHints: ['BASE_SEPOLIA_RPC', 'BASE_SEPOLIA_RPC_URL'],
-  clientFactoryV1Env: ['VITE_PRONOS_BASE_SEPOLIA_FACTORY'],
-  clientFactoryV2Env: ['VITE_PRONOS_BASE_SEPOLIA_FACTORY_V2'],
-  clientTokenEnv: ['VITE_PRONOS_BASE_SEPOLIA_TOKEN'],
-  adminSafeEnv: ['ADMIN_SAFE_ADDRESS', 'VITE_PRONOS_BASE_SEPOLIA_ADMIN_SAFE'],
-  resolverSafeEnv: ['RESOLVER_SAFE_ADDRESS', 'VITE_PRONOS_BASE_SEPOLIA_RESOLVER_SAFE'],
+  rpcEnvHints: ['ARB_RPC_URL', 'ARB_SEPOLIA_RPC', 'ARBITRUM_SEPOLIA_RPC_URL'],
+  clientFactoryV1Env: ['VITE_PRONOS_ARB_SEPOLIA_FACTORY'],
+  clientFactoryV2Env: ['VITE_PRONOS_ARB_SEPOLIA_FACTORY_V2'],
+  clientCollateralEnv: ['VITE_ONCHAIN_COLLATERAL_ADDRESS', 'VITE_PRONOS_ARB_SEPOLIA_USDC'],
+  clientShareTokenV1Env: ['VITE_PRONOS_ARB_SEPOLIA_TOKEN'],
+  clientShareTokenV2Env: ['VITE_PRONOS_ARB_SEPOLIA_TOKEN_V2'],
+  adminSafeEnv: ['ADMIN_SAFE_ADDRESS', 'VITE_PRONOS_ARB_SEPOLIA_ADMIN_SAFE'],
+  resolverSafeEnv: ['RESOLVER_SAFE_ADDRESS', 'VITE_PRONOS_ARB_SEPOLIA_RESOLVER_SAFE'],
 });
 
 function hasEnv(env, name) {
@@ -40,7 +44,7 @@ function intEnv(env, name) {
 
 function normalizeAddress(value) {
   const s = String(value || '').trim();
-  return /^0x[0-9a-fA-F]{40}$/.test(s) ? s.toLowerCase() : null;
+  return /^0x[0-9a-fA-F]{40}$/.test(s) && !/^0x0{40}$/i.test(s) ? s.toLowerCase() : null;
 }
 
 function sameAddress(a, b) {
@@ -53,13 +57,13 @@ function onchainProfile(env, chainId) {
   const requested = String(env.ONCHAIN_READINESS_PROFILE || env.ONCHAIN_NETWORK || '')
     .trim()
     .toLowerCase();
-  if (['sepolia', 'base-sepolia', 'base_sepolia', 'testnet'].includes(requested)) {
+  if (['sepolia', 'arbitrum-sepolia', 'arbitrum_sepolia', 'testnet'].includes(requested)) {
     return SEPOLIA_PROFILE;
   }
   if (['mainnet', 'arbitrum-one', 'production'].includes(requested)) {
     return MAINNET_PROFILE;
   }
-  return chainId === BASE_SEPOLIA_CHAIN_ID ? SEPOLIA_PROFILE : MAINNET_PROFILE;
+  return chainId === ARBITRUM_SEPOLIA_CHAIN_ID ? SEPOLIA_PROFILE : MAINNET_PROFILE;
 }
 
 export function parseOnchainAddressList(value) {
@@ -256,7 +260,9 @@ export function collectOnchainReadiness({
     indexerFactoryV2,
     clientFactoryV1: firstEnv(env, profile.clientFactoryV1Env),
     clientFactoryV2: firstEnv(env, profile.clientFactoryV2Env),
-    clientCollateral: firstEnv(env, profile.clientTokenEnv),
+    clientCollateral: firstEnv(env, profile.clientCollateralEnv),
+    clientShareTokenV1: firstEnv(env, profile.clientShareTokenV1Env),
+    clientShareTokenV2: firstEnv(env, profile.clientShareTokenV2Env),
   };
   const cre = {
     webhookSecret: hasEnv(env, 'CRE_RESOLUTION_WEBHOOK_SECRET'),
@@ -435,8 +441,8 @@ export function collectOnchainReadiness({
   if (factoryV2 && !hasAnyEnv(env, profile.clientFactoryV2Env)) {
     warnings.push(`${profile.clientFactoryV2Env[0]} missing`);
   }
-  if (collateral && !hasAnyEnv(env, profile.clientTokenEnv)) {
-    warnings.push(`${profile.clientTokenEnv[0]} missing`);
+  if (collateral && !hasAnyEnv(env, profile.clientCollateralEnv)) {
+    warnings.push(`${profile.clientCollateralEnv[0]} missing`);
   }
 
   warnChainMismatch(warnings, env, 'VITE_ONCHAIN_CHAIN_ID', chainId, 'ONCHAIN_CHAIN_ID');
@@ -452,8 +458,15 @@ export function collectOnchainReadiness({
   for (const name of profile.clientFactoryV2Env) {
     warnAddressMismatch(warnings, env, name, factoryV2, 'ONCHAIN_MARKET_FACTORY_V2_ADDRESS');
   }
-  for (const name of profile.clientTokenEnv) {
-    warnAddressMismatch(warnings, env, name, collateral, 'ONCHAIN_COLLATERAL_ADDRESS');
+  const clientCollateralName = profile.clientCollateralEnv.find(name => hasEnv(env, name));
+  if (clientCollateralName) {
+    warnAddressMismatch(warnings, env, clientCollateralName, collateral, 'ONCHAIN_COLLATERAL_ADDRESS');
+  }
+  for (const name of profile.clientShareTokenV1Env) {
+    warnAddressMismatch(warnings, env, name, runtimeEnv.shareTokenV1, 'ONCHAIN_SHARE_TOKEN_ADDRESS');
+  }
+  for (const name of profile.clientShareTokenV2Env) {
+    warnAddressMismatch(warnings, env, name, runtimeEnv.shareTokenV2, 'ONCHAIN_SHARE_TOKEN_V2_ADDRESS');
   }
 
   if (policy.coverageError) {

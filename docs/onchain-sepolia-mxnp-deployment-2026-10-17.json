@@ -1,0 +1,439 @@
+{
+  "network": "Arbitrum Sepolia",
+  "chainId": 421614,
+  "rpcUrl": "https://sepolia-rollup.arbitrum.io/rpc",
+  "recordedAt": "2026-10-17T11:02:56.885Z",
+  "git": {
+    "branch": "onchain-sepolia",
+    "baseCommit": "604ca105d02f217072e2929648ca6f59c243fc43",
+    "uncommittedSourceChanges": true,
+    "pointbreakCommit": "47aa9e19115d64bc36a2684e5eeb685caef117ba",
+    "originPointbreakCommit": "47aa9e19115d64bc36a2684e5eeb685caef117ba"
+  },
+  "localDeploymentWallet": "0x0Caa37c077924038e14e9D8dE46B5208788e52CF",
+  "operationsWallet": {
+    "organizationId": "34e1b782-dc66-4b66-9ac7-477b743718f5",
+    "walletId": "8f4bb026-14cf-5590-b9f7-6100fc2ad08c",
+    "walletName": "pronos-onchain-sepolia-ops-2026-10-17",
+    "address": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+    "path": "m/44'/60'/0'/0/0",
+    "roles": [
+      "MXNP owner/minter",
+      "V1/V2 factory owner",
+      "V1/V2 market creator",
+      "V1/V2 resolver"
+    ],
+    "credentialAuthority": "Existing parent-organization root API credential; no restrictive operations policy or separate API credential was created. User-wallet delegation is a separate check."
+  },
+  "deployment": {
+    "token": {
+      "completedAt": "2026-10-17T10:54:43.489Z",
+      "contracts": [
+        {
+          "contractName": "TournamentMXNP",
+          "contractAddress": "0x6ed6c00c2b4cf9f5989866f4c5862d4cded67ef9",
+          "transactionHash": "0xaa76b23f1341c3319a58d1f6ca393430d3e5de3bc67dee553f34117502ad0af4"
+        }
+      ],
+      "receipts": [
+        {
+          "transactionHash": "0xaa76b23f1341c3319a58d1f6ca393430d3e5de3bc67dee553f34117502ad0af4",
+          "status": 1,
+          "blockNumber": 320053256,
+          "gasUsed": "773152",
+          "effectiveGasPrice": "20132001"
+        }
+      ]
+    },
+    "v1": {
+      "completedAt": "2026-10-17T10:58:07.924Z",
+      "contracts": [
+        {
+          "contractName": "PronosToken",
+          "contractAddress": "0xc26f94e86da1193dade6d798acdf8c0bc4d68946",
+          "transactionHash": "0xf34f9e4bfe3e231351a8a40c64b820023ce10b6956f5668c5f15337043a96644"
+        },
+        {
+          "contractName": "MarketFactory",
+          "contractAddress": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+          "transactionHash": "0x75fa852ad68d712590be9b84b75609d766ceaece5c44bb69582dcf2c306fc40f"
+        }
+      ],
+      "receipts": [
+        {
+          "transactionHash": "0xf34f9e4bfe3e231351a8a40c64b820023ce10b6956f5668c5f15337043a96644",
+          "status": 1,
+          "blockNumber": 320053980,
+          "gasUsed": "1320576",
+          "effectiveGasPrice": "20074001"
+        },
+        {
+          "transactionHash": "0x75fa852ad68d712590be9b84b75609d766ceaece5c44bb69582dcf2c306fc40f",
+          "status": 1,
+          "blockNumber": 320053989,
+          "gasUsed": "6722623",
+          "effectiveGasPrice": "20000001"
+        },
+        {
+          "transactionHash": "0x0a2c18aff3fe667769d3d4eef78b9e5be528d004a8e5d393c23e23bfc6abe9dd",
+          "status": 1,
+          "blockNumber": 320053999,
+          "gasUsed": "47809",
+          "effectiveGasPrice": "20198001"
+        },
+        {
+          "transactionHash": "0xe997eca1a756396d66449a03e92dc15d15b0f3b8ba4906442c7648ae90788bcf",
+          "status": 1,
+          "blockNumber": 320054006,
+          "gasUsed": "27042",
+          "effectiveGasPrice": "20052001"
+        },
+        {
+          "transactionHash": "0x1f31cbf9510dacecfacdc74319db7284068562445ab0dadb8668f8c67725cb11",
+          "status": 1,
+          "blockNumber": 320054014,
+          "gasUsed": "30674",
+          "effectiveGasPrice": "20060001"
+        },
+        {
+          "transactionHash": "0x2c05ecac994a41d543e8770f68348c07a348b80569a47fc8c1a2868f9cfe15e2",
+          "status": 1,
+          "blockNumber": 320054020,
+          "gasUsed": "30695",
+          "effectiveGasPrice": "20000001"
+        },
+        {
+          "transactionHash": "0x4defbe483ec69e6d95855000b44673f7bb2f9afcb334ea043e7aa7a0cbd273e1",
+          "status": 1,
+          "blockNumber": 320054028,
+          "gasUsed": "28693",
+          "effectiveGasPrice": "20000001"
+        }
+      ]
+    },
+    "v2": {
+      "completedAt": "2026-10-17T10:59:29.859Z",
+      "contracts": [
+        {
+          "contractName": "PronosTokenV2",
+          "contractAddress": "0x2748e2d6e64aa6aabb368c4e9d844c87fe615caf",
+          "transactionHash": "0xf97f62d205047e1d1dbc8ec455876797be00eef42cf6337a43418c6187f9b309"
+        },
+        {
+          "contractName": "MarketFactoryV2",
+          "contractAddress": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+          "transactionHash": "0x9a4f09539feb7d00e32dfa1f9927978f909b053b02cca418b93a169ca5cafbb9"
+        }
+      ],
+      "receipts": [
+        {
+          "transactionHash": "0xf97f62d205047e1d1dbc8ec455876797be00eef42cf6337a43418c6187f9b309",
+          "status": 1,
+          "blockNumber": 320054284,
+          "gasUsed": "1459171",
+          "effectiveGasPrice": "20000001"
+        },
+        {
+          "transactionHash": "0x9a4f09539feb7d00e32dfa1f9927978f909b053b02cca418b93a169ca5cafbb9",
+          "status": 1,
+          "blockNumber": 320054294,
+          "gasUsed": "7422740",
+          "effectiveGasPrice": "20150001"
+        },
+        {
+          "transactionHash": "0xce8858c2c51d84c86eb9078478e840d1353b3fbd91ec618db6ddc8b5b8b82bfa",
+          "status": 1,
+          "blockNumber": 320054304,
+          "gasUsed": "47831",
+          "effectiveGasPrice": "20000001"
+        },
+        {
+          "transactionHash": "0x2e3e3f06885919414afed6fda2423dea861533cd8d35c4ca61aab9b2c289ddb1",
+          "status": 1,
+          "blockNumber": 320054314,
+          "gasUsed": "28717",
+          "effectiveGasPrice": "20062001"
+        },
+        {
+          "transactionHash": "0x21cd572c57f5caa6ed46aa479c20b2837bdef8bc1d815ff477758a01fc3784e4",
+          "status": 1,
+          "blockNumber": 320054325,
+          "gasUsed": "30674",
+          "effectiveGasPrice": "20020001"
+        },
+        {
+          "transactionHash": "0x3434ee8acb2c327d60f1c2d5f1bed428dd55ce0769ee2ebb3fba016be84336d2",
+          "status": 1,
+          "blockNumber": 320054335,
+          "gasUsed": "30695",
+          "effectiveGasPrice": "20242001"
+        },
+        {
+          "transactionHash": "0x78d3a3a9748024d0c747c524caf0ffa0d3efcfb914ef9342301b79184dd6334d",
+          "status": 1,
+          "blockNumber": 320054342,
+          "gasUsed": "28693",
+          "effectiveGasPrice": "20258001"
+        }
+      ]
+    }
+  },
+  "contractVerification": {
+    "verifiedAt": "2026-10-17T11:00:41.030Z",
+    "contracts": [
+      {
+        "contractName": "TournamentMXNP",
+        "address": "0x6ed6c00c2b4cf9f5989866f4c5862d4cded67ef9",
+        "creationTransaction": "0xaa76b23f1341c3319a58d1f6ca393430d3e5de3bc67dee553f34117502ad0af4",
+        "constructorArguments": [
+          "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c"
+        ],
+        "creationBytecodeMatched": true,
+        "runtimeMatchedExceptConstructorImmutables": true,
+        "runtimeCodeHash": "0xbb57d0ff9d7fd581dc42e7510bb4ba3fbff799170b7cff0b648e13ee5fbe46bf",
+        "runtimeBytes": 2958,
+        "compiler": "0.8.24+commit.e11b9ed9",
+        "optimizer": {
+          "enabled": true,
+          "runs": 200
+        },
+        "evmVersion": "cancun"
+      },
+      {
+        "contractName": "PronosToken",
+        "address": "0xc26f94e86da1193dade6d798acdf8c0bc4d68946",
+        "creationTransaction": "0xf34f9e4bfe3e231351a8a40c64b820023ce10b6956f5668c5f15337043a96644",
+        "constructorArguments": [],
+        "creationBytecodeMatched": true,
+        "runtimeMatchedExceptConstructorImmutables": true,
+        "runtimeCodeHash": "0x40a1d6f5219a751e54117a4485fe3aa6f360ba6b48c8d737e984bd1e8d631f94",
+        "runtimeBytes": 5716,
+        "compiler": "0.8.24+commit.e11b9ed9",
+        "optimizer": {
+          "enabled": true,
+          "runs": 200
+        },
+        "evmVersion": "cancun"
+      },
+      {
+        "contractName": "MarketFactory",
+        "address": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+        "creationTransaction": "0x75fa852ad68d712590be9b84b75609d766ceaece5c44bb69582dcf2c306fc40f",
+        "constructorArguments": [
+          "0xc26f94e86da1193dade6d798acdf8c0bc4d68946",
+          "0x6ed6c00c2b4cf9f5989866f4c5862d4cded67ef9",
+          "0xa8eE70541d537389ed287d204efC5297569321d5",
+          "0xa8eE70541d537389ed287d204efC5297569321d5",
+          "0xa8eE70541d537389ed287d204efC5297569321d5"
+        ],
+        "creationBytecodeMatched": true,
+        "runtimeMatchedExceptConstructorImmutables": true,
+        "runtimeCodeHash": "0x7e215597c586456c4162af5c6f37518e2bf3b78b42afdb196cc6d7ad3892aefb",
+        "runtimeBytes": 12712,
+        "compiler": "0.8.24+commit.e11b9ed9",
+        "optimizer": {
+          "enabled": true,
+          "runs": 200
+        },
+        "evmVersion": "cancun"
+      },
+      {
+        "contractName": "PronosTokenV2",
+        "address": "0x2748e2d6e64aa6aabb368c4e9d844c87fe615caf",
+        "creationTransaction": "0xf97f62d205047e1d1dbc8ec455876797be00eef42cf6337a43418c6187f9b309",
+        "constructorArguments": [],
+        "creationBytecodeMatched": true,
+        "runtimeMatchedExceptConstructorImmutables": true,
+        "runtimeCodeHash": "0x0a210f747130b9bcba621ef8015395ef82a854b1d627f54679ff4301edb94ac1",
+        "runtimeBytes": 6357,
+        "compiler": "0.8.24+commit.e11b9ed9",
+        "optimizer": {
+          "enabled": true,
+          "runs": 200
+        },
+        "evmVersion": "cancun"
+      },
+      {
+        "contractName": "MarketFactoryV2",
+        "address": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+        "creationTransaction": "0x9a4f09539feb7d00e32dfa1f9927978f909b053b02cca418b93a169ca5cafbb9",
+        "constructorArguments": [
+          "0x2748e2d6e64aa6aabb368c4e9d844c87fe615caf",
+          "0x6ed6c00c2b4cf9f5989866f4c5862d4cded67ef9",
+          "0xa8eE70541d537389ed287d204efC5297569321d5",
+          "0xa8eE70541d537389ed287d204efC5297569321d5",
+          "0xa8eE70541d537389ed287d204efC5297569321d5"
+        ],
+        "creationBytecodeMatched": true,
+        "runtimeMatchedExceptConstructorImmutables": true,
+        "runtimeCodeHash": "0x8c19d77213cd931a138c94bb14f188bf709520f37a048abb23c6784c805dc9c4",
+        "runtimeBytes": 13934,
+        "compiler": "0.8.24+commit.e11b9ed9",
+        "optimizer": {
+          "enabled": true,
+          "runs": 200
+        },
+        "evmVersion": "cancun"
+      }
+    ]
+  },
+  "roleVerification": {
+    "v1": {
+      "address": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+      "shareAddress": "0xc26f94e86da1193dade6d798acdf8c0bc4d68946",
+      "poolCreationCode": "0xaB878eF1b244FF4c53C6d212ceF7cbAC88Cd48F3",
+      "runtimeBytes": 12712,
+      "owner": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "marketCreator": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "resolver": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "collateral": "0x6ed6C00C2B4cF9f5989866f4c5862D4cdeD67ef9",
+      "marketCount": "0",
+      "factoryMinter": true,
+      "creatorOwnerResolverCallChecks": true,
+      "codeStoreMatchesPoolCreationCode": true
+    },
+    "v2": {
+      "address": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+      "shareAddress": "0x2748e2d6e64aa6aabb368c4e9d844c87fe615caf",
+      "poolCreationCode": "0xf6723A289a356f20D1B5e09143580451fd120060",
+      "runtimeBytes": 13934,
+      "owner": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "marketCreator": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "resolver": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "collateral": "0x6ed6C00C2B4cF9f5989866f4c5862D4cdeD67ef9",
+      "marketCount": "0",
+      "factoryMinter": true,
+      "creatorOwnerResolverCallChecks": true,
+      "codeStoreMatchesPoolCreationCode": true
+    }
+  },
+  "gasFunding": {
+    "transactionHash": "0x2f3cc93bfe64daf4e5d8cf1c7f3bfb31efb0081f744c9b837553bedd3790b4ba",
+    "from": "0x0Caa37c077924038e14e9D8dE46B5208788e52CF",
+    "to": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+    "amountETH": "0.001",
+    "blockNumber": 320054583
+  },
+  "operationsSeedFunding": {
+    "transactionHash": "0xf9821977bc0e05b0f30d613631c2f28b4761c49324e7ffdc429d534dd965b362",
+    "signer": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+    "recipient": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+    "amountMXNP": "1000",
+    "turnkeyActivityId": "01a14985-5954-7a36-9879-f9291b654208",
+    "turnkeyActivityStatus": "ACTIVITY_STATUS_COMPLETED",
+    "blockNumber": 320054622,
+    "gasUsed": "70666"
+  },
+  "balancesAtVerification": {
+    "opsETH": "0.000998578624076",
+    "opsMXNP": "1000.0",
+    "totalSupplyMXNP": "1000.0",
+    "localDeployerETH": "0.003296805304700215",
+    "multiMarketGasReserveETH": "0.00052"
+  },
+  "fundingVerifiedAt": "2026-10-17T11:00:44.323Z",
+  "previewConfiguration": {
+    "verifiedAt": "2026-10-17T11:02:13.235Z",
+    "projectId": "prj_Cq2kBrGtvtU7nVOH3T6yBGJWGRKi",
+    "target": "preview",
+    "gitBranch": "onchain-sepolia",
+    "updated": {
+      "ONCHAIN_MARKET_FACTORY_ADDRESS": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+      "ONCHAIN_MARKET_FACTORY_V2_ADDRESS": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+      "FACTORY_ADDRESS": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+      "PRONOS_FACTORY_ADDRESS": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+      "FACTORY_V2_ADDRESS": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+      "PRONOS_FACTORY_V2_ADDRESS": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+      "VITE_PRONOS_ARB_SEPOLIA_FACTORY": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+      "VITE_PRONOS_ARB_SEPOLIA_FACTORY_V2": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+      "ONCHAIN_SHARE_TOKEN_ADDRESS": "0xc26f94e86da1193dade6d798acdf8c0bc4d68946",
+      "ONCHAIN_SHARE_TOKEN_V2_ADDRESS": "0x2748e2d6e64aa6aabb368c4e9d844c87fe615caf",
+      "VITE_PRONOS_ARB_SEPOLIA_TOKEN": "0xc26f94e86da1193dade6d798acdf8c0bc4d68946",
+      "VITE_PRONOS_ARB_SEPOLIA_TOKEN_V2": "0x2748e2d6e64aa6aabb368c4e9d844c87fe615caf",
+      "ONCHAIN_COLLATERAL_ADDRESS": "0x6ed6c00c2b4cf9f5989866f4c5862d4cded67ef9",
+      "ONCHAIN_TOURNAMENT_MXNP_ADDRESS": "0x6ed6c00c2b4cf9f5989866f4c5862d4cded67ef9",
+      "VITE_ONCHAIN_COLLATERAL_ADDRESS": "0x6ed6c00c2b4cf9f5989866f4c5862d4cded67ef9",
+      "ONCHAIN_COLLATERAL_SYMBOL": "MXNP",
+      "INDEXER_START_BLOCK": "320053989",
+      "ONCHAIN_DEPLOYER_SUBORG_ID": "34e1b782-dc66-4b66-9ac7-477b743718f5",
+      "ONCHAIN_DEPLOYER_ADDRESS": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "ONCHAIN_OWNER_SUBORG_ID": "34e1b782-dc66-4b66-9ac7-477b743718f5",
+      "ONCHAIN_OWNER_ADDRESS": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "ONCHAIN_RESOLVER_SUBORG_ID": "34e1b782-dc66-4b66-9ac7-477b743718f5",
+      "ONCHAIN_RESOLVER_ADDRESS": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "MARKET_CREATOR_ADDRESS": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c"
+    },
+    "unchangedOutsideBranch": 100,
+    "pointbreakRecordsUnchanged": 9,
+    "flagsRemainOff": true
+  },
+  "checks": {
+    "solidityTestsPassed": 122,
+    "focusedJavascriptTestsPassed": 91,
+    "creationAndRuntimeBytecodeMatched": true,
+    "unauthorizedOwnerCreatorResolverCallsRejected": true,
+    "turnkeySignedTransactionConfirmed": true,
+    "marketsCreated": 0,
+    "userAllocationsOrResets": 0,
+    "applicationDeploymentPerformed": false,
+    "explorerSourceVerificationPerformed": false
+  },
+  "sourceSha256": [
+    {
+      "path": "contracts/src/TournamentMXNP.sol",
+      "sha256": "1f68557f33cea87aa76a22e36fd12d1679cfac21b9f45d994e2dd7dec67a5b7b"
+    },
+    {
+      "path": "contracts/src/PronosToken.sol",
+      "sha256": "b9f3f5eef790f85e95c5520a7a110caa17ae69c118db53a7381facb1cc107e1a"
+    },
+    {
+      "path": "contracts/src/PronosTokenV2.sol",
+      "sha256": "759acb46f1829cae9df200018713f6b6b6e84ab526fc4f0a292a5872d6ce563e"
+    },
+    {
+      "path": "contracts/src/MarketFactory.sol",
+      "sha256": "8a0369972d4f54173b7dd98d055e5a4a0d4e0c8909de08df3d048a4afd171aac"
+    },
+    {
+      "path": "contracts/src/MarketFactoryV2.sol",
+      "sha256": "9bedf30657dd3058a14ef92540f9456776db127bb4b89da760fca8442f75825b"
+    },
+    {
+      "path": "contracts/src/PronosAMM.sol",
+      "sha256": "73387aeaacf2a2baf18787ebc41ec1af38d98e9eff0af649d9cf6da53eaf3a1f"
+    },
+    {
+      "path": "contracts/src/PronosAMMMulti.sol",
+      "sha256": "f5413b50d22d4f0d1c4095e4d862d5aa83ae651caf2d1efba6cb47f506f257a2"
+    },
+    {
+      "path": "contracts/src/PoolDeployment.sol",
+      "sha256": "1cb1609d3b7e362f9cb61d4b8bfada29f22494fbfefa0ae69f495d9996cdd074"
+    },
+    {
+      "path": "contracts/script/DeployTournamentMXNP.s.sol",
+      "sha256": "57d438dde7f86333fff7980da6e8a80c7579c527ffd4343c49bc2af7b1c85d0e"
+    },
+    {
+      "path": "contracts/script/DeployProtocol.s.sol",
+      "sha256": "68a5f622c1cf5eb37dce534580a9a74a7f81693bc5e762eb39f43e4667b23ab0"
+    },
+    {
+      "path": "contracts/script/DeployProtocolV2.s.sol",
+      "sha256": "7b4b8cde0be06c43cbd372e8704a3946db0c37dae7e7a67f7906c82ef05ef0f3"
+    },
+    {
+      "path": "contracts/foundry.toml",
+      "sha256": "a34a809385070f33fabc4793988c3f956ae2b9e14e8afd653fe9be4d3e351abb"
+    },
+    {
+      "path": "frontend/api/_lib/onchain-fees.js",
+      "sha256": "737c38ee23206dfa5968e3cb64f8471678a748bdf684281c9febc46a82281a74"
+    },
+    {
+      "path": "frontend/api/_lib/onchain-trader.js",
+      "sha256": "a724fe98c3714283df70fe83ebd0fe24b6a654b17b5332754003470d4bb13245"
+    }
+  ]
+}

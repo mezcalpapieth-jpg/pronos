@@ -1,0 +1,1019 @@
+{
+  "measured_at": "2026-10-17T11:06:31.077Z",
+  "purpose": "Read-only Points demand sizing for a future Arbitrum Sepolia tournament; this is not a migration, funding action or chain mint.",
+  "branch": "onchain-sepolia",
+  "data_source": {
+    "neon_project_id": "tiny-heart-17710833",
+    "neon_branch_id": "br-twilight-fire-amf1oasv",
+    "database": "neondb",
+    "role": "pronos_reader",
+    "access": "SELECT only"
+  },
+  "windows": {
+    "August": {
+      "starts_at": "2026-08-12T06:00:00Z",
+      "ends_at": "2026-08-27T05:59:00Z"
+    },
+    "October": {
+      "starts_at": "2026-10-01T06:00:00Z",
+      "ends_at": "2026-10-17T11:06:31.077Z",
+      "cycle_ends_at": "2026-11-01T05:59:00Z"
+    }
+  },
+  "assumptions": [
+    "All amounts are MXNP-equivalent Points units with 6 decimals; source markets remain off-chain Points markets.",
+    "Baseline is 500 per registered non-treasury user at the window end, including new signups once. New signup credits are not added a second time.",
+    "Rewards include daily, referral, rescue, social, PWA, maker rewards and explicit cycle carryover. Administrative reset deltas, trading proceeds, redemptions and refunds are not new issuance.",
+    "Market seeds use the scalar seed_liquidity once per unified pool, or once per parallel child pool. Parallel parents and per-outcome share reserve arrays are not added again.",
+    "Published pool equivalents include active, resolved and canceled rows, exclude pending and test rows, and use current configured seeds for rows created in each window. They are a conservative no-recovery budget, not historical cash-flow reconstruction or existing on-chain collateral.",
+    "A July full-calendar-month peak is a broader historical stress case, not an official tournament comparison or evidence that high-frequency crypto markets are enabled in the new preview.",
+    "Existing active seed and seeds from markets resolved in the last 30 days are capital-planning proxies, not actual current ERC20 pool balances or recoverable proceeds.",
+    "Pool-owned winning-share collateral recovery waits 30 days after resolution; user redemptions remain possible and consume existing pool collateral. Do not budget immediate full seed recovery.",
+    "Parlay bookmaker liabilities, stock ledger balances and historical open positions are not migrated by this new-cycle budget; carrying those products on-chain needs a separate liability audit.",
+    "No current on-chain user delegation rows were found among the 599 users; wallet count sizes funding capacity and does not establish signing readiness.",
+    "Linear October projection preserves the opening 410-user baseline and projects subsequent signup allocations, rewards and seeds; future issuance and market cadence can differ.",
+    "The 50m treasury target is planning headroom, not a protocol-required minimum or a 50m user grant. Token supply has no immutable application cap; mint only approved amounts and record reserve drawdown."
+  ],
+  "cycles": [
+    {
+      "label": "August",
+      "baseline_mxnp": "95000",
+      "rewards_and_carryover_mxnp": "125893.027529",
+      "user_funding_mxnp": "220893.027529",
+      "published_pool_equivalents": "304",
+      "market_seed_mxnp": "305183.627000",
+      "total_no_recovery_budget_mxnp": "526076.654529"
+    },
+    {
+      "label": "October to date",
+      "baseline_mxnp": "299500",
+      "rewards_and_carryover_mxnp": "181299.493992",
+      "user_funding_mxnp": "480799.493992",
+      "published_pool_equivalents": "333",
+      "market_seed_mxnp": "508683.530000",
+      "total_no_recovery_budget_mxnp": "989483.023992"
+    }
+  ],
+  "projections": {
+    "elapsed_days": 16.2128596875,
+    "cycle_days": 30.999305555555555,
+    "method": "Hold the 410-user opening baseline fixed; linearly project new signup allocations, rewards and published pool seeds at the observed October rate. Forecast, not a guarantee.",
+    "full_cycle_user_mxnp": 732334.0392205635,
+    "full_cycle_market_seed_mxnp": 972612.8814712603,
+    "full_cycle_total_mxnp": 1704946.9206918238,
+    "existing_pre_october_active_or_recently_resolved_pool_seed_mxnp": 929728.8,
+    "current_rate_plus_legacy_pool_seed_mxnp": 2634675.720691824,
+    "stress_formula": "1.5 * (2 * July peak monthly published seed + 2 * projected October user funding); round up to a 50m treasury reserve target",
+    "stress_budget_before_rounding_mxnp": 39187437.11766169,
+    "recommended_test_treasury_target_mxnp": "50000000",
+    "current_scope_launch_reserve_mxnp": "10000000"
+  },
+  "aggregates": {
+    "users": [
+      {
+        "label": "July",
+        "started_at": "2026-07-14T09:39:56.080Z",
+        "ended_at": "2026-07-28T09:39:56.080Z",
+        "registered_at_start": "3",
+        "registered_at_end": "5",
+        "trading_users": "2",
+        "buy_volume": "350.000000"
+      },
+      {
+        "label": "August",
+        "started_at": "2026-08-12T14:52:57.891Z",
+        "ended_at": "2026-08-27T05:59:00.000Z",
+        "registered_at_start": "115",
+        "registered_at_end": "190",
+        "trading_users": "98",
+        "buy_volume": "853018.106000"
+      },
+      {
+        "label": "October to date",
+        "started_at": "2026-10-01T06:00:00.000Z",
+        "ended_at": "2026-10-17T11:06:31.077Z",
+        "registered_at_start": "410",
+        "registered_at_end": "599",
+        "trading_users": "198",
+        "buy_volume": "1251449.830000"
+      }
+    ],
+    "funding": [
+      {
+        "label": "August",
+        "kind": "cycle_carryover",
+        "entries": "115",
+        "users": "115",
+        "net_amount": "26205.000000",
+        "positive_amount": "26205.000000"
+      },
+      {
+        "label": "August",
+        "kind": "daily_claim",
+        "entries": "454",
+        "users": "102",
+        "net_amount": "67460.000000",
+        "positive_amount": "67460.000000"
+      },
+      {
+        "label": "August",
+        "kind": "limit_buy_release",
+        "entries": "8",
+        "users": "3",
+        "net_amount": "6275.000000",
+        "positive_amount": "6275.000000"
+      },
+      {
+        "label": "August",
+        "kind": "limit_buy_reserve",
+        "entries": "11",
+        "users": "5",
+        "net_amount": "-6524.300000",
+        "positive_amount": "0.000000"
+      },
+      {
+        "label": "August",
+        "kind": "limit_maker_reward",
+        "entries": "3",
+        "users": "1",
+        "net_amount": "0.346656",
+        "positive_amount": "0.346656"
+      },
+      {
+        "label": "August",
+        "kind": "market_cancel_refund",
+        "entries": "1",
+        "users": "1",
+        "net_amount": "100.000000",
+        "positive_amount": "100.000000"
+      },
+      {
+        "label": "August",
+        "kind": "pwa_install_bonus",
+        "entries": "7",
+        "users": "7",
+        "net_amount": "350.000000",
+        "positive_amount": "350.000000"
+      },
+      {
+        "label": "August",
+        "kind": "redemption",
+        "entries": "503",
+        "users": "57",
+        "net_amount": "766203.587833",
+        "positive_amount": "766203.587833"
+      },
+      {
+        "label": "August",
+        "kind": "redemption_reversal",
+        "entries": "2",
+        "users": "2",
+        "net_amount": "-3782.332378",
+        "positive_amount": "0.000000"
+      },
+      {
+        "label": "August",
+        "kind": "referral_bonus",
+        "entries": "81",
+        "users": "52",
+        "net_amount": "14250.000000",
+        "positive_amount": "14250.000000"
+      },
+      {
+        "label": "August",
+        "kind": "rescue_bonus",
+        "entries": "66",
+        "users": "38",
+        "net_amount": "9476.838515",
+        "positive_amount": "9476.838515"
+      },
+      {
+        "label": "August",
+        "kind": "resolution_correction",
+        "entries": "2",
+        "users": "2",
+        "net_amount": "-1242.512033",
+        "positive_amount": "0.000000"
+      },
+      {
+        "label": "August",
+        "kind": "signup_bonus",
+        "entries": "75",
+        "users": "75",
+        "net_amount": "37500.000000",
+        "positive_amount": "37500.000000"
+      },
+      {
+        "label": "August",
+        "kind": "social_task",
+        "entries": "57",
+        "users": "38",
+        "net_amount": "6700.000000",
+        "positive_amount": "6700.000000"
+      },
+      {
+        "label": "August",
+        "kind": "trade_buy",
+        "entries": "1338",
+        "users": "98",
+        "net_amount": "-852768.806000",
+        "positive_amount": "0.000000"
+      },
+      {
+        "label": "August",
+        "kind": "trade_sell",
+        "entries": "231",
+        "users": "47",
+        "net_amount": "160079.552769",
+        "positive_amount": "160079.552769"
+      },
+      {
+        "label": "July",
+        "kind": "daily_claim",
+        "entries": "7",
+        "users": "3",
+        "net_amount": "720.000000",
+        "positive_amount": "720.000000"
+      },
+      {
+        "label": "July",
+        "kind": "redemption",
+        "entries": "1",
+        "users": "1",
+        "net_amount": "104.245744",
+        "positive_amount": "104.245744"
+      },
+      {
+        "label": "July",
+        "kind": "signup_bonus",
+        "entries": "2",
+        "users": "2",
+        "net_amount": "1000.000000",
+        "positive_amount": "1000.000000"
+      },
+      {
+        "label": "July",
+        "kind": "social_task",
+        "entries": "2",
+        "users": "1",
+        "net_amount": "30.000000",
+        "positive_amount": "30.000000"
+      },
+      {
+        "label": "July",
+        "kind": "trade_buy",
+        "entries": "4",
+        "users": "2",
+        "net_amount": "-350.000000",
+        "positive_amount": "0.000000"
+      },
+      {
+        "label": "July",
+        "kind": "trade_sell",
+        "entries": "1",
+        "users": "1",
+        "net_amount": "97.500000",
+        "positive_amount": "97.500000"
+      },
+      {
+        "label": "October to date",
+        "kind": "admin_account_reset",
+        "entries": "11",
+        "users": "6",
+        "net_amount": "-4533.661664",
+        "positive_amount": "19916.066404"
+      },
+      {
+        "label": "October to date",
+        "kind": "cycle_carryover",
+        "entries": "48",
+        "users": "48",
+        "net_amount": "7505.000000",
+        "positive_amount": "7505.000000"
+      },
+      {
+        "label": "October to date",
+        "kind": "cycle_reset",
+        "entries": "405",
+        "users": "405",
+        "net_amount": "-437698.110864",
+        "positive_amount": "26501.059229"
+      },
+      {
+        "label": "October to date",
+        "kind": "daily_claim",
+        "entries": "701",
+        "users": "201",
+        "net_amount": "104000.000000",
+        "positive_amount": "104000.000000"
+      },
+      {
+        "label": "October to date",
+        "kind": "limit_buy_release",
+        "entries": "4",
+        "users": "4",
+        "net_amount": "700.000000",
+        "positive_amount": "700.000000"
+      },
+      {
+        "label": "October to date",
+        "kind": "limit_buy_reserve",
+        "entries": "23",
+        "users": "13",
+        "net_amount": "-6939.000000",
+        "positive_amount": "0.000000"
+      },
+      {
+        "label": "October to date",
+        "kind": "limit_maker_reward",
+        "entries": "9",
+        "users": "6",
+        "net_amount": "8.616457",
+        "positive_amount": "8.616457"
+      },
+      {
+        "label": "October to date",
+        "kind": "limit_sell_fill",
+        "entries": "1",
+        "users": "1",
+        "net_amount": "184.090000",
+        "positive_amount": "184.090000"
+      },
+      {
+        "label": "October to date",
+        "kind": "market_cancel_refund",
+        "entries": "3",
+        "users": "3",
+        "net_amount": "500.000000",
+        "positive_amount": "500.000000"
+      },
+      {
+        "label": "October to date",
+        "kind": "parlay_entry",
+        "entries": "89",
+        "users": "27",
+        "net_amount": "-34007.660000",
+        "positive_amount": "0.000000"
+      },
+      {
+        "label": "October to date",
+        "kind": "parlay_payout",
+        "entries": "20",
+        "users": "11",
+        "net_amount": "31274.475000",
+        "positive_amount": "31274.475000"
+      },
+      {
+        "label": "October to date",
+        "kind": "parlay_refund",
+        "entries": "2",
+        "users": "2",
+        "net_amount": "600.000000",
+        "positive_amount": "600.000000"
+      },
+      {
+        "label": "October to date",
+        "kind": "pwa_install_bonus",
+        "entries": "12",
+        "users": "12",
+        "net_amount": "600.000000",
+        "positive_amount": "600.000000"
+      },
+      {
+        "label": "October to date",
+        "kind": "redemption",
+        "entries": "686",
+        "users": "73",
+        "net_amount": "1103436.060874",
+        "positive_amount": "1103436.060874"
+      },
+      {
+        "label": "October to date",
+        "kind": "redemption_reversal",
+        "entries": "26",
+        "users": "6",
+        "net_amount": "-19260.491441",
+        "positive_amount": "1654.188856"
+      },
+      {
+        "label": "October to date",
+        "kind": "referral_bonus",
+        "entries": "294",
+        "users": "156",
+        "net_amount": "51600.000000",
+        "positive_amount": "51600.000000"
+      },
+      {
+        "label": "October to date",
+        "kind": "rescue_bonus",
+        "entries": "97",
+        "users": "57",
+        "net_amount": "13885.877535",
+        "positive_amount": "13885.877535"
+      },
+      {
+        "label": "October to date",
+        "kind": "signup_bonus",
+        "entries": "189",
+        "users": "189",
+        "net_amount": "94500.000000",
+        "positive_amount": "94500.000000"
+      },
+      {
+        "label": "October to date",
+        "kind": "social_task",
+        "entries": "33",
+        "users": "21",
+        "net_amount": "3700.000000",
+        "positive_amount": "3700.000000"
+      },
+      {
+        "label": "October to date",
+        "kind": "stock_buy",
+        "entries": "27",
+        "users": "13",
+        "net_amount": "-10470.672299",
+        "positive_amount": "0.000000"
+      },
+      {
+        "label": "October to date",
+        "kind": "stock_sell",
+        "entries": "5",
+        "users": "3",
+        "net_amount": "1423.451842",
+        "positive_amount": "1423.451842"
+      },
+      {
+        "label": "October to date",
+        "kind": "trade_buy",
+        "entries": "2115",
+        "users": "193",
+        "net_amount": "-1245310.830000",
+        "positive_amount": "0.000000"
+      },
+      {
+        "label": "October to date",
+        "kind": "trade_sell",
+        "entries": "316",
+        "users": "46",
+        "net_amount": "225376.148631",
+        "positive_amount": "225376.148631"
+      }
+    ],
+    "market_seeds": [
+      {
+        "label": "August",
+        "amm_mode": "parallel",
+        "is_child": false,
+        "tournament_featured": false,
+        "status": "canceled",
+        "markets": "1",
+        "seed_total": "1500.000000",
+        "seed_min": "1500.000000",
+        "seed_max": "1500.000000"
+      },
+      {
+        "label": "August",
+        "amm_mode": "parallel",
+        "is_child": false,
+        "tournament_featured": true,
+        "status": "resolved",
+        "markets": "21",
+        "seed_total": "24398.520000",
+        "seed_min": "1000.000000",
+        "seed_max": "4061.160000"
+      },
+      {
+        "label": "August",
+        "amm_mode": "parallel",
+        "is_child": true,
+        "tournament_featured": false,
+        "status": "canceled",
+        "markets": "2",
+        "seed_total": "3000.000000",
+        "seed_min": "1500.000000",
+        "seed_max": "1500.000000"
+      },
+      {
+        "label": "August",
+        "amm_mode": "parallel",
+        "is_child": true,
+        "tournament_featured": false,
+        "status": "resolved",
+        "markets": "178",
+        "seed_total": "174242.087000",
+        "seed_min": "330.800000",
+        "seed_max": "4061.160000"
+      },
+      {
+        "label": "August",
+        "amm_mode": "unified",
+        "is_child": false,
+        "tournament_featured": false,
+        "status": "canceled",
+        "markets": "1",
+        "seed_total": "1900.000000",
+        "seed_min": "1900.000000",
+        "seed_max": "1900.000000"
+      },
+      {
+        "label": "August",
+        "amm_mode": "unified",
+        "is_child": false,
+        "tournament_featured": true,
+        "status": "canceled",
+        "markets": "3",
+        "seed_total": "1800.000000",
+        "seed_min": "200.000000",
+        "seed_max": "1000.000000"
+      },
+      {
+        "label": "August",
+        "amm_mode": "unified",
+        "is_child": false,
+        "tournament_featured": false,
+        "status": "resolved",
+        "markets": "27",
+        "seed_total": "27000.000000",
+        "seed_min": "1000.000000",
+        "seed_max": "1000.000000"
+      },
+      {
+        "label": "August",
+        "amm_mode": "unified",
+        "is_child": false,
+        "tournament_featured": true,
+        "status": "resolved",
+        "markets": "78",
+        "seed_total": "82241.540000",
+        "seed_min": "382.780000",
+        "seed_max": "2000.000000"
+      },
+      {
+        "label": "July",
+        "amm_mode": "parallel",
+        "is_child": false,
+        "tournament_featured": false,
+        "status": "canceled",
+        "markets": "1",
+        "seed_total": "800.000000",
+        "seed_min": "800.000000",
+        "seed_max": "800.000000"
+      },
+      {
+        "label": "July",
+        "amm_mode": "parallel",
+        "is_child": false,
+        "tournament_featured": false,
+        "status": "pending",
+        "markets": "2",
+        "seed_total": "2000.000000",
+        "seed_min": "1000.000000",
+        "seed_max": "1000.000000"
+      },
+      {
+        "label": "July",
+        "amm_mode": "parallel",
+        "is_child": false,
+        "tournament_featured": false,
+        "status": "resolved",
+        "markets": "15",
+        "seed_total": "14000.000000",
+        "seed_min": "800.000000",
+        "seed_max": "1000.000000"
+      },
+      {
+        "label": "July",
+        "amm_mode": "parallel",
+        "is_child": true,
+        "tournament_featured": false,
+        "status": "canceled",
+        "markets": "13",
+        "seed_total": "12600.000000",
+        "seed_min": "800.000000",
+        "seed_max": "1000.000000"
+      },
+      {
+        "label": "July",
+        "amm_mode": "parallel",
+        "is_child": true,
+        "tournament_featured": false,
+        "status": "pending",
+        "markets": "26",
+        "seed_total": "26000.000000",
+        "seed_min": "1000.000000",
+        "seed_max": "1000.000000"
+      },
+      {
+        "label": "July",
+        "amm_mode": "parallel",
+        "is_child": true,
+        "tournament_featured": false,
+        "status": "resolved",
+        "markets": "95",
+        "seed_total": "93000.000000",
+        "seed_min": "800.000000",
+        "seed_max": "1000.000000"
+      },
+      {
+        "label": "July",
+        "amm_mode": "unified",
+        "is_child": false,
+        "tournament_featured": false,
+        "status": "canceled",
+        "markets": "1",
+        "seed_total": "1000.000000",
+        "seed_min": "1000.000000",
+        "seed_max": "1000.000000"
+      },
+      {
+        "label": "July",
+        "amm_mode": "unified",
+        "is_child": false,
+        "tournament_featured": false,
+        "status": "resolved",
+        "markets": "8148",
+        "seed_total": "8136745.000000",
+        "seed_min": "280.000000",
+        "seed_max": "1115.000000"
+      },
+      {
+        "label": "October to date",
+        "amm_mode": "parallel",
+        "is_child": false,
+        "tournament_featured": true,
+        "status": "active",
+        "markets": "5",
+        "seed_total": "7364.710000",
+        "seed_min": "364.710000",
+        "seed_max": "2500.000000"
+      },
+      {
+        "label": "October to date",
+        "amm_mode": "parallel",
+        "is_child": false,
+        "tournament_featured": true,
+        "status": "resolved",
+        "markets": "16",
+        "seed_total": "19000.000000",
+        "seed_min": "1000.000000",
+        "seed_max": "2500.000000"
+      },
+      {
+        "label": "October to date",
+        "amm_mode": "parallel",
+        "is_child": true,
+        "tournament_featured": false,
+        "status": "active",
+        "markets": "22",
+        "seed_total": "32499.980000",
+        "seed_min": "364.710000",
+        "seed_max": "2500.000000"
+      },
+      {
+        "label": "October to date",
+        "amm_mode": "parallel",
+        "is_child": true,
+        "tournament_featured": false,
+        "status": "resolved",
+        "markets": "118",
+        "seed_total": "129500.000000",
+        "seed_min": "500.000000",
+        "seed_max": "2500.000000"
+      },
+      {
+        "label": "October to date",
+        "amm_mode": "unified",
+        "is_child": false,
+        "tournament_featured": false,
+        "status": "active",
+        "markets": "1",
+        "seed_total": "1875.000000",
+        "seed_min": "1875.000000",
+        "seed_max": "1875.000000"
+      },
+      {
+        "label": "October to date",
+        "amm_mode": "unified",
+        "is_child": false,
+        "tournament_featured": true,
+        "status": "active",
+        "markets": "32",
+        "seed_total": "99572.290000",
+        "seed_min": "500.000000",
+        "seed_max": "10000.000000"
+      },
+      {
+        "label": "October to date",
+        "amm_mode": "unified",
+        "is_child": false,
+        "tournament_featured": true,
+        "status": "canceled",
+        "markets": "2",
+        "seed_total": "2000.000000",
+        "seed_min": "1000.000000",
+        "seed_max": "1000.000000"
+      },
+      {
+        "label": "October to date",
+        "amm_mode": "unified",
+        "is_child": false,
+        "tournament_featured": false,
+        "status": "pending",
+        "markets": "2",
+        "seed_total": "4375.000000",
+        "seed_min": "1875.000000",
+        "seed_max": "2500.000000"
+      },
+      {
+        "label": "October to date",
+        "amm_mode": "unified",
+        "is_child": false,
+        "tournament_featured": false,
+        "status": "resolved",
+        "markets": "19",
+        "seed_total": "20500.000000",
+        "seed_min": "1000.000000",
+        "seed_max": "2500.000000"
+      },
+      {
+        "label": "October to date",
+        "amm_mode": "unified",
+        "is_child": false,
+        "tournament_featured": true,
+        "status": "resolved",
+        "markets": "139",
+        "seed_total": "222736.260000",
+        "seed_min": "100.000000",
+        "seed_max": "10000.000000"
+      }
+    ],
+    "current": [
+      {
+        "measured_at": "2026-10-17T11:06:38.673Z",
+        "registered_users": "599",
+        "unblocked_users_with_wallet": "599",
+        "user_cash_points": "517351.305424",
+        "treasury_balance": null
+      }
+    ],
+    "totals": [
+      {
+        "label": "August",
+        "funded_pools": "304",
+        "seed_total": "305183.627000",
+        "tournament_pools": "259",
+        "tournament_seed_total": "258283.627000",
+        "pending_pools": "0",
+        "pending_seed_total": "0",
+        "active_seed_total": "0",
+        "mean_seed": "1003.893510"
+      },
+      {
+        "label": "October to date",
+        "funded_pools": "333",
+        "seed_total": "508683.530000",
+        "tournament_pools": "313",
+        "tournament_seed_total": "486308.530000",
+        "pending_pools": "2",
+        "pending_seed_total": "4375.000000",
+        "active_seed_total": "133947.270000",
+        "mean_seed": "1527.578168"
+      }
+    ],
+    "issuance": [
+      {
+        "label": "October to date",
+        "baseline_all_users": "299500",
+        "reward_issuance": "181299.493992",
+        "new_signup_already_in_baseline": "94500.000000",
+        "admin_reset_net": "-4533.661664"
+      },
+      {
+        "label": "August",
+        "baseline_all_users": "95000",
+        "reward_issuance": "125893.027529",
+        "new_signup_already_in_baseline": "38500.000000",
+        "admin_reset_net": "0"
+      }
+    ],
+    "current_seeds": [
+      {
+        "bucket": "active",
+        "pools": "110",
+        "seed_total": "207127.270000",
+        "pre_october_seed": "73180.000000"
+      },
+      {
+        "bucket": "resolved_within_30_days",
+        "pools": "1133",
+        "seed_total": "1229285.060000",
+        "pre_october_seed": "856548.800000"
+      }
+    ],
+    "legacy_peak": [
+      {
+        "month": "2026-07-01T00:00:00.000Z",
+        "resolver_type": "chainlink_price",
+        "pools": "12150",
+        "seed_total": "12150000.000000"
+      },
+      {
+        "month": "2026-08-01T00:00:00.000Z",
+        "resolver_type": "chainlink_price",
+        "pools": "5768",
+        "seed_total": "5768000.000000"
+      },
+      {
+        "month": "2026-09-01T00:00:00.000Z",
+        "resolver_type": "chainlink_price",
+        "pools": "1444",
+        "seed_total": "1444000.000000"
+      },
+      {
+        "month": "2026-08-01T00:00:00.000Z",
+        "resolver_type": "none",
+        "pools": "374",
+        "seed_total": "362947.087000"
+      },
+      {
+        "month": "2026-09-01T00:00:00.000Z",
+        "resolver_type": "sports_api",
+        "pools": "362",
+        "seed_total": "356539.400000"
+      },
+      {
+        "month": "2026-10-01T00:00:00.000Z",
+        "resolver_type": "sports_api",
+        "pools": "124",
+        "seed_total": "264176.260000"
+      },
+      {
+        "month": "2026-09-01T00:00:00.000Z",
+        "resolver_type": "none",
+        "pools": "214",
+        "seed_total": "213500.000000"
+      },
+      {
+        "month": "2026-10-01T00:00:00.000Z",
+        "resolver_type": "none",
+        "pools": "140",
+        "seed_total": "161999.980000"
+      },
+      {
+        "month": "2026-08-01T00:00:00.000Z",
+        "resolver_type": "sports_api",
+        "pools": "144",
+        "seed_total": "143720.100000"
+      },
+      {
+        "month": "2026-07-01T00:00:00.000Z",
+        "resolver_type": "none",
+        "pools": "110",
+        "seed_total": "106400.000000"
+      },
+      {
+        "month": "2026-07-01T00:00:00.000Z",
+        "resolver_type": "sports_api",
+        "pools": "54",
+        "seed_total": "53715.000000"
+      },
+      {
+        "month": "2026-09-01T00:00:00.000Z",
+        "resolver_type": "api_price",
+        "pools": "51",
+        "seed_total": "51000.000000"
+      }
+    ],
+    "seed_validation": [
+      {
+        "missing_seeds": "0",
+        "other_amm_modes": "0",
+        "parents_without_children": "0"
+      }
+    ],
+    "month_totals": [
+      {
+        "month": "2026-07",
+        "published_pools": "12345",
+        "seed_total": "12330145.000000"
+      },
+      {
+        "month": "2026-08",
+        "published_pools": "6355",
+        "seed_total": "6348227.187000"
+      },
+      {
+        "month": "2026-09",
+        "published_pools": "2103",
+        "seed_total": "2105039.400000"
+      },
+      {
+        "month": "2026-10",
+        "published_pools": "345",
+        "seed_total": "520683.530000"
+      }
+    ],
+    "current_sizes": [
+      {
+        "seed_liquidity": "1000.000000",
+        "pools": "247"
+      },
+      {
+        "seed_liquidity": "2500.000000",
+        "pools": "16"
+      },
+      {
+        "seed_liquidity": "1200.000000",
+        "pools": "14"
+      },
+      {
+        "seed_liquidity": "5000.000000",
+        "pools": "13"
+      },
+      {
+        "seed_liquidity": "10000.000000",
+        "pools": "11"
+      },
+      {
+        "seed_liquidity": "500.000000",
+        "pools": "2"
+      },
+      {
+        "seed_liquidity": "100.000000",
+        "pools": "2"
+      },
+      {
+        "seed_liquidity": "506.940000",
+        "pools": "1"
+      }
+    ],
+    "reset_eligibility": [
+      {
+        "users": "599",
+        "distinct_valid_wallets": "599",
+        "invalid_wallets": "0",
+        "current_delegation_rows": "0"
+      }
+    ],
+    "aug_funding": [
+      {
+        "kind": "cycle_carryover",
+        "amount": "26205.000000"
+      },
+      {
+        "kind": "daily_claim",
+        "amount": "68220.000000"
+      },
+      {
+        "kind": "limit_maker_reward",
+        "amount": "0.346656"
+      },
+      {
+        "kind": "pwa_install_bonus",
+        "amount": "400.000000"
+      },
+      {
+        "kind": "referral_bonus",
+        "amount": "14600.000000"
+      },
+      {
+        "kind": "rescue_bonus",
+        "amount": "9767.680873"
+      },
+      {
+        "kind": "social_task",
+        "amount": "6700.000000"
+      }
+    ]
+  },
+  "read_only_chain_check": {
+    "measured_at": "2026-10-17T11:10:39.019Z",
+    "block": 320056909,
+    "chain_id": 421614,
+    "token": "0x6ed6C00C2B4cF9f5989866f4c5862D4cdeD67ef9",
+    "ops": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+    "owner": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+    "total_supply_mxnp": "1000.0",
+    "ops_mxnp": "1000.0",
+    "ops_eth": "0.000998578624076",
+    "gas_price_wei": "20000000",
+    "estimates": [
+      {
+        "mxnp": "1000",
+        "gas_units": "36829",
+        "estimated_fee_eth_at_current_quote": "0.00000073658"
+      },
+      {
+        "mxnp": "10000000",
+        "gas_units": "36853",
+        "estimated_fee_eth_at_current_quote": "0.00000073706"
+      },
+      {
+        "mxnp": "100000000",
+        "gas_units": "36853",
+        "estimated_fee_eth_at_current_quote": "0.00000073706"
+      }
+    ]
+  }
+}

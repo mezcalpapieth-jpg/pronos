@@ -95,14 +95,19 @@ contract DeployProtocolV2 is Script {
 
         console.log("=== Deployment Complete ===");
         console.log("Vercel env:");
+        console.log("ONCHAIN_CHAIN_ID=", block.chainid);
+        console.log("VITE_ONCHAIN_CHAIN_ID=", block.chainid);
         console.log("ONCHAIN_MARKET_FACTORY_V2_ADDRESS=", address(factory));
         console.log("ONCHAIN_SHARE_TOKEN_V2_ADDRESS=", address(token));
         console.log("MARKET_CREATOR_ADDRESS=", marketCreator);
         console.log("ONCHAIN_DEPLOYER_ADDRESS=", marketCreator);
-        console.log("VITE_PRONOS_ARBITRUM_FACTORY_V2=", address(factory));
-        console.log("VITE_PRONOS_ARBITRUM_TOKEN_V2=", address(token));
-        console.log("VITE_PRONOS_BASE_SEPOLIA_FACTORY_V2=", address(factory));
-        console.log("VITE_PRONOS_BASE_SEPOLIA_TOKEN_V2=", address(token));
+        if (block.chainid == 421614) {
+            console.log("VITE_PRONOS_ARB_SEPOLIA_FACTORY_V2=", address(factory));
+            console.log("VITE_PRONOS_ARB_SEPOLIA_TOKEN_V2=", address(token));
+        } else if (block.chainid == 42161) {
+            console.log("VITE_PRONOS_ARBITRUM_FACTORY_V2=", address(factory));
+            console.log("VITE_PRONOS_ARBITRUM_TOKEN_V2=", address(token));
+        }
         console.log("PRONOS_FACTORY_V2_ADDRESS=", address(factory));
         console.log("FACTORY_V2_ADDRESS=", address(factory));
         console.log("Next steps:");

@@ -7965,6 +7965,8 @@ function StrategiesPanel() {
 // re-runs of the generator skip the same source_event_id.
 function PendingMarketsTable({ onQueueChange }) {
   const [rows, setRows] = useState(null);
+  const [approvalSettings, setApprovalSettings] = useState(null);
+  const [approvalMode, setApprovalMode] = useState(null);
   const [filter, setFilter] = useState('pending');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [sportFilter, setSportFilter] = useState('all');
@@ -7985,6 +7987,10 @@ function PendingMarketsTable({ onQueueChange }) {
   const [cryptoIntervalLoading, setCryptoIntervalLoading] = useState(false);
   const [cryptoIntervalSaving, setCryptoIntervalSaving] = useState(false);
   const [cryptoIntervalError, setCryptoIntervalError] = useState(null);
+  const previewApprovalMode = approvalSettings?.previewEnabled
+    ? (approvalMode || approvalSettings.defaultMode)
+    : undefined;
+  const approvingOnchain = previewApprovalMode === 'onchain';
 
   const showSportFilters = categoryFilter === 'deportes';
   const showCryptoFilters = categoryFilter === 'crypto';
@@ -8045,6 +8051,10 @@ function PendingMarketsTable({ onQueueChange }) {
       });
       const r = await adminListPendingMarkets(q);
       setRows(r.pending || []);
+      setApprovalSettings(r.approvalSettings || null);
+      setApprovalMode(current => r.approvalSettings?.previewEnabled
+        ? (current || r.approvalSettings.defaultMode)
+        : null);
     } catch (e) {
       setRows([]);
       setErr(e.code || e.message);
@@ -8142,7 +8152,7 @@ function PendingMarketsTable({ onQueueChange }) {
   async function review(id, action) {
     setBusyId(id);
     try {
-      await adminReviewPendingMarket(id, action, null);
+      await adminReviewPendingMarket(id, action, null, action === 'approve' ? previewApprovalMode : undefined);
       // Don't reload — admin's scroll position is preserved if we
       // mutate the local rows array instead of refetching. Reload
       // was causing the page to "jump back to the top" between
@@ -8229,6 +8239,7 @@ function PendingMarketsTable({ onQueueChange }) {
   }
 
   async function approveAll() {
+    if (approvingOnchain) return;
     const pendingCount = rows?.filter(r => r.status === 'pending').length || 0;
     if (pendingCount === 0) return;
     if (!confirm(`¿Aprobar los ${pendingCount} mercados pendientes? Se crearán todos con la seed y modo sugeridos.`)) {
@@ -8236,7 +8247,7 @@ function PendingMarketsTable({ onQueueChange }) {
     }
     setBulkBusy(true);
     try {
-      const r = await adminApproveAllPendingMarkets(null, pendingFiltersPayload());
+      const r = await adminApproveAllPendingMarkets(null, pendingFiltersPayload(), previewApprovalMode);
       await load();
       const msg = r.failedCount > 0
         ? `Aprobados ${r.approvedCount} de ${r.checked}. ${r.failedCount} fallaron — revisa el historial.`
@@ -8394,6 +8405,27 @@ function PendingMarketsTable({ onQueueChange }) {
 
   return (
     <div>
+      {approvalSettings?.previewEnabled && (
+        <div style={{ marginBottom: 16, padding: 12, border: '1px solid var(--border)', borderRadius: 8 }}>
+          <label style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+            Destino de aprobación (preview)
+            <select
+              value={previewApprovalMode}
+              onChange={event => setApprovalMode(event.target.value)}
+              disabled={loading || bulkBusy || busyId !== null}
+              style={{ background: 'var(--surface2)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 6, padding: 8 }}
+            >
+              <option value="onchain">Arbitrum Sepolia</option>
+              <option value="points">Points</option>
+            </select>
+          </label>
+          <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
+            {approvingOnchain
+              ? 'Cada aprobación desplegará un mercado en Arbitrum Sepolia. Aprueba uno por uno.'
+              : 'Las aprobaciones crearán mercados Points.'}
+          </p>
+        </div>
+      )}
       <div style={{
         display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap',
         alignItems: 'center',
@@ -8427,8 +8459,8 @@ function PendingMarketsTable({ onQueueChange }) {
         {filter === 'pending' && pendingCount > 0 && (
           <button
             onClick={approveAll}
-            disabled={bulkBusy}
-            title={`Aprobar los ${pendingCount} mercados pendientes de un jalón`}
+            disabled={loading || bulkBusy || busyId !== null || approvingOnchain}
+            title={approvingOnchain ? 'Aprueba uno por uno en Arbitrum Sepolia' : `Aprobar los ${pendingCount} mercados pendientes de un jalón`}
             style={{
               marginLeft: 'auto',
               padding: '6px 14px',
@@ -8438,8 +8470,8 @@ function PendingMarketsTable({ onQueueChange }) {
               color: 'var(--green)',
               fontFamily: 'var(--font-mono)', fontSize: 11,
               letterSpacing: '0.06em', textTransform: 'uppercase',
-              cursor: bulkBusy ? 'not-allowed' : 'pointer',
-              opacity: bulkBusy ? 0.5 : 1,
+              cursor: loading || bulkBusy || busyId !== null || approvingOnchain ? 'not-allowed' : 'pointer',
+              opacity: loading || bulkBusy || busyId !== null || approvingOnchain ? 0.5 : 1,
               fontWeight: 600,
             }}
           >
@@ -8823,7 +8855,7 @@ function PendingMarketsTable({ onQueueChange }) {
                   </button>
                   <button
                     onClick={() => review(r.id, 'approve')}
-                    disabled={busyId === r.id}
+                    disabled={loading || bulkBusy || busyId !== null}
                     style={{
                       padding: '6px 12px',
                       background: 'rgba(0,232,122,0.12)',
@@ -8837,7 +8869,7 @@ function PendingMarketsTable({ onQueueChange }) {
                       opacity: busyId === r.id ? 0.5 : 1,
                     }}
                   >
-                    Aprobar
+                    {approvingOnchain ? 'Aprobar en Sepolia' : 'Aprobar'}
                   </button>
                   <button
                     onClick={() => review(r.id, 'reject')}

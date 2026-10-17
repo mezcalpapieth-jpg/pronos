@@ -6,7 +6,7 @@ Status: design + first backend/token/readiness/reset dry-run groundwork started.
 
 ## Goal
 
-Run the next Points tournament with tournament money represented by a testnet ERC20 on Base Sepolia, while keeping the product feeling exactly like Points:
+Run the next Points tournament with tournament money represented by a testnet ERC20 on Arbitrum Sepolia, while keeping the product feeling exactly like Points:
 
 - Users still press `Comprar`, `Vender`, or `Cobrar`.
 - Users do not see wallet addresses, gas, approvals, chain IDs, or explorer links in the normal flow.
@@ -14,7 +14,7 @@ Run the next Points tournament with tournament money represented by a testnet ER
 - No live Points balances or active markets are migrated on this branch.
 - The tournament reset creates a fresh on-chain cycle, funds eligible wallets, and starts scoring from zero.
 
-For this roadmap, "Sepolia" now means Base Sepolia. The existing contracts are EVM-compatible, but chain IDs, RPCs, deploy scripts, frontend aliases, indexer settings, and reset checks must use Base Sepolia instead of Arbitrum Sepolia.
+For this roadmap, "Sepolia" means Arbitrum Sepolia (chain ID `421614`). Use its RPC, deploy aliases, frontend aliases, indexer settings, and reset checks for tournament rehearsals.
 
 ## Non-Negotiables
 
@@ -52,7 +52,7 @@ Started on this branch:
 - Added backend sell-time share operator approval so sell can stay invisible to the user.
 - Added `TournamentMXNP`, an owner-minted 6-decimal testnet token with no public faucet.
 - Added a Sepolia readiness profile so tournament rehearsals do not require mainnet Juno/Bitso checks.
-- Added a dry-run reset/funding planner for Base Sepolia that audits eligible wallets, env blockers, delegation gaps, duplicate wallet mappings, and the exact 500 MXNP allocation before any DB or chain writes exist.
+- Added a dry-run reset/funding planner for Arbitrum Sepolia that audits eligible wallets, env blockers, delegation gaps, duplicate wallet mappings, and the exact 500 MXNP allocation before any DB or chain writes exist.
 
 ## Key Product Decision
 
@@ -80,7 +80,7 @@ points_pending_markets row
 For the next tournament, approval should produce one `points_markets` row with:
 
 - `mode = 'onchain'`
-- `chain_id = 84532` for Base Sepolia
+- `chain_id = 421614` for Arbitrum Sepolia
 - `chain_market_id = protocol market id`
 - `chain_address = deployed AMM pool address`
 - normal `featured`, `tournament_featured`, resolver, image, tag, and deadline metadata
@@ -104,7 +104,7 @@ Recommended launch token for this tournament:
 - Name: `Tournament MXNP`
 - Symbol: `MXNP`
 - Decimals: `6`
-- Network: Base Sepolia
+- Network: Arbitrum Sepolia
 - Minting: owner/operator only, no public faucet
 - Reset funding: mint or transfer exactly the tournament allocation to eligible wallets
 
@@ -153,10 +153,10 @@ Longer-term optimization:
 
 Tasks:
 
-- Final testnet: Base Sepolia.
+- Final testnet: Arbitrum Sepolia.
 - Add controlled `TournamentMXNP` or `MockMXNP` ERC20 with 6 decimals and owner-only mint.
 - Keep `MockMXNB` only for local/dry-run faucet testing.
-- Deploy collateral token to Base Sepolia.
+- Deploy collateral token to Arbitrum Sepolia.
 - Deploy V1 binary token/factory/pool stack with tournament collateral.
 - Deploy V2 multi-outcome token/factory/pool stack with tournament collateral.
 - Configure factory owner, market creator, resolver, treasury, liquidity reserve, emergency reserve.
@@ -256,7 +256,7 @@ Tasks:
 
 Tasks:
 
-- Configure indexer for Base Sepolia chain ID `84532`.
+- Configure indexer for Arbitrum Sepolia chain ID `421614`.
 - Track both factory versions.
 - Track deployed pools as markets are approved.
 - Ingest:
@@ -328,7 +328,7 @@ Local/unit:
 
 Integration:
 
-- Deploy token + factories on Base Sepolia.
+- Deploy token + factories on Arbitrum Sepolia.
 - Create three test users.
 - Fund 500 MXNP + gas.
 - Approve two pending markets as on-chain:
@@ -442,4 +442,137 @@ Days 24-25: launch prep
 2. Done: finish and test `TournamentMXNP` with owner-only mint and deployment script.
 3. Done: add Sepolia-specific readiness profile instead of mainnet-only readiness checks.
 4. Done: add reset/funding script skeleton with dry-run mode.
-5. Next: wire admin pending approval to a branch-only on-chain default flag.
+5. Done: wire admin pending approval to a branch-only on-chain default flag.
+6. Done: configure the isolated preview database, Arbitrum Sepolia runtime, and separate operational secrets.
+7. Done (2026-10-17): deploy MXNP and fresh V1/V2 factories; verify and fund the dedicated Turnkey operations wallet; replace only `onchain-sepolia` preview aliases. See the deployment checkpoint below.
+8. Next: ship and verify the preview, activate its signing/approval flags for a single-market test, and connect the Points trading adapter to the on-chain path. User delegation and the tournament reset/funding dry run remain separate checks.
+
+### Preview Admin Approval Setting
+
+Set `ONCHAIN_PREVIEW_APPROVALS_ENABLED=true` only for the `onchain-sepolia` Preview environment. The server additionally requires `VERCEL_ENV=preview`, `VERCEL_GIT_COMMIT_REF=onchain-sepolia`, and `ONCHAIN_CHAIN_ID=421614`; the setting stays inactive in production or on other branches/chains. Vercel supplies the deployment metadata; do not spoof it in deployed environment variables.
+
+When active, Points admin's pending queue shows a **Destino de aprobación (preview)** selector. It defaults to **Arbitrum Sepolia**, with **Points** available as an explicit alternative. Each Sepolia approval uses the existing deployment path to create its own contract. Bulk on-chain approval is disabled in the UI and rejected by the API before database work. Missing runtime configuration returns an error without falling back to a Points market.
+
+The default applies only to human reviews through `/api/points/admin/pending-markets`. Scheduled tournament approvals and existing explicit MVP approval options keep their previous behavior. It does not migrate existing markets or enable on-chain trading in the Points UI.
+
+Keep the flag off until the preview has an isolated database, verified Arbitrum Sepolia RPC/contracts, and a funded Turnkey deployer with the required factory permissions. Configure the token, factories and Turnkey runtime from the readiness checklist before approving a test market. This implementation does not deploy contracts, reset balances or change production configuration.
+
+### Preview Runtime Configuration — 2026-10-17
+
+This is the initial runtime checkpoint. The MXNP deployment checkpoint below supersedes its legacy contract aliases and unverified signer status.
+
+Configured 37 variables in Vercel project `pronos` (`prj_Cq2kBrGtvtU7nVOH3T6yBGJWGRKi`), all targeting **Preview / `onchain-sepolia`**. These settings apply to the next deployment of this branch; no deployment, commit, or push was performed during configuration.
+
+The database is now assigned to a dedicated Neon branch, `onchain-sepolia-preview` (`br-sweet-dream-amb6hlfe`) in project `pronos-mvp` (`tiny-heart-17710833`). It is a normal copy of `main` at creation, so existing test accounts and pending markets can be exercised independently. It is not continuously synchronized with production. Compute is 0.25–1 CU with a 300-second idle suspension.
+
+- `DATABASE_URL` and `DATABASE_WRITE_URL` use the new branch's pooled writer connection (`neondb_owner`).
+- `DATABASE_READ_URL` uses the same new endpoint with `pronos_reader`. SELECT checks confirmed it can read pending markets and cannot insert or update them.
+- `POINTS_SESSION_SECRET`, `CRON_SECRET`, and `INDEXER_KEY` are newly generated branch-specific secrets. The three database URLs are also stored as sensitive variables. Existing production sessions and cron secrets were not changed.
+- `ONCHAIN_READINESS_PROFILE=sepolia`; `ONCHAIN_CHAIN_ID`, `VITE_ONCHAIN_CHAIN_ID`, `CHAIN_ID`, and `PROTOCOL_CHAIN_ID` are all `421614`.
+- `ONCHAIN_RPC_URL`, `ARB_RPC_URL`, and `ARB_SEPOLIA_RPC` use `https://sepolia-rollup.arbitrum.io/rpc`; a live read confirmed chain ID `421614`.
+
+The following existing contracts were verified through read-only RPC calls and configured consistently across server, browser, and indexer aliases. They are **legacy USDC rehearsal contracts**, not the tournament MXNP deployment:
+
+| Component | Verified Arbitrum Sepolia address |
+| --- | --- |
+| V1 factory | `0x68d09c6636019719cb7a3b50f93e421ec18ccfbc` |
+| V2 factory | `0xf87f7e2c1e97054343670aa5cbe69eb69f1bbf8f` |
+| V1 ERC1155 shares | `0x5039b8ad44e7c2485487d5801fdbf1344ebe35e1` |
+| V2 ERC1155 shares | `0x28d99089673d5e1fd65999512b5345f40d85ea01` |
+| USDC collateral | `0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d` |
+
+Both factories report the listed collateral and share tokens. Their owner is `0xF5015Ec3C55AbCbC1254BD959816325e683e5dE1`, an EOA holding 0 Sepolia ETH at this check; their resolver is `0xa8eE70541d537389ed287d204efC5297569321d5`, also an EOA. Neither returned `marketCreator()` through the current ABI, so automatic creation permissions must not be assumed. `INDEXER_START_BLOCK` points to the legacy V1 factory's deployment block; update it when replacing these factories.
+
+`ONCHAIN_COLLATERAL_SYMBOL=USDC` and `VITE_ONCHAIN_COLLATERAL_ADDRESS` explicitly identify the legacy ERC20. `VITE_PRONOS_*_TOKEN` / `*_TOKEN_V2` identify ERC1155 shares. The readiness check now validates those separately and rejects zero-address Safe placeholders as owner controls.
+
+**Activation remains off:** `ONCHAIN_PREVIEW_APPROVALS_ENABLED=false`, `TURNKEY_POLICIES_ENABLED=false`, `GAS_SPONSORSHIP_ENABLED=false`, and the three Juno checkout/withdrawal flags are false for this preview. Existing Turnkey API credentials and deployer settings remain inherited; their presence was checked via metadata, but the sensitive deployer identity/sub-org values and signing permissions have not been verified. Dedicated resolver and owner signer settings are still missing. No wallet policies, balances, markets, or chain state were modified.
+
+Before enabling the preview:
+
+1. Confirm the Turnkey deployer, resolver, and owner wallet addresses/sub-org IDs. A Foundry deployment key and a Turnkey runtime signer are separate configurations; do not infer one from the other.
+2. Deploy `TournamentMXNP` and fresh V1/V2 factories on chain `421614`, configuring the confirmed creator, resolver, and owner roles. The existing legacy USDC contracts must not be relabeled as MXNP.
+3. Replace the server, browser, and indexer factory/share/collateral aliases with the new deployment; set `ONCHAIN_TOURNAMENT_MXNP_ADDRESS`, `ONCHAIN_COLLATERAL_SYMBOL=MXNP`, `VITE_ONCHAIN_COLLATERAL_ADDRESS`, and the new factory start block.
+4. Verify creator/resolver/owner permissions, runtime signer gas, seed collateral, and delegation targets. Keep both approval and signing flags off until these checks pass. The local Foundry wallet `0x0Caa37c077924038e14e9D8dE46B5208788e52CF` held `0.004659166628142` Sepolia ETH at this check; that does not establish the runtime signer's funding.
+5. Ship a reviewed `onchain-sepolia` preview, verify its exact SHA and `/api/points/admin/onchain-status`, then enable the branch-specific signing/approval flags and deploy again for a single-market approval test. Keep the Points trading-adapter work and reset/funding dry run as separate remaining roadmap tasks.
+
+Verification: read back all 31 public configuration values, confirmed six new variables are sensitive, and confirmed all 100 original environment-variable records were unchanged (including 70 production-targeted records and nine Pointbreak-specific records). Local `pointbreak` and `origin/pointbreak` stayed at `47aa9e19115d64bc36a2684e5eeb685caef117ba`. The 76 focused readiness, approval, factory-permission, reset-planner, deployment-script, and admin tests passed; `git diff --check` passed. No deployed application flow has been verified with this new configuration yet.
+
+### MXNP Deployment And Turnkey Verification — 2026-10-17
+
+Deployed on **Arbitrum Sepolia / chain `421614`** from the `onchain-sepolia` working tree. The machine-readable [deployment record](./onchain-sepolia-mxnp-deployment-2026-10-17.json) contains successful transaction receipts, constructor arguments, bytecode hashes, source SHA-256 fingerprints, role checks, funding proofs, and the preview configuration readback. The source changes are still uncommitted; the record identifies their base commit and fingerprints rather than claiming a committed SHA contains them.
+
+| Component | New address |
+| --- | --- |
+| Tournament MXNP, ERC20 / 6 decimals | `0x6ed6C00C2B4cF9f5989866f4c5862D4cdeD67ef9` |
+| V1 factory | `0x69440742A168635D9fA7cC0cfb0935AFFFe79Ad3` |
+| V1 ERC1155 shares | `0xc26F94E86da1193DADE6d798AcDF8C0BC4d68946` |
+| V2 factory | `0xFcac9cfCF22Df809ba365C85dD767C90BB260FD6` |
+| V2 ERC1155 shares | `0x2748E2d6E64AA6aabB368C4e9d844c87fE615Caf` |
+| V1 pool creation-code store | `0xaB878eF1b244FF4c53C6d212ceF7cbAC88Cd48F3` |
+| V2 pool creation-code store | `0xf6723A289a356f20D1B5e09143580451fd120060` |
+
+Both factories use the new MXNP collateral. Their ERC1155 tokens authorize their respective factories as minters and are owned by those factories. The new indexer start block is **`320053989`**, the V1 factory's creation block. The legacy USDC contracts and their roles remain unchanged; the explicitly named `VITE_PRONOS_ARB_SEPOLIA_USDC` alias still refers to USDC, while `VITE_ONCHAIN_COLLATERAL_ADDRESS` now refers to MXNP.
+
+**Dedicated preview operations signer:** `0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c`, Turnkey wallet `pronos-onchain-sepolia-ops-2026-10-17` (`8f4bb026-14cf-5590-b9f7-6100fc2ad08c`). It belongs to the existing parent organization `34e1b782-dc66-4b66-9ac7-477b743718f5`; the three `ONCHAIN_*_SUBORG_ID` settings intentionally use that organization ID for this operations wallet. No private key was exported. This wallet owns MXNP and holds the owner, creator, and resolver roles on both new factories.
+
+The existing API credential authenticates as a **root user in the parent organization**. Signing was verified with that existing authority; no restrictive operations policy or separate API credential was created. The dedicated wallet separates preview funds and contract roles, but it does not isolate the existing API credential's broader authority. This verification does not establish user-wallet delegated signing: user consent, non-root delegation policies, target coverage, expiration, and trade-flow checks remain separate work. No existing policies or credentials were modified.
+
+Read-only contract calls verified that the operations signer passes owner controls, reaches the seed validation in market creation, and reaches market validation in resolution. Calls from the former local deployment wallet fail the corresponding owner, creator, and resolver checks. No market was created during these probes.
+
+Funding and actual Turnkey execution were confirmed:
+
+- [Gas transfer](https://sepolia.arbiscan.io/tx/0x2f3cc93bfe64daf4e5d8cf1c7f3bfb31efb0081f744c9b837553bedd3790b4ba): `0.001` Sepolia ETH from local deployment wallet `0x0Caa37c077924038e14e9D8dE46B5208788e52CF` to the operations wallet.
+- [Owner-only seed mint](https://sepolia.arbiscan.io/tx/0xf9821977bc0e05b0f30d613631c2f28b4761c49324e7ffdc429d534dd965b362): Turnkey signed and the chain confirmed `1,000 MXNP` minted only to the operations wallet. This covers two default `500 MXNP` market seeds. No tournament user received an allocation or balance reset.
+- After that transaction, the operations wallet held **`0.000998578624076` Sepolia ETH and `1,000 MXNP`**. Total MXNP supply was `1,000`. The local deployment wallet retained `0.003296805304700215` Sepolia ETH. These are checkpoint balances, not fixed guarantees for later fee conditions.
+- At the check, the application's buffered V2 approval/create gas reserve was `0.00052 ETH`, below the funded operations balance. The cofounder's additional test ETH was not needed for this deployment. For additional operating gas, transfer **Arbitrum Sepolia ETH on chain `421614`** to the dedicated operations address above.
+
+Two deployment/runtime blockers were fixed on this branch:
+
+1. Factory runtime bytecode originally exceeded EIP-170 (`29,611` / `32,962` bytes). Each constructor now stores its pool creation code in an immutable, inert contract. The factory copies that code and executes CREATE itself, preserving the pool's factory authority and existing constructor/call interfaces. Deployed factory sizes are `12,712` / `13,934` bytes with the existing Solidity 0.8.24 optimizer configuration. The complete 122-test Solidity suite passes, including pool lifecycle/fuzz coverage and two new code-storage/size checks.
+2. ethers v5's `getFeeData()` supplied a `1.5 gwei` default tip against a roughly `0.02 gwei` Sepolia gas quote, inflating the runtime's funding requirement. The `421614` runtime now uses the node gas quote with a 2x fee cap and zero tip for both preflight and signing. Other chains retain their existing provider fee behavior. This follows the [Arbitrum gas model](https://docs.arbitrum.io/how-arbitrum-works/deep-dives/gas-and-fees); the actual mint above confirms the Sepolia transaction path. Fee failures propagate without a fabricated quote.
+
+Creation transaction bytecode and deployed runtime bytecode (accounting for constructor immutables) were matched to local artifacts for MXNP, both factories, and both share tokens. The stored pool initcode was also matched exactly. Public explorer source verification was not submitted; no Arbiscan API key was configured.
+
+Updated **24 public Vercel configuration values**, exclusively for **Preview / `onchain-sepolia`**, covering the new contracts, collateral symbol, indexer start block, and the three signer roles. All values were read back. Existing branch database/secrets and disabled flags remain in place. All 100 environment records outside this branch, including 70 production-targeted records and nine Pointbreak-specific records, remain unchanged. Both Pointbreak refs remain `47aa9e19115d64bc36a2684e5eeb685caef117ba`.
+
+**Activation is still off.** The contract deployments are live; the new application configuration and fee helper require the next reviewed preview deployment. No application deployment, commit, push, production promotion, market approval, user reset, or user-policy modification was performed. All 91 focused JavaScript tests passed.
+
+Next steps:
+
+1. Commit and push the reviewed `onchain-sepolia` changes, deploy its preview, verify the exact source SHA and `/api/points/admin/onchain-status`, and check that new contracts and signer roles are reported.
+2. Enable only this preview's signing/approval flags after reviewing its remaining readiness checks, then deploy again and approve one small market. Confirm collateral approval, factory creation, indexing, and admin response end to end.
+3. Verify user-authorized delegation against the new MXNP/share/pool targets, finish the Points trading adapter, and run the tournament reset/funding planner in dry-run mode before any user allocations.
+
+### Tournament Collateral Capacity — 2026-10-17
+
+The deployed `1,000 MXNP` is a signing/deployment smoke-test balance. Size the tournament treasury from user grants **and** the actual market seed schedule. The read-only [capacity audit](./onchain-sepolia-capacity-2026-10-17.json) contains the aggregate source data, calculation assumptions, projections, and public RPC estimates. All source Points markets and balances remain unchanged.
+
+| Funding component, MXNP-equivalent | August tournament, Aug 12 06:00–Aug 27 05:59 UTC | October, Oct 1 06:00–Oct 17 11:06 UTC |
+| --- | ---: | ---: |
+| User baseline, 500 per registered user | 95,000 (190 users) | 299,500 (599 users) |
+| Rewards and explicit carryover | 125,893.03 | 181,299.49 |
+| Published market pool seeds | 305,183.63 (304 pools) | 508,683.53 (333 pools) |
+| Total budget before recycling collateral | **526,076.65** | **989,483.02** |
+
+These are conservative equivalent-capital budgets for the observed Points workload, not a reconstruction of historical cash flows or collateral already deposited on-chain. Seeds include active, resolved and canceled published pools at their current configured amounts; pending/test rows are excluded. Count one scalar seed per unified pool and one per parallel child pool. Do not count a parallel parent again or sum unified per-outcome share reserves as extra collateral. New signup grants are included in the 500-per-user baseline once. Trade volume, sale proceeds, redemptions, refunds, reset balance deltas, and leaderboard-only bonuses are not fresh token issuance. Admin account adjustments and any migration of existing stock/parlay liabilities require separate review.
+
+Most October pools use 1,000 points; 13 use 5,000 and 11 use 10,000. Mean October seed is 1,527.58. At the observed rate, the full October cycle projects to approximately **732,334 MXNP for users and rewards + 972,613 MXNP for seeds = 1.70 million MXNP**. This projection keeps the opening 410-user allocation fixed and scales subsequent signups, rewards and market creation. Existing pre-October active/recently resolved pool seeds add a further 929,729-equivalent capital proxy if future cycles overlap in that way; no historical market migration is planned.
+
+Historical generation can be much larger: July's full calendar month published **12,345 pool equivalents with 12,330,145 points in seeds**, including 12,150,000 in `chainlink_price` pools. That is a broader stress case, not the August tournament window or an instruction to enable those generators in preview. Pool-owned winning-share collateral recovery waits **30 days after resolution**, and user winnings consume pool collateral; budget without assuming immediate or full seed recovery.
+
+**Planning target: 50,000,000 MXNP in the operations treasury**, released only against approved market seeds and audited user/reward grants. A current-scope launch reserve of 10 million would cover the observed normal cadence with substantial headroom; the 50 million target also covers the historical high-frequency scenario. The explicit stress calculation is `1.5 × (2 × July monthly seed peak + 2 × projected October user funding) ≈ 39.19 million`, rounded up to 50 million. It is a reserve target, not a protocol minimum or a change to the 500-MXNP starting allocation. At the original capacity-audit checkpoint, supply was 1,000 and no larger mint had been executed. The subsequently authorized **49,999,000-MXNP** top-up is confirmed in the checkpoint below.
+
+MXNP units and Arbitrum Sepolia ETH are independent budgets. `TournamentMXNP.mint` is owner-only and has no ETH payment/backing requirement or fixed application supply cap. At block `320056909`, read-only RPC simulation estimated `36,829` gas to mint 1,000 MXNP and `36,853` gas to mint either 10 million or 100 million to the existing treasury wallet: approximately **0.00000074 ETH** at the quoted `0.02 gwei`, before fee buffers and later fee changes. Gas scales chiefly with operations/recipients and market/trade transaction count, not nominal MXNP issuance. The operations wallet still held `1,000 MXNP` and `0.000998578624076 ETH`; total supply was still 1,000. The cofounder's 3 ETH would fund gas separately if transferred, rather than back the MXNP reserve.
+
+Before activation, add user/reward issuance execution and reserve accounting, enforce mint idempotency and per-cycle grant limits, and estimate gas for the planned number of wallets, pool deployments, approvals, trades and resolutions. All 599 users have distinct valid wallet mappings, but no current user delegation policy rows were found, so capacity does not establish signing readiness. Keep preview activation disabled until the existing readiness checks and small-market end-to-end rehearsal pass. This audit adds no mint, transfer, user reset, deployment, or Pointbreak change.
+
+### Operations Treasury Top-Up — 2026-10-17
+
+Following explicit user authorization, Turnkey signed an owner-only mint of **49,999,000 MXNP** to the existing operations wallet `0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c`, bringing both its balance and total supply from 1,000 to exactly **50,000,000 MXNP** on Arbitrum Sepolia (`421614`). Token: `0x6ed6C00C2B4cF9f5989866f4c5862D4cdeD67ef9`.
+
+- [Successful transaction](https://sepolia.arbiscan.io/tx/0x06b4aae6e1321d3263e64ec1e7d419c8e976a8ad74c9d64ef78a028a3b18b5b1), block `320063087`; receipt status 1 and the single zero-address-to-operations mint event were verified. Readback at block `320063102` showed 50 million in both the treasury and total supply.
+- Actual fee: **0.00000073250026 Sepolia ETH**, `36,490` gas at `0.020074 gwei`. The operations wallet retained `0.000997846123816 ETH` at that readback.
+- Before signing, topping up the same 1,000 balance to 50 million or to 100 million each estimated **36,853 gas / 0.00000073706 ETH** at the same gas quote. The 100-million case was simulated only. Fees depend on execution, storage and transaction data; token quantity does not create a proportional ETH cost or backing requirement. Later quotes may vary.
+- Spare treasury units do not alter user balances or market depth until distributed or seeded. Enforce the same per-user grant and per-market seed limits, exclude the operations wallet from tournament scoring, and audit reserve movements. This token has no public or owner burn function, so unnecessary issuance cannot be removed from total supply through the existing contract. Additional authorized minting remains possible later.
+
+The [public top-up record](./onchain-sepolia-mxnp-topup-2026-10-17.json) preserves the preflight comparison, exact amount/calldata, Turnkey activity ID, successful receipt, and before/after balances. No private key was exported. No user received tokens, no market was created, and no application deployment, flag/configuration update, commit, push, or Pointbreak change was performed. The earlier deployment and capacity files remain historical checkpoint records; use this top-up record for the latest verified supply.

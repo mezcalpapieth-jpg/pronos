@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./PronosTokenV2.sol";
 import "./PronosAMMMulti.sol";
+import "./PoolDeployment.sol";
 
 /**
  * @title MarketFactoryV2
@@ -12,6 +13,7 @@ import "./PronosAMMMulti.sol";
  */
 contract MarketFactoryV2 {
     PronosTokenV2 public immutable token;
+    address public immutable poolCreationCode;
     IERC20 public immutable collateral;
 
     address public owner;
@@ -81,6 +83,7 @@ contract MarketFactoryV2 {
         address _emergencyReserve
     ) {
         token = PronosTokenV2(_token);
+        poolCreationCode = address(new PoolCreationCode(type(PronosAMMMulti).creationCode));
         collateral = IERC20(_collateral);
         owner = msg.sender;
         marketCreator = msg.sender;
@@ -110,13 +113,10 @@ contract MarketFactoryV2 {
 
         marketId = token.registerMarket(uint8(outcomes.length));
 
-        PronosAMMMulti pool = new PronosAMMMulti(
-            address(token),
-            address(collateral),
-            marketId,
-            uint8(outcomes.length),
-            feeCollector
-        );
+        PronosAMMMulti pool = PronosAMMMulti(PoolDeployment.deploy(
+            poolCreationCode,
+            abi.encode(address(token), address(collateral), marketId, uint8(outcomes.length), feeCollector)
+        ));
 
         token.setMinter(address(pool), true);
 

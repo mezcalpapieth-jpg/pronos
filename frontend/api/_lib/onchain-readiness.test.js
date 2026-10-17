@@ -48,7 +48,9 @@ function completeEnv(overrides = {}) {
     VITE_ONCHAIN_CHAIN_ID: '42161',
     VITE_PRONOS_ARBITRUM_FACTORY: ADDR.factoryV1,
     VITE_PRONOS_ARBITRUM_FACTORY_V2: ADDR.factoryV2,
-    VITE_PRONOS_ARBITRUM_TOKEN: ADDR.collateral,
+    VITE_ONCHAIN_COLLATERAL_ADDRESS: ADDR.collateral,
+    VITE_PRONOS_ARBITRUM_TOKEN: ADDR.shareTokenV1,
+    VITE_PRONOS_ARBITRUM_TOKEN_V2: ADDR.shareTokenV2,
     INDEXER_KEY: 'indexer-key',
     CRON_SECRET: 'cron-secret',
     JUNO_API_KEY: 'juno-key',
@@ -140,33 +142,35 @@ test('collectOnchainReadiness includes Juno funding readiness', () => {
 test('collectOnchainReadiness catches deployment alias mismatches', () => {
   const result = collectOnchainReadiness({
     env: completeEnv({
-      VITE_ONCHAIN_CHAIN_ID: '84532',
+      VITE_ONCHAIN_CHAIN_ID: '421614',
       FACTORY_ADDRESS: '0xffffffffffffffffffffffffffffffffffffffff',
       VITE_PRONOS_ARBITRUM_FACTORY_V2: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
       VITE_PRONOS_ARBITRUM_TOKEN: '0xdddddddddddddddddddddddddddddddddddddddd',
+      VITE_ONCHAIN_COLLATERAL_ADDRESS: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
     }),
     protocolPools: [ADDR.poolA],
   });
   const warnings = result.warnings.join('\n');
 
   assert.equal(result.ok, false);
-  assert.match(warnings, /VITE_ONCHAIN_CHAIN_ID=84532 does not match ONCHAIN_CHAIN_ID=42161/);
+  assert.match(warnings, /VITE_ONCHAIN_CHAIN_ID=421614 does not match ONCHAIN_CHAIN_ID=42161/);
   assert.match(warnings, /FACTORY_ADDRESS does not match ONCHAIN_MARKET_FACTORY_ADDRESS/);
   assert.match(warnings, /VITE_PRONOS_ARBITRUM_FACTORY_V2 does not match ONCHAIN_MARKET_FACTORY_V2_ADDRESS/);
-  assert.match(warnings, /VITE_PRONOS_ARBITRUM_TOKEN does not match ONCHAIN_COLLATERAL_ADDRESS/);
+  assert.match(warnings, /VITE_PRONOS_ARBITRUM_TOKEN does not match ONCHAIN_SHARE_TOKEN_ADDRESS/);
+  assert.match(warnings, /VITE_ONCHAIN_COLLATERAL_ADDRESS does not match ONCHAIN_COLLATERAL_ADDRESS/);
 });
 
-test('collectOnchainReadiness supports Base Sepolia without mainnet provider blockers', () => {
+test('collectOnchainReadiness supports Arbitrum Sepolia without mainnet provider blockers', () => {
   const result = collectOnchainReadiness({
     env: completeEnv({
       ONCHAIN_READINESS_PROFILE: 'sepolia',
-      ONCHAIN_RPC_URL: 'https://sepolia.base.org',
-      ONCHAIN_CHAIN_ID: '84532',
-      CHAIN_ID: '84532',
-      PROTOCOL_CHAIN_ID: '84532',
-      VITE_ONCHAIN_CHAIN_ID: '84532',
+      ONCHAIN_RPC_URL: 'https://sepolia-rollup.arbitrum.io/rpc',
+      ONCHAIN_CHAIN_ID: '421614',
+      CHAIN_ID: '421614',
+      PROTOCOL_CHAIN_ID: '421614',
+      VITE_ONCHAIN_CHAIN_ID: '421614',
       ARB_RPC_URL: '',
-      BASE_SEPOLIA_RPC: 'https://sepolia.base.org',
+      ARB_SEPOLIA_RPC: 'https://sepolia-rollup.arbitrum.io/rpc',
       FACTORY_ADDRESS: '',
       PRONOS_FACTORY_ADDRESS: '',
       FACTORY_V2_ADDRESS: '',
@@ -174,11 +178,15 @@ test('collectOnchainReadiness supports Base Sepolia without mainnet provider blo
       VITE_PRONOS_ARBITRUM_FACTORY: '',
       VITE_PRONOS_ARBITRUM_FACTORY_V2: '',
       VITE_PRONOS_ARBITRUM_TOKEN: '',
-      VITE_PRONOS_BASE_SEPOLIA_FACTORY: ADDR.factoryV1,
-      VITE_PRONOS_BASE_SEPOLIA_FACTORY_V2: ADDR.factoryV2,
-      VITE_PRONOS_BASE_SEPOLIA_TOKEN: ADDR.collateral,
-      VITE_PRONOS_BASE_SEPOLIA_ADMIN_SAFE: '0x6666666666666666666666666666666666666666',
-      VITE_PRONOS_BASE_SEPOLIA_RESOLVER_SAFE: '0x7777777777777777777777777777777777777777',
+      VITE_PRONOS_ARBITRUM_TOKEN_V2: '',
+      VITE_ONCHAIN_COLLATERAL_ADDRESS: '',
+      VITE_PRONOS_ARB_SEPOLIA_FACTORY: ADDR.factoryV1,
+      VITE_PRONOS_ARB_SEPOLIA_FACTORY_V2: ADDR.factoryV2,
+      VITE_PRONOS_ARB_SEPOLIA_USDC: ADDR.collateral,
+      VITE_PRONOS_ARB_SEPOLIA_TOKEN: ADDR.shareTokenV1,
+      VITE_PRONOS_ARB_SEPOLIA_TOKEN_V2: ADDR.shareTokenV2,
+      VITE_PRONOS_ARB_SEPOLIA_ADMIN_SAFE: '0x6666666666666666666666666666666666666666',
+      VITE_PRONOS_ARB_SEPOLIA_RESOLVER_SAFE: '0x7777777777777777777777777777777777777777',
       JUNO_API_KEY: '',
       JUNO_API_SECRET: '',
       JUNO_BEARER_TOKEN: '',
@@ -194,15 +202,36 @@ test('collectOnchainReadiness supports Base Sepolia without mainnet provider blo
   const blockerIds = result.launch.blockers.map(b => b.id);
 
   assert.equal(result.deployment.profile, 'sepolia');
-  assert.equal(result.deployment.expectedChainId, 84532);
-  assert.equal(result.deployment.networkName, 'Base Sepolia');
+  assert.equal(result.deployment.expectedChainId, 421614);
+  assert.equal(result.deployment.networkName, 'Arbitrum Sepolia');
   assert.equal(result.launch.ready, true);
   assert.equal(result.deployment.indexerFactoryV1, ADDR.factoryV1);
   assert.equal(result.deployment.clientFactoryV1, ADDR.factoryV1);
+  assert.equal(result.deployment.clientCollateral, ADDR.collateral);
+  assert.equal(result.deployment.clientShareTokenV1, ADDR.shareTokenV1);
+  assert.equal(result.deployment.clientShareTokenV2, ADDR.shareTokenV2);
+  assert.equal(result.ok, true);
   assert.doesNotMatch(warnings, /not Arbitrum One/);
   assert.doesNotMatch(warnings, /JUNO_API_KEY missing/);
   assert.doesNotMatch(warnings, /VITE_PRONOS_ARBITRUM_FACTORY missing/);
   assert.ok(!blockerIds.includes('juno_provider_missing'));
+});
+
+test('Sepolia readiness uses explicit MXNP collateral before the legacy USDC alias', () => {
+  const env = completeEnv({
+    ONCHAIN_CHAIN_ID: '421614',
+    VITE_ONCHAIN_COLLATERAL_ADDRESS: ADDR.collateral,
+    VITE_PRONOS_ARB_SEPOLIA_USDC: '0xffffffffffffffffffffffffffffffffffffffff',
+    VITE_PRONOS_ARB_SEPOLIA_TOKEN: ADDR.shareTokenV1,
+    VITE_PRONOS_ARB_SEPOLIA_TOKEN_V2: ADDR.shareTokenV2,
+  });
+  const result = collectOnchainReadiness({ env });
+  assert.equal(result.deployment.clientCollateral, ADDR.collateral);
+  assert.doesNotMatch(result.warnings.join('\n'), /USDC does not match|TOKEN.*does not match/);
+
+  env.VITE_PRONOS_ARB_SEPOLIA_TOKEN_V2 = ADDR.collateral;
+  const mismatch = collectOnchainReadiness({ env });
+  assert.match(mismatch.warnings.join('\n'), /VITE_PRONOS_ARB_SEPOLIA_TOKEN_V2 does not match ONCHAIN_SHARE_TOKEN_V2_ADDRESS/);
 });
 
 test('collectOnchainReadiness reports env pool gaps without failing DB-backed policy autofill', () => {
@@ -216,4 +245,30 @@ test('collectOnchainReadiness reports env pool gaps without failing DB-backed po
   assert.equal(result.policy.autoIncludesIndexedPools, true);
   assert.deepEqual(result.policy.missingPools, [ADDR.poolB]);
   assert.doesNotMatch(result.warnings.join('\n'), /ONCHAIN_MARKET_POOL_ADDRESSES missing/);
+});
+
+test('zero-address Safe placeholders do not satisfy owner controls', () => {
+  const result = collectOnchainReadiness({
+    env: completeEnv({
+      ADMIN_SAFE_ADDRESS: '0x0000000000000000000000000000000000000000',
+      RESOLVER_SAFE_ADDRESS: '0x0000000000000000000000000000000000000000',
+      ONCHAIN_OWNER_SUBORG_ID: '',
+      ONCHAIN_OWNER_ADDRESS: '',
+    }),
+  });
+  assert.equal(result.ownerControls.configured, false);
+  assert.equal(result.ownerControls.resolverSafeConfigured, false);
+  assert.ok(result.launch.blockers.some(b => b.id === 'owner_controls_missing'));
+});
+
+test('collectOnchainReadiness infers Arbitrum Sepolia and rejects Base for its rehearsal profile', () => {
+  const inferred = collectOnchainReadiness({ env: { ONCHAIN_CHAIN_ID: '421614' } });
+  assert.equal(inferred.deployment.profile, 'sepolia');
+  assert.equal(inferred.deployment.expectedChainId, 421614);
+  assert.ok(!inferred.launch.blockers.some(b => b.id === 'juno_provider_missing'));
+
+  const wrongNetwork = collectOnchainReadiness({
+    env: { ONCHAIN_READINESS_PROFILE: 'sepolia', ONCHAIN_CHAIN_ID: '84532' },
+  });
+  assert.ok(wrongNetwork.launch.blockers.some(b => b.id === 'chain_id_unexpected'));
 });

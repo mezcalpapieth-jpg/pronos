@@ -16,7 +16,7 @@ test('V1 deploy script sets an automatic market creator before Safe ownership tr
   assert.notEqual(setCreator, -1, 'script should set MarketFactory.marketCreator');
   assert.notEqual(transferOwner, -1, 'script should transfer ownership to the Safe/admin');
   assert.match(source, /ONCHAIN_SHARE_TOKEN_ADDRESS=/, 'V1 should print the share token env var');
-  assert.match(source, /VITE_PRONOS_BASE_SEPOLIA_FACTORY=/, 'V1 should print the Base Sepolia factory alias');
+  assert.match(source, /VITE_PRONOS_ARB_SEPOLIA_FACTORY=/, 'V1 should print the Arbitrum Sepolia factory alias');
   assert.ok(setCreator < transferOwner, 'marketCreator must be set before ownership leaves the deployer');
 });
 
@@ -36,7 +36,7 @@ test('V2 deploy script mirrors V1 Safe aliases and automatic market creator setu
   assert.notEqual(setCreator, -1, 'V2 should set MarketFactoryV2.marketCreator');
   assert.notEqual(transferOwner, -1, 'V2 should transfer ownership to the Safe/admin');
   assert.match(source, /ONCHAIN_SHARE_TOKEN_V2_ADDRESS=/, 'V2 should print the share token env var');
-  assert.match(source, /VITE_PRONOS_BASE_SEPOLIA_FACTORY_V2=/, 'V2 should print the Base Sepolia factory alias');
+  assert.match(source, /VITE_PRONOS_ARB_SEPOLIA_FACTORY_V2=/, 'V2 should print the Arbitrum Sepolia factory alias');
   assert.ok(setCreator < transferOwner, 'marketCreator must be set before ownership leaves the deployer');
 });
 
@@ -46,6 +46,6 @@ test('tournament MXNP deploy script emits controlled collateral env', () => {
   assert.match(source, /TOURNAMENT_MXNP_OWNER/, 'script should support explicit token owner');
   assert.match(source, /new TournamentMXNP\(owner\)/, 'script should deploy with configured owner');
   assert.match(source, /ONCHAIN_COLLATERAL_ADDRESS=/, 'script should print collateral env');
-  assert.match(source, /base_sepolia/, 'script usage should point operators at Base Sepolia');
+  assert.match(source, /arbitrum_sepolia/, 'script usage should point operators at Arbitrum Sepolia');
   assert.doesNotMatch(source, /faucet\(/, 'tournament token deploy path must not expose a faucet');
 });

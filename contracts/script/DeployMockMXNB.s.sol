@@ -10,7 +10,7 @@ import {MockMXNB} from "../src/MockMXNB.sol";
  *
  * Usage:
  *   forge script script/DeployMockMXNB.s.sol \
- *     --rpc-url base_sepolia --broadcast --verify
+ *     --rpc-url arbitrum_sepolia --broadcast --verify
  *
  * Env vars:
  *   DEPLOYER_PRIVATE_KEY - deployer's secp256k1 hex key

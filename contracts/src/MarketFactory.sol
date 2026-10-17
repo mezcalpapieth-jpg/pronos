@@ -5,6 +5,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./PronosToken.sol";
 import "./PronosAMM.sol";
+import "./PoolDeployment.sol";
 
 /**
  * @title MarketFactory
@@ -20,6 +21,7 @@ contract MarketFactory is ReentrancyGuard {
     // ─── State ────────────────────────────────────────────────────────────────
 
     PronosToken public immutable token;
+    address public immutable poolCreationCode;
     // Generic ERC-20 collateral. Arbitrum One: MXNB. Testnet:
     // MockMXNB. The contract doesn't care which token it is — only
     // the deploy script and environment do.
@@ -99,6 +101,7 @@ contract MarketFactory is ReentrancyGuard {
         address _emergencyReserve
     ) {
         token             = PronosToken(_token);
+        poolCreationCode  = address(new PoolCreationCode(type(PronosAMM).creationCode));
         collateral        = IERC20(_collateral);
         owner             = msg.sender;
         marketCreator     = msg.sender;
@@ -134,12 +137,10 @@ contract MarketFactory is ReentrancyGuard {
         marketId = token.registerMarket();
 
         // Deploy AMM pool
-        PronosAMM pool = new PronosAMM(
-            address(token),
-            address(collateral),
-            marketId,
-            feeCollector
-        );
+        PronosAMM pool = PronosAMM(PoolDeployment.deploy(
+            poolCreationCode,
+            abi.encode(address(token), address(collateral), marketId, feeCollector)
+        ));
 
         // Authorize pool as minter
         token.setMinter(address(pool), true);

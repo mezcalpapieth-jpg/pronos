@@ -860,8 +860,8 @@ export async function adminListTaskCounts() {
   };
 }
 
-export async function adminReviewPendingMarket(id, action, note) {
-  return postJson('/api/points/admin/pending-markets', { id, action, note });
+export async function adminReviewPendingMarket(id, action, note, previewApprovalMode) {
+  return postJson('/api/points/admin/pending-markets', { id, action, note, previewApprovalMode });
 }
 
 export async function adminRefreshPendingPricing(id) {
@@ -878,8 +878,8 @@ export async function adminEditPendingMarket(id, patch, note) {
 
 // Bulk-approve every pending row. Backend does per-row transactions so
 // partial failure is tolerated; returns `{ checked, approvedCount, failedCount, failures }`.
-export async function adminApproveAllPendingMarkets(note, filters) {
-  return postJson('/api/points/admin/pending-markets', { action: 'approve_all', note, filters });
+export async function adminApproveAllPendingMarkets(note, filters, previewApprovalMode) {
+  return postJson('/api/points/admin/pending-markets', { action: 'approve_all', note, filters, previewApprovalMode });
 }
 
 // One-shot: retrofit resolver_type + resolver_config on already-approved

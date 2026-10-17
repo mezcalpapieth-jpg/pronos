@@ -29,6 +29,7 @@ import { syncApiPriceFromQuestion } from '../../_lib/api-price-market-sync.js';
 import { syncWeatherDateFromMarket } from '../../_lib/weather-market-sync.js';
 import { validateBeforeMonthDeadline } from '../../_lib/manual-deadline-sanity.js';
 import { attachMarketTranslations } from '../../_lib/market-translations.js';
+import { pendingApprovalOptions, pendingApprovalSettings } from '../../_lib/onchain-preview-approval.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 const readSql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
@@ -222,8 +223,8 @@ export default async function handler(req, res) {
     const admin = requirePointsAdmin(req, res);
     if (!admin) return;
 
-    if (req.method === 'GET')  return list(req, res);
-    if (req.method === 'POST') return review(req, res, admin);
+    if (req.method === 'GET')  return await list(req, res);
+    if (req.method === 'POST') return await review(req, res, admin);
     return res.status(405).json({ error: 'method_not_allowed' });
   } catch (e) {
     const status = Number.isInteger(e?.status) && e.status >= 400 && e.status < 600
@@ -430,6 +431,7 @@ async function list(req, res) {
   const filteredRows = filteredPendingRows(rows, req.query || {});
 
   return res.status(200).json({
+    approvalSettings: pendingApprovalSettings(),
     pending: filteredRows.map(r => {
       const sourceData = parseJsonb(r.source_data, {});
       return {
@@ -1259,12 +1261,12 @@ async function listPendingRowsForBulk(filters = {}) {
 }
 
 async function review(req, res, admin) {
-  const { id, action, note, patch, mode, chainId, chainAddress, chainMarketId, autoDeploy, filters } = req.body || {};
-  // Shared opts passed to approveOne for both single-row and
-  // approve_all paths. Default behaviour (no opts) keeps Points admin
-  // approvals off-chain; the MVP admin sends mode='onchain' + chain
-  // fields on every approve call.
-  const approveOpts = { mode, chainId, chainAddress, chainMarketId, autoDeploy };
+  const { id, action, note, patch, filters } = req.body || {};
+  // Resolve the preview default and reject unsupported bulk approvals before
+  // any schema/database work. Other review actions never deploy markets.
+  const approveOpts = action === 'approve' || action === 'approve_all'
+    ? pendingApprovalOptions(req.body)
+    : {};
 
   await ensurePointsSchema(schemaSql);
 
@@ -1272,18 +1274,7 @@ async function review(req, res, admin) {
   // so one bad spec (e.g. end_time already in the past) doesn't undo
   // the rows that processed cleanly before it. Returns a summary of
   // what landed + what failed so the admin UI can show the result.
-  //
-  // Bulk approve with mode='onchain' would assign the same chain_address
-  // to every market, which doesn't match reality (each market = its own
-  // contract). Reject it explicitly — MVP admin must approve on-chain
-  // markets one at a time with per-market chain details.
   if (action === 'approve_all') {
-    if (approveOpts?.mode === 'onchain') {
-      return res.status(400).json({
-        error: 'bulk_approve_onchain_unsupported',
-        detail: 'On-chain approvals must be done one at a time so each market gets its own chain_address.',
-      });
-    }
     const pending = await listPendingRowsForBulk(filters || {});
     const approved = [];
     const failures = [];

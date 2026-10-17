@@ -24,6 +24,7 @@
  */
 
 import { ethers } from 'ethers';
+import { onchainFeeData } from './onchain-fees.js';
 import {
   isDelegationEnabled, signDelegatedTransaction,
 } from './turnkey-delegation.js';
@@ -203,7 +204,7 @@ function chainId() {
 async function signAndBroadcast({ suborgId, from, to, data, gasLimit }) {
   const prov = provider();
   const nonce = await prov.getTransactionCount(from, 'pending');
-  const feeData = await prov.getFeeData();
+  const feeData = await onchainFeeData(prov, chainId());
 
   const unsignedTx = {
     to,
@@ -864,7 +865,7 @@ export async function deployMarketOnChain({
     factory.owner(),
     factory.marketCreator().catch(() => null),
     factory.collateral(),
-    prov.getFeeData(),
+    onchainFeeData(prov, chainId()),
     prov.getBalance(deployerAddr),
   ]);
   if (!sameAddress(factoryOwner, deployerAddr) && !sameAddress(factoryCreator, deployerAddr)) {

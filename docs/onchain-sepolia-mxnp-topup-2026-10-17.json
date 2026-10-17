@@ -1,0 +1,70 @@
+{
+  "preparedAt": "2026-10-17T11:37:22.101Z",
+  "network": "Arbitrum Sepolia",
+  "chainId": 421614,
+  "token": "0x6ed6C00C2B4cF9f5989866f4c5862D4cdeD67ef9",
+  "owner": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+  "recipient": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+  "targetWalletMXNP": "50000000",
+  "mintMXNP": "49999000.0",
+  "before": {
+    "totalSupplyMXNP": "1000.0",
+    "operationsMXNP": "1000.0",
+    "operationsETH": "0.000998578624076",
+    "blockNumber": 320063056
+  },
+  "comparisons": [
+    {
+      "targetWalletMXNP": "50000000",
+      "mintMXNP": "49999000.0",
+      "estimatedGas": "36853",
+      "estimatedFeeETH": "0.00000073706"
+    },
+    {
+      "targetWalletMXNP": "100000000",
+      "mintMXNP": "99999000.0",
+      "estimatedGas": "36853",
+      "estimatedFeeETH": "0.00000073706"
+    }
+  ],
+  "gasPriceWei": "20000000",
+  "nonce": 1,
+  "gasLimit": "47908",
+  "maxFeePerGasWei": "40000000",
+  "maximumFeeETH": "0.00000191632",
+  "calldata": "0x40c10f190000000000000000000000006e2f3d41f893c8dd0f638f3fee212ea0457e317c00000000000000000000000000000000000000000000000000002d794ca25600",
+  "authorization": "User explicitly requested topping up this operations wallet to 50 million MXNP. 100 million is a gas comparison only.",
+  "transactionHash": "0x06b4aae6e1321d3263e64ec1e7d419c8e976a8ad74c9d64ef78a028a3b18b5b1",
+  "turnkeyActivityId": "01a149a7-0f8f-7ad5-bd8f-d9583f9116dc",
+  "signedAt": "2026-10-17T11:37:27.650Z",
+  "broadcastAt": "2026-10-17T11:37:28.043Z",
+  "receipt": {
+    "status": 1,
+    "blockNumber": 320063087,
+    "blockHash": "0xee35e7d6527a4fdad3d141e84ee01b2e6343322f33be66dfab7d57d93e29e6c0",
+    "confirmations": 16,
+    "gasUsed": "36490",
+    "effectiveGasPriceWei": "20074000",
+    "transactionFeeETH": "0.00000073250026",
+    "mintEventVerified": true
+  },
+  "after": {
+    "totalSupplyMXNP": "50000000.0",
+    "operationsMXNP": "50000000.0",
+    "operationsETH": "0.000997846123816",
+    "blockNumber": 320063102
+  },
+  "verifiedAt": "2026-10-17T11:37:33.211Z",
+  "scope": {
+    "branch": "onchain-sepolia",
+    "action": "Owner mint to the existing operations treasury only",
+    "user_allocations": false,
+    "market_creation": false,
+    "application_deployment": false,
+    "vercel_environment_mutations": false,
+    "pointbreak_changed": false
+  },
+  "explorer_url": "https://sepolia.arbiscan.io/tx/0x06b4aae6e1321d3263e64ec1e7d419c8e976a8ad74c9d64ef78a028a3b18b5b1",
+  "comparison_note": "Both estimates were taken before the mint, with the same 1,000-MXNP starting balance and same recipient. 100 million was simulated only. Mint amount changes did not change the quoted gas in this comparison.",
+  "supply_note": "Owner-only ERC20 mint requires gas but no ETH backing. No public burn or owner burn function exists in this token. Treasury reserves are separate from per-user allocations and market seed approvals."
+}

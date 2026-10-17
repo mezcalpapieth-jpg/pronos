@@ -1,4 +1,4 @@
-export const BASE_SEPOLIA_CHAIN_ID = 84532;
+export const ARBITRUM_SEPOLIA_CHAIN_ID = 421614;
 export const DEFAULT_RESET_ALLOCATION_MXNP = '500';
 export const MXNP_DECIMALS = 6;
 
@@ -198,13 +198,13 @@ export function buildOnchainResetPlan({
     });
   }
   if (!hasEnv(env, 'ONCHAIN_CHAIN_ID')) {
-    pushMissingEnv(blockers, env, 'ONCHAIN_CHAIN_ID', 'The reset must target Base Sepolia explicitly.');
-  } else if (chainId !== BASE_SEPOLIA_CHAIN_ID) {
+    pushMissingEnv(blockers, env, 'ONCHAIN_CHAIN_ID', 'The reset must target Arbitrum Sepolia explicitly.');
+  } else if (chainId !== ARBITRUM_SEPOLIA_CHAIN_ID) {
     blockers.push({
-      id: 'chain_not_base_sepolia',
-      title: 'Reset target is not Base Sepolia',
-      detail: `ONCHAIN_CHAIN_ID=${chainId}; expected ${BASE_SEPOLIA_CHAIN_ID}.`,
-      fix: 'Set ONCHAIN_CHAIN_ID=84532',
+      id: 'chain_not_arbitrum_sepolia',
+      title: 'Reset target is not Arbitrum Sepolia',
+      detail: `ONCHAIN_CHAIN_ID=${chainId}; expected ${ARBITRUM_SEPOLIA_CHAIN_ID}.`,
+      fix: 'Set ONCHAIN_CHAIN_ID=421614',
     });
   }
 
@@ -361,8 +361,8 @@ export function buildOnchainResetPlan({
     },
     chain: {
       chainId,
-      expectedChainId: BASE_SEPOLIA_CHAIN_ID,
-      networkName: 'Base Sepolia',
+      expectedChainId: ARBITRUM_SEPOLIA_CHAIN_ID,
+      networkName: 'Arbitrum Sepolia',
       rpcConfigured: hasEnv(env, 'ONCHAIN_RPC_URL'),
       tokenAddress,
       collateralAddress,
@@ -412,7 +412,7 @@ export function buildOnchainResetPlan({
     blockers: uniqueById(blockers),
     warnings,
     nextActions: [
-      'Deploy TournamentMXNP and both protocol factories on Base Sepolia.',
+      'Deploy TournamentMXNP and both protocol factories on Arbitrum Sepolia.',
       'Set Sepolia env values for token, collateral, factories, share tokens, RPC, owner, and indexer.',
       'Create or refresh Turnkey wallets and delegated policies for every selected user.',
       'Pre-fund eligible wallets with Sepolia ETH or ship a gas sponsorship path.',

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  BASE_SEPOLIA_CHAIN_ID,
+  ARBITRUM_SEPOLIA_CHAIN_ID,
   buildOnchainResetPlan,
   formatFixedUnits,
   parseFixedUnits,
@@ -22,8 +22,8 @@ const ADDR = {
 
 function completeEnv(overrides = {}) {
   return {
-    ONCHAIN_CHAIN_ID: String(BASE_SEPOLIA_CHAIN_ID),
-    ONCHAIN_RPC_URL: 'https://sepolia.base.org',
+    ONCHAIN_CHAIN_ID: String(ARBITRUM_SEPOLIA_CHAIN_ID),
+    ONCHAIN_RPC_URL: 'https://sepolia-rollup.arbitrum.io/rpc',
     ONCHAIN_TOURNAMENT_MXNP_ADDRESS: ADDR.token,
     ONCHAIN_COLLATERAL_ADDRESS: ADDR.token,
     ONCHAIN_MARKET_FACTORY_ADDRESS: ADDR.factoryV1,
@@ -125,7 +125,7 @@ test('buildOnchainResetPlan reports missing Sepolia env and rejects apply mode',
   assert.equal(plan.ok, false);
   assert.equal(plan.dryRun, false);
   assert.ok(blockerIds.includes('apply_not_implemented'));
-  assert.ok(blockerIds.includes('chain_not_base_sepolia'));
+  assert.ok(blockerIds.includes('chain_not_arbitrum_sepolia'));
   assert.ok(blockerIds.includes('onchain_rpc_url_missing'));
   assert.ok(blockerIds.includes('onchain_tournament_mxnp_address_missing'));
   assert.ok(blockerIds.includes('no_eligible_wallets'));
@@ -148,6 +148,17 @@ test('buildOnchainResetPlan validates gas funding estimate', () => {
 
   assert.equal(plan.ok, false);
   assert.ok(blockerIds.includes('invalid_gas_eth'));
+});
+
+test('buildOnchainResetPlan blocks funding plans aimed at Base Sepolia', () => {
+  const plan = buildOnchainResetPlan({
+    env: completeEnv({ ONCHAIN_CHAIN_ID: '84532' }),
+    users: [{ username: 'frmm', wallet_address: ADDR.walletA, turnkey_sub_org_id: 'suborg-frmm' }],
+  });
+
+  assert.equal(plan.ok, false);
+  assert.equal(plan.chain.expectedChainId, 421614);
+  assert.ok(plan.blockers.some(b => b.id === 'chain_not_arbitrum_sepolia'));
 });
 
 test('buildOnchainResetPlan blocks duplicate wallets and missing requested users', () => {
