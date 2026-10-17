@@ -1,0 +1,274 @@
+{
+  "deployment": {
+    "chainId": 421614,
+    "sourceSha": "1fe6cb196680146d0db2d8d18076b3cf3877d725",
+    "collateral": "0x6ed6c00c2b4cf9f5989866f4c5862d4cded67ef9",
+    "admin": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+    "startedAt": "2026-10-17T16:50:16.778Z",
+    "steps": {
+      "v1": {
+        "completedAt": "2026-10-17T16:50:39.177Z",
+        "contracts": [
+          {
+            "contractName": "PronosToken",
+            "contractAddress": "0x0c059fe84d1a733d1d698dd04a2f594df883dfb4",
+            "transactionHash": "0xe5e7ac3e585dd711f0aefa559c4161b4eed55b7019dab898d936759237809d74"
+          },
+          {
+            "contractName": "MarketFactory",
+            "contractAddress": "0xb6cf9f65ab82c17c8e9d58d06073ca3af3e5443d",
+            "transactionHash": "0x99a54b977b5ef519212337617385aa523b4699c31e39781ccff6a6d89b060200"
+          }
+        ],
+        "receipts": [
+          {
+            "transactionHash": "0xe5e7ac3e585dd711f0aefa559c4161b4eed55b7019dab898d936759237809d74",
+            "status": 1,
+            "blockNumber": 320134741,
+            "gasUsed": "1320576",
+            "effectiveGasPrice": "20000001"
+          },
+          {
+            "transactionHash": "0x99a54b977b5ef519212337617385aa523b4699c31e39781ccff6a6d89b060200",
+            "status": 1,
+            "blockNumber": 320134752,
+            "gasUsed": "7196368",
+            "effectiveGasPrice": "20152001"
+          },
+          {
+            "transactionHash": "0x29d208f977d22c214b53c18b04da9336448860e3e8bf2eb65285a3451cf6a340",
+            "status": 1,
+            "blockNumber": 320134762,
+            "gasUsed": "47809",
+            "effectiveGasPrice": "20058001"
+          },
+          {
+            "transactionHash": "0x6852a26a12faad3472f2d411c4c20bd386877a5718cc18cd02cd937914480f77",
+            "status": 1,
+            "blockNumber": 320134769,
+            "gasUsed": "27042",
+            "effectiveGasPrice": "20030001"
+          },
+          {
+            "transactionHash": "0xadd6cb374c7c474a2f42800d197f9caf5f47e70e2d9b6d2897b6c3510938e77f",
+            "status": 1,
+            "blockNumber": 320134776,
+            "gasUsed": "30669",
+            "effectiveGasPrice": "20016001"
+          },
+          {
+            "transactionHash": "0x374a82dbd617c0338c73188c569664a4375578c868079d471a1dd7355cbc9596",
+            "status": 1,
+            "blockNumber": 320134784,
+            "gasUsed": "30690",
+            "effectiveGasPrice": "20046001"
+          }
+        ]
+      },
+      "v2": {
+        "completedAt": "2026-10-17T16:51:27.538Z",
+        "contracts": [
+          {
+            "contractName": "PronosTokenV2",
+            "contractAddress": "0xac7474e5ff1b98d5d6268a76ae409f972717436b",
+            "transactionHash": "0x7d4c8c548f20ef002b72376fd5e965d469cfd880adb8293067abde98c35c4d83"
+          },
+          {
+            "contractName": "MarketFactoryV2",
+            "contractAddress": "0x33c1cdd4e22a9732ad808f2ad7efe82211b65c6a",
+            "transactionHash": "0x1518f6e7f59908a41abcad7bbeee74e4ca6a1272457ffd840d2a72500e5294fb"
+          }
+        ],
+        "receipts": [
+          {
+            "transactionHash": "0x7d4c8c548f20ef002b72376fd5e965d469cfd880adb8293067abde98c35c4d83",
+            "status": 1,
+            "blockNumber": 320134910,
+            "gasUsed": "1459171",
+            "effectiveGasPrice": "20210001"
+          },
+          {
+            "transactionHash": "0x1518f6e7f59908a41abcad7bbeee74e4ca6a1272457ffd840d2a72500e5294fb",
+            "status": 1,
+            "blockNumber": 320134921,
+            "gasUsed": "7966525",
+            "effectiveGasPrice": "20038001"
+          },
+          {
+            "transactionHash": "0x275ab846bd30e2eb294248892336799130d24e97db37ae4f08a11b76b745bfbc",
+            "status": 1,
+            "blockNumber": 320134931,
+            "gasUsed": "47831",
+            "effectiveGasPrice": "20000001"
+          },
+          {
+            "transactionHash": "0x6c02f86a3acb0bb619220d63084c0f3913ca541310c708e83e23b179e30af664",
+            "status": 1,
+            "blockNumber": 320134942,
+            "gasUsed": "28717",
+            "effectiveGasPrice": "20126001"
+          },
+          {
+            "transactionHash": "0x1082258252a24bbdb43f80057a90377b7e9c5f5222f0f849d1ccf64d79b2f622",
+            "status": 1,
+            "blockNumber": 320134952,
+            "gasUsed": "30669",
+            "effectiveGasPrice": "20030001"
+          },
+          {
+            "transactionHash": "0xdba9b3f416061161e778a48fd87eba533781e50b7a31515e5d94a14abf76b204",
+            "status": 1,
+            "blockNumber": 320134967,
+            "gasUsed": "30690",
+            "effectiveGasPrice": "20034001"
+          }
+        ]
+      },
+      "router": {
+        "completedAt": "2026-10-17T16:52:30.087Z",
+        "contracts": [
+          {
+            "contractName": "PronosTradingRouter",
+            "contractAddress": "0x25bc3c0f0c41516167f096ac4bf785f60bbbe843",
+            "transactionHash": "0x971f2cbabdc26e900de2ee5d8298bb9cb49204e8367bef4c233773a12137f13a"
+          }
+        ],
+        "receipts": [
+          {
+            "transactionHash": "0x971f2cbabdc26e900de2ee5d8298bb9cb49204e8367bef4c233773a12137f13a",
+            "status": 1,
+            "blockNumber": 320135190,
+            "gasUsed": "1247414",
+            "effectiveGasPrice": "20000001"
+          },
+          {
+            "transactionHash": "0x71cc5d846812c8e8b9c27b2673753a6d6a2899902c6e64e0528fa6828af74b23",
+            "status": 1,
+            "blockNumber": 320135199,
+            "gasUsed": "52322",
+            "effectiveGasPrice": "20098001"
+          },
+          {
+            "transactionHash": "0x1dccf99b39bd9a58a847415e1f42ad8550d1df74414e73cf4fe7c7102cb3e6e4",
+            "status": 1,
+            "blockNumber": 320135208,
+            "gasUsed": "52234",
+            "effectiveGasPrice": "20000001"
+          }
+        ]
+      }
+    },
+    "ownershipTransfers": [
+      {
+        "address": "0xb6cf9f65ab82c17c8e9d58d06073ca3af3e5443d",
+        "transactionHash": "0x70f7e9869b858d447499c5cc1554b34113449a4d4d475c383254da2fc1ce0e9f",
+        "blockNumber": 320135513,
+        "status": 1
+      },
+      {
+        "address": "0x33c1cdd4e22a9732ad808f2ad7efe82211b65c6a",
+        "transactionHash": "0xd43a116f5fc22cf5c6ead8426c6754f06c60a6ef5e85223cf7bed2f6f7dbe4f0",
+        "blockNumber": 320135540,
+        "status": 1
+      }
+    ]
+  },
+  "verification": {
+    "checkedAt": "2026-10-17T16:54:02.294Z",
+    "contracts": [
+      {
+        "name": "PronosToken",
+        "address": "0x0c059fe84d1a733d1d698dd04a2f594df883dfb4",
+        "creationTransaction": "0xe5e7ac3e585dd711f0aefa559c4161b4eed55b7019dab898d936759237809d74",
+        "constructorArguments": [],
+        "creationBytecodeMatched": true,
+        "runtimeMatchedExceptConstructorImmutables": true,
+        "codeHash": "0x40a1d6f5219a751e54117a4485fe3aa6f360ba6b48c8d737e984bd1e8d631f94",
+        "runtimeBytes": 5716
+      },
+      {
+        "name": "MarketFactory",
+        "address": "0xb6cf9f65ab82c17c8e9d58d06073ca3af3e5443d",
+        "creationTransaction": "0x99a54b977b5ef519212337617385aa523b4699c31e39781ccff6a6d89b060200",
+        "constructorArguments": [
+          "0x0c059fe84d1a733d1d698dd04a2f594df883dfb4",
+          "0x6ed6c00c2b4cf9f5989866f4c5862d4cded67ef9",
+          "0xa8eE70541d537389ed287d204efC5297569321d5",
+          "0xa8eE70541d537389ed287d204efC5297569321d5",
+          "0xa8eE70541d537389ed287d204efC5297569321d5"
+        ],
+        "creationBytecodeMatched": true,
+        "runtimeMatchedExceptConstructorImmutables": true,
+        "codeHash": "0x458a44bb21df3f4b5e801536bda6a83f696f2750231d2b4eb2de4124d144cc3b",
+        "runtimeBytes": 13697
+      },
+      {
+        "name": "PronosTokenV2",
+        "address": "0xac7474e5ff1b98d5d6268a76ae409f972717436b",
+        "creationTransaction": "0x7d4c8c548f20ef002b72376fd5e965d469cfd880adb8293067abde98c35c4d83",
+        "constructorArguments": [],
+        "creationBytecodeMatched": true,
+        "runtimeMatchedExceptConstructorImmutables": true,
+        "codeHash": "0x0a210f747130b9bcba621ef8015395ef82a854b1d627f54679ff4301edb94ac1",
+        "runtimeBytes": 6357
+      },
+      {
+        "name": "MarketFactoryV2",
+        "address": "0x33c1cdd4e22a9732ad808f2ad7efe82211b65c6a",
+        "creationTransaction": "0x1518f6e7f59908a41abcad7bbeee74e4ca6a1272457ffd840d2a72500e5294fb",
+        "constructorArguments": [
+          "0xac7474e5ff1b98d5d6268a76ae409f972717436b",
+          "0x6ed6c00c2b4cf9f5989866f4c5862d4cded67ef9",
+          "0xa8eE70541d537389ed287d204efC5297569321d5",
+          "0xa8eE70541d537389ed287d204efC5297569321d5",
+          "0xa8eE70541d537389ed287d204efC5297569321d5"
+        ],
+        "creationBytecodeMatched": true,
+        "runtimeMatchedExceptConstructorImmutables": true,
+        "codeHash": "0xbe7e75236e124e911513a1a151b06d85e03382cdda15c0f3950ed9d65ee6182c",
+        "runtimeBytes": 14932
+      },
+      {
+        "name": "PronosTradingRouter",
+        "address": "0x25bc3c0f0c41516167f096ac4bf785f60bbbe843",
+        "creationTransaction": "0x971f2cbabdc26e900de2ee5d8298bb9cb49204e8367bef4c233773a12137f13a",
+        "constructorArguments": [
+          "0xb6cf9f65ab82c17c8e9d58d06073ca3af3e5443d",
+          "0x33c1cdd4e22a9732ad808f2ad7efe82211b65c6a"
+        ],
+        "creationBytecodeMatched": true,
+        "runtimeMatchedExceptConstructorImmutables": true,
+        "codeHash": "0x60e7e8dff86f3e4b88df68d9f78caac497e4e14d9d15b61c318cf9038581fcd9",
+        "runtimeBytes": 5320
+      }
+    ],
+    "ownershipTransfers": [
+      {
+        "address": "0xb6cf9f65ab82c17c8e9d58d06073ca3af3e5443d",
+        "transactionHash": "0x70f7e9869b858d447499c5cc1554b34113449a4d4d475c383254da2fc1ce0e9f",
+        "blockNumber": 320135513,
+        "status": 1
+      },
+      {
+        "address": "0x33c1cdd4e22a9732ad808f2ad7efe82211b65c6a",
+        "transactionHash": "0xd43a116f5fc22cf5c6ead8426c6754f06c60a6ef5e85223cf7bed2f6f7dbe4f0",
+        "blockNumber": 320135540,
+        "status": 1
+      }
+    ],
+    "operationsProbes": [
+      {
+        "factory": "0xb6cf9f65ab82c17c8e9d58d06073ca3af3e5443d",
+        "signingAuthorized": true,
+        "broadcast": false
+      },
+      {
+        "factory": "0x33c1cdd4e22a9732ad808f2ad7efe82211b65c6a",
+        "signingAuthorized": true,
+        "broadcast": false
+      }
+    ],
+    "mxnpReused": true,
+    "newMint": false
+  }
+}

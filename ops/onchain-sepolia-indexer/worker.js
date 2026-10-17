@@ -1,10 +1,10 @@
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 
 const factories = [
-  '0x69440742a168635d9fa7cc0cfb0935afffe79ad3',
-  '0xfcac9cfcf22df809ba365c85dd767c90bb260fd6',
+  '0xb6cf9f65ab82c17c8e9d58d06073ca3af3e5443d',
+  '0x33c1cdd4e22a9732ad808f2ad7efe82211b65c6a',
 ];
-// Retain these historical factories when activation replaces the current pair.
+// Historical factories keep their own checkpoints for remaining redemptions.
 const legacyFactories = [
   '0x69440742a168635d9fa7cc0cfb0935afffe79ad3',
   '0xfcac9cfcf22df809ba365c85dd767c90bb260fd6',

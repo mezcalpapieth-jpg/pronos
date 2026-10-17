@@ -1,6 +1,6 @@
 # Stable trading authorization — Arbitrum Sepolia
 
-Implemented locally on `onchain-sepolia`, October 17, 2026. **Not committed, pushed, deployed or activated.** No live Turnkey policies, funds, database records, contracts or environment variables changed in this implementation. Pointbreak is outside this release.
+Implemented on `onchain-sepolia`, October 17, 2026, in commit `1fe6cb1`. The compatible share tokens, factories and immutable router are deployed on Arbitrum Sepolia using existing MXNP. Creation and runtime bytecode, one-time bindings, operations signing and admin ownership were verified. Receipts and code hashes are in `onchain-sepolia-router-deployment-2026-10-17.json`. Preview activation and the real future-market rehearsal are the next release checks. Pointbreak is outside this release.
 
 ## Result
 

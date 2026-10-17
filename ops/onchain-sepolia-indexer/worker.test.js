@@ -6,7 +6,7 @@ const env = {
   VERCEL_ENV:'production', VERCEL_PROJECT_ID:'dedicated', PREVIEW_INDEXER_PROJECT_ID:'dedicated',
   DATABASE_URL:'postgresql://sepolia_indexer:synthetic@ep-delicate-glitter-amp7yrkv.c-5.us-east-1.aws.neon.tech/neondb',
   CHAIN_ID:'421614', PROTOCOL_CHAIN_ID:'421614', CRON_SECRET:'synthetic-secret-only-for-tests-123456',
-  FACTORY_ADDRESS:'0x69440742a168635d9fa7cc0cfb0935afffe79ad3', FACTORY_V2_ADDRESS:'0xfcac9cfcf22df809ba365c85dd767c90bb260fd6',
+  FACTORY_ADDRESS:'0xb6cf9f65ab82c17c8e9d58d06073ca3af3e5443d', FACTORY_V2_ADDRESS:'0x33c1cdd4e22a9732ad808f2ad7efe82211b65c6a',
 };
 const request = { method:'GET', headers:{authorization:`Bearer ${env.CRON_SECRET}`,'user-agent':'vercel-cron/1.0','x-vercel-cron-schedule':'* * * * *'}, query:{resolve:'1',fromBlock:'0'} };
 function setup({ lease=true, chain=421614, fail=false, environment=env }={}) {
@@ -25,7 +25,7 @@ test('isolation pins project, chain, database role/branch, factories and signing
     assert.throws(()=>validateWorker({...env,...patch},source));
   }
   assert.throws(()=>validateWorker(env,{...source,branch:'pointbreak'}));
-  assert.doesNotThrow(()=>validateWorker({...env,ONCHAIN_LEGACY_MARKET_FACTORY_ADDRESS:env.FACTORY_ADDRESS,ONCHAIN_LEGACY_MARKET_FACTORY_V2_ADDRESS:env.FACTORY_V2_ADDRESS},source));
+  assert.doesNotThrow(()=>validateWorker({...env,ONCHAIN_LEGACY_MARKET_FACTORY_ADDRESS:'0x69440742a168635d9fa7cc0cfb0935afffe79ad3',ONCHAIN_LEGACY_MARKET_FACTORY_V2_ADDRESS:'0xfcac9cfcf22df809ba365c85dd767c90bb260fd6'},source));
   assert.throws(()=>validateWorker({...env,ONCHAIN_LEGACY_MARKET_FACTORY_ADDRESS:`0x${'1'.repeat(40)}`},source));
 });
 test('unauthenticated requests and wrong methods never reach RPC, SQL or indexing',async()=>{
