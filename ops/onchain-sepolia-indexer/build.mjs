@@ -1,5 +1,5 @@
 import { build } from 'esbuild';
-import { readFile } from 'node:fs/promises';
+import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 const source = JSON.parse(await readFile(new URL('./source.json', import.meta.url), 'utf8'));
@@ -9,3 +9,5 @@ await build({
   bundle: true, platform: 'node', format: 'esm', target: 'node22',
   nodePaths: [resolve('node_modules')], packages: 'external',
 });
+await mkdir('public', { recursive: true });
+await writeFile('public/index.html', '<!doctype html><title>Pronos Sepolia indexer</title>Pronos Sepolia indexer');
