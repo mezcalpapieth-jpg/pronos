@@ -1114,10 +1114,15 @@ export async function resolveMarketOnChain({
   } catch (_) {
     throw new Error(`invalid_marketId: ${marketId}`);
   }
-  const outcomeNum = Number.parseInt(outcome, 10);
-  if (!Number.isInteger(outcomeNum) || outcomeNum < 0 || outcomeNum > 255) {
-    throw new Error('outcome must be an integer in [0, 255]');
+  const outcomeNum = typeof outcome === 'number' || (typeof outcome === 'string' && /^\d+$/.test(outcome))
+    ? Number(outcome) : NaN;
+  const maxOutcome = useV2 ? 255 : 1;
+  if (!Number.isInteger(outcomeNum) || outcomeNum < 0 || outcomeNum > maxOutcome) {
+    throw new Error(`outcome must be an integer in [0, ${maxOutcome}]`);
   }
+  // App/resolver indexes are zero-based. V1 reserves zero for unresolved;
+  // its contract enum is 1=YES, 2=NO. V2 already uses zero-based indexes.
+  const chainOutcome = useV2 ? outcomeNum : outcomeNum + 1;
 
   const prov = provider();
   const factory = new ethers.Contract(factoryAddress, abi, prov);
@@ -1130,7 +1135,7 @@ export async function resolveMarketOnChain({
   }
 
   const iface = new ethers.utils.Interface(abi);
-  const data = iface.encodeFunctionData('resolveMarket', [marketIdBn, outcomeNum]);
+  const data = iface.encodeFunctionData('resolveMarket', [marketIdBn, chainOutcome]);
 
   // Simulate first so a bad outcome / already-resolved market gives
   // a useful error before we burn a tx.
@@ -1176,7 +1181,7 @@ export async function resolveMarketOnChain({
     txHash: receipt.transactionHash,
     blockNumber: receipt.blockNumber,
     marketId: resolvedMarketId || marketIdBn.toString(),
-    outcome: resolvedOutcome ?? outcomeNum,
+    outcome: resolvedOutcome ?? chainOutcome,
     factoryVariant: useV2 ? 'v2' : 'v1',
     chainId: chainId(),
   };

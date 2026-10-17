@@ -1,0 +1,788 @@
+{
+  "schemaVersion": 1,
+  "completedAt": "2026-10-17T14:21:17.635Z",
+  "scope": {
+    "branch": "onchain-sepolia",
+    "environment": "preview",
+    "chainId": 421614,
+    "databaseBranch": "br-sweet-dream-amb6hlfe",
+    "pointbreakChanged": false,
+    "productionChanged": false,
+    "vercelSettingsChanged": false,
+    "committed": false,
+    "pushed": false,
+    "localFixesDeployed": false
+  },
+  "account": {
+    "username": "pronos",
+    "walletAddress": "0xe1081Be279c5C23D2F37133218d1295C6b9bb37b",
+    "authentication": "Normal email OTP signup and username claim; actual authenticated preview session",
+    "ownershipVerified": true,
+    "backendIsRoot": false,
+    "rootQuorumUnchanged": true
+  },
+  "delegation": {
+    "policyId": "322ecbad-50fb-45f6-9442-65dd019d8786",
+    "authorizedAt": "2026-10-17T14:06:59.567Z",
+    "expiresAt": "2026-10-18T14:06:58.828Z",
+    "expiryEnforcement": "Turnkey policy time expression, not credential expiry",
+    "scope": {
+      "chainId": 421614,
+      "pool": "0x1aca9bc8ce8b8f2eef41fa4f4b39ee8a7bb0d6e7",
+      "collateral": "0x6ed6c00c2b4cf9f5989866f4c5862d4cded67ef9",
+      "shareToken": "0xc26f94e86da1193dade6d798acdf8c0bc4d68946",
+      "zeroNativeValue": true,
+      "exactApprovalsOnly": true,
+      "maxGas": 600000,
+      "maxFeePerGasWei": 200000000,
+      "selectors": [
+        "0x01a9812c",
+        "0xde254659",
+        "0xdb006a75"
+      ]
+    },
+    "permissionProbes": [
+      {
+        "name": "native_transfer",
+        "rejected": true,
+        "errorCode": 7,
+        "broadcast": false
+      },
+      {
+        "name": "erc20_transfer",
+        "rejected": true,
+        "errorCode": 7,
+        "broadcast": false
+      },
+      {
+        "name": "unapproved_spender",
+        "rejected": true,
+        "errorCode": 7,
+        "broadcast": false
+      },
+      {
+        "name": "different_chain",
+        "rejected": true,
+        "errorCode": 7,
+        "broadcast": false
+      }
+    ],
+    "dailyCapEnforced": false,
+    "statusEndpointCaveat": "Generic delegation-status returns the default 200000 dailyCapMxnb for a NULL database cap. This rehearsal policy has no daily spending cap; do not present that status field as enforcement."
+  },
+  "funding": {
+    "allocatedMXNP": "500",
+    "allocatedETH": "0.0005",
+    "source": "Existing operations wallet; no new mint",
+    "receipts": {
+      "mxnp": {
+        "txHash": "0xe55cd387d3cf0aa83342f51283449ef9bcd14ddd12a2e85e6162b29a16f28e0d",
+        "explorer": "https://sepolia.arbiscan.io/tx/0xe55cd387d3cf0aa83342f51283449ef9bcd14ddd12a2e85e6162b29a16f28e0d",
+        "status": 1,
+        "blockNumber": 320097451,
+        "from": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+        "to": "0x6ed6C00C2B4cF9f5989866f4c5862D4cdeD67ef9",
+        "selector": "0xa9059cbb",
+        "gasUsed": "51556",
+        "feeETH": "0.000001033491576"
+      },
+      "gas": {
+        "txHash": "0xe4f6098e89d0ee2a1a36a920e10c19646f8b184d340d33f3ba36ee402d08877f",
+        "explorer": "https://sepolia.arbiscan.io/tx/0xe4f6098e89d0ee2a1a36a920e10c19646f8b184d340d33f3ba36ee402d08877f",
+        "status": 1,
+        "blockNumber": 320097462,
+        "from": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+        "to": "0xe1081Be279c5C23D2F37133218d1295C6b9bb37b",
+        "selector": "0x",
+        "gasUsed": "21000",
+        "feeETH": "0.000000420672"
+      }
+    }
+  },
+  "market": {
+    "pointsId": 360636,
+    "protocolDatabaseId": 3,
+    "contractMarketId": 0,
+    "factory": "0x69440742A168635D9fA7cC0cfb0935AFFFe79Ad3",
+    "pool": "0x1aca9bc8ce8b8f2eef41fa4f4b39ee8a7bb0d6e7",
+    "isTechnicalTest": true,
+    "question": "PRUEBA TÉCNICA: ¿queda verificada la creación de un mercado en Arbitrum Sepolia?",
+    "winningOutcomeIndex": 0,
+    "contractOutcome": 1,
+    "resolutionReason": "Technical test market was created on Arbitrum Sepolia; factory/pool/token and prior buy/sell receipts verified"
+  },
+  "rehearsal": {
+    "buy": {
+      "execution": "Deployed protocol API using actual pronos session and non-root delegated signer",
+      "collateralMXNP": 50,
+      "shares": 93.169134,
+      "minSharesOut": 92.237442,
+      "feeMXNP": 1.25,
+      "receipt": {
+        "txHash": "0x62ebfee39220f6727772a228159909227c1318924980806c1eaa382ae4186131",
+        "explorer": "https://sepolia.arbiscan.io/tx/0x62ebfee39220f6727772a228159909227c1318924980806c1eaa382ae4186131",
+        "status": 1,
+        "blockNumber": 320097857,
+        "from": "0xe1081Be279c5C23D2F37133218d1295C6b9bb37b",
+        "to": "0x1aca9bC8ce8b8f2Eef41fa4F4b39Ee8a7Bb0d6E7",
+        "selector": "0x01a9812c",
+        "gasUsed": "187111",
+        "feeETH": "0.000003827168394"
+      }
+    },
+    "sell": {
+      "execution": "Deployed protocol API using actual pronos session and non-root delegated signer",
+      "shares": 30,
+      "collateralOutMXNP": 15.727122,
+      "minCollateralOut": 15.56985,
+      "actualFeeMXNP": 0.441719,
+      "quoteFeeCaveat": "Live sell quote reported fee=0 while the confirmed receipt reports 0.441719. Net collateral quote and min-output guard were correct; fee presentation needs follow-up.",
+      "receipt": {
+        "txHash": "0xa5c1192a5ce35f3c9b88168ab407a9f7350af4baed81a0be8552279360b66d75",
+        "explorer": "https://sepolia.arbiscan.io/tx/0xa5c1192a5ce35f3c9b88168ab407a9f7350af4baed81a0be8552279360b66d75",
+        "status": 1,
+        "blockNumber": 320099012,
+        "from": "0xe1081Be279c5C23D2F37133218d1295C6b9bb37b",
+        "to": "0x1aca9bC8ce8b8f2Eef41fa4F4b39Ee8a7Bb0d6E7",
+        "selector": "0xde254659",
+        "gasUsed": "127381",
+        "feeETH": "0.000002552970002"
+      }
+    },
+    "resolve": {
+      "execution": "Existing operations resolver via locally corrected onchain-trader helper; deployed admin HTTP endpoint not exercised",
+      "winningOutcomeIndex": 0,
+      "contractOutcome": 1,
+      "receipt": {
+        "txHash": "0x9ee84749d208a62eedb98247fde725d669b6ef5e85f85de57bb0cf61ef5fd4e1",
+        "explorer": "https://sepolia.arbiscan.io/tx/0x9ee84749d208a62eedb98247fde725d669b6ef5e85f85de57bb0cf61ef5fd4e1",
+        "status": 1,
+        "blockNumber": 320099657,
+        "from": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+        "to": "0x69440742A168635D9fA7cC0cfb0935AFFFe79Ad3",
+        "selector": "0xdf55406e",
+        "gasUsed": "62464",
+        "feeETH": "0.000001253402624"
+      }
+    },
+    "redeem": {
+      "execution": "Deployed protocol API using actual pronos session and non-root delegated signer",
+      "shares": 63.169134,
+      "payoutMXNP": 63.169134,
+      "receipt": {
+        "txHash": "0x3605406f46da55530134321470f121ab69fd82c18f0b3b3f31e7c7623ad33ea5",
+        "explorer": "https://sepolia.arbiscan.io/tx/0x3605406f46da55530134321470f121ab69fd82c18f0b3b3f31e7c7623ad33ea5",
+        "status": 1,
+        "blockNumber": 320099924,
+        "from": "0xe1081Be279c5C23D2F37133218d1295C6b9bb37b",
+        "to": "0x1aca9bC8ce8b8f2Eef41fa4F4b39Ee8a7Bb0d6E7",
+        "selector": "0xdb006a75",
+        "gasUsed": "75869",
+        "feeETH": "0.00000151738"
+      }
+    },
+    "approvals": {
+      "collateral": {
+        "txHash": "0x219346e91ca492770d05b5c19bd5e12fc9d500e0d54500307e89644a0eed4ac5",
+        "explorer": "https://sepolia.arbiscan.io/tx/0x219346e91ca492770d05b5c19bd5e12fc9d500e0d54500307e89644a0eed4ac5",
+        "status": 1,
+        "blockNumber": 320097839,
+        "from": "0xe1081Be279c5C23D2F37133218d1295C6b9bb37b",
+        "to": "0x6ed6C00C2B4cF9f5989866f4c5862D4cdeD67ef9",
+        "selector": "0x095ea7b3",
+        "gasUsed": "46679",
+        "feeETH": "0.00000094384938"
+      },
+      "shareOperator": {
+        "txHash": "0x2e6803a53199fa0c882462744f3e01a2ec28afe38ae3718dfadbc18696f1e824",
+        "explorer": "https://sepolia.arbiscan.io/tx/0x2e6803a53199fa0c882462744f3e01a2ec28afe38ae3718dfadbc18696f1e824",
+        "status": 1,
+        "blockNumber": 320098993,
+        "from": "0xe1081Be279c5C23D2F37133218d1295C6b9bb37b",
+        "to": "0xc26F94E86da1193DADE6d798AcDF8C0BC4d68946",
+        "selector": "0xa22cb465",
+        "gasUsed": "46208",
+        "feeETH": "0.000000931368448"
+      }
+    },
+    "indexing": {
+      "automaticPreviewScheduler": false,
+      "runs": [
+        {
+          "checkedAt": "2026-10-17T14:10:58.670Z",
+          "execution": "Existing repository indexer run locally with preview-only DB credentials; no deployed authentication changes",
+          "fromBlock": 320097850,
+          "toBlock": 320097873,
+          "status": 200,
+          "processed": {
+            "markets": 0,
+            "liquidity": 0,
+            "trades": 1,
+            "resolutions": 0,
+            "redemptions": 0,
+            "lifecycle": 0
+          },
+          "backgroundJobs": {
+            "crypto5Min": {
+              "processed": false,
+              "reason": "not_production"
+            },
+            "tokenMcapSnapshots": {
+              "status": "skipped",
+              "reason": "not_scheduled"
+            },
+            "pointsAutoResolve": {
+              "status": "skipped",
+              "reason": "not_scheduled"
+            },
+            "protocolAutoResolve": {
+              "status": "skipped",
+              "reason": "not_scheduled"
+            }
+          }
+        },
+        {
+          "checkedAt": "2026-10-17T14:14:55.422Z",
+          "execution": "Existing repository indexer run locally with preview-only DB credentials; no deployed authentication changes",
+          "fromBlock": 320099005,
+          "toBlock": 320099025,
+          "status": 200,
+          "processed": {
+            "markets": 0,
+            "liquidity": 0,
+            "trades": 1,
+            "resolutions": 0,
+            "redemptions": 0,
+            "lifecycle": 0
+          },
+          "backgroundJobs": {
+            "crypto5Min": {
+              "processed": false,
+              "reason": "not_production"
+            },
+            "tokenMcapSnapshots": {
+              "status": "skipped",
+              "reason": "not_scheduled"
+            },
+            "pointsAutoResolve": {
+              "status": "skipped",
+              "reason": "not_scheduled"
+            },
+            "protocolAutoResolve": {
+              "status": "skipped",
+              "reason": "not_scheduled"
+            }
+          }
+        },
+        {
+          "checkedAt": "2026-10-17T14:17:36.632Z",
+          "execution": "Existing repository indexer run locally with preview-only DB credentials; no deployed authentication changes",
+          "fromBlock": 320099650,
+          "toBlock": 320099672,
+          "status": 200,
+          "processed": {
+            "markets": 0,
+            "liquidity": 0,
+            "trades": 0,
+            "resolutions": 1,
+            "redemptions": 0,
+            "lifecycle": 0
+          },
+          "backgroundJobs": {
+            "crypto5Min": {
+              "processed": false,
+              "reason": "not_production"
+            },
+            "tokenMcapSnapshots": {
+              "status": "skipped",
+              "reason": "not_scheduled"
+            },
+            "pointsAutoResolve": {
+              "status": "skipped",
+              "reason": "not_scheduled"
+            },
+            "protocolAutoResolve": {
+              "status": "skipped",
+              "reason": "not_scheduled"
+            }
+          }
+        },
+        {
+          "checkedAt": "2026-10-17T14:20:01.958Z",
+          "execution": "Existing repository indexer run locally with preview-only DB credentials; no deployed authentication changes",
+          "fromBlock": 320099916,
+          "toBlock": 320099940,
+          "status": 200,
+          "processed": {
+            "markets": 0,
+            "liquidity": 0,
+            "trades": 0,
+            "resolutions": 0,
+            "redemptions": 1,
+            "lifecycle": 0
+          },
+          "backgroundJobs": {
+            "crypto5Min": {
+              "processed": false,
+              "reason": "not_production"
+            },
+            "tokenMcapSnapshots": {
+              "status": "skipped",
+              "reason": "not_scheduled"
+            },
+            "pointsAutoResolve": {
+              "status": "skipped",
+              "reason": "not_scheduled"
+            },
+            "protocolAutoResolve": {
+              "status": "skipped",
+              "reason": "not_scheduled"
+            }
+          }
+        }
+      ],
+      "initialRedemptionIssue": "Original indexer excluded resolved pools; receipt replay after the local fix inserted exactly one redemption."
+    }
+  },
+  "finalAudit": {
+    "checkedAt": "2026-10-17T14:21:17.635Z",
+    "chainId": 421614,
+    "walletAddress": "0xe1081Be279c5C23D2F37133218d1295C6b9bb37b",
+    "balances": {
+      "walletMXNP": "528.896256",
+      "walletETH": "0.000490227263776",
+      "walletGasSpentETH": "0.000009772736224",
+      "operationsMXNP": "49999000.0",
+      "operationsETH": "0.000418746397616",
+      "poolMXNP": "469.412025",
+      "totalSupplyMXNP": "50000000.0",
+      "yesShares": "0.0",
+      "noShares": "0.0",
+      "resolved": true,
+      "contractOutcome": 1,
+      "totalRedeemedMXNP": "63.169134"
+    },
+    "receipts": {
+      "fundingMXNP": {
+        "txHash": "0xe55cd387d3cf0aa83342f51283449ef9bcd14ddd12a2e85e6162b29a16f28e0d",
+        "explorer": "https://sepolia.arbiscan.io/tx/0xe55cd387d3cf0aa83342f51283449ef9bcd14ddd12a2e85e6162b29a16f28e0d",
+        "status": 1,
+        "blockNumber": 320097451,
+        "from": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+        "to": "0x6ed6C00C2B4cF9f5989866f4c5862D4cdeD67ef9",
+        "selector": "0xa9059cbb",
+        "gasUsed": "51556",
+        "feeETH": "0.000001033491576"
+      },
+      "fundingGas": {
+        "txHash": "0xe4f6098e89d0ee2a1a36a920e10c19646f8b184d340d33f3ba36ee402d08877f",
+        "explorer": "https://sepolia.arbiscan.io/tx/0xe4f6098e89d0ee2a1a36a920e10c19646f8b184d340d33f3ba36ee402d08877f",
+        "status": 1,
+        "blockNumber": 320097462,
+        "from": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+        "to": "0xe1081Be279c5C23D2F37133218d1295C6b9bb37b",
+        "selector": "0x",
+        "gasUsed": "21000",
+        "feeETH": "0.000000420672"
+      },
+      "buy": {
+        "txHash": "0x62ebfee39220f6727772a228159909227c1318924980806c1eaa382ae4186131",
+        "explorer": "https://sepolia.arbiscan.io/tx/0x62ebfee39220f6727772a228159909227c1318924980806c1eaa382ae4186131",
+        "status": 1,
+        "blockNumber": 320097857,
+        "from": "0xe1081Be279c5C23D2F37133218d1295C6b9bb37b",
+        "to": "0x1aca9bC8ce8b8f2Eef41fa4F4b39Ee8a7Bb0d6E7",
+        "selector": "0x01a9812c",
+        "gasUsed": "187111",
+        "feeETH": "0.000003827168394"
+      },
+      "sell": {
+        "txHash": "0xa5c1192a5ce35f3c9b88168ab407a9f7350af4baed81a0be8552279360b66d75",
+        "explorer": "https://sepolia.arbiscan.io/tx/0xa5c1192a5ce35f3c9b88168ab407a9f7350af4baed81a0be8552279360b66d75",
+        "status": 1,
+        "blockNumber": 320099012,
+        "from": "0xe1081Be279c5C23D2F37133218d1295C6b9bb37b",
+        "to": "0x1aca9bC8ce8b8f2Eef41fa4F4b39Ee8a7Bb0d6E7",
+        "selector": "0xde254659",
+        "gasUsed": "127381",
+        "feeETH": "0.000002552970002"
+      },
+      "resolve": {
+        "txHash": "0x9ee84749d208a62eedb98247fde725d669b6ef5e85f85de57bb0cf61ef5fd4e1",
+        "explorer": "https://sepolia.arbiscan.io/tx/0x9ee84749d208a62eedb98247fde725d669b6ef5e85f85de57bb0cf61ef5fd4e1",
+        "status": 1,
+        "blockNumber": 320099657,
+        "from": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+        "to": "0x69440742A168635D9fA7cC0cfb0935AFFFe79Ad3",
+        "selector": "0xdf55406e",
+        "gasUsed": "62464",
+        "feeETH": "0.000001253402624"
+      },
+      "redeem": {
+        "txHash": "0x3605406f46da55530134321470f121ab69fd82c18f0b3b3f31e7c7623ad33ea5",
+        "explorer": "https://sepolia.arbiscan.io/tx/0x3605406f46da55530134321470f121ab69fd82c18f0b3b3f31e7c7623ad33ea5",
+        "status": 1,
+        "blockNumber": 320099924,
+        "from": "0xe1081Be279c5C23D2F37133218d1295C6b9bb37b",
+        "to": "0x1aca9bC8ce8b8f2Eef41fa4F4b39Ee8a7Bb0d6E7",
+        "selector": "0xdb006a75",
+        "gasUsed": "75869",
+        "feeETH": "0.00000151738"
+      },
+      "collateralApproval": {
+        "txHash": "0x219346e91ca492770d05b5c19bd5e12fc9d500e0d54500307e89644a0eed4ac5",
+        "explorer": "https://sepolia.arbiscan.io/tx/0x219346e91ca492770d05b5c19bd5e12fc9d500e0d54500307e89644a0eed4ac5",
+        "status": 1,
+        "blockNumber": 320097839,
+        "from": "0xe1081Be279c5C23D2F37133218d1295C6b9bb37b",
+        "to": "0x6ed6C00C2B4cF9f5989866f4c5862D4cdeD67ef9",
+        "selector": "0x095ea7b3",
+        "gasUsed": "46679",
+        "feeETH": "0.00000094384938"
+      },
+      "shareOperatorApproval": {
+        "txHash": "0x2e6803a53199fa0c882462744f3e01a2ec28afe38ae3718dfadbc18696f1e824",
+        "explorer": "https://sepolia.arbiscan.io/tx/0x2e6803a53199fa0c882462744f3e01a2ec28afe38ae3718dfadbc18696f1e824",
+        "status": 1,
+        "blockNumber": 320098993,
+        "from": "0xe1081Be279c5C23D2F37133218d1295C6b9bb37b",
+        "to": "0xc26F94E86da1193DADE6d798AcDF8C0BC4d68946",
+        "selector": "0xa22cb465",
+        "gasUsed": "46208",
+        "feeETH": "0.000000931368448"
+      }
+    },
+    "database": {
+      "branch": "onchain-sepolia",
+      "branchId": "br-sweet-dream-amb6hlfe",
+      "points": [
+        {
+          "username": "pronos",
+          "balance": "500.000000",
+          "points_trade_count": "0"
+        }
+      ],
+      "trades": [
+        {
+          "side": "buy",
+          "collateral_amt": "50.000000",
+          "shares_amt": "93.169134",
+          "fee_amt": "1.250000",
+          "tx_hash": "0x62ebfee39220f6727772a228159909227c1318924980806c1eaa382ae4186131",
+          "block_number": "320097857"
+        },
+        {
+          "side": "sell",
+          "collateral_amt": "15.727122",
+          "shares_amt": "30.000000",
+          "fee_amt": "0.441719",
+          "tx_hash": "0xa5c1192a5ce35f3c9b88168ab407a9f7350af4baed81a0be8552279360b66d75",
+          "block_number": "320099012"
+        }
+      ],
+      "redemptions": [
+        {
+          "outcome_index": null,
+          "shares": "63.169134",
+          "payout": "63.169134",
+          "tx_hash": "0x3605406f46da55530134321470f121ab69fd82c18f0b3b3f31e7c7623ad33ea5",
+          "block_number": "320099924"
+        }
+      ],
+      "markets": [
+        {
+          "id": 3,
+          "chain_id": 421614,
+          "market_id": 0,
+          "status": "resolved",
+          "outcome": 1,
+          "protocol_version": "v1"
+        }
+      ]
+    },
+    "livePreview": {
+      "checkedAt": "2026-10-17T14:20:30.111Z",
+      "balance": {
+        "mode": "onchain",
+        "chainId": 421614,
+        "symbol": "MXNP",
+        "balance": "528.896256"
+      },
+      "portfolio": {
+        "mode": "onchain",
+        "positions": [],
+        "history": [
+          {
+            "id": 360636,
+            "mode": "onchain",
+            "parentMarketId": null,
+            "legLabel": null,
+            "question": "PRUEBA TÉCNICA: ¿queda verificada la creación de un mercado en Arbitrum Sepolia?",
+            "category": "general",
+            "outcomes": [
+              "Sí",
+              "No"
+            ],
+            "chainId": 421614,
+            "chainAddress": "0x1aca9bc8ce8b8f2eef41fa4f4b39ee8a7bb0d6e7",
+            "chainMarketId": "0",
+            "protocolMarketId": 3,
+            "status": "resolved",
+            "outcome": 0,
+            "endTime": "2026-10-18T12:00:54.000Z",
+            "prices": [
+              0.5315217383754179,
+              0.4684782616245821
+            ],
+            "volume24h": 65.727122,
+            "liquidity": 469.412025,
+            "snapshotAt": "2026-10-17T14:19:59.945Z",
+            "executionReady": true,
+            "marketId": 360636,
+            "transactions": [
+              {
+                "side": "buy",
+                "outcomeIndex": 0,
+                "outcomeLabel": "Sí",
+                "shares": 93.169134,
+                "collateral": 50,
+                "fee": 1.25,
+                "createdAt": "2026-10-17T14:10:56.172Z"
+              },
+              {
+                "side": "sell",
+                "outcomeIndex": 0,
+                "outcomeLabel": "Sí",
+                "shares": 30,
+                "collateral": 15.727122,
+                "fee": 0.441719,
+                "createdAt": "2026-10-17T14:14:52.611Z"
+              },
+              {
+                "side": "redeem",
+                "outcomeIndex": 0,
+                "outcomeLabel": "Sí",
+                "shares": 63.169134,
+                "collateral": 63.169134,
+                "fee": 0,
+                "createdAt": "2026-10-17T14:19:59.450Z"
+              }
+            ],
+            "totalInvested": 50,
+            "totalReceived": 78.896256,
+            "markToMarket": 0,
+            "claimablePayout": 0,
+            "canRedeem": false,
+            "outcomeStatus": "won",
+            "winningOutcomeIndex": 0,
+            "winningOutcomeLabel": "Sí",
+            "pickedOutcomeLabel": "Sí",
+            "netPnl": 28.896255999999994
+          }
+        ],
+        "summary": {
+          "totalPositions": 0,
+          "activePositions": 0,
+          "totalInvested": 0,
+          "currentValue": 0,
+          "pnl": 0,
+          "unrealizedPnl": 0,
+          "realizedPnl": 28.896256,
+          "totalPnl": 28.896255999999994,
+          "marketsTotal": 1,
+          "marketsWon": 1,
+          "marketsLost": 0,
+          "marketsOpen": 0,
+          "marketsExited": 0,
+          "marketsPending": 0,
+          "marketsCanceled": 0,
+          "marketsCycleClosed": 0
+        }
+      },
+      "pointsBalance": 500
+    },
+    "publicReadCheckpoints": [
+      {
+        "checkedAt": "2026-10-17T14:15:32.150Z",
+        "walletMXNP": "465.727122",
+        "pointsBalance": 500,
+        "positions": [
+          {
+            "shares": 63.169134,
+            "canRedeem": false,
+            "status": "active"
+          }
+        ],
+        "summary": {
+          "totalPositions": 1,
+          "activePositions": 1,
+          "totalInvested": 33.90024747895585,
+          "currentValue": 33.575767915349715,
+          "pnl": -0.6971100846502818,
+          "unrealizedPnl": -0.3244795636061326,
+          "realizedPnl": -0.3726305210441492,
+          "totalPnl": -0.6971100846502836,
+          "marketsTotal": 1,
+          "marketsWon": 0,
+          "marketsLost": 0,
+          "marketsOpen": 1,
+          "marketsExited": 0,
+          "marketsPending": 0,
+          "marketsCanceled": 0,
+          "marketsCycleClosed": 0
+        }
+      },
+      {
+        "checkedAt": "2026-10-17T14:17:52.993Z",
+        "walletMXNP": "465.727122",
+        "pointsBalance": 500,
+        "positions": [
+          {
+            "shares": 63.169134,
+            "canRedeem": true,
+            "status": "resolved"
+          }
+        ],
+        "summary": {
+          "totalPositions": 1,
+          "activePositions": 0,
+          "totalInvested": 33.90024747895585,
+          "currentValue": 63.169134,
+          "pnl": 28.896256,
+          "unrealizedPnl": 29.268886521044152,
+          "realizedPnl": -0.3726305210441492,
+          "totalPnl": 28.896255999999994,
+          "marketsTotal": 1,
+          "marketsWon": 1,
+          "marketsLost": 0,
+          "marketsOpen": 0,
+          "marketsExited": 0,
+          "marketsPending": 0,
+          "marketsCanceled": 0,
+          "marketsCycleClosed": 0
+        }
+      },
+      {
+        "checkedAt": "2026-10-17T14:19:25.180Z",
+        "walletMXNP": "528.896256",
+        "pointsBalance": 500,
+        "positions": [
+          {
+            "shares": 63.169134,
+            "canRedeem": true,
+            "status": "resolved"
+          }
+        ],
+        "summary": {
+          "totalPositions": 1,
+          "activePositions": 0,
+          "totalInvested": 33.90024747895585,
+          "currentValue": 63.169134,
+          "pnl": 28.896256,
+          "unrealizedPnl": 29.268886521044152,
+          "realizedPnl": -0.3726305210441492,
+          "totalPnl": 28.896255999999994,
+          "marketsTotal": 1,
+          "marketsWon": 1,
+          "marketsLost": 0,
+          "marketsOpen": 0,
+          "marketsExited": 0,
+          "marketsPending": 0,
+          "marketsCanceled": 0,
+          "marketsCycleClosed": 0
+        }
+      },
+      {
+        "checkedAt": "2026-10-17T14:20:30.111Z",
+        "walletMXNP": "528.896256",
+        "pointsBalance": 500,
+        "positions": [],
+        "summary": {
+          "totalPositions": 0,
+          "activePositions": 0,
+          "totalInvested": 0,
+          "currentValue": 0,
+          "pnl": 0,
+          "unrealizedPnl": 0,
+          "realizedPnl": 28.896256,
+          "totalPnl": 28.896255999999994,
+          "marketsTotal": 1,
+          "marketsWon": 1,
+          "marketsLost": 0,
+          "marketsOpen": 0,
+          "marketsExited": 0,
+          "marketsPending": 0,
+          "marketsCanceled": 0,
+          "marketsCycleClosed": 0
+        }
+      }
+    ]
+  },
+  "localFixes": [
+    {
+      "files": [
+        "frontend/api/_lib/onchain-trader.js"
+      ],
+      "change": "Translate zero-based app outcomes to V1 contract values 1/2, preserving V2 zero-based outcomes. Reject invalid V1 indexes before signing."
+    },
+    {
+      "files": [
+        "frontend/api/protocol/admin/resolve-market.js",
+        "frontend/api/protocol/admin/resolution-candidates.js"
+      ],
+      "change": "Accept numeric chain market ID zero while rejecting missing metadata."
+    },
+    {
+      "files": [
+        "frontend/api/indexer.js"
+      ],
+      "change": "Continue scanning resolved, disputed and canceled pools belonging to the configured chain/factory, allowing post-resolution redemption and same-block events."
+    }
+  ],
+  "validation": {
+    "focusedTestsPassed": 44,
+    "failed": 0,
+    "gitDiffCheckPassed": true,
+    "liveBrowserInteractionVerified": false,
+    "liveAuthenticatedApiAndAdapterReadVerified": true,
+    "notes": "Buy, sell and redeem used the existing deployed preview. Resolution and manual indexing used the corrected local source. The deployed admin resolution and deployed indexer fixes have not been verified because no deployment was performed."
+  },
+  "deployments": {
+    "checkedAt": "2026-10-17T14:18:50.335Z",
+    "production": {
+      "id": "dpl_C4bVYurgBRwVYqZAJJChri7uQpzz",
+      "url": "pronos-fw1lqtni2-mezcalpapieth-jpgs-projects.vercel.app",
+      "state": "READY",
+      "target": "production",
+      "gitBranch": "pointbreak",
+      "gitSha": "47aa9e19115d64bc36a2684e5eeb685caef117ba",
+      "aliases": [
+        "pronos.io",
+        "www.pronos.io",
+        "pronos-chi.vercel.app",
+        "pronos-mezcalpapieth-jpgs-projects.vercel.app"
+      ]
+    },
+    "preview": {
+      "id": "dpl_3fQByqTPnmCFAgvGkKS3PMDDpJA1",
+      "url": "pronos-g1vwm9bz4-mezcalpapieth-jpgs-projects.vercel.app",
+      "state": "READY",
+      "target": null,
+      "gitBranch": "onchain-sepolia",
+      "gitSha": "94db969aea3814e713a152316417cf8df29f5731",
+      "aliases": [
+        "pronos-git-onchain-sepolia-mezcalpapieth-jpgs-projects.vercel.app"
+      ]
+    },
+    "unchangedEnvironmentRecordsOutsideBranch": 100,
+    "settingsChanged": false
+  },
+  "nextSteps": [
+    "Commit/push the reviewed local fixes and deploy a SHA-matched onchain-sepolia preview, then verify deployed resolution and indexing paths.",
+    "Implement the normal owner-authorized non-root delegation flow and remove unsupported cap/expiry claims. This dedicated test account was provisioned using its genuine owner session.",
+    "Correct sell-quote fee presentation; preserve the working net collateral and min-output protection.",
+    "Provide a preview indexer schedule before multi-user testing.",
+    "Complete cancellation refund attribution/correction evidence and tournament funding/reset/scoring/reward safeguards before activation."
+  ],
+  "credentialHandling": "No OTP, session cookie, ephemeral private key, database URL or backend secret is included. Temporary owner/session and database credentials used for this rehearsal are removed after verification."
+}

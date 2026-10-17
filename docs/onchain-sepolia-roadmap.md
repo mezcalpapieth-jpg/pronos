@@ -628,7 +628,7 @@ The live authenticated user's balance/portfolio and direct protected-preview bro
 
 Pointbreak local, tracking, and remote refs remain `47aa9e19115d64bc36a2684e5eeb685caef117ba`. Production remains on READY deployment `dpl_C4bVYurgBRwVYqZAJJChri7uQpzz` with that SHA and the same four aliases. This release changed no Vercel settings.
 
-Remaining work before activation:
+Remaining work at the frontend-adapter deployment checkpoint (superseded by the wallet rehearsal below):
 
 1. Verify a consenting test user's own live RPC balance and indexed portfolio through the preview session.
 2. Obtain that test user's explicit delegation consent, fund only the authorized test wallet, and verify gas handling. Perform a real buy/sell/resolve/redeem rehearsal with receipt and indexer readback. The earlier aggregate audit found zero current delegation policies; implementing the adapter does not grant them.
@@ -637,3 +637,28 @@ Remaining work before activation:
 5. Implement tournament reset/funding dry runs, issuance limits, cycle registration, scoring and reward behavior. The test selector is a rehearsal surface, not tournament-launch readiness.
 
 No user funds, policies, live Points data, Vercel settings or Pointbreak files/refs were changed by this release. Only this branch's preview alias advanced.
+
+### Consenting Wallet and Real Trade Rehearsal — 2026-10-17
+
+Created the dedicated **`pronos`** account through normal email OTP verification and username claim. Its wallet is `0xe1081Be279c5C23D2F37133218d1295C6b9bb37b`. The verified owner session authorized a non-root backend signer for one technical test pool on Arbitrum Sepolia. The human root quorum remains unchanged. The policy permits exact pool approvals and guarded buy/sell/redeem calls, with zero native value, gas/fee limits, and an enforced expiry of **2026-10-18 14:06:58 UTC**. Actual signing probes rejected native transfers, ERC20 transfers, an unapproved spender and another chain. The backend credential itself does not expire; the policy's time expression ends its trading permission.
+
+Transferred **500 MXNP and 0.0005 Sepolia ETH** from the existing operations wallet, without minting. On the deployed `94db969` preview, the actual authenticated user and delegated signer completed:
+
+- Buy: **50 MXNP → 93.169134 Yes shares**, with a 1% minimum-share guard.
+- Partial sell: **30 shares → 15.727122 MXNP**, with a 1% minimum-collateral guard.
+- Resolve the technical test to Yes using the existing operations resolver and the locally corrected dispatcher.
+- Redeem: **63.169134 remaining shares → 63.169134 MXNP** through the deployed preview API.
+
+Receipt, RPC, isolated database and authenticated adapter checks agree: the wallet ends with **528.896256 MXNP**, **0.000490227263776 ETH**, zero Yes/No shares, zero portfolio positions and realized test PnL of **+28.896256 MXNP**. Its separate Points balance remains **500**, with zero Points trades. The protocol ledger contains exactly two trades and one redemption. Total MXNP supply remains **50 million**; operations retain **49,999,000 MXNP / 0.000418746397616 ETH**. This is a technical test payout from seeded test liquidity.
+
+The rehearsal exposed and locally fixed three blockers: V1 resolution now translates app indexes `0/1` to contract outcomes `1/2`; both admin resolution paths accept chain market ID `0`; and the indexer keeps watching resolved pools so it can record later redemptions. Replaying the existing redemption receipt after the indexer fix inserted one event and removed the stale claimable position. Manual indexing used only the isolated preview database; background resolver/generator jobs stayed disabled. **44 focused tests and `git diff --check` passed.** These fixes remain **uncommitted, unpushed and undeployed**. The deployed admin resolution and deployed indexer paths therefore still need verification after the next preview release. No live browser click-through was performed; real authenticated API execution and adapter reads were verified.
+
+The [rehearsal proof](./onchain-sepolia-wallet-rehearsal-2026-10-17.json) records funding, approvals, all transaction receipts, permission rejections, indexer ranges, live read checkpoints and final ledger reconciliation. Temporary owner/session and database credentials were removed after verification. Pointbreak local/tracking/remote remain `47aa9e19115d64bc36a2684e5eeb685caef117ba`; production retains READY deployment `dpl_C4bVYurgBRwVYqZAJJChri7uQpzz` and its aliases. All 100 Vercel environment records outside this branch are unchanged.
+
+Remaining work before activation:
+
+1. Commit/push these reviewed fixes, deploy an exact-SHA `onchain-sepolia` preview, and verify the deployed resolution and indexer behavior.
+2. Implement the normal owner-authorized non-root delegation flow. This account used its real owner session for a scoped operational setup; the existing application delegation flow is not ready for arbitrary fresh accounts. The generic status endpoint still reports a default 200,000 daily cap despite this policy having no enforced daily spending cap. Correct the status and consent claims before broader use.
+3. Fix sell-quote fee presentation: the live quote reported zero fee while the receipt reported **0.441719 MXNP**. The quoted net collateral and output guard were correct.
+4. Arrange automatic preview indexing; production cron does not schedule this preview. Scanning closed pools is necessary for redemptions, but indexing cost must be monitored as historical pool count grows.
+5. Complete cancellation-refund burn attribution, resolution-correction evidence, tournament reset/funding dry runs, issuance limits, registration, scoring and rewards before activation.

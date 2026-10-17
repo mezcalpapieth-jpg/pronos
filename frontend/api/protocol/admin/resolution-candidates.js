@@ -193,7 +193,7 @@ export default async function handler(req, res) {
     if (!Number.isInteger(outcome) || outcome < 0 || outcome >= outcomeCount) {
       return res.status(400).json({ error: 'invalid_outcome' });
     }
-    if (!candidate.factory_address || !candidate.chain_market_id) {
+    if (!candidate.factory_address || candidate.chain_market_id == null || candidate.chain_market_id === '') {
       return res.status(500).json({ error: 'market_missing_chain_metadata' });
     }
 

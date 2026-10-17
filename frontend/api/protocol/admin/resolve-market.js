@@ -81,7 +81,7 @@ export default async function handler(req, res) {
         detail: `market has ${outcomeCount} outcomes, index ${oi} out of range`,
       });
     }
-    if (!m.factory_address || !m.market_id) {
+    if (!m.factory_address || m.market_id == null || m.market_id === '') {
       return res.status(500).json({ error: 'market_missing_chain_metadata' });
     }
 

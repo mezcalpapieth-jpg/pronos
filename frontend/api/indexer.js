@@ -568,9 +568,10 @@ async function indexFactoryRange(provider, factoryConfig, fromBlock, toBlock, pr
     FROM protocol_markets
     WHERE chain_id = ${CHAIN_ID}
       AND factory_address = ${factoryConfig.address}
-      AND COALESCE(status, 'active') = 'active'
   `;
 
+  // Resolved pools still emit redemptions. Keep watching every indexed pool
+  // for this chain/factory, including trades in the block it was resolved.
   for (const pool of pools) {
     if (pool.protocol_version === 'v2') {
       await indexV2Pool(provider, pool, fromBlock, toBlock, processed);
