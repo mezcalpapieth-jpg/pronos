@@ -13,6 +13,7 @@ import { binaryBuyQuote, binaryPrices, multiBuyQuote, multiPrices } from '../_li
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 import { seriesTradeLockFromRows } from '../_lib/series-markets.js';
 import { cryptoTradeLock } from '../_lib/points-crypto-trade-guard.js';
+import { pointsExecutionLock } from '../_lib/points-execution-mode.js';
 import {
   tournamentCutoffSnapshotLock,
   tournamentSettlementLock,
@@ -100,7 +101,7 @@ export default async function handler(req, res) {
   try {
     await ensurePointsSchema(schemaSql);
     const rows = await sql`
-      SELECT m.id, m.question, m.status, m.reserves, m.outcomes, m.start_time, m.end_time,
+      SELECT m.id, m.mode, m.question, m.status, m.reserves, m.outcomes, m.start_time, m.end_time,
              m.created_at, m.resolver_type, m.resolver_config, m.sport, m.league,
              m.seed_liquidity, m.seed_liquidities,
              (
@@ -116,6 +117,8 @@ export default async function handler(req, res) {
     `;
     if (rows.length === 0) return res.status(404).json({ error: 'market_not_found' });
     const r = rows[0];
+    const executionLock = pointsExecutionLock(r);
+    if (executionLock) return res.status(executionLock.status).json({ error: executionLock.error, detail: executionLock.detail });
     if (r.status !== 'active') return res.status(400).json({ error: 'market_closed' });
     if (r.end_time && new Date(r.end_time) <= new Date()) {
       return res.status(400).json({ error: 'market_expired' });

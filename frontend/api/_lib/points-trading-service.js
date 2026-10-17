@@ -35,6 +35,7 @@ import {
 } from './points-tournament-entry.js';
 import { normalizeExecutableSellShares } from './points-sell-shares.js';
 import { optionalFiniteNumber } from './protocol-trade-guards.js';
+import { assertPointsExecution } from './points-execution-mode.js';
 
 const EPSILON = 0.000001;
 
@@ -168,7 +169,7 @@ export async function executePointsBuy(client, {
   const tradeApiKeyId = normalizeApiKeyId(apiKeyId);
 
   const marketResult = await client.query(
-    `SELECT m.id, m.question, m.status, m.reserves, m.outcomes, m.start_time, m.end_time,
+    `SELECT m.id, m.mode, m.question, m.status, m.reserves, m.outcomes, m.start_time, m.end_time,
             m.created_at, m.resolver_type, m.resolver_config, m.sport, m.league,
             m.seed_liquidity, m.seed_liquidities, m.amm_mode, m.parent_id,
             (
@@ -185,6 +186,7 @@ export async function executePointsBuy(client, {
   );
   if (marketResult.rows.length === 0) throw apiError('market_not_found', 404);
   const market = marketResult.rows[0];
+  assertPointsExecution(market);
   if (market.status !== 'active') throw apiError('market_closed', 400);
   if (market.end_time && new Date(market.end_time) <= new Date()) throw apiError('market_expired', 400);
 
@@ -383,7 +385,7 @@ export async function executePointsSell(client, {
   const tradeApiKeyId = normalizeApiKeyId(apiKeyId);
 
   const marketResult = await client.query(
-    `SELECT m.id, m.status, m.reserves, m.end_time, m.resolver_config,
+    `SELECT m.id, m.mode, m.status, m.reserves, m.end_time, m.resolver_config,
             m.seed_liquidity, m.seed_liquidities,
             (
               m.tournament_featured IS TRUE
@@ -399,6 +401,7 @@ export async function executePointsSell(client, {
   );
   if (marketResult.rows.length === 0) throw apiError('market_not_found', 404);
   const market = marketResult.rows[0];
+  assertPointsExecution(market);
   if (market.status !== 'active') throw apiError('market_closed', 400);
   if (market.end_time && new Date(market.end_time) <= new Date()) throw apiError('market_expired', 400);
   await assertTournamentCutoffSnapshotReady(client, { market });

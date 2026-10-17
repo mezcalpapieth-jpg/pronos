@@ -1,4 +1,5 @@
 import { binaryPrices, multiPrices } from './amm-math.js';
+import { assertPointsExecution } from './points-execution-mode.js';
 import {
   TOURNAMENT_PARLAY_EDGE_FACTOR,
   TOURNAMENT_PARLAY_MAX_LEGS,
@@ -125,7 +126,7 @@ export function calculateParlayMultiplier(prices) {
 async function readParlayMarkets(db, marketIds, { lock = false } = {}) {
   const lockClause = lock ? 'FOR SHARE OF m' : '';
   return queryRows(db, `
-    SELECT m.id, m.question, m.status, m.outcome, m.outcomes, m.reserves,
+    SELECT m.id, m.mode, m.question, m.status, m.outcome, m.outcomes, m.reserves,
            m.end_time, m.parent_id,
            COALESCE(m.parent_id, m.id) AS exposure_group_id,
            (
@@ -169,6 +170,7 @@ export async function readParlayQuote(db, { legs, stake, now = new Date(), lockM
   const pricedLegs = normalizedLegs.map((leg) => {
     const market = marketById.get(leg.marketId);
     if (!market) throw apiError('market_not_found', 404, { marketId: leg.marketId });
+    assertPointsExecution(market);
     if (market.status !== 'active') throw apiError('market_not_active', 400, { marketId: leg.marketId });
 
     const groupId = Number(market.exposure_group_id || market.id);

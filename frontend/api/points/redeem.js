@@ -7,6 +7,7 @@
  * trade + distribution audit all inside one Postgres transaction.
  */
 import { neon } from '@neondatabase/serverless';
+import { assertPointsExecution } from '../_lib/points-execution-mode.js';
 import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { requireSession } from '../_lib/session.js';
@@ -50,13 +51,14 @@ export default async function handler(req, res) {
 
     const result = await withTransaction(async (client) => {
       const marketResult = await client.query(
-        `SELECT id, status, outcome FROM points_markets WHERE id = $1 FOR UPDATE`,
+        `SELECT id, mode, status, outcome FROM points_markets WHERE id = $1 FOR UPDATE`,
         [mid],
       );
       if (marketResult.rows.length === 0) {
         const err = new Error('market_not_found'); err.status = 404; throw err;
       }
       const m = marketResult.rows[0];
+      assertPointsExecution(m);
       if (m.status !== 'resolved') {
         const err = new Error('market_not_resolved'); err.status = 400; throw err;
       }

@@ -148,6 +148,14 @@ test('parlay multiplier caps tiny-price combinations', () => {
   assert.equal(quote.multiplier, 25);
 });
 
+test('Points parlay quotes reject on-chain legs instead of pricing the Points reserves', async () => {
+  const db=fakeDb({markets:[makeMarket(1,{mode:'onchain'}),makeMarket(2),makeMarket(3)]});
+  await assert.rejects(readParlayQuote(db,{
+    legs:[{marketId:1,outcomeIndex:0},{marketId:2,outcomeIndex:0},{marketId:3,outcomeIndex:0}],
+    stake:100,now:new Date('2026-09-01T00:00:00Z'),
+  }),{message:'onchain_market_requires_protocol',status:409});
+});
+
 test('parlay market eligibility inherits tournament approvals', () => {
   assert.match(parlaySource, /TOURNAMENT_APPROVED_MARKET_START_ISO/);
   assert.match(parlaySource, /LEFT JOIN points_pending_markets pm/);

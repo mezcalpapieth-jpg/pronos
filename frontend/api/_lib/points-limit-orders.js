@@ -9,6 +9,7 @@ import {
 import { buildMockMakerDepth, AMM_DEPTH_LEVELS } from './amm-depth.js';
 import { bestEffortInsertPointsPriceSnapshot } from './points-price-snapshots.js';
 import { assertCryptoTradeAllowed, cryptoTradeLock } from './points-crypto-trade-guard.js';
+import { assertPointsExecution } from './points-execution-mode.js';
 import {
   TOURNAMENT_APPROVED_MARKET_START_ISO,
   TOURNAMENT_LIQUIDITY_REWARD_MAX_DAILY_PER_USER,
@@ -293,7 +294,7 @@ export function normalizeLimitPrice(value) {
 
 async function lockMarket(client, marketId) {
   const result = await client.query(
-    `SELECT m.id, m.question, m.status, m.reserves, m.outcomes, m.end_time, m.resolver_config,
+    `SELECT m.id, m.mode, m.question, m.status, m.reserves, m.outcomes, m.end_time, m.resolver_config,
             m.amm_mode, m.parent_id,
             (
               m.tournament_featured IS TRUE
@@ -314,6 +315,7 @@ async function lockMarket(client, marketId) {
 }
 
 function assertMarketCanTrade(market) {
+  assertPointsExecution(market);
   if (market.status !== 'active') {
     const err = new Error('market_closed'); err.status = 400; throw err;
   }
@@ -1997,6 +1999,7 @@ export async function executeLimitOrderById(client, orderId) {
   }
 
   const market = await lockMarket(client, Number(order.market_id));
+  assertPointsExecution(market);
   const reserves = reservesForMarket(market, Number(order.outcome_index));
   order = await accrueMakerRewardForOrder(client, order, market, reserves);
 

@@ -445,7 +445,7 @@ Days 24-25: launch prep
 5. Done: wire admin pending approval to a branch-only on-chain default flag.
 6. Done: configure the isolated preview database, Arbitrum Sepolia runtime, and separate operational secrets.
 7. Done (2026-10-17): deploy MXNP and fresh V1/V2 factories; verify and fund the dedicated Turnkey operations wallet; replace only `onchain-sepolia` preview aliases. See the deployment checkpoint below.
-8. Next: ship and verify the preview, activate its signing/approval flags for a single-market test, and connect the Points trading adapter to the on-chain path. User delegation and the tournament reset/funding dry run remain separate checks.
+8. In progress: the reviewed preview is shipped and its contract/environment readiness checks pass. Preview-only signing/approval flags are configured for the single-market rehearsal. Finish that rehearsal and connect the Points trading adapter to the on-chain path. User delegation and the tournament reset/funding dry run remain separate checks.
 
 ### Preview Admin Approval Setting
 
@@ -576,3 +576,13 @@ Following explicit user authorization, Turnkey signed an owner-only mint of **49
 - Spare treasury units do not alter user balances or market depth until distributed or seeded. Enforce the same per-user grant and per-market seed limits, exclude the operations wallet from tournament scoring, and audit reserve movements. This token has no public or owner burn function, so unnecessary issuance cannot be removed from total supply through the existing contract. Additional authorized minting remains possible later.
 
 The [public top-up record](./onchain-sepolia-mxnp-topup-2026-10-17.json) preserves the preflight comparison, exact amount/calldata, Turnkey activity ID, successful receipt, and before/after balances. No private key was exported. No user received tokens, no market was created, and no application deployment, flag/configuration update, commit, push, or Pointbreak change was performed. The earlier deployment and capacity files remain historical checkpoint records; use this top-up record for the latest verified supply.
+
+### Preview Readiness and Execution Boundary — 2026-10-17
+
+Committed and pushed the deployment/runtime work as `eafdeb0965c1e523a5fd27d47ae710a2ff939e7f`. Its Vercel Preview deployment is READY. Authenticated `/api/points/admin/onchain-status` on the same source commit confirmed chain `421614`, matching V1/V2 factory and share-token aliases, the new MXNP collateral, owner/creator/resolver permissions, and the treasury's 50 million MXNP / `0.000997846123816 ETH`. The only configuration blocker was the deliberately disabled signing flag; CRE automation and user gas sponsorship remain review items. The served Points admin lazy bundle contains the preview approval selector. Unauthenticated admin requests return 401.
+
+Enabled `TURNKEY_POLICIES_ENABLED` and `ONCHAIN_PREVIEW_APPROVALS_ENABLED` only for Preview / `onchain-sepolia`, for the one-market rehearsal. Gas sponsorship stays false. Rotated only this preview's session secret and manual indexer key for authenticated verification; temporary verification credentials are kept outside the repository and removed after the run. All 100 environment records outside this branch, including nine Pointbreak-specific records, were compared and remain unchanged. These updated settings require the next preview deployment before use.
+
+Before integrating trading, added an explicit execution-mode boundary: Points buy/sell, quotes, redeem, limit-order creation/execution, and parlay quotes reject on-chain markets with HTTP 409 before Points balances, positions, order matching or settlement are accessed. Legacy null-mode and explicit Points markets retain their behavior. This is a prerequisite for the adapter, not an implementation of wallet trading in the Points UI.
+
+The isolated preview database's aggregate audit reports 599 distinct mapped user wallets and zero current delegation-policy rows. The runtime's `launch.ready` field checks configuration; it must not be presented as proof that users can trade. User-authorized policies, wallet gas support, the frontend adapter, and buy/sell/resolve/redeem rehearsal remain outstanding. No user allocation or reset was performed. A broader user-level export was rejected by automatic approval review; this checkpoint uses aggregate counts only.

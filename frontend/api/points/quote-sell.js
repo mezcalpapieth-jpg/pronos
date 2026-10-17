@@ -6,6 +6,7 @@
  * `fee` field always returns 0 but we keep the field for UI uniformity.
  */
 import { neon } from '@neondatabase/serverless';
+import { pointsExecutionLock } from '../_lib/points-execution-mode.js';
 import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { binaryPrices, binarySellQuote, multiPrices, multiSellQuote } from '../_lib/amm-math.js';
@@ -70,7 +71,7 @@ export default async function handler(req, res) {
   try {
     await ensurePointsSchema(schemaSql);
     const rows = await sql`
-      SELECT m.status, m.reserves, m.end_time, m.resolver_config,
+      SELECT m.mode, m.status, m.reserves, m.end_time, m.resolver_config,
              m.seed_liquidity, m.seed_liquidities,
              (
                m.tournament_featured IS TRUE
@@ -85,6 +86,8 @@ export default async function handler(req, res) {
     `;
     if (rows.length === 0) return res.status(404).json({ error: 'market_not_found' });
     const r = rows[0];
+    const executionLock = pointsExecutionLock(r);
+    if (executionLock) return res.status(executionLock.status).json({ error: executionLock.error, detail: executionLock.detail });
     if (r.status !== 'active') return res.status(400).json({ error: 'market_closed' });
     if (r.end_time && new Date(r.end_time) <= new Date()) {
       return res.status(400).json({ error: 'market_expired' });
