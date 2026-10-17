@@ -1665,9 +1665,10 @@
     "outsideBranchEnvironmentRecordsUnchanged": 100
   },
   "verification": {
-    "focusedTestsPassed": 60,
+    "focusedTestsPassed": 64,
     "mvpAndPointsBuildsPassed": true,
     "normalOwnerFlow": "actual frontend delegationClient module, genuine OTP-bound owner key, SDK server transport",
+    "browserSessionRegression": "installed Turnkey browser SDK session manager and IndexedDbClient: matching session, wrong organization, rotated signing key and expired session",
     "frontendRouting": "actual Points executionAdapter module against deployed API",
     "browserVerification": "In-app browser could not open localhost read-only proxy (ERR_BLOCKED_BY_CLIENT); no live browser mutation or IndexedDB click-through claimed.",
     "manualIndexing": true,

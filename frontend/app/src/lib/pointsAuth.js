@@ -14,7 +14,7 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { Turnkey, TurnkeyIndexedDbClient } from '@turnkey/sdk-browser';
-import { createDelegationClient } from './delegationClient.js';
+import { createDelegationClient, delegationOwnerClient } from './delegationClient.js';
 
 // ─── Turnkey browser SDK singleton ──────────────────────────────────────────
 // The browser client keeps its session + ephemeral keypair in IndexedDB
@@ -192,12 +192,7 @@ const delegationClient = createDelegationClient({
   post: delegationPost,
   ownerClient: async organizationId => {
     const client = await getIdbClient();
-    const session = await client.getSession();
-    const publicKey = await client.getPublicKey();
-    if (!session || session.organizationId !== organizationId || session.token !== publicKey) {
-      throw Object.assign(new Error('delegation_owner_login_required'), { code: 'delegation_owner_login_required' });
-    }
-    return client;
+    return delegationOwnerClient({ browser: getBrowser(), client, organizationId });
   },
 });
 export const authorizeDelegation = () => delegationClient.authorize();

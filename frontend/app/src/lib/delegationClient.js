@@ -1,5 +1,16 @@
 const fail = code => { throw Object.assign(new Error(code), { code }); };
 
+export async function delegationOwnerClient({ browser, client, organizationId }) {
+  // Session storage belongs to the SDK object; IndexedDbClient only stamps
+  // requests and exposes the public key paired with its non-extractable key.
+  const session = await browser.getSession();
+  const publicKey = await client.getPublicKey();
+  if (!session || session.organizationId !== organizationId || session.token !== publicKey) {
+    fail('delegation_owner_login_required');
+  }
+  return client;
+}
+
 // No backend-held owner credentials: mutations are stamped by the OTP-bound
 // browser key. Transport/client injection also exercises the real sequence in tests.
 export function createDelegationClient({ post, ownerClient }) {
