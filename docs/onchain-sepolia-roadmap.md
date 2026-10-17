@@ -2,7 +2,7 @@
 
 Branch: `onchain-sepolia`
 
-Status: contracts, preview runtime, Points execution guards, and the Points frontend adapter are shipped to the isolated preview. The single-market approval/indexing rehearsal and the adapter's live mapping, quotes, public reads, Points separation, session guards, and served bundles are verified. A real user-wallet rehearsal, user delegation/funding, and tournament-cycle work remain. This branch must stay hidden behind flags until the next tournament reset.
+Status: contracts, preview runtime, Points execution guards, frontend adapter, persistent owner delegation, automatic indexing and sell-fee presentation are deployed to the isolated preview. Stable router authorization is verified: one consent before pool creation covered real buy/sell/resolve/redeem rehearsals on subsequent binary and three-outcome markets. Existing MXNP is reused; Pointbreak and Pronos production are unchanged. Normal-user gas support, tournament reset/funding limits, registration/scoring/rewards and remaining lifecycle rehearsals remain. This branch must stay hidden behind flags until the next tournament reset.
 
 ## Goal
 
@@ -189,8 +189,8 @@ Tasks:
 - Persistent owner-approved grants remain active until revoked; user login sessions have independent expiry.
 - Require each account's owner consent before first on-chain trading. Never install the backend as a root user or silently grant all accounts trading authority.
 - Keep parent OTP authentication credentials separate from the delegated signing credential; registering the login key in a user sub-org changes Turnkey's credential matching and can break returning login.
-- Existing grants continue covering their earlier pools. A newly deployed pool requires an explicit owner-approved scope extension through the same consent surface.
-- To avoid scope extensions as markets grow, design and audit a stable trading router with an on-chain factory/market registry. Broad transfers or arbitrary contract calls are not a substitute.
+- Historical pool grants continue covering their earlier pools. Users explicitly migrate once to the fixed router grant; subsequent pools of its two immutable factories need no scope extension. Replacing the router or factories requires new consent.
+- The fixed Sepolia router verifies each pool against its immutable factory registries. Deployment, one-time owner migration, subsequent V1/V2 trading and automatic indexing are verified in the stable authorization checkpoint below. Independent contract review remains separate.
 - Do not expose per-trade approvals in UI copy.
 
 Launch blocker:
@@ -452,7 +452,9 @@ Days 24-25: launch prep
 8. Done (2026-10-17): ship the preview, verify its exact source SHA and readiness, and approve/index one 500-MXNP test market through the deployed admin API. Verify live protocol quotes and Points execution guards. See the rehearsal checkpoint below.
 9. Done (2026-10-17): connect and deploy the Points frontend adapter, preserving separate Points/protocol IDs and ledger reads; verify a consenting user's real buy/sell/resolve/redeem rehearsal.
 10. Done (2026-10-17): implement owner-approved, persistent, non-root preview delegation with verified revocation and separate login/signing credentials. See the persistent delegation checkpoint below.
-11. Remaining: establish gas support for normal users, configure automatic preview indexing, fix sell-quote fee presentation, and run the tournament reset/funding dry run before allocations. Scoring, reward issuance and cancellation/correction accounting remain launch work.
+11. Done (2026-10-17): configure automatic preview indexing and deploy/verify corrected sell-quote fee presentation.
+12. Done (2026-10-17): deploy compatible factories/share tokens and the stable router using existing MXNP; verify one owner grant covers future binary and three-outcome markets through buy/sell/resolve/redeem and automatic indexing.
+13. Remaining: establish gas support for normal users and run the tournament reset/funding dry run before allocations. Issuance limits, registration, scoring, reward issuance and cancellation/correction accounting remain launch work.
 
 ### Preview Admin Approval Setting
 
@@ -734,10 +736,20 @@ Operations now hold **49,998,700 MXNP / 0.000848293373936 Sepolia ETH**; total s
 
 Next: stable trading scope, normal-user gas support, isolated tournament reset/funding dry runs, registration/scoring/rewards and remaining lifecycle rehearsals before activation.
 
-### Stable Future-Market Authorization — Implemented Locally, 2026-10-17
+### Stable Future-Market Authorization — Deployed and Verified, 2026-10-17
 
 Added a fixed Sepolia trading router and compatible factory/pool entry points. One owner-approved, persistent grant can now cover future binary and multi-outcome pools from the same immutable factories without a new policy or per-pool token approval. The router validates factory registration on chain, retains guarded execution, pays the owner directly and preserves user-attributed events/cost basis. Backend verification pins its runtime code and all bindings; frontend coverage and readiness use the verified scope. Explicit historical factory/share-token configuration retains exact permissions and indexing for existing pools.
 
-**This checkpoint is local only: uncommitted, unpushed and undeployed.** Current deployed factories have immutable pool code, so activation requires new compatible factories/share tokens plus the router, reusing existing MXNP. Existing users must explicitly approve the replacement scope once. No live grants, contracts, funds, database records or environment variables changed, and Pointbreak remains untouched. The [implementation and activation guide](./onchain-sepolia-stable-authorization-2026-10-17.md) specifies cutover, dedicated worker pins, legacy retention and the real future-pool rehearsal still required before activation.
+Implementation `1fe6cb1` and deployed configuration `0c9e272` are pushed to `onchain-sepolia`. New compatible V1/V2 factories/share tokens and router `0x25bc3c0f0c41516167f096ac4bf785f60bbbe843` are live using the **existing MXNP**, with no mint. Creation/runtime bytecode, immutable bindings, operations permissions and ownership were verified. The old factories and tokens remain configured for historical markets. Application `dpl_BKSvNUTdsCW1usv1eFR5xB492ZzT` and dedicated worker `dpl_Gm2KenMHSnwPxMRTpHGwsJckNcG7` are READY at exact runtime SHA `0c9e27210b451e29b484fe795c6fc8da26e5993f`.
+
+The real `pronos` owner approved once at **17:01:46 UTC**, while both new factory market counts were zero. Policy `307adccf-2e00-449e-9ec7-4c6cc7fb5437` and its scope hash stayed unchanged after creating and trading two future pools. Both completed guarded 5-MXNP buy, one-share sell, outcome-0 resolution and full winning-share redemption through the actual frontend adapter and deployed APIs. All six receipts target the router from the user's wallet; no additional owner authorization was needed. One collateral allowance serves both pools. Each share token received one operator approval. Actual trading gas ranges **126,180–273,571**, below the existing 600,000 limit.
+
+The technical fixtures went pending first (37697/37698), then used the operations deployment helper and explicit hidden preview catalog approval through Neon after automatic protocol indexing; this does not claim an admin UI/auto-deploy test. Points IDs are **360639/360640**, protocol database IDs **7/8**, and each factory's contract ID is **0**. Nine real minute-cron runs ingested two creations, four trades, two resolutions and two redemptions without a manual trigger. Current and legacy factory checkpoints cover the final receipt. The served frontend entry and lazy buy module match on the unique preview and branch alias.
+
+Final wallet is **549.381753 MXNP / 0.000445142809610 ETH**, with no shares or open positions. Its balance reconciles exactly from 536.960738 MXNP using the six receipts. Operations hold **49,998,500 MXNP / 0.000666266156742 ETH**; supply remains **50 million** and the router holds no collateral/shares. The separate ledger remains **500 Points / zero Points trades**. Eight actual no-broadcast Turnkey probes rejected native value, another chain, excessive gas/fees, unapproved targets, transfers, arbitrary approval spenders and factory administration; a positive signing control passed. The backend is non-root and the human root quorum is unchanged.
+
+Pointbreak local/tracking/remote refs and Pronos production deployment are unchanged; all **100** environment records outside this preview branch are identical. The [deployment manifest](./onchain-sepolia-router-deployment-2026-10-17.json), [live verification proof](./onchain-sepolia-stable-authorization-verification-2026-10-17.json) and [implementation guide](./onchain-sepolia-stable-authorization-2026-10-17.md) record the evidence. Verification used real owner credentials with SDK server transport, authenticated APIs and receipts; no browser click-through or current admin-readiness endpoint check is claimed. A fresh router-specific revoke/relogin cycle remains separate from this future-market proof.
 
 Validation: **135 contract tests, 110 focused JavaScript tests, both frontend builds, the dedicated indexer bundle and diff checks passed.** This includes cold-storage eight-outcome gas checks, unchanged scope after future pool creation, real dispatcher approval reuse, explicit owner migration and invalid-router readiness blockers.
+
+Next: normal-user gas funding/sponsorship, isolated tournament reset/funding dry runs with issuance limits, registration/scoring/rewards, and cancellation/refund and resolution-correction rehearsals. Users must still approve their initial grant; no accounts were silently authorized.
