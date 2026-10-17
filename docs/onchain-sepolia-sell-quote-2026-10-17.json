@@ -129,5 +129,240 @@
       "fee": "2270407",
       "net": "93081003"
     }
-  ]
+  ],
+  "releaseVerification": {
+    "verifiedAt": "2026-10-17T16:15:37.868Z",
+    "deployment": {
+      "id": "dpl_GTXyqtpMygAwsPcK8peg7EH18n5Q",
+      "sha": "c9f755d21946644cfb8a966b9eec85b3f421295b",
+      "state": "READY",
+      "origin": "https://pronos-piyunh1bd-mezcalpapieth-jpgs-projects.vercel.app",
+      "alias": "https://pronos-git-onchain-sepolia-mezcalpapieth-jpgs-projects.vercel.app"
+    },
+    "config": {
+      "enabled": true,
+      "chainId": 421614,
+      "symbol": "MXNP"
+    },
+    "technicalFixture": {
+      "branch": "onchain-sepolia",
+      "chainId": 421614,
+      "createdAt": "2026-10-17T16:14:28.775Z",
+      "wallet": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "seedMxnp": 100,
+      "preflight": {
+        "eth": "0.000923965173936",
+        "mxnp": "49998800.0",
+        "supply": "50000000.0"
+      },
+      "phase": "confirmed",
+      "result": {
+        "marketId": "3",
+        "marketAddress": "0x299d5788CD5fc0F10c00fb1D6832C0923A83ffDD",
+        "txHash": "0x62463bedfa071ad194fbeff5d627df3f91ab7302d7c1dfbfdb762dbe3c5ecd80",
+        "blockNumber": 320126692,
+        "chainId": 421614,
+        "question": "[Technical test] Sell quote gross, fee and net verification - 2026-10-17",
+        "category": "Technical test",
+        "factoryVariant": "v1-binary"
+      },
+      "gasUsed": "3783590",
+      "postflight": {
+        "eth": "0.000848293373936",
+        "mxnp": "49998700.0",
+        "supply": "50000000.0"
+      },
+      "onlyOperation": "create one 100-MXNP test pool; no user trades, minting or authorizations"
+    },
+    "indexedMarket": {
+      "id": 6,
+      "marketId": 3,
+      "pool": "0x299d5788cd5fc0f10c00fb1d6832c0923a83ffdd",
+      "status": "active"
+    },
+    "rpcComparisonBlock": 320126903,
+    "quotes": [
+      {
+        "outcomeIndex": 0,
+        "shares": 1,
+        "quote": {
+          "shares": 1,
+          "gross": 0.49875,
+          "fee": 0.012468,
+          "feePct": 2.4998496240601504,
+          "collateralOut": 0.486282,
+          "priceBefore": 0.5,
+          "priceAfter": null,
+          "currentPrice": 0.5,
+          "postTradePrice": null,
+          "priceImpactPts": null,
+          "pricesBefore": [
+            0.5,
+            0.5
+          ],
+          "pricesAfter": null
+        },
+        "minimumOut": 0.481419
+      },
+      {
+        "outcomeIndex": 0,
+        "shares": 3e-06,
+        "quote": {
+          "shares": 3e-06,
+          "gross": 1e-06,
+          "fee": 1e-06,
+          "feePct": 100,
+          "collateralOut": 0,
+          "priceBefore": 0.5,
+          "priceAfter": null,
+          "currentPrice": 0.5,
+          "postTradePrice": null,
+          "priceImpactPts": null,
+          "pricesBefore": [
+            0.5,
+            0.5
+          ],
+          "pricesAfter": null
+        },
+        "minimumOut": 0
+      },
+      {
+        "outcomeIndex": 0,
+        "shares": 10,
+        "quote": {
+          "shares": 10,
+          "gross": 4.875078,
+          "fee": 0.121876,
+          "feePct": 2.4999805131323027,
+          "collateralOut": 4.753202,
+          "priceBefore": 0.5,
+          "priceAfter": null,
+          "currentPrice": 0.5,
+          "postTradePrice": null,
+          "priceImpactPts": null,
+          "pricesBefore": [
+            0.5,
+            0.5
+          ],
+          "pricesAfter": null
+        },
+        "minimumOut": 4.705669
+      },
+      {
+        "outcomeIndex": 1,
+        "shares": 1,
+        "quote": {
+          "shares": 1,
+          "gross": 0.49875,
+          "fee": 0.012468,
+          "feePct": 2.4998496240601504,
+          "collateralOut": 0.486282,
+          "priceBefore": 0.5,
+          "priceAfter": null,
+          "currentPrice": 0.5,
+          "postTradePrice": null,
+          "priceImpactPts": null,
+          "pricesBefore": [
+            0.5,
+            0.5
+          ],
+          "pricesAfter": null
+        },
+        "minimumOut": 0.481419
+      },
+      {
+        "outcomeIndex": 1,
+        "shares": 3e-06,
+        "quote": {
+          "shares": 3e-06,
+          "gross": 1e-06,
+          "fee": 1e-06,
+          "feePct": 100,
+          "collateralOut": 0,
+          "priceBefore": 0.5,
+          "priceAfter": null,
+          "currentPrice": 0.5,
+          "postTradePrice": null,
+          "priceImpactPts": null,
+          "pricesBefore": [
+            0.5,
+            0.5
+          ],
+          "pricesAfter": null
+        },
+        "minimumOut": 0
+      },
+      {
+        "outcomeIndex": 1,
+        "shares": 10,
+        "quote": {
+          "shares": 10,
+          "gross": 4.875078,
+          "fee": 0.121876,
+          "feePct": 2.4999805131323027,
+          "collateralOut": 4.753202,
+          "priceBefore": 0.5,
+          "priceAfter": null,
+          "currentPrice": 0.5,
+          "postTradePrice": null,
+          "priceImpactPts": null,
+          "pricesBefore": [
+            0.5,
+            0.5
+          ],
+          "pricesAfter": null
+        },
+        "minimumOut": 4.705669
+      }
+    ],
+    "guards": {
+      "invalidOutcome": {
+        "error": "invalid_outcome_index"
+      },
+      "closedMarket": {
+        "error": "market_closed"
+      },
+      "unauthenticatedAdmin": {
+        "error": "not_authenticated"
+      }
+    },
+    "servedAssets": {
+      "entry": "/points/assets/index-RA1itLJ4.js",
+      "modal": "/points/assets/PointsSellPreviewModal-BF5QTRFu.js",
+      "modalSha256": "8437fa7f5a585f22fb5da43a79d40efc64557783de7c12dcc3f4351d0f1531d5",
+      "grossFeeNetLabels": true,
+      "uniqueDeploymentAndAliasMatch": true
+    },
+    "verificationScope": "Real deployed API and served JavaScript, exact RPC reconciliation and frontend preview calculation; no browser click-through or user trading transaction",
+    "boundaries": {
+      "checkedAt": "2026-10-17T16:15:45.939Z",
+      "pointbreak": {
+        "pointbreak": "47aa9e19115d64bc36a2684e5eeb685caef117ba",
+        "origin/pointbreak": "47aa9e19115d64bc36a2684e5eeb685caef117ba",
+        "remote": "47aa9e19115d64bc36a2684e5eeb685caef117ba"
+      },
+      "production": {
+        "id": "dpl_C4bVYurgBRwVYqZAJJChri7uQpzz",
+        "sha": "47aa9e19115d64bc36a2684e5eeb685caef117ba",
+        "state": "READY",
+        "aliases": [
+          "pronos.io",
+          "www.pronos.io",
+          "pronos-chi.vercel.app",
+          "pronos-mezcalpapieth-jpgs-projects.vercel.app"
+        ]
+      },
+      "outsideBranchEnvironmentRecordsUnchanged": 100
+    },
+    "validation": {
+      "focusedTests": 43,
+      "pointsBuild": "passed",
+      "mvpBuild": "passed",
+      "diffCheck": "passed",
+      "knownUnrelatedBaselineFailures": [
+        "portfolio separates open PnL from total account PnL",
+        "portfolio PnL and history can switch between current and previous cycles"
+      ]
+    }
+  }
 }
