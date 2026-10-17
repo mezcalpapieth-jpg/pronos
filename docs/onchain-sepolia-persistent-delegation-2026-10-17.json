@@ -1,0 +1,1686 @@
+{
+  "branch": "onchain-sepolia",
+  "startedAt": "2026-10-17T14:43:11.678Z",
+  "steps": {
+    "create": {
+      "pendingId": 37695,
+      "requestedAt": "2026-10-17T14:43:11.679Z",
+      "response": {
+        "status": 200,
+        "data": {
+          "ok": true,
+          "action": "approve",
+          "id": 37695,
+          "marketId": 360637
+        }
+      }
+    },
+    "buy": {
+      "requestedAt": "2026-10-17T15:00:51.365Z",
+      "body": {
+        "marketId": 360637,
+        "outcomeIndex": 0,
+        "collateral": 5,
+        "minSharesOut": 9.428156
+      },
+      "quote": {
+        "collateral": 5,
+        "fee": 0.125,
+        "feePct": 2.5,
+        "sharesOut": 9.52339,
+        "avgPrice": 0.5118975490870373,
+        "payout": 9.52339,
+        "profit": 4.523389999999999,
+        "priceBefore": 0.5,
+        "priceAfter": null,
+        "currentPrice": 0.5,
+        "postTradePrice": null,
+        "priceImpactPts": null,
+        "pricesBefore": [
+          0.5,
+          0.5
+        ],
+        "pricesAfter": null
+      },
+      "response": {
+        "ok": true,
+        "mode": "protocol",
+        "sharesOut": 9.52339,
+        "fee": 0.125,
+        "txHash": "0x01d1ac00eb9b4ecfbbc4578d54109a93aa5e8b221c8190415bc72b88180dea9e",
+        "blockNumber": 320109883
+      },
+      "confirmedAt": "2026-10-17T15:01:02.227Z"
+    },
+    "sell": {
+      "requestedAt": "2026-10-17T15:01:47.741Z",
+      "body": {
+        "marketId": 360637,
+        "outcomeIndex": 0,
+        "shares": 1,
+        "minCollateralOut": 0.503762
+      },
+      "quote": {
+        "shares": 1,
+        "gross": 0.508851,
+        "fee": 0,
+        "feePct": 0,
+        "collateralOut": 0.508851,
+        "priceBefore": 0.523781,
+        "priceAfter": null,
+        "currentPrice": 0.523781,
+        "postTradePrice": null,
+        "priceImpactPts": null,
+        "pricesBefore": [
+          0.523781,
+          0.476218
+        ],
+        "pricesAfter": null
+      },
+      "response": {
+        "ok": true,
+        "mode": "protocol",
+        "collateralOut": 0.508851,
+        "fee": 0.013684,
+        "txHash": "0x3695dbfafd15a3d4c00f7d2427c38788b522d43947c606e58640dbe7a5233ede",
+        "blockNumber": 320110109
+      },
+      "confirmedAt": "2026-10-17T15:01:59.796Z"
+    },
+    "resolve": {
+      "requestedAt": "2026-10-17T15:02:26.670Z",
+      "body": {
+        "marketId": 4,
+        "winningOutcomeIndex": 0
+      },
+      "response": {
+        "ok": true,
+        "marketId": "1",
+        "outcome": 1,
+        "txHash": "0xd170f0e331e308e04ba18ff6d12c76d7e4923195638edcfeb586a401fbe843b5",
+        "blockNumber": 320110242,
+        "chainId": 421614,
+        "factoryVariant": "v1"
+      },
+      "confirmedAt": "2026-10-17T15:02:33.604Z"
+    },
+    "redeem": {
+      "requestedAt": "2026-10-17T15:03:21.647Z",
+      "body": {
+        "marketId": 360637,
+        "amount": 8.52339
+      },
+      "response": {
+        "ok": true,
+        "mode": "protocol",
+        "payout": 8.52339,
+        "txHash": "0x19f5c248299119f135e1ef8d2c1407735e56d61c1f52c28245be11136a8a0442",
+        "blockNumber": 320110460
+      },
+      "confirmedAt": "2026-10-17T15:03:28.924Z"
+    }
+  },
+  "authIsolation": {
+    "checkedAt": "2026-10-17T14:53:39.097Z",
+    "parentAuthUserId": "2b1b0ec3-6cb7-40fa-9fa7-98106b6bf007",
+    "policyId": "6486072b-34ce-45e1-b8bf-fd3252606443",
+    "nonRoot": true,
+    "separateFromTradingKey": true,
+    "parentAuthTransactionSigningRejected": true,
+    "broadcast": false
+  },
+  "readiness": {
+    "checkedAt": "2026-10-17T14:56:04.736Z",
+    "ok": true,
+    "env": {
+      "rpc": true,
+      "chainId": 421614,
+      "factoryV1": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+      "factoryV2": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+      "collateral": "0x6ed6c00c2b4cf9f5989866f4c5862d4cded67ef9",
+      "shareTokenV1": "0xc26f94e86da1193dade6d798acdf8c0bc4d68946",
+      "shareTokenV2": "0x2748e2d6e64aa6aabb368c4e9d844c87fe615caf",
+      "deployerSuborgId": true,
+      "deployerAddress": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "resolverSuborgId": true,
+      "resolverAddress": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "policiesEnabled": true,
+      "databaseUrl": true,
+      "databaseReadUrl": true,
+      "indexerKey": true,
+      "cronSecret": true
+    },
+    "ownerControls": {
+      "adminSafe": "0x0000000000000000000000000000000000000000",
+      "resolverSafe": "0x0000000000000000000000000000000000000000",
+      "ownerSuborgId": true,
+      "ownerAddress": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "safeConfigured": false,
+      "resolverSafeConfigured": false,
+      "ownerSignerConfigured": true,
+      "configured": true
+    },
+    "deployment": {
+      "profile": "sepolia",
+      "networkName": "Arbitrum Sepolia",
+      "testnet": true,
+      "expectedChainId": 421614,
+      "expectedMainnetChainId": 42161,
+      "clientChainId": 421614,
+      "indexerChainId": 421614,
+      "protocolChainId": 421614,
+      "indexerRpc": true,
+      "indexerFactoryV1": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+      "indexerFactoryV2": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+      "clientFactoryV1": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+      "clientFactoryV2": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+      "clientCollateral": "0x6ed6c00c2b4cf9f5989866f4c5862d4cded67ef9",
+      "clientShareTokenV1": "0xc26f94e86da1193dade6d798acdf8c0bc4d68946",
+      "clientShareTokenV2": "0x2748e2d6e64aa6aabb368c4e9d844c87fe615caf"
+    },
+    "turnkey": {
+      "policiesEnabled": true,
+      "organizationId": true,
+      "apiPublicKey": true,
+      "apiPrivateKey": true,
+      "apiBaseUrl": "https://api.turnkey.com",
+      "clientOrganizationId": true,
+      "serverConfigured": true,
+      "clientConfigured": true
+    },
+    "juno": {
+      "apiKey": false,
+      "apiSecret": false,
+      "bearerToken": false,
+      "apiBaseUrl": null,
+      "webhookSecret": false,
+      "cardCheckoutEnabled": false,
+      "applePayEnabled": false,
+      "withdrawalsEnabled": false,
+      "configured": false
+    },
+    "cre": {
+      "webhookSecret": false,
+      "minConfidenceBps": 9000,
+      "maxAgeMs": 21600000
+    },
+    "gas": {
+      "sponsorshipEnabled": false
+    },
+    "policy": {
+      "configuredPoolCount": 0,
+      "indexedPoolCount": 3,
+      "missingPools": [
+        "0xcb3149d9b41870f092162ab15a676a39d5058c17",
+        "0x1aca9bc8ce8b8f2eef41fa4f4b39ee8a7bb0d6e7",
+        "0x1de8137b670fe25c79ac199fb4e0e6182ac39aa9"
+      ],
+      "coverageError": null,
+      "autoIncludesIndexedPools": true
+    },
+    "launch": {
+      "ready": true,
+      "blockerCount": 0,
+      "reviewCount": 2,
+      "blockers": [],
+      "reviews": [
+        {
+          "id": "cre_webhook_dry_run",
+          "title": "CRE sigue en modo revisión",
+          "detail": "Sin secreto, Chainlink CRE no puede enviar resoluciones al webhook.",
+          "fix": "Set CRE_RESOLUTION_WEBHOOK_SECRET before enabling CRE workflows"
+        },
+        {
+          "id": "gas_sponsorship_unset",
+          "title": "Gas sponsorship no configurado",
+          "detail": "Turnkey quita popups, pero no cubre gas de Arbitrum Sepolia para el usuario.",
+          "fix": "Set GAS_SPONSORSHIP_ENABLED=true only after relayer/paymaster/funded-wallet support exists"
+        }
+      ],
+      "nextSteps": [
+        "Set CRE_RESOLUTION_WEBHOOK_SECRET before enabling CRE workflows",
+        "Set GAS_SPONSORSHIP_ENABLED=true only after relayer/paymaster/funded-wallet support exists"
+      ]
+    },
+    "v1": {
+      "address": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+      "reachable": true,
+      "owner": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "marketCreator": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "resolver": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "collateral": "0x6ed6C00C2B4cF9f5989866f4c5862D4cdeD67ef9",
+      "deployerIsOwner": true,
+      "deployerIsMarketCreator": true,
+      "deployerCanCreate": true,
+      "resolverMatches": true,
+      "collateralMatches": true,
+      "error": null
+    },
+    "v2": {
+      "address": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+      "reachable": true,
+      "owner": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "marketCreator": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "resolver": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "collateral": "0x6ed6C00C2B4cF9f5989866f4c5862D4cdeD67ef9",
+      "deployerIsOwner": true,
+      "deployerIsMarketCreator": true,
+      "deployerCanCreate": true,
+      "resolverMatches": true,
+      "collateralMatches": true,
+      "error": null
+    },
+    "deployer": {
+      "address": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "ethBalanceWei": "343230822146000",
+      "ethBalanceEther": 0.000343230822146,
+      "collateralSymbol": "MXNP",
+      "collateralDecimals": 6,
+      "collateralBalanceRaw": "49998900000000",
+      "collateralBalanceUnits": 49998900
+    },
+    "warnings": []
+  },
+  "delegation": [
+    {
+      "action": "authorize",
+      "checkedAt": "2026-10-17T14:58:25.796Z",
+      "usesNormalFrontendClient": true,
+      "ownerCredential": "real OTP-bound P256 key; SDK server transport for scripted verification",
+      "rootQuorumUnchanged": true,
+      "result": {
+        "ok": true,
+        "active": true,
+        "enabled": true,
+        "persistent": true,
+        "policyId": "580fbaec-b74e-4e9b-929c-62e505cefa47",
+        "expiresAt": null,
+        "dailyCapMxnb": null,
+        "poolCount": 2
+      },
+      "status": {
+        "active": true,
+        "enabled": true,
+        "persistent": true,
+        "simulated": false,
+        "needsRefresh": false,
+        "policyId": "580fbaec-b74e-4e9b-929c-62e505cefa47",
+        "expiresAt": null,
+        "dailyCapMxnb": null,
+        "dailyCapEnforced": false,
+        "authorizedAt": "2026-10-17T14:56:42.140Z",
+        "coveredPools": [
+          "0x1aca9bc8ce8b8f2eef41fa4f4b39ee8a7bb0d6e7",
+          "0xcb3149d9b41870f092162ab15a676a39d5058c17"
+        ],
+        "poolCount": 2
+      }
+    },
+    {
+      "action": "status",
+      "checkedAt": "2026-10-17T14:58:36.132Z",
+      "usesNormalFrontendClient": true,
+      "ownerCredential": "real OTP-bound P256 key; SDK server transport for scripted verification",
+      "rootQuorumUnchanged": true,
+      "result": {
+        "active": true,
+        "enabled": true,
+        "persistent": true,
+        "simulated": false,
+        "needsRefresh": false,
+        "policyId": "580fbaec-b74e-4e9b-929c-62e505cefa47",
+        "expiresAt": null,
+        "dailyCapMxnb": null,
+        "dailyCapEnforced": false,
+        "authorizedAt": "2026-10-17T14:56:42.140Z",
+        "coveredPools": [
+          "0x1aca9bc8ce8b8f2eef41fa4f4b39ee8a7bb0d6e7",
+          "0xcb3149d9b41870f092162ab15a676a39d5058c17"
+        ],
+        "poolCount": 2
+      },
+      "status": {
+        "active": true,
+        "enabled": true,
+        "persistent": true,
+        "simulated": false,
+        "needsRefresh": false,
+        "policyId": "580fbaec-b74e-4e9b-929c-62e505cefa47",
+        "expiresAt": null,
+        "dailyCapMxnb": null,
+        "dailyCapEnforced": false,
+        "authorizedAt": "2026-10-17T14:56:42.140Z",
+        "coveredPools": [
+          "0x1aca9bc8ce8b8f2eef41fa4f4b39ee8a7bb0d6e7",
+          "0xcb3149d9b41870f092162ab15a676a39d5058c17"
+        ],
+        "poolCount": 2
+      }
+    },
+    {
+      "action": "revoke",
+      "checkedAt": "2026-10-17T14:58:54.059Z",
+      "usesNormalFrontendClient": true,
+      "ownerCredential": "real OTP-bound P256 key; SDK server transport for scripted verification",
+      "rootQuorumUnchanged": true,
+      "result": {
+        "ok": true,
+        "revoked": true,
+        "active": false
+      },
+      "status": {
+        "active": false,
+        "enabled": true,
+        "persistent": false,
+        "simulated": false,
+        "needsRefresh": true,
+        "policyId": null,
+        "expiresAt": null,
+        "dailyCapMxnb": null,
+        "dailyCapEnforced": false,
+        "authorizedAt": null,
+        "coveredPools": [],
+        "poolCount": 2
+      }
+    },
+    {
+      "action": "authorize",
+      "checkedAt": "2026-10-17T14:59:39.492Z",
+      "usesNormalFrontendClient": true,
+      "ownerCredential": "real OTP-bound P256 key; SDK server transport for scripted verification",
+      "rootQuorumUnchanged": true,
+      "result": {
+        "ok": true,
+        "active": true,
+        "enabled": true,
+        "persistent": true,
+        "policyId": "c23dda23-74fa-49ca-bc85-4e30108e960a",
+        "expiresAt": null,
+        "dailyCapMxnb": null,
+        "poolCount": 2
+      },
+      "status": {
+        "active": true,
+        "enabled": true,
+        "persistent": true,
+        "simulated": false,
+        "needsRefresh": false,
+        "policyId": "c23dda23-74fa-49ca-bc85-4e30108e960a",
+        "expiresAt": null,
+        "dailyCapMxnb": null,
+        "dailyCapEnforced": false,
+        "authorizedAt": "2026-10-17T14:59:39.050Z",
+        "coveredPools": [
+          "0x1aca9bc8ce8b8f2eef41fa4f4b39ee8a7bb0d6e7",
+          "0xcb3149d9b41870f092162ab15a676a39d5058c17"
+        ],
+        "poolCount": 2
+      }
+    }
+  ],
+  "revocationProof": {
+    "checkedAt": "2026-10-17T14:59:28.586Z",
+    "turnkeyDeniedTradingSignature": true,
+    "broadcast": false,
+    "oldNonRootSignerRemoved": true,
+    "rootQuorumUnchanged": true,
+    "normalFlowWillCreateNewNonRootSigner": true
+  },
+  "reads": [
+    {
+      "checkedAt": "2026-10-17T15:00:16.382Z",
+      "balance": {
+        "mode": "onchain",
+        "chainId": 421614,
+        "symbol": "MXNP",
+        "balance": "528.896256"
+      },
+      "portfolio": {
+        "mode": "onchain",
+        "positions": [],
+        "history": [
+          {
+            "id": 360636,
+            "mode": "onchain",
+            "parentMarketId": null,
+            "legLabel": null,
+            "question": "PRUEBA TÉCNICA: ¿queda verificada la creación de un mercado en Arbitrum Sepolia?",
+            "category": "general",
+            "outcomes": [
+              "Sí",
+              "No"
+            ],
+            "chainId": 421614,
+            "chainAddress": "0x1aca9bc8ce8b8f2eef41fa4f4b39ee8a7bb0d6e7",
+            "chainMarketId": "0",
+            "protocolMarketId": 3,
+            "status": "resolved",
+            "outcome": 0,
+            "endTime": "2026-10-18T12:00:54.000Z",
+            "prices": [
+              0.5315217383754179,
+              0.4684782616245821
+            ],
+            "volume24h": 65.727122,
+            "liquidity": 469.412025,
+            "snapshotAt": "2026-10-17T14:46:41.779Z",
+            "executionReady": true,
+            "marketId": 360636,
+            "transactions": [
+              {
+                "side": "buy",
+                "outcomeIndex": 0,
+                "outcomeLabel": "Sí",
+                "shares": 93.169134,
+                "collateral": 50,
+                "fee": 1.25,
+                "createdAt": "2026-10-17T14:10:56.172Z"
+              },
+              {
+                "side": "sell",
+                "outcomeIndex": 0,
+                "outcomeLabel": "Sí",
+                "shares": 30,
+                "collateral": 15.727122,
+                "fee": 0.441719,
+                "createdAt": "2026-10-17T14:14:52.611Z"
+              },
+              {
+                "side": "redeem",
+                "outcomeIndex": 0,
+                "outcomeLabel": "Sí",
+                "shares": 63.169134,
+                "collateral": 63.169134,
+                "fee": 0,
+                "createdAt": "2026-10-17T14:19:59.450Z"
+              }
+            ],
+            "totalInvested": 50,
+            "totalReceived": 78.896256,
+            "markToMarket": 0,
+            "claimablePayout": 0,
+            "canRedeem": false,
+            "outcomeStatus": "won",
+            "winningOutcomeIndex": 0,
+            "winningOutcomeLabel": "Sí",
+            "pickedOutcomeLabel": "Sí",
+            "netPnl": 28.896255999999994
+          }
+        ],
+        "summary": {
+          "totalPositions": 0,
+          "activePositions": 0,
+          "totalInvested": 0,
+          "currentValue": 0,
+          "pnl": 0,
+          "unrealizedPnl": 0,
+          "realizedPnl": 28.896256,
+          "totalPnl": 28.896255999999994,
+          "marketsTotal": 1,
+          "marketsWon": 1,
+          "marketsLost": 0,
+          "marketsOpen": 0,
+          "marketsExited": 0,
+          "marketsPending": 0,
+          "marketsCanceled": 0,
+          "marketsCycleClosed": 0
+        }
+      },
+      "pointsBalance": 500,
+      "username": "pronos",
+      "market": {
+        "id": 360637,
+        "ammMode": "unified",
+        "title": "PRUEBA TÉCNICA: ¿se verifica la resolución e indexación del ensayo de delegación?",
+        "title_es": "PRUEBA TÉCNICA: ¿se verifica la resolución e indexación del ensayo de delegación?",
+        "title_en": "PRUEBA TÉCNICA: ¿se verifica la resolución e indexación del ensayo de delegación?",
+        "outcomes_es": [
+          "Sí",
+          "No"
+        ],
+        "outcomes_en": [
+          "Yes",
+          "No"
+        ],
+        "options_es": [
+          {
+            "label": "Sí"
+          },
+          {
+            "label": "No"
+          }
+        ],
+        "options_en": [
+          {
+            "label": "Yes"
+          },
+          {
+            "label": "No"
+          }
+        ],
+        "question": "PRUEBA TÉCNICA: ¿se verifica la resolución e indexación del ensayo de delegación?",
+        "category": "general",
+        "imageUrl": null,
+        "icon": null,
+        "outcomes": [
+          "Sí",
+          "No"
+        ],
+        "chartStyle": null,
+        "reserves": [
+          100,
+          100
+        ],
+        "prices": [
+          0.5,
+          0.5
+        ],
+        "seedLiquidity": 100,
+        "volume": 100,
+        "tradeVolume": 0,
+        "lastTradeAt": null,
+        "startTime": null,
+        "endTime": "2026-10-18T14:43:01.000Z",
+        "status": "active",
+        "outcome": null,
+        "resolvedAt": null,
+        "finalScore": null,
+        "createdAt": "2026-10-17T14:43:13.940Z",
+        "resolverType": null,
+        "resolverSource": null,
+        "resolutionCriteria": null,
+        "transcriptEvidence": null,
+        "liveScoreConfig": null,
+        "cryptoMeta": null,
+        "tokenMeta": null,
+        "soccerMatchMeta": null,
+        "seriesMeta": null,
+        "sport": null,
+        "league": null,
+        "categoryTags": [
+          "general"
+        ],
+        "geoTags": [],
+        "topicTags": [
+          "general"
+        ],
+        "outcomeImages": null,
+        "outcomeCountryLabels": null,
+        "mode": "onchain",
+        "chainId": 421614,
+        "chainMarketId": "1",
+        "chainAddress": "0xcb3149d9b41870f092162ab15a676a39d5058c17",
+        "archivedAt": null,
+        "parentMarketId": null,
+        "legLabel": null,
+        "protocolMarketId": 4,
+        "volume24h": 0,
+        "liquidity": 100,
+        "snapshotAt": "2026-10-17T14:46:41.988Z",
+        "executionReady": true
+      }
+    },
+    {
+      "checkedAt": "2026-10-17T15:02:59.776Z",
+      "balance": {
+        "mode": "onchain",
+        "chainId": 421614,
+        "symbol": "MXNP",
+        "balance": "524.405107"
+      },
+      "portfolio": {
+        "mode": "onchain",
+        "positions": [
+          {
+            "id": 360637,
+            "mode": "onchain",
+            "parentMarketId": null,
+            "legLabel": null,
+            "question": "PRUEBA TÉCNICA: ¿se verifica la resolución e indexación del ensayo de delegación?",
+            "category": "general",
+            "outcomes": [
+              "Sí",
+              "No"
+            ],
+            "chainId": 421614,
+            "chainAddress": "0xcb3149d9b41870f092162ab15a676a39d5058c17",
+            "chainMarketId": "1",
+            "protocolMarketId": 4,
+            "status": "resolved",
+            "outcome": 0,
+            "endTime": "2026-10-18T14:43:01.000Z",
+            "prices": [
+              0.5212891508377846,
+              0.4787108491622155
+            ],
+            "volume24h": 5.508851,
+            "liquidity": 95.829075,
+            "snapshotAt": "2026-10-17T15:02:43.008Z",
+            "executionReady": true,
+            "marketId": 360637,
+            "transactions": [
+              {
+                "side": "buy",
+                "outcomeIndex": 0,
+                "outcomeLabel": "Sí",
+                "shares": 9.52339,
+                "collateral": 5,
+                "fee": 0.125,
+                "createdAt": "2026-10-17T15:01:16.906Z"
+              },
+              {
+                "side": "sell",
+                "outcomeIndex": 0,
+                "outcomeLabel": "Sí",
+                "shares": 1,
+                "collateral": 0.508851,
+                "fee": 0.013684,
+                "createdAt": "2026-10-17T15:02:42.882Z"
+              }
+            ],
+            "totalInvested": 5,
+            "totalReceived": 0.508851,
+            "shares": 8.52339,
+            "costBasis": 4.474976872731244,
+            "realizedPnl": -0.016172127268756165,
+            "outcomeIndex": 0,
+            "outcomeLabel": "Sí",
+            "currentPrice": 1,
+            "currentValue": 8.52339,
+            "unrealizedPnl": 4.048413127268756,
+            "pnl": 4.032240999999999,
+            "claimablePayout": 8.52339,
+            "canRedeem": true
+          }
+        ],
+        "history": [
+          {
+            "id": 360637,
+            "mode": "onchain",
+            "parentMarketId": null,
+            "legLabel": null,
+            "question": "PRUEBA TÉCNICA: ¿se verifica la resolución e indexación del ensayo de delegación?",
+            "category": "general",
+            "outcomes": [
+              "Sí",
+              "No"
+            ],
+            "chainId": 421614,
+            "chainAddress": "0xcb3149d9b41870f092162ab15a676a39d5058c17",
+            "chainMarketId": "1",
+            "protocolMarketId": 4,
+            "status": "resolved",
+            "outcome": 0,
+            "endTime": "2026-10-18T14:43:01.000Z",
+            "prices": [
+              0.5212891508377846,
+              0.4787108491622155
+            ],
+            "volume24h": 5.508851,
+            "liquidity": 95.829075,
+            "snapshotAt": "2026-10-17T15:02:43.008Z",
+            "executionReady": true,
+            "marketId": 360637,
+            "transactions": [
+              {
+                "side": "buy",
+                "outcomeIndex": 0,
+                "outcomeLabel": "Sí",
+                "shares": 9.52339,
+                "collateral": 5,
+                "fee": 0.125,
+                "createdAt": "2026-10-17T15:01:16.906Z"
+              },
+              {
+                "side": "sell",
+                "outcomeIndex": 0,
+                "outcomeLabel": "Sí",
+                "shares": 1,
+                "collateral": 0.508851,
+                "fee": 0.013684,
+                "createdAt": "2026-10-17T15:02:42.882Z"
+              }
+            ],
+            "totalInvested": 5,
+            "totalReceived": 0.508851,
+            "markToMarket": 8.52339,
+            "claimablePayout": 8.52339,
+            "canRedeem": true,
+            "outcomeStatus": "won",
+            "winningOutcomeIndex": 0,
+            "winningOutcomeLabel": "Sí",
+            "pickedOutcomeLabel": "Sí",
+            "netPnl": 4.032240999999999
+          },
+          {
+            "id": 360636,
+            "mode": "onchain",
+            "parentMarketId": null,
+            "legLabel": null,
+            "question": "PRUEBA TÉCNICA: ¿queda verificada la creación de un mercado en Arbitrum Sepolia?",
+            "category": "general",
+            "outcomes": [
+              "Sí",
+              "No"
+            ],
+            "chainId": 421614,
+            "chainAddress": "0x1aca9bc8ce8b8f2eef41fa4f4b39ee8a7bb0d6e7",
+            "chainMarketId": "0",
+            "protocolMarketId": 3,
+            "status": "resolved",
+            "outcome": 0,
+            "endTime": "2026-10-18T12:00:54.000Z",
+            "prices": [
+              0.5315217383754179,
+              0.4684782616245821
+            ],
+            "volume24h": 65.727122,
+            "liquidity": 469.412025,
+            "snapshotAt": "2026-10-17T15:02:42.763Z",
+            "executionReady": true,
+            "marketId": 360636,
+            "transactions": [
+              {
+                "side": "buy",
+                "outcomeIndex": 0,
+                "outcomeLabel": "Sí",
+                "shares": 93.169134,
+                "collateral": 50,
+                "fee": 1.25,
+                "createdAt": "2026-10-17T14:10:56.172Z"
+              },
+              {
+                "side": "sell",
+                "outcomeIndex": 0,
+                "outcomeLabel": "Sí",
+                "shares": 30,
+                "collateral": 15.727122,
+                "fee": 0.441719,
+                "createdAt": "2026-10-17T14:14:52.611Z"
+              },
+              {
+                "side": "redeem",
+                "outcomeIndex": 0,
+                "outcomeLabel": "Sí",
+                "shares": 63.169134,
+                "collateral": 63.169134,
+                "fee": 0,
+                "createdAt": "2026-10-17T14:19:59.450Z"
+              }
+            ],
+            "totalInvested": 50,
+            "totalReceived": 78.896256,
+            "markToMarket": 0,
+            "claimablePayout": 0,
+            "canRedeem": false,
+            "outcomeStatus": "won",
+            "winningOutcomeIndex": 0,
+            "winningOutcomeLabel": "Sí",
+            "pickedOutcomeLabel": "Sí",
+            "netPnl": 28.896255999999994
+          }
+        ],
+        "summary": {
+          "totalPositions": 1,
+          "activePositions": 0,
+          "totalInvested": 4.474976872731244,
+          "currentValue": 8.52339,
+          "pnl": 4.032240999999999,
+          "unrealizedPnl": 4.048413127268756,
+          "realizedPnl": 28.880083872731245,
+          "totalPnl": 32.92849699999999,
+          "marketsTotal": 2,
+          "marketsWon": 2,
+          "marketsLost": 0,
+          "marketsOpen": 0,
+          "marketsExited": 0,
+          "marketsPending": 0,
+          "marketsCanceled": 0,
+          "marketsCycleClosed": 0
+        }
+      },
+      "pointsBalance": 500,
+      "username": "pronos",
+      "market": {
+        "id": 360637,
+        "ammMode": "unified",
+        "title": "PRUEBA TÉCNICA: ¿se verifica la resolución e indexación del ensayo de delegación?",
+        "title_es": "PRUEBA TÉCNICA: ¿se verifica la resolución e indexación del ensayo de delegación?",
+        "title_en": "PRUEBA TÉCNICA: ¿se verifica la resolución e indexación del ensayo de delegación?",
+        "outcomes_es": [
+          "Sí",
+          "No"
+        ],
+        "outcomes_en": [
+          "Yes",
+          "No"
+        ],
+        "options_es": [
+          {
+            "label": "Sí"
+          },
+          {
+            "label": "No"
+          }
+        ],
+        "options_en": [
+          {
+            "label": "Yes"
+          },
+          {
+            "label": "No"
+          }
+        ],
+        "question": "PRUEBA TÉCNICA: ¿se verifica la resolución e indexación del ensayo de delegación?",
+        "category": "general",
+        "imageUrl": null,
+        "icon": null,
+        "outcomes": [
+          "Sí",
+          "No"
+        ],
+        "chartStyle": null,
+        "reserves": [
+          100,
+          100
+        ],
+        "prices": [
+          0.5212891508377846,
+          0.4787108491622155
+        ],
+        "seedLiquidity": 100,
+        "volume": 100,
+        "tradeVolume": 0,
+        "lastTradeAt": null,
+        "startTime": null,
+        "endTime": "2026-10-18T14:43:01.000Z",
+        "status": "resolved",
+        "outcome": 0,
+        "resolvedAt": null,
+        "finalScore": null,
+        "createdAt": "2026-10-17T14:43:13.940Z",
+        "resolverType": null,
+        "resolverSource": null,
+        "resolutionCriteria": null,
+        "transcriptEvidence": null,
+        "liveScoreConfig": null,
+        "cryptoMeta": null,
+        "tokenMeta": null,
+        "soccerMatchMeta": null,
+        "seriesMeta": null,
+        "sport": null,
+        "league": null,
+        "categoryTags": [
+          "general"
+        ],
+        "geoTags": [],
+        "topicTags": [
+          "general"
+        ],
+        "outcomeImages": null,
+        "outcomeCountryLabels": null,
+        "mode": "onchain",
+        "chainId": 421614,
+        "chainMarketId": "1",
+        "chainAddress": "0xcb3149d9b41870f092162ab15a676a39d5058c17",
+        "archivedAt": null,
+        "parentMarketId": null,
+        "legLabel": null,
+        "protocolMarketId": 4,
+        "volume24h": 5.508851,
+        "liquidity": 95.829075,
+        "snapshotAt": "2026-10-17T15:02:43.008Z",
+        "executionReady": true
+      }
+    },
+    {
+      "checkedAt": "2026-10-17T15:04:44.426Z",
+      "balance": {
+        "mode": "onchain",
+        "chainId": 421614,
+        "symbol": "MXNP",
+        "balance": "532.928497"
+      },
+      "portfolio": {
+        "mode": "onchain",
+        "positions": [],
+        "history": [
+          {
+            "id": 360637,
+            "mode": "onchain",
+            "parentMarketId": null,
+            "legLabel": null,
+            "question": "PRUEBA TÉCNICA: ¿se verifica la resolución e indexación del ensayo de delegación?",
+            "category": "general",
+            "outcomes": [
+              "Sí",
+              "No"
+            ],
+            "chainId": 421614,
+            "chainAddress": "0xcb3149d9b41870f092162ab15a676a39d5058c17",
+            "chainMarketId": "1",
+            "protocolMarketId": 4,
+            "status": "resolved",
+            "outcome": 0,
+            "endTime": "2026-10-18T14:43:01.000Z",
+            "prices": [
+              0.5212891508377846,
+              0.4787108491622155
+            ],
+            "volume24h": 5.508851,
+            "liquidity": 95.829075,
+            "snapshotAt": "2026-10-17T15:04:18.178Z",
+            "executionReady": true,
+            "marketId": 360637,
+            "transactions": [
+              {
+                "side": "buy",
+                "outcomeIndex": 0,
+                "outcomeLabel": "Sí",
+                "shares": 9.52339,
+                "collateral": 5,
+                "fee": 0.125,
+                "createdAt": "2026-10-17T15:01:16.906Z"
+              },
+              {
+                "side": "sell",
+                "outcomeIndex": 0,
+                "outcomeLabel": "Sí",
+                "shares": 1,
+                "collateral": 0.508851,
+                "fee": 0.013684,
+                "createdAt": "2026-10-17T15:02:42.882Z"
+              },
+              {
+                "side": "redeem",
+                "outcomeIndex": 0,
+                "outcomeLabel": "Sí",
+                "shares": 8.52339,
+                "collateral": 8.52339,
+                "fee": 0,
+                "createdAt": "2026-10-17T15:04:18.102Z"
+              }
+            ],
+            "totalInvested": 5,
+            "totalReceived": 9.032240999999999,
+            "markToMarket": 0,
+            "claimablePayout": 0,
+            "canRedeem": false,
+            "outcomeStatus": "won",
+            "winningOutcomeIndex": 0,
+            "winningOutcomeLabel": "Sí",
+            "pickedOutcomeLabel": "Sí",
+            "netPnl": 4.032240999999999
+          },
+          {
+            "id": 360636,
+            "mode": "onchain",
+            "parentMarketId": null,
+            "legLabel": null,
+            "question": "PRUEBA TÉCNICA: ¿queda verificada la creación de un mercado en Arbitrum Sepolia?",
+            "category": "general",
+            "outcomes": [
+              "Sí",
+              "No"
+            ],
+            "chainId": 421614,
+            "chainAddress": "0x1aca9bc8ce8b8f2eef41fa4f4b39ee8a7bb0d6e7",
+            "chainMarketId": "0",
+            "protocolMarketId": 3,
+            "status": "resolved",
+            "outcome": 0,
+            "endTime": "2026-10-18T12:00:54.000Z",
+            "prices": [
+              0.5315217383754179,
+              0.4684782616245821
+            ],
+            "volume24h": 65.727122,
+            "liquidity": 469.412025,
+            "snapshotAt": "2026-10-17T15:04:17.961Z",
+            "executionReady": true,
+            "marketId": 360636,
+            "transactions": [
+              {
+                "side": "buy",
+                "outcomeIndex": 0,
+                "outcomeLabel": "Sí",
+                "shares": 93.169134,
+                "collateral": 50,
+                "fee": 1.25,
+                "createdAt": "2026-10-17T14:10:56.172Z"
+              },
+              {
+                "side": "sell",
+                "outcomeIndex": 0,
+                "outcomeLabel": "Sí",
+                "shares": 30,
+                "collateral": 15.727122,
+                "fee": 0.441719,
+                "createdAt": "2026-10-17T14:14:52.611Z"
+              },
+              {
+                "side": "redeem",
+                "outcomeIndex": 0,
+                "outcomeLabel": "Sí",
+                "shares": 63.169134,
+                "collateral": 63.169134,
+                "fee": 0,
+                "createdAt": "2026-10-17T14:19:59.450Z"
+              }
+            ],
+            "totalInvested": 50,
+            "totalReceived": 78.896256,
+            "markToMarket": 0,
+            "claimablePayout": 0,
+            "canRedeem": false,
+            "outcomeStatus": "won",
+            "winningOutcomeIndex": 0,
+            "winningOutcomeLabel": "Sí",
+            "pickedOutcomeLabel": "Sí",
+            "netPnl": 28.896255999999994
+          }
+        ],
+        "summary": {
+          "totalPositions": 0,
+          "activePositions": 0,
+          "totalInvested": 0,
+          "currentValue": 0,
+          "pnl": 0,
+          "unrealizedPnl": 0,
+          "realizedPnl": 32.928497,
+          "totalPnl": 32.92849699999999,
+          "marketsTotal": 2,
+          "marketsWon": 2,
+          "marketsLost": 0,
+          "marketsOpen": 0,
+          "marketsExited": 0,
+          "marketsPending": 0,
+          "marketsCanceled": 0,
+          "marketsCycleClosed": 0
+        }
+      },
+      "pointsBalance": 500,
+      "username": "pronos",
+      "market": {
+        "id": 360637,
+        "ammMode": "unified",
+        "title": "PRUEBA TÉCNICA: ¿se verifica la resolución e indexación del ensayo de delegación?",
+        "title_es": "PRUEBA TÉCNICA: ¿se verifica la resolución e indexación del ensayo de delegación?",
+        "title_en": "PRUEBA TÉCNICA: ¿se verifica la resolución e indexación del ensayo de delegación?",
+        "outcomes_es": [
+          "Sí",
+          "No"
+        ],
+        "outcomes_en": [
+          "Yes",
+          "No"
+        ],
+        "options_es": [
+          {
+            "label": "Sí"
+          },
+          {
+            "label": "No"
+          }
+        ],
+        "options_en": [
+          {
+            "label": "Yes"
+          },
+          {
+            "label": "No"
+          }
+        ],
+        "question": "PRUEBA TÉCNICA: ¿se verifica la resolución e indexación del ensayo de delegación?",
+        "category": "general",
+        "imageUrl": null,
+        "icon": null,
+        "outcomes": [
+          "Sí",
+          "No"
+        ],
+        "chartStyle": null,
+        "reserves": [
+          100,
+          100
+        ],
+        "prices": [
+          0.5212891508377846,
+          0.4787108491622155
+        ],
+        "seedLiquidity": 100,
+        "volume": 100,
+        "tradeVolume": 0,
+        "lastTradeAt": null,
+        "startTime": null,
+        "endTime": "2026-10-18T14:43:01.000Z",
+        "status": "resolved",
+        "outcome": 0,
+        "resolvedAt": null,
+        "finalScore": null,
+        "createdAt": "2026-10-17T14:43:13.940Z",
+        "resolverType": null,
+        "resolverSource": null,
+        "resolutionCriteria": null,
+        "transcriptEvidence": null,
+        "liveScoreConfig": null,
+        "cryptoMeta": null,
+        "tokenMeta": null,
+        "soccerMatchMeta": null,
+        "seriesMeta": null,
+        "sport": null,
+        "league": null,
+        "categoryTags": [
+          "general"
+        ],
+        "geoTags": [],
+        "topicTags": [
+          "general"
+        ],
+        "outcomeImages": null,
+        "outcomeCountryLabels": null,
+        "mode": "onchain",
+        "chainId": 421614,
+        "chainMarketId": "1",
+        "chainAddress": "0xcb3149d9b41870f092162ab15a676a39d5058c17",
+        "archivedAt": null,
+        "parentMarketId": null,
+        "legLabel": null,
+        "protocolMarketId": 4,
+        "volume24h": 5.508851,
+        "liquidity": 95.829075,
+        "snapshotAt": "2026-10-17T15:04:18.178Z",
+        "executionReady": true
+      }
+    }
+  ],
+  "returningLogin": {
+    "checkedAt": "2026-10-17T15:00:39.673Z",
+    "realOtpLogin": true,
+    "afterPersistentGrant": true,
+    "username": "pronos",
+    "delegationStillActive": true,
+    "policyId": "c23dda23-74fa-49ca-bc85-4e30108e960a"
+  },
+  "successfulConsentChecks": 3,
+  "persistentPermissionProbes": {
+    "checkedAt": "2026-10-17T15:01:41.356Z",
+    "backendUserId": "2b75acf8-d9f8-44e2-a0a5-9f4520a1e631",
+    "nonRoot": true,
+    "checks": [
+      {
+        "name": "native_transfer",
+        "rejected": true,
+        "code": 7,
+        "broadcast": false
+      },
+      {
+        "name": "token_transfer",
+        "rejected": true,
+        "code": 7,
+        "broadcast": false
+      },
+      {
+        "name": "unapproved_spender",
+        "rejected": true,
+        "code": 7,
+        "broadcast": false
+      },
+      {
+        "name": "other_chain",
+        "rejected": true,
+        "code": 7,
+        "broadcast": false
+      }
+    ]
+  },
+  "executionDeployment": {
+    "sha": "885f3cddbe353fa24c57d9611940748a1d172415",
+    "id": "dpl_D6vix1d9XBHZbnpA4xAz3MroTX1J",
+    "url": "https://pronos-gdg5swkwd-mezcalpapieth-jpgs-projects.vercel.app"
+  },
+  "marketIdentity": {
+    "pendingId": 37695,
+    "pointsId": 360637,
+    "protocolDatabaseId": 4,
+    "contractId": 1,
+    "pool": "0xCB3149d9B41870F092162ab15a676a39d5058C17",
+    "chainId": 421614
+  },
+  "chainFinal": {
+    "checkedAt": "2026-10-17T15:06:12.305Z",
+    "block": 320111098,
+    "resolved": true,
+    "outcome": 1,
+    "yesShares": "0",
+    "noShares": "0",
+    "userMxnp": "532.928497",
+    "operationsMxnp": "49998900.0",
+    "totalSupplyMxnp": "50000000.0",
+    "userEth": "0.000480877478672",
+    "operationsEth": "0.000341966182954",
+    "receipts": {
+      "buy": {
+        "hash": "0x01d1ac00eb9b4ecfbbc4578d54109a93aa5e8b221c8190415bc72b88180dea9e",
+        "blockNumber": 320109883,
+        "status": 1,
+        "from": "0xe1081Be279c5C23D2F37133218d1295C6b9bb37b",
+        "to": "0xCB3149d9B41870F092162ab15a676a39d5058C17",
+        "gasUsed": "169987",
+        "effectiveGasPriceWei": "20162000"
+      },
+      "sell": {
+        "hash": "0x3695dbfafd15a3d4c00f7d2427c38788b522d43947c606e58640dbe7a5233ede",
+        "blockNumber": 320110109,
+        "status": 1,
+        "from": "0xe1081Be279c5C23D2F37133218d1295C6b9bb37b",
+        "to": "0xCB3149d9B41870F092162ab15a676a39d5058C17",
+        "gasUsed": "126622",
+        "effectiveGasPriceWei": "20000000"
+      },
+      "resolve": {
+        "hash": "0xd170f0e331e308e04ba18ff6d12c76d7e4923195638edcfeb586a401fbe843b5",
+        "blockNumber": 320110242,
+        "status": 1,
+        "from": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+        "to": "0x69440742A168635D9fA7cC0cfb0935AFFFe79Ad3",
+        "gasUsed": "62476",
+        "effectiveGasPriceWei": "20242000"
+      },
+      "redeem": {
+        "hash": "0x19f5c248299119f135e1ef8d2c1407735e56d61c1f52c28245be11136a8a0442",
+        "blockNumber": 320110460,
+        "status": 1,
+        "from": "0xe1081Be279c5C23D2F37133218d1295C6b9bb37b",
+        "to": "0xCB3149d9B41870F092162ab15a676a39d5058C17",
+        "gasUsed": "75857",
+        "effectiveGasPriceWei": "20000000"
+      }
+    }
+  },
+  "ledger": {
+    "payout": 8.52339,
+    "status": "resolved",
+    "policyId": "c23dda23-74fa-49ca-bc85-4e30108e960a",
+    "tradeCount": 2,
+    "redeemedShares": 8.52339,
+    "contractOutcome": 1,
+    "policyExpiresAt": null,
+    "redemptionCount": 1,
+    "dailyCapMetadata": null,
+    "pointsTradeCount": 0,
+    "protocolMarketId": 4
+  },
+  "schemaVersion": 1,
+  "indexing": {
+    "creation": {
+      "checkedAt": "2026-10-17T14:46:42.310Z",
+      "from": 320105730,
+      "to": 320105745,
+      "status": 200,
+      "data": {
+        "status": "ok",
+        "block": 320106541,
+        "factories": [
+          {
+            "version": "v1",
+            "address": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+            "status": "ok",
+            "fromBlock": 320105730,
+            "toBlock": 320105745,
+            "processed": {
+              "markets": 1,
+              "liquidity": 1,
+              "trades": 0,
+              "resolutions": 0,
+              "redemptions": 0,
+              "lifecycle": 0
+            }
+          },
+          {
+            "version": "v2",
+            "address": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+            "status": "ok",
+            "fromBlock": 320105730,
+            "toBlock": 320105745,
+            "processed": {
+              "markets": 0,
+              "liquidity": 0,
+              "trades": 0,
+              "resolutions": 0,
+              "redemptions": 0,
+              "lifecycle": 0
+            }
+          }
+        ],
+        "processed": {
+          "markets": 1,
+          "liquidity": 1,
+          "trades": 0,
+          "resolutions": 0,
+          "redemptions": 0,
+          "lifecycle": 0
+        },
+        "crypto5Min": {
+          "processed": false,
+          "reason": "not_production"
+        },
+        "tokenMcapSnapshots": {
+          "status": "skipped",
+          "reason": "not_scheduled"
+        },
+        "pointsAutoResolve": {
+          "status": "skipped",
+          "reason": "not_scheduled"
+        },
+        "protocolAutoResolve": {
+          "status": "skipped",
+          "reason": "not_scheduled"
+        }
+      }
+    },
+    "buy": {
+      "checkedAt": "2026-10-17T15:01:17.397Z",
+      "from": 320109878,
+      "to": 320109888,
+      "status": 200,
+      "data": {
+        "status": "ok",
+        "block": 320109952,
+        "factories": [
+          {
+            "version": "v1",
+            "address": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+            "status": "ok",
+            "fromBlock": 320109878,
+            "toBlock": 320109888,
+            "processed": {
+              "markets": 0,
+              "liquidity": 0,
+              "trades": 1,
+              "resolutions": 0,
+              "redemptions": 0,
+              "lifecycle": 0
+            }
+          },
+          {
+            "version": "v2",
+            "address": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+            "status": "ok",
+            "fromBlock": 320109878,
+            "toBlock": 320109888,
+            "processed": {
+              "markets": 0,
+              "liquidity": 0,
+              "trades": 0,
+              "resolutions": 0,
+              "redemptions": 0,
+              "lifecycle": 0
+            }
+          }
+        ],
+        "processed": {
+          "markets": 0,
+          "liquidity": 0,
+          "trades": 1,
+          "resolutions": 0,
+          "redemptions": 0,
+          "lifecycle": 0
+        },
+        "crypto5Min": {
+          "processed": false,
+          "reason": "not_production"
+        },
+        "tokenMcapSnapshots": {
+          "status": "skipped",
+          "reason": "not_scheduled"
+        },
+        "pointsAutoResolve": {
+          "status": "skipped",
+          "reason": "not_scheduled"
+        },
+        "protocolAutoResolve": {
+          "status": "skipped",
+          "reason": "not_scheduled"
+        }
+      }
+    },
+    "sellAndResolution": {
+      "checkedAt": "2026-10-17T15:02:43.335Z",
+      "from": 320110104,
+      "to": 320110247,
+      "status": 200,
+      "data": {
+        "status": "ok",
+        "block": 320110290,
+        "factories": [
+          {
+            "version": "v1",
+            "address": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+            "status": "ok",
+            "fromBlock": 320110104,
+            "toBlock": 320110247,
+            "processed": {
+              "markets": 0,
+              "liquidity": 0,
+              "trades": 1,
+              "resolutions": 1,
+              "redemptions": 0,
+              "lifecycle": 0
+            }
+          },
+          {
+            "version": "v2",
+            "address": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+            "status": "ok",
+            "fromBlock": 320110104,
+            "toBlock": 320110247,
+            "processed": {
+              "markets": 0,
+              "liquidity": 0,
+              "trades": 0,
+              "resolutions": 0,
+              "redemptions": 0,
+              "lifecycle": 0
+            }
+          }
+        ],
+        "processed": {
+          "markets": 0,
+          "liquidity": 0,
+          "trades": 1,
+          "resolutions": 1,
+          "redemptions": 0,
+          "lifecycle": 0
+        },
+        "crypto5Min": {
+          "processed": false,
+          "reason": "not_production"
+        },
+        "tokenMcapSnapshots": {
+          "status": "skipped",
+          "reason": "not_scheduled"
+        },
+        "pointsAutoResolve": {
+          "status": "skipped",
+          "reason": "not_scheduled"
+        },
+        "protocolAutoResolve": {
+          "status": "skipped",
+          "reason": "not_scheduled"
+        }
+      }
+    },
+    "redemption": {
+      "checkedAt": "2026-10-17T15:04:18.492Z",
+      "from": 320110455,
+      "to": 320110465,
+      "status": 200,
+      "data": {
+        "status": "ok",
+        "block": 320110666,
+        "factories": [
+          {
+            "version": "v1",
+            "address": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+            "status": "ok",
+            "fromBlock": 320110455,
+            "toBlock": 320110465,
+            "processed": {
+              "markets": 0,
+              "liquidity": 0,
+              "trades": 0,
+              "resolutions": 0,
+              "redemptions": 1,
+              "lifecycle": 0
+            }
+          },
+          {
+            "version": "v2",
+            "address": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+            "status": "ok",
+            "fromBlock": 320110455,
+            "toBlock": 320110465,
+            "processed": {
+              "markets": 0,
+              "liquidity": 0,
+              "trades": 0,
+              "resolutions": 0,
+              "redemptions": 0,
+              "lifecycle": 0
+            }
+          }
+        ],
+        "processed": {
+          "markets": 0,
+          "liquidity": 0,
+          "trades": 0,
+          "resolutions": 0,
+          "redemptions": 1,
+          "lifecycle": 0
+        },
+        "crypto5Min": {
+          "processed": false,
+          "reason": "not_production"
+        },
+        "tokenMcapSnapshots": {
+          "status": "skipped",
+          "reason": "not_scheduled"
+        },
+        "pointsAutoResolve": {
+          "status": "skipped",
+          "reason": "not_scheduled"
+        },
+        "protocolAutoResolve": {
+          "status": "skipped",
+          "reason": "not_scheduled"
+        }
+      }
+    },
+    "redemptionReplay": {
+      "checkedAt": "2026-10-17T15:05:39.516Z",
+      "from": 320110455,
+      "to": 320110465,
+      "status": 200,
+      "data": {
+        "status": "ok",
+        "block": 320110973,
+        "factories": [
+          {
+            "version": "v1",
+            "address": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+            "status": "ok",
+            "fromBlock": 320110455,
+            "toBlock": 320110465,
+            "processed": {
+              "markets": 0,
+              "liquidity": 0,
+              "trades": 0,
+              "resolutions": 0,
+              "redemptions": 0,
+              "lifecycle": 0
+            }
+          },
+          {
+            "version": "v2",
+            "address": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+            "status": "ok",
+            "fromBlock": 320110455,
+            "toBlock": 320110465,
+            "processed": {
+              "markets": 0,
+              "liquidity": 0,
+              "trades": 0,
+              "resolutions": 0,
+              "redemptions": 0,
+              "lifecycle": 0
+            }
+          }
+        ],
+        "processed": {
+          "markets": 0,
+          "liquidity": 0,
+          "trades": 0,
+          "resolutions": 0,
+          "redemptions": 0,
+          "lifecycle": 0
+        },
+        "crypto5Min": {
+          "processed": false,
+          "reason": "not_production"
+        },
+        "tokenMcapSnapshots": {
+          "status": "skipped",
+          "reason": "not_scheduled"
+        },
+        "pointsAutoResolve": {
+          "status": "skipped",
+          "reason": "not_scheduled"
+        },
+        "protocolAutoResolve": {
+          "status": "skipped",
+          "reason": "not_scheduled"
+        }
+      }
+    }
+  },
+  "boundaries": {
+    "checkedAt": "2026-10-17T15:06:48.568Z",
+    "pointbreak": {
+      "pointbreak": "47aa9e19115d64bc36a2684e5eeb685caef117ba",
+      "origin/pointbreak": "47aa9e19115d64bc36a2684e5eeb685caef117ba",
+      "remote": "47aa9e19115d64bc36a2684e5eeb685caef117ba"
+    },
+    "production": {
+      "id": "dpl_C4bVYurgBRwVYqZAJJChri7uQpzz",
+      "sha": "47aa9e19115d64bc36a2684e5eeb685caef117ba",
+      "state": "READY",
+      "aliases": [
+        "pronos.io",
+        "www.pronos.io",
+        "pronos-chi.vercel.app",
+        "pronos-mezcalpapieth-jpgs-projects.vercel.app"
+      ]
+    },
+    "outsideBranchEnvironmentRecordsUnchanged": 100
+  },
+  "verification": {
+    "focusedTestsPassed": 60,
+    "mvpAndPointsBuildsPassed": true,
+    "normalOwnerFlow": "actual frontend delegationClient module, genuine OTP-bound owner key, SDK server transport",
+    "frontendRouting": "actual Points executionAdapter module against deployed API",
+    "browserVerification": "In-app browser could not open localhost read-only proxy (ERR_BLOCKED_BY_CLIENT); no live browser mutation or IndexedDB click-through claimed.",
+    "manualIndexing": true,
+    "previewSchedulerConfigured": false,
+    "noNewMint": true,
+    "noAdditionalUserFunding": true
+  },
+  "remaining": [
+    "Stable router/registry to avoid explicit consent extensions for newly deployed pools; current grants do not expire and remain usable for previously approved pools.",
+    "Gas funding/sponsorship for normal users.",
+    "Automatic preview indexer scheduling and historical-pool scan cost.",
+    "Sell quote fee presentation: net output correct but displayed fee zero; actual sell fee 0.013684 MXNP.",
+    "Tournament reset/funding dry run, issuance limits, registration, scoring and rewards.",
+    "Cancellation/refund burn attribution, resolution corrections, multi-user and V2 live rehearsals."
+  ]
+}

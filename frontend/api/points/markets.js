@@ -17,6 +17,7 @@ import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 import { publicMarketTranslationFields } from '../_lib/market-translations.js';
 import { binaryPricesWithBookTrade, pricesWithBookTrades } from '../_lib/points-display-prices.js';
 import { TOURNAMENT_APPROVED_MARKET_START_ISO } from '../_lib/points-tournament-config.js';
+import { pendingApprovalSettings } from '../_lib/onchain-preview-approval.js';
 
 // Lazy neon client init — defer until the first request so a missing
 // DATABASE_URL at module-load time surfaces as a structured JSON error
@@ -134,6 +135,9 @@ export default async function handler(req, res) {
     const modeFilter = modeParam === 'onchain' ? 'onchain'
                       : modeParam === 'all'    ? null
                       : 'points';
+    const indexedCatalog = modeFilter === 'onchain' && pendingApprovalSettings().previewEnabled;
+    const catalogFactories = [process.env.ONCHAIN_MARKET_FACTORY_ADDRESS, process.env.ONCHAIN_MARKET_FACTORY_V2_ADDRESS]
+      .filter(value => /^0x[0-9a-f]{40}$/i.test(value || '')).map(value => value.toLowerCase());
     // Chain filter: MVP can narrow to a specific chain_id (e.g. 421614
     // for Sepolia, 42161 for Arbitrum One) so flipping env chains between
     // testnet and mainnet is a one-variable change — each chain sees only
@@ -162,7 +166,7 @@ export default async function handler(req, res) {
     const tournamentOnly = !category && featuredParam === 'tournament';
     const featuredOnly = !category && !tournamentOnly && featuredParam !== 'all';
     const cacheKey = [
-      'points:markets:v13',
+      'points:markets:v14',
       status,
       category || 'all',
       modeFilter || 'all-modes',
@@ -189,7 +193,9 @@ export default async function handler(req, res) {
         SELECT
           m.id, m.question, m.category, m.outcomes, m.reserves, m.seed_liquidity,
           m.image_url,
-          m.end_time, m.status, m.outcome, m.created_at, m.resolved_at, m.mode,
+          m.end_time, COALESCE(indexed.status, m.status) AS status,
+          CASE WHEN indexed.status = 'resolved' THEN indexed.outcome - CASE WHEN indexed.protocol_version = 'v2' THEN 0 ELSE 1 END ELSE m.outcome END AS outcome,
+          m.created_at, COALESCE(indexed.resolved_at, m.resolved_at) AS resolved_at, m.mode,
           m.chain_id, m.chain_market_id, m.chain_address, m.category_tags,
           m.geo_tags, m.topic_tags, m.amm_mode, m.start_time, m.sport, m.league,
           m.outcome_images, m.featured, m.hidden_from_home, m.tournament_featured,
@@ -207,6 +213,13 @@ export default async function handler(req, res) {
           dt.is_book_trade AS display_trade_is_book,
           dt.per_outcome AS display_trade_outcomes
         FROM points_markets m
+        -- Read indexed lifecycle state; do not copy protocol settlement into
+        -- the Points ledger. Unindexed markets keep their pending UI state.
+        LEFT JOIN protocol_markets indexed ON ${indexedCatalog}::boolean
+          AND m.mode = 'onchain' AND m.chain_id = indexed.chain_id AND indexed.chain_id = 421614
+          AND LOWER(m.chain_address) = LOWER(indexed.pool_address)
+          AND m.chain_market_id::text = indexed.market_id::text
+          AND LOWER(indexed.factory_address) = ANY(${catalogFactories}::text[])
         LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
         LEFT JOIN LATERAL (
           WITH recent AS (
@@ -258,7 +271,7 @@ export default async function handler(req, res) {
               FROM latest_by_outcome
             ), '[]'::jsonb) AS per_outcome
         ) dt ON true
-        WHERE m.status = ${status}
+        WHERE COALESCE(indexed.status, m.status) = ${status}
           AND m.parent_id IS NULL
           AND (${category}::text IS NULL OR m.category = ${category}::text OR COALESCE(m.category_tags, '[]'::jsonb) ? ${category}::text)
           AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
@@ -284,7 +297,7 @@ export default async function handler(req, res) {
             OR COALESCE(pm.reviewed_at, m.created_at) >= ${TOURNAMENT_APPROVED_MARKET_START_ISO}::timestamptz
           )
         ORDER BY
-          CASE WHEN ${status}::text = 'resolved' THEN m.resolved_at END DESC NULLS LAST,
+          CASE WHEN ${status}::text = 'resolved' THEN COALESCE(indexed.resolved_at, m.resolved_at) END DESC NULLS LAST,
           CASE WHEN ${status}::text = 'active' AND m.end_time > NOW() THEN 1 END,
           CASE WHEN m.end_time > NOW() THEN m.end_time END ASC NULLS LAST,
           CASE WHEN m.end_time <= NOW() THEN m.end_time END DESC NULLS LAST,

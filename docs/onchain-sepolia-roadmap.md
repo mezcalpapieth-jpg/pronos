@@ -179,16 +179,18 @@ Open decisions:
 
 Tasks:
 
-- Include collateral token, share token V1, share token V2, factories, and pools in policy targets.
+- Include exact collateral/share approval calls and guarded trading calls for approved pools. User trading grants must not allow factory administration.
 - Include selectors:
   - ERC20 `approve(address,uint256)`
   - ERC1155 `setApprovalForAll(address,bool)`
   - binary buy/sell
   - multi buy/sell
   - redeem
-- Refresh policies when new pools are deployed.
-- Make policy refresh automatic when a user first trades a newly approved market.
-- Keep one user-visible consent surface, ideally at signup or before first on-chain tournament action.
+- Persistent owner-approved grants remain active until revoked; user login sessions have independent expiry.
+- Require each account's owner consent before first on-chain trading. Never install the backend as a root user or silently grant all accounts trading authority.
+- Keep parent OTP authentication credentials separate from the delegated signing credential; registering the login key in a user sub-org changes Turnkey's credential matching and can break returning login.
+- Existing grants continue covering their earlier pools. A newly deployed pool requires an explicit owner-approved scope extension through the same consent surface.
+- To avoid scope extensions as markets grow, design and audit a stable trading router with an on-chain factory/market registry. Broad transfers or arbitrary contract calls are not a substitute.
 - Do not expose per-trade approvals in UI copy.
 
 Launch blocker:
@@ -202,7 +204,7 @@ Tasks:
 - Create a reset command/job for an on-chain tournament cycle.
 - Snapshot current off-chain tournament state before reset.
 - Create or verify Turnkey wallets for eligible users.
-- Create or refresh delegation policy for each eligible user.
+- Check each eligible user's owner-approved delegation; request consent where absent. The reset job cannot grant itself signing authority.
 - Fund each wallet with testnet gas.
 - Mint or transfer exactly `500 MXNP` to each eligible tournament wallet.
 - Store cycle metadata:
@@ -308,12 +310,12 @@ Tasks:
 - Do not publish faucet links.
 - Prefer owner-only mint token for tournament launch.
 - Rate limit trade endpoints.
-- Cap delegated daily notional.
+- Add an enforced delegated daily notional limit before claiming one. The current scoped preview grant has no daily spending cap.
 - Alert on:
   - unexpected token transfers into tournament wallets
   - failed trade bursts
   - wallets with external funding
-  - policies near expiry
+  - revoked/missing policies and markets outside an account's approved scope
   - markets missing indexer coverage
 - Keep admin/reset scripts branch-gated and explicit.
 
@@ -448,8 +450,9 @@ Days 24-25: launch prep
 6. Done: configure the isolated preview database, Arbitrum Sepolia runtime, and separate operational secrets.
 7. Done (2026-10-17): deploy MXNP and fresh V1/V2 factories; verify and fund the dedicated Turnkey operations wallet; replace only `onchain-sepolia` preview aliases. See the deployment checkpoint below.
 8. Done (2026-10-17): ship the preview, verify its exact source SHA and readiness, and approve/index one 500-MXNP test market through the deployed admin API. Verify live protocol quotes and Points execution guards. See the rehearsal checkpoint below.
-9. Next: connect the Points frontend adapter to protocol execution, preserving separate Points/protocol database IDs and ledger reads. Include market cards/detail, buy/sell/redeem, portfolio, and history; do not activate a partially routed tournament.
-10. Remaining: obtain user-authorized delegation, establish user wallet gas support, and run the reset/funding dry run in its own authorized scope before any allocations. Then rehearse buy, sell, resolve, and redeem with a consenting test user, and verify indexed portfolio/score updates.
+9. Done (2026-10-17): connect and deploy the Points frontend adapter, preserving separate Points/protocol IDs and ledger reads; verify a consenting user's real buy/sell/resolve/redeem rehearsal.
+10. Done (2026-10-17): implement owner-approved, persistent, non-root preview delegation with verified revocation and separate login/signing credentials. See the persistent delegation checkpoint below.
+11. Remaining: establish gas support for normal users, configure automatic preview indexing, fix sell-quote fee presentation, and run the tournament reset/funding dry run before allocations. Scoring, reward issuance and cancellation/correction accounting remain launch work.
 
 ### Preview Admin Approval Setting
 
@@ -662,3 +665,31 @@ Remaining work before activation:
 3. Fix sell-quote fee presentation: the live quote reported zero fee while the receipt reported **0.441719 MXNP**. The quoted net collateral and output guard were correct.
 4. Arrange automatic preview indexing; production cron does not schedule this preview. Scanning closed pools is necessary for redemptions, but indexing cost must be monitored as historical pool count grows.
 5. Complete cancellation-refund burn attribution, resolution-correction evidence, tournament reset/funding dry runs, issuance limits, registration, scoring and rewards before activation.
+
+### Persistent Owner Delegation and Deployed Settlement — 2026-10-17
+
+Supersedes the uncommitted/deployment-pending and generic-delegation limitations at the preceding checkpoint. Resolution/indexer fixes were committed and pushed in `0e734ae`; the normal owner delegation flow shipped in `c576fa5`; separate login/signing credentials shipped in `885f3cd`. The actual execution rehearsal below ran on READY preview `dpl_D6vix1d9XBHZbnpA4xAz3MroTX1J`, source `885f3cddbe353fa24c57d9611940748a1d172415`.
+
+Each account explicitly approves its first trading grant through its own OTP-bound owner credential. The browser registers a **non-root** trading signer, installs an exact scoped policy with **no time expression**, removes superseded grants, and asks the server to verify the actual Turnkey state before recording consent. The policy and backend credential have no expiry; login sessions retain their independent expiry. Closing/canceling consent cannot submit a trade. The Points account menu exposes authorization management and real revocation. If the owner login has expired, changing the grant requires email verification; ordinary trades under an active grant do not.
+
+The grant covers authorized Sepolia pools, exact collateral/operator approvals, guarded buy/sell and redemption, the user's own address, zero native value, and bounded gas/fees. It permits no withdrawals, token transfers or account administration. **No daily spending cap is enforced or advertised.** An existing grant stays usable for its approved pools when new markets are added; trading an additional pool requires an explicit scope extension. A stable, audited router/registry is the next design needed to remove those extensions as market count grows. Do not silently grant policies to all existing accounts.
+
+Live verification found that registering the parent login key as a user's trading credential caused later Turnkey logins to evaluate the trading-only policy. A separate **non-root parent authentication user**, with only AUTH/OTP and suborganization-creation policy permissions, now handles preview login and parent reads. Its key is never installed in user suborganizations. Signing still uses the existing trading/operations credential. The new login key cannot sign wallet transactions. Only `onchain-sepolia` preview variables `TURNKEY_AUTH_API_PUBLIC_KEY` and `TURNKEY_AUTH_API_PRIVATE_KEY` were added; production/inherited credentials were not changed.
+
+Using `pronos`, verified the real frontend delegation client against the deployed endpoints: authorize → revoke → rejected trading signature → remove the inactive non-root test signer → normal creation of a fresh non-root signer → authorize again. The human root quorum stayed unchanged throughout. A fresh returning OTP login then succeeded and the same persistent policy remained active. Native/token transfers, an unapproved spender and another chain were rejected by actual Turnkey signing probes; none were broadcast. These workflow checks used the real owner key with SDK server transport. They do not claim a browser IndexedDB click-through: the in-app browser blocked the temporary read-only localhost proxy, and Vercel protection was preserved.
+
+Approved one new **100-MXNP-seeded technical test market**, pending `37695`, Points `360637`, protocol database `4`, contract ID `1`, pool `0xCB3149d9B41870F092162ab15a676a39d5058C17`. The actual frontend execution adapter and deployed APIs completed:
+
+- Buy **5 MXNP → 9.52339 Yes shares**, fee `0.125 MXNP`, with a 1% minimum-share guard.
+- Sell **1 share → 0.508851 MXNP**, receipt fee `0.013684 MXNP`, with a 1% minimum-output guard.
+- Resolve to Yes through the **deployed admin endpoint**: app outcome `0` correctly becomes V1 contract outcome `1`.
+- Index resolution through the **deployed preview indexer**, read back resolved/claimable holdings, then redeem **8.52339 shares → 8.52339 MXNP**.
+- Index the later redemption while the pool is already resolved. Replaying the same narrow range inserts **zero** new redemptions; the ledger has exactly two trades and one redemption for this market.
+
+Final RPC, receipt, isolated database and adapter reads agree: `pronos` holds **532.928497 MXNP / 0.000480877478672 Sepolia ETH**, with zero remaining shares/positions and cumulative realized test PnL **32.928497 MXNP** across both rehearsals. Its separate **500 Points and zero Points trades** are unchanged. Operations hold **49,998,900 MXNP / 0.000341966182954 ETH**; supply remains **50 million**. No new mint or additional user funding was needed. All checks used Arbitrum Sepolia `421614` and the isolated preview database.
+
+The catalog read filter now uses indexed protocol status/outcome for matching preview chain, factory, pool and contract IDs, so settled markets can leave the active list and appear in resolved results without writing settlement into the Points ledger. Unindexed mappings retain their existing unavailable/pending behavior. **60 focused tests, both frontend builds, and diff checks passed.** Readiness returned `ok: true`, no warnings and zero blockers; its explicit reviews still include CRE review mode and absent gas sponsorship.
+
+The [public verification proof](./onchain-sepolia-persistent-delegation-2026-10-17.json) records owner-flow checks, permission denials, returning login, transaction receipts, manual indexer ranges/replay, final portfolio, ledger and branch boundaries. Manual indexer authentication was rotated only for this preview. Pointbreak local/tracking/remote refs remain `47aa9e19115d64bc36a2684e5eeb685caef117ba`; production remains READY `dpl_C4bVYurgBRwVYqZAJJChri7uQpzz` with unchanged aliases. All **100** environment records outside `onchain-sepolia` remain unchanged.
+
+Next roadmap work: configure automatic preview indexing; correct sell-quote fee presentation (net collateral is correct, displayed fee is zero); define a stable trading scope for future pools; provide normal-user gas funding/sponsorship; run isolated tournament reset/funding dry runs with issuance limits; implement registration/scoring/rewards; and rehearse V2, cancellation/refunds and resolution corrections before activation.

@@ -17,7 +17,7 @@ test('points market payload keeps admin featured and tournament markets on home'
 });
 
 test('points public lists hide bulk-hidden active markets outside trophy overrides', () => {
-  assert.match(source, /points:markets:v13/);
+  assert.match(source, /points:markets:v14/);
   assert.match(source, /m\.hidden_from_home IS NOT TRUE[\s\S]*?OR m\.tournament_featured = true[\s\S]*?pm\.reviewed_at/);
   assert.match(source, /m\.featured = true AND m\.hidden_from_home = false[\s\S]*?OR m\.tournament_featured = true[\s\S]*?pm\.reviewed_at/);
 });
