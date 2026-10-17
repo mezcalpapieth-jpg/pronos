@@ -32,6 +32,7 @@ import { applyCors } from '../../_lib/cors.js';
 import { requirePointsAdmin } from '../../_lib/points-admin.js';
 import { collectOnchainReadiness } from '../../_lib/onchain-readiness.js';
 import { verifyTradingRouter } from '../../_lib/trading-router.js';
+import { probeGasFunding } from '../../_lib/sepolia-gas-readiness.js';
 import {
   appendFactoryProbeWarnings,
   buildFactoryProbeStatus,
@@ -155,6 +156,27 @@ export default async function handler(req, res) {
     }
 
     const provider = new ethers.providers.JsonRpcProvider(process.env.ONCHAIN_RPC_URL);
+    if (gas?.autoFunding?.enabled) {
+      let fundingSql = null;
+      if (gas.autoFunding.configured) {
+        const { neon } = await import('@neondatabase/serverless');
+        fundingSql = neon(process.env.DATABASE_URL);
+      }
+      gas.autoFunding = await probeGasFunding({ provider, sql: fundingSql });
+      if (gas.autoFunding.ready) {
+        const review = launch.reviews.find(r => r.id === 'gas_auto_funding_unverified');
+        launch.reviews = launch.reviews.filter(r => r.id !== 'gas_auto_funding_unverified');
+        launch.reviewCount = launch.reviews.length;
+        launch.nextSteps = launch.nextSteps.filter(fix => fix !== review?.fix);
+      } else {
+        warnings.push('Automatic Sepolia gas funding is enabled but not ready: check gas.autoFunding.');
+        const blocker = { id: 'gas_auto_funding_unready', title: 'Automatic gas funding unready',
+          detail: 'Check dedicated funder, permissions, DB schema, pending transfers, budget and confirmed funding evidence.',
+          fix: 'Complete the isolated preview gas-funding activation and rehearsal' };
+        launch.blockers.push(blocker); launch.nextSteps.push(blocker.fix);
+        launch.blockerCount = launch.blockers.length; launch.ready = false;
+      }
+    }
     let tradingAuthorization = { scope: 'pools', routerConfigured: false };
     if (process.env.ONCHAIN_TRADING_ROUTER_ADDRESS || process.env.ONCHAIN_TRADING_ROUTER_CODE_HASH) {
       try {

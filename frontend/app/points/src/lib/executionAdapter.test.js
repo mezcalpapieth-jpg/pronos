@@ -7,7 +7,7 @@ const chainMarket = { id: 360636, mode: 'onchain', chainId: 421614, chainMarketI
   executionReady: true, prices: [0.6, 0.4], outcomes: ['Sí', 'No'], status: 'active' };
 const pointsMarket = { id: 3, mode: 'points', outcomes: ['Sí', 'No'], prices: [0.5, 0.5] };
 
-function fixture({ enabled = true, mapping = [chainMarket, pointsMarket], requestError = null, beforeTrade } = {}) {
+function fixture({ enabled = true, mapping = [chainMarket, pointsMarket], requestError = null, tradeError = 'delegation_required', beforeTrade } = {}) {
   const requests = [];
   let portfolio = { positions: [{ mode: 'onchain', marketId: chainMarket.id }], history: [], summary: {} };
   const client = createExecutionAdapter({
@@ -40,7 +40,7 @@ function fixture({ enabled = true, mapping = [chainMarket, pointsMarket], reques
     },
     async post(url, body) {
       requests.push({ method: 'POST', url, body });
-      if (body.collateral === 999) throw Object.assign(new Error('delegation_required'), { code: 'delegation_required' });
+      if (body.collateral === 999) throw Object.assign(new Error(tradeError), { code: tradeError });
       return { ok: true };
     },
   });
@@ -99,9 +99,11 @@ test('missing, unindexed, wrong-chain and unknown-mode mappings cannot submit a 
 });
 
 test('protocol signing failures are surfaced without attempting Points execution', async () => {
-  const { client, requests } = fixture();
-  await assert.rejects(client.trade('buy', { marketId: chainMarket.id, collateral: 999, outcomeIndex: 0 }), { code: 'delegation_required' });
-  assert.deepEqual(requests.filter(r => r.method === 'POST').map(r => r.url), ['/api/protocol/buy']);
+  for (const code of ['delegation_required', 'gas_funding_pending', 'gas_funding_limit', 'gas_funding_unavailable']) {
+    const { client, requests } = fixture({ tradeError: code });
+    await assert.rejects(client.trade('buy', { marketId: chainMarket.id, collateral: 999, outcomeIndex: 0 }), { code });
+    assert.deepEqual(requests.filter(r => r.method === 'POST').map(r => r.url), ['/api/protocol/buy']);
+  }
 });
 
 test('parallel parents expose mapped child pools; the parent itself cannot trade', async () => {

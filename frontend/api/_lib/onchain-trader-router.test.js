@@ -21,6 +21,7 @@ function fixture({ route = router, token = a('2'), failRoute = false } = {}) {
     process: { env: { ONCHAIN_COLLATERAL_ADDRESS: a('4') } },
     requireReady() {}, provider: () => ({}),
     poolTradingRoute: async () => { if (failRoute) throw Error('trading_router_unverified'); return route; },
+    prepareUserTradeGas: async args => { sent.push({ gasPreparation: args.action }); },
     MAX_UINT256: ethers.constants.MaxUint256, COLLATERAL_DECIMALS: 6,
     async signAndBroadcast(tx) {
       sent.push(tx);
@@ -58,7 +59,9 @@ test('future pools reuse router collateral/operator approvals; all three calls t
     await f.sellOnChain(f.args);
     f.args.market.chain_address = a('b');
     await f.buyOnChain(f.args); await f.sellOnChain(f.args); await f.redeemOnChain(f.args);
-    assert.equal(f.sent.length, 7); // two approvals total for both pools
+    assert.equal(f.sent.filter(tx => !tx.gasPreparation).length, 7); // two approvals total for both pools
+    assert.deepEqual(f.sent.filter(tx => tx.gasPreparation).map(tx => tx.gasPreparation), ['buy','sell','buy','sell','redeem']);
+    assert.equal(f.sent[0].gasPreparation, 'buy'); // funding precedes the first approval
     const routed = f.sent.filter(tx => tx.to === router.address);
     assert.equal(routed.length, 5);
     const parsed = routed.map(tx => iface.parseTransaction(tx));

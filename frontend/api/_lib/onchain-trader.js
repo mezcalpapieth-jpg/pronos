@@ -24,6 +24,7 @@ import { ethers } from 'ethers';
 import { onchainFeeData } from './onchain-fees.js';
 import { readSellQuoteAmounts } from './onchain-sell-quote.js';
 import { poolTradingRoute, TRADING_ROUTER_ABI } from './trading-router.js';
+import { prepareUserTradeGas } from './sepolia-user-gas.js';
 import {
   isDelegationEnabled, signDelegatedTransaction,
 } from './turnkey-delegation.js';
@@ -690,6 +691,9 @@ export async function buyOnChain({
     : ethers.constants.Zero;
   if (route && (minSharesUnits.lte(0) || route.binary !== isBinary(market))) throw Object.assign(new Error('invalid_router_trade'), { status: 400 });
 
+  await prepareUserTradeGas({ suborgId, ownerAddr, provider: provider(), pool: ammAddr, route,
+    action: 'buy', binary: isBinary(market), units: collateralUnits, outcomeIndex, minOut: minSharesUnits,
+    gasUnits: 700000 });
   await ensureCollateralAllowance({
     suborgId, ownerAddr, ammAddress: route?.address || ammAddr, amount: collateralUnits,
   });
@@ -741,6 +745,9 @@ export async function sellOnChain({
   if (route && (minCollateralUnits.lte(0) || route.binary !== isBinary(market)
     || tokenAddr.toLowerCase() !== route.shares[route.binary ? 'v1' : 'v2'])) throw Object.assign(new Error('invalid_router_trade'), { status: 400 });
 
+  await prepareUserTradeGas({ suborgId, ownerAddr, provider: provider(), pool: ammAddr, route,
+    action: 'sell', binary: isBinary(market), units: sharesUnits, outcomeIndex, minOut: minCollateralUnits,
+    gasUnits: 720000 });
   await ensureShareOperatorApproval({
     suborgId, ownerAddr, ammAddress: route?.address || ammAddr, tokenAddr,
   });
@@ -780,6 +787,8 @@ export async function redeemOnChain({
   const units = ethers.utils.parseUnits(String(amount), COLLATERAL_DECIMALS);
   const route = await poolTradingRoute(market.chain_address, { provider: provider() });
   const data = route ? new ethers.utils.Interface(TRADING_ROUTER_ABI).encodeFunctionData('redeem', [market.chain_address, units]) : encodeRedeem(units);
+  await prepareUserTradeGas({ suborgId, ownerAddr, provider: provider(), pool: market.chain_address, route,
+    action: 'redeem', units, data, target: route?.address || market.chain_address, gasUnits: 600000 });
   const receipt = await signAndBroadcast({
     suborgId, from: ownerAddr, to: route?.address || market.chain_address, data,
   });

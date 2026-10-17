@@ -2,7 +2,7 @@
 
 Branch: `onchain-sepolia`
 
-Status: contracts, preview runtime, Points execution guards, frontend adapter, persistent owner delegation, automatic indexing and sell-fee presentation are deployed to the isolated preview. Stable router authorization is verified: one consent before pool creation covered real buy/sell/resolve/redeem rehearsals on subsequent binary and three-outcome markets. Existing MXNP is reused; Pointbreak and Pronos production are unchanged. Normal-user gas support, tournament reset/funding limits, registration/scoring/rewards and remaining lifecycle rehearsals remain. This branch must stay hidden behind flags until the next tournament reset.
+Status: contracts, preview runtime, Points execution guards, frontend adapter, persistent owner delegation, automatic indexing and sell-fee presentation are deployed to the isolated preview. Stable router authorization is verified: one consent before pool creation covered real buy/sell/resolve/redeem rehearsals on subsequent binary and three-outcome markets. Existing MXNP is reused; Pointbreak and Pronos production are unchanged. Automatic normal-user gas funding is implemented locally with persistent limits and retry protection; its dedicated wallet, preview migration, deployment and live zero-ETH rehearsal remain. Tournament reset/funding limits, registration/scoring/rewards and remaining lifecycle rehearsals also remain. This branch must stay hidden behind flags until the next tournament reset.
 
 ## Goal
 
@@ -94,7 +94,7 @@ Required states:
 - User has a Turnkey sub-org.
 - User has an EVM wallet address.
 - User has an active delegation policy.
-- Wallet has Sepolia gas, unless a relayer/paymaster path is implemented.
+- Wallet gets Sepolia gas automatically before trading once the preview gas-funding service is activated.
 - Wallet receives the reset allocation of tournament MXNP.
 
 ### Mock Coin
@@ -753,3 +753,21 @@ Pointbreak local/tracking/remote refs and Pronos production deployment are uncha
 Validation: **135 contract tests, 110 focused JavaScript tests, both frontend builds, the dedicated indexer bundle and diff checks passed.** This includes cold-storage eight-outcome gas checks, unchanged scope after future pool creation, real dispatcher approval reuse, explicit owner migration and invalid-router readiness blockers.
 
 Next: normal-user gas funding/sponsorship, isolated tournament reset/funding dry runs with issuance limits, registration/scoring/rewards, and cancellation/refund and resolution-correction rehearsals. Users must still approve their initial grant; no accounts were silently authorized.
+
+### Automatic User Gas — Implemented Locally, 2026-10-17
+
+Added native ETH preparation before user buy/sell/redeem approvals and transactions. Funding is restricted to the opted-in `onchain-sepolia` Preview, actual Arbitrum Sepolia RPC chain and pinned isolated preview database. It requires a dedicated Turnkey gas wallet separate from contract operations and the incoming local reserve address. Eligible users need unique account/wallet mappings, live owner-approved scope and valid collateral/share holdings or a simulated valid redemption.
+
+Low balances top up to **0.0005 ETH**, with a **0.002-ETH rolling daily wallet/account cap**, **0.1-ETH global daily cap including transfer fee ceilings**, five-minute cooldown and **0.01-ETH retained funder reserve**. A persistent database lease, signed payload/hash saved before broadcast, nonce checks and a single pending-payment constraint protect concurrent requests and ambiguous RPC retries. Normal users see preparation/retry messages rather than ETH instructions. Already funded users need no funding write or signature.
+
+The admin status adds separate automatic-gas readiness and cannot treat env configuration as permission or payment proof. Its live probe checks schema/write access, reserve, budget, pending payments and a confirmed transfer associated with the configured funder/current public-key fingerprint. A guarded migration script prints SQL by default and accepts apply only for the pinned isolated direct database endpoint and correct preview branch metadata. The read-only indexer is unchanged.
+
+Validation: **93 focused JavaScript tests passed**, including local PostgreSQL/WASM ledger constraints, lease fencing, cooldown and rolling budget cases; both frontend builds and diff checks passed. Read-only deployed-router simulations confirmed that raw `eth_call` rejects a zero-ETH non-holder and accepts a zero-ETH winning holder; the latter is a contract-held positive control, not a normal-user funding rehearsal. The local test engine is outside the application. No live transaction, schema migration, wallet provisioning, deployment, commit or push was performed. Pointbreak local/tracking refs remain `47aa9e19115d64bc36a2684e5eeb685caef117ba`; unrelated local approved-market exports are untouched.
+
+Next: release/configure the dedicated gas wallet and preview schema, fund it from the incoming reserve after receipt, activate the preview flag and rehearse a genuinely zero-ETH account through buy/sell/resolve/redeem. Then resume isolated tournament reset/funding limits, registration/scoring/rewards and the remaining lifecycle rehearsals. The [activation and recovery guide](./onchain-sepolia-automatic-gas-2026-10-17.md) records exact limits and steps. Automatic gas remains off until that release; no user grants or MXNP allocations were changed.
+
+### Automatic User Gas — Release Configuration, 2026-10-17
+
+Created dedicated Turnkey gas wallet `0x252a1cfa015612EFB8C7c2f1643A9F541b866990` and verified the existing backend credential can sign a native Arbitrum Sepolia transfer from it without broadcasting. Applied the exported migration transactionally only to preview branch `br-sweet-dream-amb6hlfe`, verified both tables/all five indexes and application-role write access, and retained the indexer's restricted access. Configured only the three gas settings on the `onchain-sepolia` Preview; the flag remains false and all 100 outside-branch environment records remain unchanged. The 93 focused tests passed again before release.
+
+The incoming reserve still held **0.002244109750225488 ETH** at 17:53 UTC, so the new wallet is unfunded. The initial 0.1-ETH float, activation and real zero-ETH trading rehearsal depend on the incoming funds. No funding transfer, successful live readiness or completed zero-ETH user flow is claimed. See the activation guide for the exact destination, limits and remaining steps.

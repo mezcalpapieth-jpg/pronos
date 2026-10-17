@@ -257,6 +257,18 @@ const PUBLIC_ERROR_COPY = {
     es: 'Tu cuenta necesita fondos para completar esta operación de prueba.',
     en: 'Your account needs funding to complete this test trade.',
   },
+  gas_funding_pending: {
+    es: 'Estamos preparando tu operación. Intenta de nuevo en unos segundos.',
+    en: 'We are preparing your trade. Please try again in a few seconds.',
+  },
+  gas_funding_limit: {
+    es: 'Alcanzamos el límite temporal de operaciones de prueba. Intenta más tarde.',
+    en: 'The temporary test trading limit has been reached. Please try again later.',
+  },
+  gas_funding_unavailable: {
+    es: 'No pudimos preparar tu operación de prueba. Intenta más tarde.',
+    en: 'We could not prepare your test trade. Please try again later.',
+  },
 };
 
 export function publicErrorMessage(error, lang = 'es', fallback = 'default') {

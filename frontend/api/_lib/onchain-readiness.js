@@ -1,3 +1,5 @@
+import { gasFundingReadiness } from './sepolia-gas-readiness.js';
+
 const ARBITRUM_ONE_CHAIN_ID = 42161;
 const ARBITRUM_SEPOLIA_CHAIN_ID = 421614;
 
@@ -271,6 +273,7 @@ export function collectOnchainReadiness({
   };
   const gas = {
     sponsorshipEnabled: env.GAS_SPONSORSHIP_ENABLED === 'true',
+    autoFunding: gasFundingReadiness(env),
   };
 
   const blockers = [];
@@ -382,7 +385,13 @@ export function collectOnchainReadiness({
       'Set CRE_RESOLUTION_WEBHOOK_SECRET before enabling CRE workflows',
     ));
   }
-  if (!gas.sponsorshipEnabled) {
+  if (gas.autoFunding.enabled) {
+    reviews.push(launchItem(
+      'gas_auto_funding_unverified', 'Fondeo automático pendiente de verificación',
+      'La configuración no prueba permisos, migración, presupuesto ni un depósito confirmado.',
+      'Check gas.autoFunding on the admin status endpoint and complete a real funded trade rehearsal',
+    ));
+  } else if (!gas.sponsorshipEnabled) {
     reviews.push(launchItem(
       'gas_sponsorship_unset',
       'Gas sponsorship no configurado',
