@@ -1,0 +1,1076 @@
+{
+  "verifiedAt": "2026-10-17T15:46:34.948Z",
+  "branch": "onchain-sepolia",
+  "chainId": 421614,
+  "manualIndexerTriggers": 0,
+  "configuration": {
+    "projectId": "prj_2bv4NAl9EBvRdkOVw1RpAIzbDJNA",
+    "rights": {
+      "role": "sepolia_indexer",
+      "points_users_read": false,
+      "points_balance_write": false,
+      "points_trade_write": false,
+      "protocol_trade_write": true,
+      "schema_create": false,
+      "neon_admin": false,
+      "protocol_delete": false,
+      "rolsuper": false,
+      "rolcreatedb": false,
+      "rolcreaterole": false,
+      "rolreplication": false,
+      "rolbypassrls": false
+    },
+    "environmentKeys": [
+      "DATABASE_URL",
+      "CRON_SECRET",
+      "PREVIEW_INDEXER_PROJECT_ID",
+      "CHAIN_ID",
+      "PROTOCOL_CHAIN_ID",
+      "ARB_RPC_URL",
+      "FACTORY_ADDRESS",
+      "FACTORY_V2_ADDRESS",
+      "INDEXER_MAX_BATCHES"
+    ],
+    "databaseBranch": "br-sweet-dream-amb6hlfe",
+    "chainId": 421614
+  },
+  "scheduler": {
+    "project": "prj_2bv4NAl9EBvRdkOVw1RpAIzbDJNA",
+    "deploymentId": "dpl_2Cb8HSwGG9XkrHouHMn7U4rsKBds",
+    "readyState": "READY",
+    "sourceSha": "e9e4f8a76262495ee1ed2d33822be7d7f235a07c",
+    "schedule": [
+      {
+        "path": "/api/tick",
+        "schedule": "* * * * *"
+      }
+    ],
+    "aliases": [
+      "pronos-onchain-sepolia-indexer.vercel.app",
+      "pronos-onchain-sepolia-indexer-mezcalpapieth-jpgs-projects.vercel.app"
+    ],
+    "cronsEnabled": true,
+    "overlapLeaseSeconds": 330,
+    "maxFunctionDurationSeconds": 300,
+    "maxBatchesPerFactory": 2,
+    "blocksPerBatch": 2000
+  },
+  "application": {
+    "id": "dpl_FAx5oMx5247Bbbx3z1RbktRm37o3",
+    "sha": "e9e4f8a76262495ee1ed2d33822be7d7f235a07c",
+    "state": "READY",
+    "aliases": [
+      "pronos-git-onchain-sepolia-mezcalpapieth-jpgs-projects.vercel.app"
+    ],
+    "target": null
+  },
+  "market": {
+    "pendingId": 37696,
+    "pointsId": 360638,
+    "protocolDatabaseId": 5,
+    "contractId": 2,
+    "pool": "0x80aa1a6722eb6f72647c0964b64d185c01a39433",
+    "creationTx": "0x893c269d99e5ba03a592d527ede344a439464ca8008b9e784fa4e8eb14331c6e",
+    "chainId": 421614
+  },
+  "operationsGasTopUp": {
+    "from": "0x0Caa37c077924038e14e9D8dE46B5208788e52CF",
+    "to": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+    "valueETH": "0.000658033817046",
+    "targetETH": "0.001",
+    "txHash": "0xd42cd0c683e89cd5a8e50004d6b7e64642d5779f9325a90dd5cf6b51eb5628ee",
+    "receipt": {
+      "status": 1,
+      "blockNumber": 320118515,
+      "gasUsed": "21000"
+    }
+  },
+  "events": {
+    "creation": {
+      "hash": "0x893c269d99e5ba03a592d527ede344a439464ca8008b9e784fa4e8eb14331c6e",
+      "blockNumber": 320118596,
+      "status": 1,
+      "from": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "to": "0x69440742A168635D9fA7cC0cfb0935AFFFe79Ad3",
+      "gasUsed": "3738753",
+      "effectiveGasPriceWei": "20000000",
+      "runId": "234ce3c6-876b-4fdc-a0eb-da23499a3db5",
+      "indexedAt": "2026-10-17T15:39:38.596Z"
+    },
+    "buy": {
+      "hash": "0x6b588b4aa4291fa4511b52e65d2e9bb1fda0a45c69df3abb28c6a309d72c52b9",
+      "blockNumber": 320118941,
+      "status": 1,
+      "from": "0xe1081Be279c5C23D2F37133218d1295C6b9bb37b",
+      "to": "0x80aA1a6722Eb6F72647C0964b64d185c01A39433",
+      "gasUsed": "169987",
+      "effectiveGasPriceWei": "20044000",
+      "runId": "1b4852ee-98cf-403d-8fe3-13e89b8b4714",
+      "indexedAt": "2026-10-17T15:40:38.889Z"
+    },
+    "sell": {
+      "hash": "0x097604b54cbb81fa092079891bd2b2c36abfece588da7ce4d1e5939cd5d54b7e",
+      "blockNumber": 320119066,
+      "status": 1,
+      "from": "0xe1081Be279c5C23D2F37133218d1295C6b9bb37b",
+      "to": "0x80aA1a6722Eb6F72647C0964b64d185c01A39433",
+      "gasUsed": "126622",
+      "effectiveGasPriceWei": "20052000",
+      "runId": "a6bfc70b-33cc-4eba-9d21-3f7200919455",
+      "indexedAt": "2026-10-17T15:41:38.380Z"
+    },
+    "resolve": {
+      "hash": "0x5bc81b0c4f67984f5782f6e455ec16459acb43ac85b8355f87a8e9495dcb7752",
+      "blockNumber": 320119299,
+      "status": 1,
+      "from": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "to": "0x69440742A168635D9fA7cC0cfb0935AFFFe79Ad3",
+      "gasUsed": "62476",
+      "effectiveGasPriceWei": "20164000",
+      "runId": "3d1dc51b-6ec2-4b28-aa9f-4cd73cfdfb96",
+      "indexedAt": "2026-10-17T15:42:38.587Z"
+    },
+    "redeem": {
+      "hash": "0x780004da539acf7dbc2d58982a9fa6284d25012d2925dda7f085631c77a6ea4f",
+      "blockNumber": 320119725,
+      "status": 1,
+      "from": "0xe1081Be279c5C23D2F37133218d1295C6b9bb37b",
+      "to": "0x80aA1a6722Eb6F72647C0964b64d185c01A39433",
+      "gasUsed": "75857",
+      "effectiveGasPriceWei": "20080000",
+      "runId": "86154a63-01b2-41f0-94c8-c5b2f98117e0",
+      "indexedAt": "2026-10-17T15:44:38.529Z"
+    }
+  },
+  "scheduledRuns": [
+    {
+      "id": "03f3941f-54ec-4f04-8e19-5262eae2dae4",
+      "source_sha": "e9e4f8a76262495ee1ed2d33822be7d7f235a07c",
+      "trigger": "cron",
+      "status": "ok",
+      "started_at": "2026-10-17T15:37:37.428Z",
+      "completed_at": "2026-10-17T15:37:39.373Z",
+      "report": {
+        "block": 320118306,
+        "status": "ok",
+        "factories": [
+          {
+            "status": "ok",
+            "address": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+            "toBlock": 320112465,
+            "version": "v1",
+            "fromBlock": 320110466,
+            "processed": {
+              "trades": 0,
+              "markets": 0,
+              "lifecycle": 0,
+              "liquidity": 0,
+              "redemptions": 0,
+              "resolutions": 0
+            }
+          },
+          {
+            "status": "ok",
+            "address": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+            "toBlock": 320114465,
+            "version": "v1",
+            "fromBlock": 320112466,
+            "processed": {
+              "trades": 0,
+              "markets": 0,
+              "lifecycle": 0,
+              "liquidity": 0,
+              "redemptions": 0,
+              "resolutions": 0
+            }
+          },
+          {
+            "status": "ok",
+            "address": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+            "toBlock": 320112465,
+            "version": "v2",
+            "fromBlock": 320110466,
+            "processed": {
+              "trades": 0,
+              "markets": 0,
+              "lifecycle": 0,
+              "liquidity": 0,
+              "redemptions": 0,
+              "resolutions": 0
+            }
+          },
+          {
+            "status": "ok",
+            "address": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+            "toBlock": 320114465,
+            "version": "v2",
+            "fromBlock": 320112466,
+            "processed": {
+              "trades": 0,
+              "markets": 0,
+              "lifecycle": 0,
+              "liquidity": 0,
+              "redemptions": 0,
+              "resolutions": 0
+            }
+          }
+        ],
+        "processed": {
+          "trades": 0,
+          "markets": 0,
+          "lifecycle": 0,
+          "liquidity": 0,
+          "redemptions": 0,
+          "resolutions": 0
+        },
+        "durationMs": 1935,
+        "protocolOnly": true
+      }
+    },
+    {
+      "id": "d2b7ed03-05cf-4f0e-b405-a1fc8291fa38",
+      "source_sha": "e9e4f8a76262495ee1ed2d33822be7d7f235a07c",
+      "trigger": "cron",
+      "status": "ok",
+      "started_at": "2026-10-17T15:38:37.554Z",
+      "completed_at": "2026-10-17T15:38:39.195Z",
+      "report": {
+        "block": 320118538,
+        "status": "ok",
+        "factories": [
+          {
+            "status": "ok",
+            "address": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+            "toBlock": 320116465,
+            "version": "v1",
+            "fromBlock": 320114466,
+            "processed": {
+              "trades": 0,
+              "markets": 0,
+              "lifecycle": 0,
+              "liquidity": 0,
+              "redemptions": 0,
+              "resolutions": 0
+            }
+          },
+          {
+            "status": "ok",
+            "address": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+            "toBlock": 320118465,
+            "version": "v1",
+            "fromBlock": 320116466,
+            "processed": {
+              "trades": 0,
+              "markets": 0,
+              "lifecycle": 0,
+              "liquidity": 0,
+              "redemptions": 0,
+              "resolutions": 0
+            }
+          },
+          {
+            "status": "ok",
+            "address": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+            "toBlock": 320116465,
+            "version": "v2",
+            "fromBlock": 320114466,
+            "processed": {
+              "trades": 0,
+              "markets": 0,
+              "lifecycle": 0,
+              "liquidity": 0,
+              "redemptions": 0,
+              "resolutions": 0
+            }
+          },
+          {
+            "status": "ok",
+            "address": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+            "toBlock": 320118465,
+            "version": "v2",
+            "fromBlock": 320116466,
+            "processed": {
+              "trades": 0,
+              "markets": 0,
+              "lifecycle": 0,
+              "liquidity": 0,
+              "redemptions": 0,
+              "resolutions": 0
+            }
+          }
+        ],
+        "processed": {
+          "trades": 0,
+          "markets": 0,
+          "lifecycle": 0,
+          "liquidity": 0,
+          "redemptions": 0,
+          "resolutions": 0
+        },
+        "durationMs": 1636,
+        "protocolOnly": true
+      }
+    },
+    {
+      "id": "234ce3c6-876b-4fdc-a0eb-da23499a3db5",
+      "source_sha": "e9e4f8a76262495ee1ed2d33822be7d7f235a07c",
+      "trigger": "cron",
+      "status": "ok",
+      "started_at": "2026-10-17T15:39:37.500Z",
+      "completed_at": "2026-10-17T15:39:38.596Z",
+      "report": {
+        "block": 320118761,
+        "status": "ok",
+        "factories": [
+          {
+            "status": "ok",
+            "address": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+            "toBlock": 320118761,
+            "version": "v1",
+            "fromBlock": 320118466,
+            "processed": {
+              "trades": 0,
+              "markets": 1,
+              "lifecycle": 0,
+              "liquidity": 1,
+              "redemptions": 0,
+              "resolutions": 0
+            }
+          },
+          {
+            "status": "ok",
+            "address": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+            "toBlock": 320118761,
+            "version": "v2",
+            "fromBlock": 320118466,
+            "processed": {
+              "trades": 0,
+              "markets": 0,
+              "lifecycle": 0,
+              "liquidity": 0,
+              "redemptions": 0,
+              "resolutions": 0
+            }
+          }
+        ],
+        "processed": {
+          "trades": 0,
+          "markets": 1,
+          "lifecycle": 0,
+          "liquidity": 1,
+          "redemptions": 0,
+          "resolutions": 0
+        },
+        "durationMs": 1092,
+        "protocolOnly": true
+      }
+    },
+    {
+      "id": "1b4852ee-98cf-403d-8fe3-13e89b8b4714",
+      "source_sha": "e9e4f8a76262495ee1ed2d33822be7d7f235a07c",
+      "trigger": "cron",
+      "status": "ok",
+      "started_at": "2026-10-17T15:40:37.647Z",
+      "completed_at": "2026-10-17T15:40:38.889Z",
+      "report": {
+        "block": 320118989,
+        "status": "ok",
+        "factories": [
+          {
+            "status": "ok",
+            "address": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+            "toBlock": 320118989,
+            "version": "v1",
+            "fromBlock": 320118762,
+            "processed": {
+              "trades": 1,
+              "markets": 0,
+              "lifecycle": 0,
+              "liquidity": 0,
+              "redemptions": 0,
+              "resolutions": 0
+            }
+          },
+          {
+            "status": "ok",
+            "address": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+            "toBlock": 320118989,
+            "version": "v2",
+            "fromBlock": 320118762,
+            "processed": {
+              "trades": 0,
+              "markets": 0,
+              "lifecycle": 0,
+              "liquidity": 0,
+              "redemptions": 0,
+              "resolutions": 0
+            }
+          }
+        ],
+        "processed": {
+          "trades": 1,
+          "markets": 0,
+          "lifecycle": 0,
+          "liquidity": 0,
+          "redemptions": 0,
+          "resolutions": 0
+        },
+        "durationMs": 1237,
+        "protocolOnly": true
+      }
+    },
+    {
+      "id": "a6bfc70b-33cc-4eba-9d21-3f7200919455",
+      "source_sha": "e9e4f8a76262495ee1ed2d33822be7d7f235a07c",
+      "trigger": "cron",
+      "status": "ok",
+      "started_at": "2026-10-17T15:41:37.275Z",
+      "completed_at": "2026-10-17T15:41:38.380Z",
+      "report": {
+        "block": 320119216,
+        "status": "ok",
+        "factories": [
+          {
+            "status": "ok",
+            "address": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+            "toBlock": 320119216,
+            "version": "v1",
+            "fromBlock": 320118990,
+            "processed": {
+              "trades": 1,
+              "markets": 0,
+              "lifecycle": 0,
+              "liquidity": 0,
+              "redemptions": 0,
+              "resolutions": 0
+            }
+          },
+          {
+            "status": "ok",
+            "address": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+            "toBlock": 320119216,
+            "version": "v2",
+            "fromBlock": 320118990,
+            "processed": {
+              "trades": 0,
+              "markets": 0,
+              "lifecycle": 0,
+              "liquidity": 0,
+              "redemptions": 0,
+              "resolutions": 0
+            }
+          }
+        ],
+        "processed": {
+          "trades": 1,
+          "markets": 0,
+          "lifecycle": 0,
+          "liquidity": 0,
+          "redemptions": 0,
+          "resolutions": 0
+        },
+        "durationMs": 1101,
+        "protocolOnly": true
+      }
+    },
+    {
+      "id": "3d1dc51b-6ec2-4b28-aa9f-4cd73cfdfb96",
+      "source_sha": "e9e4f8a76262495ee1ed2d33822be7d7f235a07c",
+      "trigger": "cron",
+      "status": "ok",
+      "started_at": "2026-10-17T15:42:37.466Z",
+      "completed_at": "2026-10-17T15:42:38.587Z",
+      "report": {
+        "block": 320119448,
+        "status": "ok",
+        "factories": [
+          {
+            "status": "ok",
+            "address": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+            "toBlock": 320119448,
+            "version": "v1",
+            "fromBlock": 320119217,
+            "processed": {
+              "trades": 0,
+              "markets": 0,
+              "lifecycle": 0,
+              "liquidity": 0,
+              "redemptions": 0,
+              "resolutions": 1
+            }
+          },
+          {
+            "status": "ok",
+            "address": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+            "toBlock": 320119448,
+            "version": "v2",
+            "fromBlock": 320119217,
+            "processed": {
+              "trades": 0,
+              "markets": 0,
+              "lifecycle": 0,
+              "liquidity": 0,
+              "redemptions": 0,
+              "resolutions": 0
+            }
+          }
+        ],
+        "processed": {
+          "trades": 0,
+          "markets": 0,
+          "lifecycle": 0,
+          "liquidity": 0,
+          "redemptions": 0,
+          "resolutions": 1
+        },
+        "durationMs": 1117,
+        "protocolOnly": true
+      }
+    },
+    {
+      "id": "5059c1a5-5cd2-4aae-a875-42cd39059e86",
+      "source_sha": "e9e4f8a76262495ee1ed2d33822be7d7f235a07c",
+      "trigger": "cron",
+      "status": "ok",
+      "started_at": "2026-10-17T15:43:37.248Z",
+      "completed_at": "2026-10-17T15:43:38.271Z",
+      "report": {
+        "block": 320119681,
+        "status": "ok",
+        "factories": [
+          {
+            "status": "ok",
+            "address": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+            "toBlock": 320119681,
+            "version": "v1",
+            "fromBlock": 320119449,
+            "processed": {
+              "trades": 0,
+              "markets": 0,
+              "lifecycle": 0,
+              "liquidity": 0,
+              "redemptions": 0,
+              "resolutions": 0
+            }
+          },
+          {
+            "status": "ok",
+            "address": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+            "toBlock": 320119681,
+            "version": "v2",
+            "fromBlock": 320119449,
+            "processed": {
+              "trades": 0,
+              "markets": 0,
+              "lifecycle": 0,
+              "liquidity": 0,
+              "redemptions": 0,
+              "resolutions": 0
+            }
+          }
+        ],
+        "processed": {
+          "trades": 0,
+          "markets": 0,
+          "lifecycle": 0,
+          "liquidity": 0,
+          "redemptions": 0,
+          "resolutions": 0
+        },
+        "durationMs": 1018,
+        "protocolOnly": true
+      }
+    },
+    {
+      "id": "86154a63-01b2-41f0-94c8-c5b2f98117e0",
+      "source_sha": "e9e4f8a76262495ee1ed2d33822be7d7f235a07c",
+      "trigger": "cron",
+      "status": "ok",
+      "started_at": "2026-10-17T15:44:37.476Z",
+      "completed_at": "2026-10-17T15:44:38.529Z",
+      "report": {
+        "block": 320119911,
+        "status": "ok",
+        "factories": [
+          {
+            "status": "ok",
+            "address": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+            "toBlock": 320119911,
+            "version": "v1",
+            "fromBlock": 320119682,
+            "processed": {
+              "trades": 0,
+              "markets": 0,
+              "lifecycle": 0,
+              "liquidity": 0,
+              "redemptions": 1,
+              "resolutions": 0
+            }
+          },
+          {
+            "status": "ok",
+            "address": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+            "toBlock": 320119911,
+            "version": "v2",
+            "fromBlock": 320119682,
+            "processed": {
+              "trades": 0,
+              "markets": 0,
+              "lifecycle": 0,
+              "liquidity": 0,
+              "redemptions": 0,
+              "resolutions": 0
+            }
+          }
+        ],
+        "processed": {
+          "trades": 0,
+          "markets": 0,
+          "lifecycle": 0,
+          "liquidity": 0,
+          "redemptions": 1,
+          "resolutions": 0
+        },
+        "durationMs": 1049,
+        "protocolOnly": true
+      }
+    },
+    {
+      "id": "6a653d59-7d74-4e02-bda8-d7692b08845c",
+      "source_sha": "e9e4f8a76262495ee1ed2d33822be7d7f235a07c",
+      "trigger": "cron",
+      "status": "ok",
+      "started_at": "2026-10-17T15:45:37.209Z",
+      "completed_at": "2026-10-17T15:45:38.336Z",
+      "report": {
+        "block": 320120139,
+        "status": "ok",
+        "factories": [
+          {
+            "status": "ok",
+            "address": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+            "toBlock": 320120139,
+            "version": "v1",
+            "fromBlock": 320119912,
+            "processed": {
+              "trades": 0,
+              "markets": 0,
+              "lifecycle": 0,
+              "liquidity": 0,
+              "redemptions": 0,
+              "resolutions": 0
+            }
+          },
+          {
+            "status": "ok",
+            "address": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+            "toBlock": 320120139,
+            "version": "v2",
+            "fromBlock": 320119912,
+            "processed": {
+              "trades": 0,
+              "markets": 0,
+              "lifecycle": 0,
+              "liquidity": 0,
+              "redemptions": 0,
+              "resolutions": 0
+            }
+          }
+        ],
+        "processed": {
+          "trades": 0,
+          "markets": 0,
+          "lifecycle": 0,
+          "liquidity": 0,
+          "redemptions": 0,
+          "resolutions": 0
+        },
+        "durationMs": 1121,
+        "protocolOnly": true
+      }
+    }
+  ],
+  "closedPoolRedemption": {
+    "resolutionObservedAt": "2026-10-17T15:42:55.881Z",
+    "redemptionSubmittedAt": "2026-10-17T15:43:46.165Z",
+    "redemptionIndexedAt": "2026-10-17T15:44:38.529Z",
+    "verified": true
+  },
+  "idlePass": {
+    "runIds": [
+      "6a653d59-7d74-4e02-bda8-d7692b08845c"
+    ],
+    "tradeRows": 2,
+    "redemptionRows": 1,
+    "noNewEvents": true
+  },
+  "ledger": {
+    "checkedAt": "2026-10-17T15:45:05.586Z",
+    "points": [
+      {
+        "username": "pronos",
+        "balance": "500.000000",
+        "points_trade_count": "0"
+      }
+    ],
+    "trades": [
+      {
+        "side": "buy",
+        "shares_amt": "9.523390",
+        "collateral_amt": "5.000000",
+        "tx_hash": "0x6b588b4aa4291fa4511b52e65d2e9bb1fda0a45c69df3abb28c6a309d72c52b9",
+        "block_number": "320118941",
+        "log_index": 10
+      },
+      {
+        "side": "sell",
+        "shares_amt": "1.000000",
+        "collateral_amt": "0.508851",
+        "tx_hash": "0x097604b54cbb81fa092079891bd2b2c36abfece588da7ce4d1e5939cd5d54b7e",
+        "block_number": "320119066",
+        "log_index": 9
+      }
+    ],
+    "redemptions": [
+      {
+        "shares": "8.523390",
+        "payout": "8.523390",
+        "tx_hash": "0x780004da539acf7dbc2d58982a9fa6284d25012d2925dda7f085631c77a6ea4f",
+        "block_number": "320119725",
+        "log_index": 64
+      }
+    ],
+    "factoryCheckpoints": [
+      {
+        "chain_id": 421614,
+        "factory_address": "0x01117f713868d53b4c89b049501ab35a4d0f7a12",
+        "last_block": "320050561"
+      },
+      {
+        "chain_id": 421614,
+        "factory_address": "0x5190065138397a38d74b90110e80448a1ba17122",
+        "last_block": "320050561"
+      },
+      {
+        "chain_id": 421614,
+        "factory_address": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+        "last_block": "320119911"
+      },
+      {
+        "chain_id": 421614,
+        "factory_address": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+        "last_block": "320119911"
+      }
+    ],
+    "legacyCheckpointsUnchanged": true
+  },
+  "chainFinal": {
+    "checkedAt": "2026-10-17T15:44:05.817Z",
+    "block": 320119787,
+    "resolved": true,
+    "outcome": 1,
+    "yesShares": "0",
+    "noShares": "0",
+    "userMxnp": "536.960738",
+    "operationsMxnp": "49998800.0",
+    "totalSupplyMxnp": "50000000.0",
+    "userEth": "0.000471538780598",
+    "operationsEth": "0.000923965173936",
+    "receipts": {
+      "creation": {
+        "hash": "0x893c269d99e5ba03a592d527ede344a439464ca8008b9e784fa4e8eb14331c6e",
+        "blockNumber": 320118596,
+        "status": 1,
+        "from": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+        "to": "0x69440742A168635D9fA7cC0cfb0935AFFFe79Ad3",
+        "gasUsed": "3738753",
+        "effectiveGasPriceWei": "20000000"
+      },
+      "buy": {
+        "hash": "0x6b588b4aa4291fa4511b52e65d2e9bb1fda0a45c69df3abb28c6a309d72c52b9",
+        "blockNumber": 320118941,
+        "status": 1,
+        "from": "0xe1081Be279c5C23D2F37133218d1295C6b9bb37b",
+        "to": "0x80aA1a6722Eb6F72647C0964b64d185c01A39433",
+        "gasUsed": "169987",
+        "effectiveGasPriceWei": "20044000"
+      },
+      "sell": {
+        "hash": "0x097604b54cbb81fa092079891bd2b2c36abfece588da7ce4d1e5939cd5d54b7e",
+        "blockNumber": 320119066,
+        "status": 1,
+        "from": "0xe1081Be279c5C23D2F37133218d1295C6b9bb37b",
+        "to": "0x80aA1a6722Eb6F72647C0964b64d185c01A39433",
+        "gasUsed": "126622",
+        "effectiveGasPriceWei": "20052000"
+      },
+      "resolve": {
+        "hash": "0x5bc81b0c4f67984f5782f6e455ec16459acb43ac85b8355f87a8e9495dcb7752",
+        "blockNumber": 320119299,
+        "status": 1,
+        "from": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+        "to": "0x69440742A168635D9fA7cC0cfb0935AFFFe79Ad3",
+        "gasUsed": "62476",
+        "effectiveGasPriceWei": "20164000"
+      },
+      "redeem": {
+        "hash": "0x780004da539acf7dbc2d58982a9fa6284d25012d2925dda7f085631c77a6ea4f",
+        "blockNumber": 320119725,
+        "status": 1,
+        "from": "0xe1081Be279c5C23D2F37133218d1295C6b9bb37b",
+        "to": "0x80aA1a6722Eb6F72647C0964b64d185c01A39433",
+        "gasUsed": "75857",
+        "effectiveGasPriceWei": "20080000"
+      }
+    }
+  },
+  "adapter": {
+    "checkedAt": "2026-10-17T15:45:06.162Z",
+    "deployment": {
+      "id": "dpl_FAx5oMx5247Bbbx3z1RbktRm37o3",
+      "sha": "e9e4f8a76262495ee1ed2d33822be7d7f235a07c",
+      "state": "READY",
+      "aliases": [
+        "pronos-git-onchain-sepolia-mezcalpapieth-jpgs-projects.vercel.app"
+      ],
+      "target": null
+    },
+    "catalog": {
+      "activeIds": [],
+      "resolved": [
+        {
+          "id": 360638,
+          "status": "resolved",
+          "outcome": 0,
+          "protocolMarketId": 5,
+          "chainId": 421614
+        },
+        {
+          "id": 360637,
+          "status": "resolved",
+          "outcome": 0,
+          "protocolMarketId": 4,
+          "chainId": 421614
+        },
+        {
+          "id": 360636,
+          "status": "resolved",
+          "outcome": 0,
+          "protocolMarketId": 3,
+          "chainId": 421614
+        }
+      ],
+      "pointsMarketCount": 38
+    },
+    "delegation": {
+      "active": true,
+      "enabled": true,
+      "persistent": true,
+      "simulated": false,
+      "needsRefresh": false,
+      "policyId": "e7be8452-9c32-4048-9b8f-466bfc3f14d2",
+      "expiresAt": null,
+      "dailyCapMxnb": null,
+      "dailyCapEnforced": false,
+      "authorizedAt": "2026-10-17T15:40:02.372Z",
+      "coveredPools": [
+        "0x1aca9bc8ce8b8f2eef41fa4f4b39ee8a7bb0d6e7",
+        "0x80aa1a6722eb6f72647c0964b64d185c01a39433",
+        "0xcb3149d9b41870f092162ab15a676a39d5058c17"
+      ],
+      "poolCount": 3
+    },
+    "readiness": {
+      "ok": true,
+      "warnings": [],
+      "launch": {
+        "ready": true,
+        "blockerCount": 0,
+        "reviewCount": 2,
+        "blockers": [],
+        "reviews": [
+          {
+            "id": "cre_webhook_dry_run",
+            "title": "CRE sigue en modo revisión",
+            "detail": "Sin secreto, Chainlink CRE no puede enviar resoluciones al webhook.",
+            "fix": "Set CRE_RESOLUTION_WEBHOOK_SECRET before enabling CRE workflows"
+          },
+          {
+            "id": "gas_sponsorship_unset",
+            "title": "Gas sponsorship no configurado",
+            "detail": "Turnkey quita popups, pero no cubre gas de Arbitrum Sepolia para el usuario.",
+            "fix": "Set GAS_SPONSORSHIP_ENABLED=true only after relayer/paymaster/funded-wallet support exists"
+          }
+        ],
+        "nextSteps": [
+          "Set CRE_RESOLUTION_WEBHOOK_SECRET before enabling CRE workflows",
+          "Set GAS_SPONSORSHIP_ENABLED=true only after relayer/paymaster/funded-wallet support exists"
+        ]
+      }
+    },
+    "account": {
+      "username": "pronos",
+      "pointsBalance": 500,
+      "balance": {
+        "mode": "onchain",
+        "chainId": 421614,
+        "symbol": "MXNP",
+        "balance": "536.960738"
+      },
+      "openPositions": 0,
+      "realizedPnl": 36.960738
+    },
+    "unauthenticatedStatus": 401,
+    "servedEntry": {
+      "path": "/points/assets/index-DCFxPVA9.js",
+      "sha256": "277f1e523c5555990b771d7c5b2b45700d021f72c2070acf81ca7966f2f8598f",
+      "correctedSdkLookup": true,
+      "authorizationAndRevocationRoutes": true
+    },
+    "liveBrowserClickThroughVerified": false
+  },
+  "readCheckpoints": [
+    {
+      "checkedAt": "2026-10-17T15:40:04.138Z",
+      "balance": {
+        "mode": "onchain",
+        "chainId": 421614,
+        "symbol": "MXNP",
+        "balance": "532.928497"
+      },
+      "pointsBalance": 500,
+      "summary": {
+        "totalPositions": 0,
+        "activePositions": 0,
+        "totalInvested": 0,
+        "currentValue": 0,
+        "pnl": 0,
+        "unrealizedPnl": 0,
+        "realizedPnl": 32.928497,
+        "totalPnl": 32.92849699999999,
+        "marketsTotal": 2,
+        "marketsWon": 2,
+        "marketsLost": 0,
+        "marketsOpen": 0,
+        "marketsExited": 0,
+        "marketsPending": 0,
+        "marketsCanceled": 0,
+        "marketsCycleClosed": 0
+      },
+      "positions": []
+    },
+    {
+      "checkedAt": "2026-10-17T15:43:06.440Z",
+      "balance": {
+        "mode": "onchain",
+        "chainId": 421614,
+        "symbol": "MXNP",
+        "balance": "528.437348"
+      },
+      "pointsBalance": 500,
+      "summary": {
+        "totalPositions": 1,
+        "activePositions": 0,
+        "totalInvested": 4.474976872731244,
+        "currentValue": 8.52339,
+        "pnl": 4.032240999999999,
+        "unrealizedPnl": 4.048413127268756,
+        "realizedPnl": 32.91232487273125,
+        "totalPnl": 36.96073799999999,
+        "marketsTotal": 3,
+        "marketsWon": 3,
+        "marketsLost": 0,
+        "marketsOpen": 0,
+        "marketsExited": 0,
+        "marketsPending": 0,
+        "marketsCanceled": 0,
+        "marketsCycleClosed": 0
+      },
+      "positions": [
+        {
+          "marketId": 360638,
+          "shares": 8.52339,
+          "canRedeem": true,
+          "status": "resolved"
+        }
+      ]
+    }
+  ],
+  "delegation": [
+    {
+      "action": "status",
+      "checkedAt": "2026-10-17T15:41:26.091Z",
+      "usesNormalFrontendClient": true,
+      "ownerCredential": "real OTP-bound P256 key; SDK server transport for scripted verification",
+      "rootQuorumUnchanged": true,
+      "result": {
+        "active": true,
+        "enabled": true,
+        "persistent": true,
+        "simulated": false,
+        "needsRefresh": false,
+        "policyId": "e7be8452-9c32-4048-9b8f-466bfc3f14d2",
+        "expiresAt": null,
+        "dailyCapMxnb": null,
+        "dailyCapEnforced": false,
+        "authorizedAt": "2026-10-17T15:40:02.372Z",
+        "coveredPools": [
+          "0x1aca9bc8ce8b8f2eef41fa4f4b39ee8a7bb0d6e7",
+          "0x80aa1a6722eb6f72647c0964b64d185c01a39433",
+          "0xcb3149d9b41870f092162ab15a676a39d5058c17"
+        ],
+        "poolCount": 3
+      },
+      "status": {
+        "active": true,
+        "enabled": true,
+        "persistent": true,
+        "simulated": false,
+        "needsRefresh": false,
+        "policyId": "e7be8452-9c32-4048-9b8f-466bfc3f14d2",
+        "expiresAt": null,
+        "dailyCapMxnb": null,
+        "dailyCapEnforced": false,
+        "authorizedAt": "2026-10-17T15:40:02.372Z",
+        "coveredPools": [
+          "0x1aca9bc8ce8b8f2eef41fa4f4b39ee8a7bb0d6e7",
+          "0x80aa1a6722eb6f72647c0964b64d185c01a39433",
+          "0xcb3149d9b41870f092162ab15a676a39d5058c17"
+        ],
+        "poolCount": 3
+      }
+    }
+  ],
+  "checks": {
+    "focusedTestsPassed": 25,
+    "workerBuildPassed": true,
+    "scheduledEventVerification": true,
+    "manualIndexingUsed": false,
+    "browserClickThroughVerified": false
+  },
+  "boundaries": {
+    "checkedAt": "2026-10-17T15:46:29.235Z",
+    "pointbreak": {
+      "pointbreak": "47aa9e19115d64bc36a2684e5eeb685caef117ba",
+      "origin/pointbreak": "47aa9e19115d64bc36a2684e5eeb685caef117ba",
+      "remote": "47aa9e19115d64bc36a2684e5eeb685caef117ba"
+    },
+    "production": {
+      "id": "dpl_C4bVYurgBRwVYqZAJJChri7uQpzz",
+      "sha": "47aa9e19115d64bc36a2684e5eeb685caef117ba",
+      "state": "READY",
+      "aliases": [
+        "pronos.io",
+        "www.pronos.io",
+        "pronos-chi.vercel.app",
+        "pronos-mezcalpapieth-jpgs-projects.vercel.app"
+      ]
+    },
+    "outsideBranchEnvironmentRecordsUnchanged": 100
+  },
+  "limitations": [
+    "This worker indexes resolution events; it does not decide or submit outcomes.",
+    "App previews and this separate scheduler have independent deployments. Redeploy the scheduler after shared indexer changes, and remove its cron when retiring this preview.",
+    "Live V2 trade, cancellation/refund and correction rehearsals remain separate roadmap work."
+  ]
+}
