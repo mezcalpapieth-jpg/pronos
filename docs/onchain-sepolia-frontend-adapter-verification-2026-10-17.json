@@ -1,0 +1,329 @@
+{
+  "schemaVersion": 1,
+  "scope": {
+    "branch": "onchain-sepolia",
+    "environment": "preview",
+    "chainId": 421614,
+    "pointbreakChanged": false,
+    "productionChanged": false,
+    "settingsChanged": false
+  },
+  "applicationCommit": "a653827061635eb3ec3e82ae275b6a6e7905c6ae",
+  "deployment": {
+    "id": "dpl_H5Nfb6heufUDbs9cmeXFhzG5SopA",
+    "url": "https://pronos-hllqqwoyy-mezcalpapieth-jpgs-projects.vercel.app",
+    "state": "READY",
+    "target": "preview",
+    "gitBranch": "onchain-sepolia",
+    "gitSha": "a653827061635eb3ec3e82ae275b6a6e7905c6ae",
+    "aliases": [
+      "pronos-git-onchain-sepolia-mezcalpapieth-jpgs-projects.vercel.app"
+    ]
+  },
+  "productionBefore": {
+    "id": "dpl_C4bVYurgBRwVYqZAJJChri7uQpzz",
+    "url": "https://pronos-fw1lqtni2-mezcalpapieth-jpgs-projects.vercel.app",
+    "state": "READY",
+    "target": "production",
+    "gitBranch": "pointbreak",
+    "gitSha": "47aa9e19115d64bc36a2684e5eeb685caef117ba",
+    "aliases": [
+      "pronos.io",
+      "www.pronos.io",
+      "pronos-chi.vercel.app",
+      "pronos-mezcalpapieth-jpgs-projects.vercel.app"
+    ]
+  },
+  "productionAfter": {
+    "id": "dpl_C4bVYurgBRwVYqZAJJChri7uQpzz",
+    "url": "https://pronos-fw1lqtni2-mezcalpapieth-jpgs-projects.vercel.app",
+    "state": "READY",
+    "target": "production",
+    "gitBranch": "pointbreak",
+    "gitSha": "47aa9e19115d64bc36a2684e5eeb685caef117ba",
+    "aliases": [
+      "pronos.io",
+      "www.pronos.io",
+      "pronos-chi.vercel.app",
+      "pronos-mezcalpapieth-jpgs-projects.vercel.app"
+    ]
+  },
+  "pointbreakRefs": {
+    "local": "47aa9e19115d64bc36a2684e5eeb685caef117ba",
+    "tracking": "47aa9e19115d64bc36a2684e5eeb685caef117ba",
+    "remote": "47aa9e19115d64bc36a2684e5eeb685caef117ba"
+  },
+  "validation": {
+    "focusedTests": {
+      "passed": 79,
+      "failed": 0
+    },
+    "pointsBuild": "passed",
+    "mvpBuild": "passed",
+    "diffCheck": "passed",
+    "browserFixture": "buy, partial sell, resolve, redeem, portfolio/history/detail and independent Points mode passed with injected simulated data"
+  },
+  "limits": {
+    "realTransactionsSubmitted": 0,
+    "privateAuthenticatedReadsVerifiedLive": false,
+    "directProtectedPreviewBrowserVerified": false,
+    "shareAccessLinkCreated": false,
+    "protectionChanged": false,
+    "shareAccessRequest": "Automatic approval review rejected creating a shareable authentication link; checks completed with the existing development identity instead.",
+    "userDelegationGranted": false,
+    "userWalletFunded": false,
+    "tournamentResetPerformed": false
+  },
+  "next": "Consenting user's own live balance/portfolio, delegation and funding, followed by a signed-wallet rehearsal and indexer readback.",
+  "verifiedAt": "2026-10-17T13:49:35.791Z",
+  "liveAdapterVerification": {
+    "checkedAt": "2026-10-17T13:49:35.791Z",
+    "origin": "https://pronos-hllqqwoyy-mezcalpapieth-jpgs-projects.vercel.app",
+    "config": {
+      "enabled": true,
+      "chainId": 421614,
+      "symbol": "MXNP"
+    },
+    "market": {
+      "id": 360636,
+      "protocolMarketId": 3,
+      "chainMarketId": "0",
+      "pool": "0x1aca9bc8ce8b8f2eef41fa4f4b39ee8a7bb0d6e7",
+      "status": "active",
+      "executionReady": true,
+      "prices": [
+        0.5,
+        0.5
+      ]
+    },
+    "buyQuote": {
+      "collateral": 50,
+      "fee": 1.25,
+      "feePct": 2.5,
+      "sharesOut": 93.169134,
+      "avgPrice": 0.5232419569339348,
+      "payout": 93.169134,
+      "profit": 43.169134,
+      "priceBefore": 0.5,
+      "priceAfter": null,
+      "currentPrice": 0.5,
+      "postTradePrice": null,
+      "priceImpactPts": null,
+      "pricesBefore": [
+        0.5,
+        0.5
+      ],
+      "pricesAfter": null
+    },
+    "sellQuote": {
+      "shares": 10,
+      "gross": 4.850625,
+      "fee": 0,
+      "feePct": 0,
+      "collateralOut": 4.850625,
+      "priceBefore": 0.5,
+      "priceAfter": null,
+      "currentPrice": 0.5,
+      "postTradePrice": null,
+      "priceImpactPts": null,
+      "pricesBefore": [
+        0.5,
+        0.5
+      ],
+      "pricesAfter": null
+    },
+    "pricePoints": 1,
+    "tradeTapeCount": 0,
+    "activityBuckets": 0,
+    "pointsModeMarketCount": 20,
+    "authenticatedPrivateReads": "not exercised; unauthenticated requests correctly rejected",
+    "transactionsSubmitted": 0,
+    "chunkChecks": [
+      {
+        "filename": "PointsBuyModal-BoZz1roL.js",
+        "marker": "minSharesOut"
+      },
+      {
+        "filename": "PointsMarketDetail-BaqUh_V0.js",
+        "marker": "executionReady"
+      },
+      {
+        "filename": "PointsPortfolio-BMBtjX8M.js",
+        "marker": "claimablePayout"
+      }
+    ],
+    "checks": [
+      {
+        "path": "/api/points/onchain?action=config",
+        "method": "GET",
+        "status": 200,
+        "elapsedMs": 231,
+        "cacheControl": "private, no-store"
+      },
+      {
+        "path": "/api/points/markets?status=active&featured=all&limit=250&mode=onchain&chain_id=421614",
+        "method": "GET",
+        "status": 200,
+        "elapsedMs": 100,
+        "cacheControl": "public, max-age=10"
+      },
+      {
+        "path": "/api/points/onchain?action=markets&ids=360636",
+        "method": "GET",
+        "status": 200,
+        "elapsedMs": 159,
+        "cacheControl": "private, no-store"
+      },
+      {
+        "path": "/api/points/market?id=360636",
+        "method": "GET",
+        "status": 200,
+        "elapsedMs": 237,
+        "cacheControl": "no-store, no-cache"
+      },
+      {
+        "path": "/api/points/onchain?action=markets&ids=360636",
+        "method": "GET",
+        "status": 200,
+        "elapsedMs": 195,
+        "cacheControl": "private, no-store"
+      },
+      {
+        "path": "/api/points/onchain?action=markets&ids=360636",
+        "method": "GET",
+        "status": 200,
+        "elapsedMs": 153,
+        "cacheControl": "private, no-store"
+      },
+      {
+        "path": "/api/protocol/quote-buy",
+        "method": "POST",
+        "status": 200,
+        "elapsedMs": 299,
+        "cacheControl": "no-store, no-cache",
+        "body": {
+          "marketId": 3,
+          "outcomeIndex": 0,
+          "collateral": 50
+        }
+      },
+      {
+        "path": "/api/points/onchain?action=markets&ids=360636",
+        "method": "GET",
+        "status": 200,
+        "elapsedMs": 162,
+        "cacheControl": "private, no-store"
+      },
+      {
+        "path": "/api/protocol/quote-sell",
+        "method": "POST",
+        "status": 200,
+        "elapsedMs": 286,
+        "cacheControl": "no-store, no-cache",
+        "body": {
+          "marketId": 3,
+          "outcomeIndex": 0,
+          "shares": 10
+        }
+      },
+      {
+        "path": "/api/points/onchain?action=markets&ids=360636",
+        "method": "GET",
+        "status": 200,
+        "elapsedMs": 165,
+        "cacheControl": "private, no-store"
+      },
+      {
+        "path": "/api/points/onchain?action=prices&ids=360636&hours=24&outcome=0&limit=200",
+        "method": "GET",
+        "status": 200,
+        "elapsedMs": 166,
+        "cacheControl": "private, no-store"
+      },
+      {
+        "path": "/api/points/onchain?action=markets&ids=360636",
+        "method": "GET",
+        "status": 200,
+        "elapsedMs": 145,
+        "cacheControl": "private, no-store"
+      },
+      {
+        "path": "/api/points/onchain?action=tape&ids=360636&hours=168&limit=20",
+        "method": "GET",
+        "status": 200,
+        "elapsedMs": 151,
+        "cacheControl": "private, no-store"
+      },
+      {
+        "path": "/api/points/onchain?action=markets&ids=360636",
+        "method": "GET",
+        "status": 200,
+        "elapsedMs": 144,
+        "cacheControl": "private, no-store"
+      },
+      {
+        "path": "/api/points/onchain?action=activity&ids=360636&hours=24&outcome=all",
+        "method": "GET",
+        "status": 200,
+        "elapsedMs": 153,
+        "cacheControl": "private, no-store"
+      },
+      {
+        "path": "/api/points/onchain?action=balance",
+        "method": "GET",
+        "status": 401,
+        "elapsedMs": 130,
+        "cacheControl": "private, no-store"
+      },
+      {
+        "path": "/api/points/onchain?action=portfolio",
+        "method": "GET",
+        "status": 401,
+        "elapsedMs": 131,
+        "cacheControl": "private, no-store"
+      },
+      {
+        "path": "/api/points/markets?status=active&featured=all&limit=20&mode=points",
+        "method": "GET",
+        "status": 200,
+        "elapsedMs": 30,
+        "cacheControl": "public, max-age=10"
+      },
+      {
+        "path": "/points",
+        "method": "GET",
+        "status": 200,
+        "elapsedMs": 146,
+        "cacheControl": "public, max-age=0, must-revalidate"
+      },
+      {
+        "path": "/points/assets/index-CIQVOCHl.js",
+        "method": "GET",
+        "status": 200,
+        "elapsedMs": 297,
+        "cacheControl": "no-store, no-cache"
+      },
+      {
+        "path": "/points/assets/PointsBuyModal-BoZz1roL.js",
+        "method": "GET",
+        "status": 200,
+        "elapsedMs": 147,
+        "cacheControl": "no-store, no-cache"
+      },
+      {
+        "path": "/points/assets/PointsMarketDetail-BaqUh_V0.js",
+        "method": "GET",
+        "status": 200,
+        "elapsedMs": 279,
+        "cacheControl": "no-store, no-cache"
+      },
+      {
+        "path": "/points/assets/PointsPortfolio-BMBtjX8M.js",
+        "method": "GET",
+        "status": 200,
+        "elapsedMs": 279,
+        "cacheControl": "no-store, no-cache"
+      }
+    ]
+  }
+}
