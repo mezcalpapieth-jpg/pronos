@@ -15,13 +15,13 @@ export function buildSellPreview(position = {}, quote = {}) {
   const salePnl = round2(collateralOut - costBasis);
   const slippageMxnp = round2(collateralOut - markValue);
   const slippagePct = markValue > 0 ? round2((slippageMxnp / markValue) * 100) : 0;
-  const priceBefore = Number(quote.priceBefore);
-  const priceAfter = Number(quote.priceAfter);
+  const priceBefore = quote.priceBefore == null ? NaN : Number(quote.priceBefore);
+  const priceAfter = quote.priceAfter == null ? NaN : Number(quote.priceAfter);
   const priceImpactPts = round2(quote.priceImpactPts);
 
   return {
-    shares: round2(shares),
-    maxShares: round2(maxShares),
+    shares: position.mode === 'onchain' ? Math.floor(shares * 1e6 + 1e-7) / 1e6 : round2(shares),
+    maxShares: position.mode === 'onchain' ? maxShares : round2(maxShares),
     sharePct: maxShares > 0 ? round2((shares / maxShares) * 100) : 100,
     costBasis,
     markValue,
@@ -30,10 +30,12 @@ export function buildSellPreview(position = {}, quote = {}) {
     salePnl,
     slippageMxnp,
     slippagePct,
-    priceBeforePct: Number.isFinite(priceBefore) ? round2(priceBefore * 100) : 0,
-    priceAfterPct: Number.isFinite(priceAfter) ? round2(priceAfter * 100) : 0,
+    priceBeforePct: Number.isFinite(priceBefore) ? round2(priceBefore * 100) : null,
+    priceAfterPct: Number.isFinite(priceAfter) ? round2(priceAfter * 100) : null,
     priceImpactPts,
-    minCollateralOut: collateralOut > 0 ? round2(collateralOut * 0.99) : 0,
+    minCollateralOut: position.mode === 'onchain'
+      ? Math.floor(Math.max(0, Number(quote.collateralOut) || 0) * 0.99 * 1e6) / 1e6
+      : collateralOut > 0 ? round2(collateralOut * 0.99) : 0,
   };
 }
 

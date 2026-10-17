@@ -234,7 +234,7 @@ export default function PointsSellPreviewModal({ state, onClose, onConfirm, onSh
                 IMPACTO POR LIQUIDEZ
               </div>
               <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                La venta mueve el mercado de {fmt(preview.priceBeforePct)}% a {fmt(preview.priceAfterPct)}%.
+                {preview.priceBeforePct != null && preview.priceAfterPct != null && <>La venta mueve el mercado de {fmt(preview.priceBeforePct)}% a {fmt(preview.priceAfterPct)}%. </>}
                 {' '}Recibes {signedFmt(preview.slippageMxnp)} MXNP contra el valor marcado
                 {' '}({signedFmt(preview.slippagePct)}%).
               </div>

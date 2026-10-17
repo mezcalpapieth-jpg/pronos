@@ -13,6 +13,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
+import { useExecutionBalance, usePointsExecution } from '../lib/PointsExecution.jsx';
 import { useLang, useT } from '@app/lib/i18n.js';
 import { historyPnlValue } from '../lib/historyPnl.js';
 import { buildSellPreview, normalizeSellShares } from '../lib/sellPreview.js';
@@ -42,12 +43,12 @@ import { emitPointsRefresh, onPointsRefresh } from '../lib/pointsLiveRefresh.js'
 function fmt(n) {
   const v = Number(n) || 0;
   const sign = v >= 0 ? '' : '-';
-  return `${sign}${Math.abs(v).toFixed(2)}`;
+  return `${sign}${(Math.round((Math.abs(v) + 1e-9) * 100) / 100).toFixed(2)}`;
 }
 
 function signedFmt(n) {
   const v = Number(n) || 0;
-  return `${v >= 0 ? '+' : '-'}${Math.abs(v).toFixed(2)}`;
+  return `${v >= 0 ? '+' : ''}${fmt(v)}`;
 }
 
 const RESOLVED_HISTORY_STATES = new Set(['won', 'lost', 'canceled']);
@@ -191,7 +192,7 @@ function PositionCard({ position, username, onSell, onRedeem, onDismiss, selling
           >
             {selling ? 'Vendiendo…' : 'Vender anticipado'}
           </button>
-        ) : isLostBet ? (
+        ) : isLostBet && onDismiss ? (
           <button
             onClick={() => onDismiss?.(position)}
             disabled={dismissing}
@@ -1031,6 +1032,9 @@ export default function PointsPortfolio() {
   const t = useT();
   const lang = useLang();
   const { authenticated, user, loading: authLoading, refresh } = usePointsAuth();
+  const { mode } = usePointsExecution();
+  const onchain = mode === 'onchain';
+  const executionBalance = useExecutionBalance();
   const [tab, setTab] = useState('activo'); // 'activo' | 'combinadas' | 'historial' | 'recompensas'
   const [positions, setPositions] = useState([]);
   const [history, setHistory] = useState([]);
@@ -1068,7 +1072,7 @@ export default function PointsPortfolio() {
   // Separate from load(): switching the chart range must not refetch
   // positions and history and flash the whole page.
   useEffect(() => {
-    if (!authenticated || tab !== 'activo') return undefined;
+    if (!authenticated || tab !== 'activo' || onchain) return undefined;
     let cancelled = false;
     setPnlLoading(true);
     fetchPnlHistory({ days: pnlRange, cycle: pnlCycleScope })
@@ -1102,6 +1106,12 @@ export default function PointsPortfolio() {
         setHistory(r.history || []);
         setHistorySummary(r.summary || null);
       }
+    } catch (error) {
+      setMsg({ type: 'error', text: publicErrorMessage(error, lang) });
+      setPositions([]);
+      setHistory([]);
+      setSummary(null);
+      setHistorySummary(null);
     } finally {
       if (!silent) setLoading(false);
     }
@@ -1140,6 +1150,7 @@ export default function PointsPortfolio() {
     try {
       const quote = await quoteSell({
         marketId: pos.marketId,
+        market: pos,
         outcomeIndex: pos.outcomeIndex,
         shares: selectedShares,
       });
@@ -1204,6 +1215,7 @@ export default function PointsPortfolio() {
     try {
       await executeSell({
         marketId: pos.marketId,
+        market: pos,
         outcomeIndex: pos.outcomeIndex,
         shares: preview.shares,
         minCollateralOut: preview.minCollateralOut,
@@ -1233,7 +1245,8 @@ export default function PointsPortfolio() {
     setMsg(null);
     setActionState({ id: `${pos.marketId}-${pos.outcomeIndex}`, type: 'redeeming' });
     try {
-      const r = await redeemWinnings({ marketId: pos.marketId, outcomeIndex: pos.outcomeIndex });
+      const r = await redeemWinnings({ marketId: pos.marketId, market: pos, outcomeIndex: pos.outcomeIndex,
+        ...(pos.mode === 'onchain' ? { amount: pos.claimablePayout ?? pos.shares } : {}) });
       setMsg({ type: 'success', text: `Cobraste ${fmt(r.payout)} MXNP` });
       await refresh();
       await load();
@@ -1288,8 +1301,8 @@ export default function PointsPortfolio() {
     }
   }
 
-  const balance = Number(user?.balance || 0);
-  const openPnl = Number(summary?.pnl || 0);
+  const balance = executionBalance.balance;
+  const openPnl = Number((onchain ? summary?.unrealizedPnl : summary?.pnl) || 0);
   const totalPnl = Number(historySummary?.totalPnl ?? openPnl);
 
   return (
@@ -1315,7 +1328,7 @@ export default function PointsPortfolio() {
           { id: 'combinadas', label: t('points.portfolio.tab.parlays') },
           { id: 'historial', label: t('points.portfolio.tab.history') },
           { id: 'recompensas', label: t('points.portfolio.tab.rewards') },
-        ].map(t => {
+        ].filter(t => !onchain || ['activo', 'historial'].includes(t.id)).map(t => {
           const active = tab === t.id;
           return (
             <button
@@ -1339,11 +1352,22 @@ export default function PointsPortfolio() {
       <div className="points-portfolio-layout">
         {/* Left: main content */}
         <div className="points-portfolio-main">
+          {msg && (
+            <div role={msg.type === 'error' ? 'alert' : 'status'} style={{
+              background: msg.type === 'error' ? 'rgba(239,68,68,0.08)' : 'rgba(0,232,122,0.08)',
+              border: `1px solid ${msg.type === 'error' ? 'rgba(239,68,68,0.3)' : 'rgba(0,232,122,0.3)'}`,
+              color: msg.type === 'error' ? 'var(--danger)' : 'var(--green)',
+              padding: '12px 14px', borderRadius: 10, marginBottom: 20,
+              fontFamily: 'var(--font-mono)', fontSize: 12,
+            }}>
+              {msg.text}
+            </div>
+          )}
           {tab === 'activo' && (
             <>
               <div className="points-portfolio-stats">
                 {[
-                  { label: 'Balance', value: `${fmt(balance)} MXNP`, color: 'var(--green)' },
+                  { label: 'Balance', value: balance == null ? '—' : `${fmt(balance)} MXNP`, color: 'var(--green)' },
                   { label: 'En posiciones', value: `${fmt(summary?.currentValue || 0)} MXNP`, color: 'var(--text-primary)' },
                   { label: 'PnL abierto', value: signedFmt(openPnl), color: openPnl >= 0 ? 'var(--success)' : 'var(--danger)' },
                   { label: 'PnL total', value: signedFmt(totalPnl), color: totalPnl >= 0 ? 'var(--success)' : 'var(--danger)' },
@@ -1359,26 +1383,15 @@ export default function PointsPortfolio() {
                 ))}
               </div>
 
-              <PnlChartCard
+              {!onchain && <PnlChartCard
                 series={pnlSeries}
                 range={pnlRange}
                 onRangeChange={setPnlRange}
                 cycleScope={pnlCycleScope}
                 onCycleScopeChange={setPnlCycleScope}
                 loading={pnlLoading}
-              />
-
-              {msg && (
-                <div style={{
-                  background: msg.type === 'error' ? 'rgba(239,68,68,0.08)' : 'rgba(0,232,122,0.08)',
-                  border: `1px solid ${msg.type === 'error' ? 'rgba(239,68,68,0.3)' : 'rgba(0,232,122,0.3)'}`,
-                  color: msg.type === 'error' ? 'var(--danger)' : 'var(--green)',
-                  padding: '12px 14px', borderRadius: 10, marginBottom: 20,
-                  fontFamily: 'var(--font-mono)', fontSize: 12,
-                }}>
-                  {msg.text}
-                </div>
-              )}
+              />}
+              {executionBalance.error && <p role="alert" style={{ color: 'var(--danger)' }}>{executionBalance.error}</p>}
 
               {loading && positions.length === 0 && <PositionSkeleton count={2} />}
               {!loading && positions.length === 0 && (
@@ -1405,7 +1418,7 @@ export default function PointsPortfolio() {
                         username={user?.username}
                         onSell={handleSell}
                         onRedeem={handleRedeem}
-                        onDismiss={handleDismiss}
+                        onDismiss={onchain ? undefined : handleDismiss}
                         selling={actionState.id === key && actionState.type === 'selling'}
                         redeeming={actionState.id === key && actionState.type === 'redeeming'}
                         dismissing={actionState.id === key && actionState.type === 'dismissing'}
@@ -1424,7 +1437,7 @@ export default function PointsPortfolio() {
               loading={loading}
               username={user?.username}
               cycleScope={historyCycleScope}
-              onCycleScopeChange={setHistoryCycleScope}
+              onCycleScopeChange={onchain ? undefined : setHistoryCycleScope}
               onRedeem={handleRedeem}
               onAcknowledgeCorrection={handleAcknowledgeResolutionCorrection}
               actionState={actionState}
@@ -1441,7 +1454,7 @@ export default function PointsPortfolio() {
         </div>
 
         {/* Right sidebar */}
-        <aside className="points-portfolio-sidebar">
+        {!onchain && <aside className="points-portfolio-sidebar">
           <DailyClaimCard onClaimed={() => {
             refresh();
             load();
@@ -1449,7 +1462,7 @@ export default function PointsPortfolio() {
           }} />
           <MiniLeaderboard currentUsername={user?.username} />
           <CycleHistoryLeaderboard currentUsername={user?.username} />
-        </aside>
+        </aside>}
       </div>
     </main>
     <PointsSellPreviewModal
@@ -1628,6 +1641,7 @@ function HistoryView({
                     <button
                       className="btn-primary"
                       onClick={() => onRedeem?.({
+                        ...m,
                         marketId: m.marketId,
                         outcomeIndex: winningOutcomeIndex,
                         claimablePayout: m.claimablePayout,

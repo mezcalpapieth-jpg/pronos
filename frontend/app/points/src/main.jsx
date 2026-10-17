@@ -12,6 +12,7 @@ import { Sentry, initSentry } from '@app/lib/sentry.js';
 import { PointsAuthProvider } from '@app/lib/pointsAuth.js';
 import { preloadCryptoTicker } from './lib/useCryptoTicker.js';
 import App from './App.jsx';
+import { PointsExecutionProvider } from './lib/PointsExecution.jsx';
 import '@app/styles/mvp.css';
 import './points.css';
 
@@ -85,7 +86,7 @@ async function bootstrap() {
           <App />
         ) : (
           <PointsAuthProvider>
-            <App />
+            <PointsExecutionProvider><App /></PointsExecutionProvider>
           </PointsAuthProvider>
         )}
       </Sentry.ErrorBoundary>

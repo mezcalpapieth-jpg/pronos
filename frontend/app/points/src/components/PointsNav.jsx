@@ -7,7 +7,7 @@
  *   - circular light/dark switcher
  *   - Green entry CTA or balance pill + dropdown when signed-in
  *
- * No wallet-chain UI, no RPC, no Privy — this is an off-chain points app.
+ * The isolated preview also exposes a test-market selector and token balance.
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
@@ -15,6 +15,7 @@ import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { useT, useLang, setLang } from '@app/lib/i18n.js';
 import { fetchMarkets, adminListTaskCounts, fetchClaimableSummary } from '../lib/pointsApi.js';
 import { onPointsRefresh } from '../lib/pointsLiveRefresh.js';
+import { useExecutionBalance, usePointsExecution } from '../lib/PointsExecution.jsx';
 
 // Public info pages on pronos.io that explain prediction markets.
 const HOW_IT_WORKS_URLS = {
@@ -56,6 +57,8 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { authenticated, user, logout, refresh } = usePointsAuth();
+  const execution = usePointsExecution();
+  const executionBalance = useExecutionBalance();
   const [scrolled, setScrolled] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -251,8 +254,7 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
     setMobileMenuOpen(false);
   }
 
-  const balance = Number(user?.balance || 0);
-  const balanceLabel = formatBalance(balance);
+  const balanceLabel = executionBalance.balance == null ? '—' : formatBalance(executionBalance.balance);
 
   return (
     <nav id="nav" className={`points-nav${scrolled ? ' scrolled' : ''}`}>
@@ -261,6 +263,15 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
       <Link to="/" className="nav-logo" style={{ textDecoration: 'none' }}>
         PRONOS<span className="green-dot" />
       </Link>
+      {execution.enabled && <select
+        aria-label={lang === 'en' ? 'Trading mode' : 'Modo de operación'}
+        value={execution.mode}
+        onChange={event => execution.setMode(event.target.value)}
+        style={{ maxWidth: 155, padding: '6px 4px', borderRadius: 6, background: 'var(--surface1)', color: 'var(--text-primary)', border: '1px solid var(--border)', fontSize: 11 }}
+      >
+        <option value="onchain">{lang === 'en' ? 'Test tournament' : 'Torneo de prueba'}</option>
+        <option value="points">Points</option>
+      </select>}
 
       {/* Search — sits right next to the logo, expands to fill
           available horizontal space up to the nav-links row. Typing
@@ -432,11 +443,11 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
                     </span>
                   )}
                 </Link>
-                <Link to="/earn" onClick={closeMobileMenu}>{t('points.nav.earn')}</Link>
+                {execution.mode !== 'onchain' && <Link to="/earn" onClick={closeMobileMenu}>{t('points.nav.earn')}</Link>}
               </>
             )}
             {/* Public — see the desktop nav for why this one isn't gated. */}
-            <Link to="/torneo" onClick={closeMobileMenu}>{t('points.nav.tournament')}</Link>
+            {execution.mode !== 'onchain' && <Link to="/torneo" onClick={closeMobileMenu}>{t('points.nav.tournament')}</Link>}
             <Link to="/support" onClick={closeMobileMenu}>
               {lang === 'en' ? 'Support' : 'Soporte'}
             </Link>
@@ -511,7 +522,7 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
                 </span>
               )}
             </Link>
-            <Link to="/earn" style={navLinkStyle}>{t('points.nav.earn')}</Link>
+            {execution.mode !== 'onchain' && <Link to="/earn" style={navLinkStyle}>{t('points.nav.earn')}</Link>}
           </>
         )}
         {/* Tournament is public and needs no account to read — it renders
@@ -521,7 +532,7 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
             visitor with no way to find out what they'd be playing for.
             Portfolio and Earn stay gated: both are personal and require
             an account to do anything with. */}
-        <Link to="/torneo" style={navLinkStyle}>{t('points.nav.tournament')}</Link>
+        {execution.mode !== 'onchain' && <Link to="/torneo" style={navLinkStyle}>{t('points.nav.tournament')}</Link>}
         <a
           href={howItWorksUrl}
           target="_blank"
@@ -594,9 +605,9 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
                 <Link to="/support" onClick={() => setDropdownOpen(false)}>
                   {lang === 'en' ? 'Support' : 'Soporte'}
                 </Link>
-                <Link to="/earn" onClick={() => setDropdownOpen(false)}>
+                {execution.mode !== 'onchain' && <Link to="/earn" onClick={() => setDropdownOpen(false)}>
                   {t('points.nav.earn')}
-                </Link>
+                </Link>}
                 {isAdmin && (
                   <Link
                     to="/admin"

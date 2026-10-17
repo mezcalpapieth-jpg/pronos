@@ -1059,6 +1059,8 @@ function ParallelLegList({ market, legs, outcomeImages, outcomeCountryLabels, on
           // synthetic leg market missing them reads as "not active" and
           // the buy click is silently swallowed.
           const legMarket = {
+            ...leg,
+            mode: market.mode || 'points',
             id: leg.id,
             parentId: market.id,
             groupId: market.id,
@@ -2837,12 +2839,12 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
   // live on leg ids but positions.js surfaces the parent id via
   // `parentMarketId` — so we match on either to pick up both modes.
   useEffect(() => {
-    if (!authenticated || !id) {
+    if (!authenticated || !id || !market) {
       setUserPositions([]);
       return undefined;
     }
     let cancelled = false;
-    fetchPositions()
+    fetchPositions({ mode: market.mode || 'points' })
       .then(r => {
         if (cancelled) return;
         const mid = Number(id);
@@ -2860,7 +2862,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
       })
       .catch(() => { /* best-effort */ });
     return () => { cancelled = true; };
-  }, [authenticated, id, buyState, orderBookRefresh, positionRefreshNonce, market?.cryptoMeta, cryptoSequenceSig]);
+  }, [authenticated, id, buyState, orderBookRefresh, positionRefreshNonce, market?.mode, market?.cryptoMeta, cryptoSequenceSig]);
 
   async function handleTradeSuccess() {
     await refresh?.();
@@ -2883,7 +2885,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
     // fields. Fall back to the parent's status rather than treating a
     // missing one as "not active" — that silently kills the click.
     const targetStatus = lockTarget?.status ?? market?.status;
-    if (lockTarget?.seriesLocked || targetStatus !== 'active' || market?.seriesLocked || market?.status !== 'active') {
+    if (lockTarget?.executionReady === false || lockTarget?.seriesLocked || targetStatus !== 'active' || market?.seriesLocked || market?.status !== 'active') {
       return;
     }
     setBuyState({
@@ -2996,6 +2998,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
     try {
       const quote = await quoteSell({
         marketId: position.marketId,
+        market: position,
         outcomeIndex: position.outcomeIndex,
         shares: selectedShares,
       });
@@ -3059,6 +3062,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
     try {
       await executeSell({
         marketId: position.marketId,
+        market: position,
         outcomeIndex: position.outcomeIndex,
         shares: preview.shares,
         minCollateralOut: preview.minCollateralOut,
@@ -3094,6 +3098,8 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
     try {
       const r = await redeemWinnings({
         marketId: position.marketId,
+        market: position,
+        ...(position.mode === 'onchain' ? { amount: position.claimablePayout ?? position.shares } : {}),
         outcomeIndex: position.outcomeIndex,
       });
       setRedeemState({
@@ -3234,6 +3240,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
     ? Math.max(chartRangeStart, Math.min(marketOpenedAt, chartWindowEnd - 60))
     : chartRangeStart;
   const withOpeningBaseline = (series) => {
+    if (market.mode === 'onchain') return series;
     if (!Array.isArray(series) || series.length === 0) return series;
     if (!Number.isFinite(marketOpenedAt) || marketOpenedAt > chartWindowEnd) return series;
     // Anchor at the market's birth when that falls inside the window, and
@@ -3308,7 +3315,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
     && market.endTime
     && new Date(market.endTime) < _now;
   const showTemperatureResolutionNote = isTemperatureMarket(market);
-  const canTrade = !isResolved && !isPendingResolution && !isTradingLocked;
+  const canTrade = !isResolved && !isPendingResolution && !isTradingLocked && market.executionReady !== false;
   const modeCopy = lang === 'en'
     ? { individual: 'Individual', combinada: 'Combo slip', otherMarkets: 'Other markets' }
     : { individual: 'Individual', combinada: 'Combinada', otherMarkets: 'Otros mercados' };
@@ -3353,7 +3360,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
             {[
               ['single', modeCopy.individual],
               ['combo', modeCopy.combinada],
-            ].map(([key, label]) => {
+            ].filter(([key]) => market.mode !== 'onchain' || key === 'single').map(([key, label]) => {
               const active = tradeMode === key;
               return (
                 <button
@@ -3456,6 +3463,8 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
         <p style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.6 }}>
           {isCanceled
             ? 'Este mercado fue anulado porque el evento no ocurrió. No cuenta como ganado o perdido.'
+            : market.executionReady === false
+            ? (lang === 'en' ? 'This test market is not ready for trading yet.' : 'Este mercado de prueba todavía no está listo para operar.')
             : isResolved
             ? t('points.detail.closedHint')
             : t('points.detail.pendingHint')}
@@ -3473,7 +3482,9 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
         lineHeight: 1.6,
       }}>
         <p style={{ margin: 0 }}>
-          {t('points.detail.mxnpNote')}
+          {market.mode === 'onchain'
+            ? (lang === 'en' ? 'MXNP is your test tournament balance.' : 'MXNP es tu saldo del torneo de prueba.')
+            : t('points.detail.mxnpNote')}
         </p>
         {showTemperatureResolutionNote && (
           <div style={{
@@ -3696,7 +3707,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
                 plus real trade activity. If there are no snapshots yet,
                 Sparkline renders an explicit flat/empty state instead
                 of inventing movement. */}
-            <div style={{
+            {market.executionReady !== false && <div style={{
               background: 'var(--surface1)',
               border: '1px solid var(--border)',
               borderRadius: 14,
@@ -3885,7 +3896,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
                   t={t}
                 />
               </div>
-            </div>
+            </div>}
 
             {isMobile && tradePanel}
 
@@ -3895,7 +3906,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
               showTradeDetails={isAdmin}
             />
 
-            <OrderBookPanel
+            {market.mode !== 'onchain' && <OrderBookPanel
               market={displayMarket}
               displayOutcomes={displayOutcomes}
               displayOutcomeIndices={displayOutcomeIndices}
@@ -3912,7 +3923,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
                   applyFreshMarket(fresh);
                 } catch { /* best-effort */ }
               }}
-            />
+            />}
 
             <SeriesGameStrip
               seriesMeta={market.seriesMeta}
@@ -3921,7 +3932,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
               t={t}
             />
 
-            {displayOutcomes.length === 2 && (
+            {market.executionReady !== false && displayOutcomes.length === 2 && (
               <ProbabilityGaugeRow
                 outcomes={displayOutcomes}
                 outcomeImages={displayOutcomeImages}
@@ -3935,7 +3946,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
                 the trade/orderbook area. The actual Sí/No buy controls
                 stay immediately after the graph on phones and in the
                 right column on desktop. */}
-            {market.ammMode === 'parallel' && Array.isArray(market.legs) && !isResolved && !isPendingResolution && (
+            {market.executionReady !== false && market.ammMode === 'parallel' && Array.isArray(market.legs) && !isResolved && !isPendingResolution && (
               <div style={{ marginBottom: 32 }}>
                 <div style={{
                   fontFamily: 'var(--font-mono)',
@@ -3967,7 +3978,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
                 chart so the user sees every outcome's percentage. The
                 actual voting stays in the trade panel near the graph.
                 Parallel uses the calmer "Odds actuales" snapshot above. */}
-            {displayOutcomes.length > 2 && market.ammMode !== 'parallel' && (
+            {market.executionReady !== false && displayOutcomes.length > 2 && market.ammMode !== 'parallel' && (
               <div style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
@@ -4179,6 +4190,8 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
                     : null;
                   const buyTarget = p.parentMarketId
                     ? {
+                        ...positionLeg,
+                        mode: market.mode || 'points',
                         id: p.marketId,
                         question: `${marketTitle} — ${label}`,
                         status: positionLeg?.status ?? market.status,

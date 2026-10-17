@@ -1,13 +1,6 @@
 /**
- * Buy flow for the points-app.
- *
- * The user enters an MXNP amount, we quote the trade server-side (which
- * runs the same AMM math the backend will use when it actually executes),
- * and show fee + shares-out + price-after. Confirm → POST /api/points/buy
- * → balance updates → modal closes.
- *
- * We intentionally keep this modal simple because the math is authoritative
- * on the server. No sell-flow here (sells live on the Portfolio page).
+ * Shared buy flow for Points and the preview test markets. The execution
+ * adapter selects the quote, execution endpoint and balance for this market.
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -15,6 +8,7 @@ import { quoteBuy, executeBuy, publicErrorMessage } from '../lib/pointsApi.js';
 import { localizedOutcomeLabels, localizedTitle, useLang, useT } from '@app/lib/i18n.js';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { emitPointsRefresh } from '../lib/pointsLiveRefresh.js';
+import { useExecutionBalance } from '../lib/PointsExecution.jsx';
 
 const TOURNAMENT_MIN_BUY_MXNP = 100;
 const FIRST_ENTRY_QUICK_AMOUNTS = [100, 200, 500, 1000];
@@ -53,16 +47,18 @@ export default function PointsBuyModal({
   const [submitError, setSubmitError] = useState('');
   const [success, setSuccess] = useState(false);
 
-  const balance = Number(user?.balance || 0);
+  const executionBalance = useExecutionBalance(market?.mode || 'points');
+  const balance = executionBalance.balance;
   const numAmount = parseFloat(amount) || 0;
-  const requiresMinimumEntry = !minimumEntrySatisfied;
+  const requiresMinimumEntry = market?.mode !== 'onchain' && !minimumEntrySatisfied;
   const quickAmounts = requiresMinimumEntry ? FIRST_ENTRY_QUICK_AMOUNTS : TOP_UP_QUICK_AMOUNTS;
   const defaultAmount = requiresMinimumEntry ? TOURNAMENT_MIN_BUY_MXNP : 50;
   const inputMin = requiresMinimumEntry ? TOURNAMENT_MIN_BUY_MXNP : 1;
   const belowMinimum = requiresMinimumEntry && numAmount > 0 && numAmount < TOURNAMENT_MIN_BUY_MXNP;
-  const insufficientBalance = numAmount > balance;
+  const balanceUnavailable = balance == null;
+  const insufficientBalance = !balanceUnavailable && numAmount > balance;
   const numberLocale = lang === 'en' ? 'en-US' : 'es-MX';
-  const balanceLabel = formatMxnp(balance, numberLocale);
+  const balanceLabel = balanceUnavailable ? '—' : formatMxnp(balance, numberLocale);
 
   useEffect(() => {
     if (!open) return;
@@ -85,7 +81,7 @@ export default function PointsBuyModal({
     setQuoteState('loading');
     setQuoteError('');
     const handle = setTimeout(() => {
-      quoteBuy({ marketId: market.id, outcomeIndex, collateral: numAmount })
+      quoteBuy({ marketId: market.id, market, outcomeIndex, collateral: numAmount })
         .then(q => {
           if (cancelled) return;
           setQuote(q);
@@ -102,7 +98,7 @@ export default function PointsBuyModal({
       cancelled = true;
       clearTimeout(handle);
     };
-  }, [open, numAmount, belowMinimum, market?.id, outcomeIndex]);
+  }, [open, numAmount, belowMinimum, market?.id, market?.mode, market?.chainAddress, outcomeIndex]);
 
   if (!open || !market) return null;
   const marketTitle = localizedTitle(market, lang) || market.question || '';
@@ -110,14 +106,16 @@ export default function PointsBuyModal({
   const displayOutcomeLabel = outcomeLabel || translatedOutcomeLabels[outcomeIndex] || market.outcomes?.[outcomeIndex] || '';
 
   async function handleConfirm() {
-    if (submitting || !quote) return;
+    if (submitting || !quote || balanceUnavailable || insufficientBalance) return;
     setSubmitting(true);
     setSubmitError('');
     try {
       await executeBuy({
         marketId: market.id,
+        market,
         outcomeIndex,
         collateral: numAmount,
+        ...(market.mode === 'onchain' ? { minSharesOut: Math.floor(Number(quote.sharesOut) * 0.99 * 1e6) / 1e6 } : {}),
       });
       await refresh();
       emitPointsRefresh({ source: 'buy', marketId: market.id });
@@ -271,9 +269,11 @@ export default function PointsBuyModal({
           lineHeight: 1.45,
           margin: '-2px 0 10px',
         }}>
-          {requiresMinimumEntry
-            ? t('points.buy.minimumEntryHint', { amount: TOURNAMENT_MIN_BUY_MXNP })
-            : t('points.buy.topUpHint')}
+          {market.mode === 'onchain'
+            ? (lang === 'en' ? 'This trade uses your test balance.' : 'Esta operación usa tu saldo de prueba.')
+            : requiresMinimumEntry
+              ? t('points.buy.minimumEntryHint', { amount: TOURNAMENT_MIN_BUY_MXNP })
+              : t('points.buy.topUpHint')}
         </div>
 
         <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
@@ -325,7 +325,7 @@ export default function PointsBuyModal({
             '—'
           } good />
           <QuoteRow label={t('points.buy.priceAfter')} value={
-            quoteState === 'ready' ? `${Math.round(quote.priceBefore * 100)}% → ${Math.round(quote.priceAfter * 100)}%` :
+            quoteState === 'ready' && quote.priceBefore != null && quote.priceAfter != null ? `${Math.round(quote.priceBefore * 100)}% → ${Math.round(quote.priceAfter * 100)}%` :
             '—'
           } />
           {quoteState === 'error' && (
@@ -335,6 +335,7 @@ export default function PointsBuyModal({
           )}
         </div>
 
+        {executionBalance.error && <p role="alert" style={{ color: 'var(--danger)', fontSize: 12 }}>{executionBalance.error}</p>}
         {insufficientBalance && (
           <div style={{
             background: 'rgba(255,59,59,0.08)',
@@ -367,7 +368,7 @@ export default function PointsBuyModal({
 
         <button
           onClick={handleConfirm}
-          disabled={submitting || insufficientBalance || belowMinimum || quoteState !== 'ready' || numAmount <= 0}
+          disabled={submitting || balanceUnavailable || insufficientBalance || belowMinimum || quoteState !== 'ready' || numAmount <= 0}
           style={{
             width: '100%',
             padding: '14px 16px',

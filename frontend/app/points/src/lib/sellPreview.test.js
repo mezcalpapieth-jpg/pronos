@@ -79,3 +79,12 @@ test('normalizeSellShares clamps slider values to the held position', () => {
   assert.equal(normalizeSellShares({ shares: 10 }, -1), 0.01);
   assert.equal(normalizeSellShares({ shares: 0 }, 5), 0);
 });
+
+test('on-chain sell keeps six-decimal holdings and floors slippage without inventing post-trade prices', () => {
+  const result = buildSellPreview({ mode: 'onchain', shares: 17.348493, costBasis: 8, currentValue: 8.7 },
+    { shares: 17.348493, collateralOut: 8.769873, priceBefore: null, priceAfter: null });
+  assert.equal(result.shares, 17.348493);
+  assert.equal(result.minCollateralOut, 8.682174);
+  assert.equal(result.priceBeforePct, null);
+  assert.equal(result.priceAfterPct, null);
+});

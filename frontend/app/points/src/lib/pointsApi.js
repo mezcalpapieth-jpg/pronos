@@ -5,6 +5,9 @@
  * goes along with requests. Errors are surfaced as Error instances
  * with an `.code` property matching the backend's short error codes.
  */
+import { createExecutionAdapter } from './executionAdapter.js';
+
+export const pointsExecution = createExecutionAdapter({ get: getJson, post: postJson });
 
 async function handle(res) {
   const data = await res.json().catch(() => ({}));
@@ -219,6 +222,22 @@ const PUBLIC_ERROR_COPY = {
   default: {
     es: 'Algo salió mal. Intenta otra vez.',
     en: 'Something went wrong. Try again.',
+  },
+  onchain_: {
+    es: 'El torneo de prueba no está disponible ahora. Actualiza la página e intenta otra vez.',
+    en: 'The test tournament is unavailable right now. Refresh and try again.',
+  },
+  delegation_required: {
+    es: 'Tu cuenta necesita autorizar las operaciones del torneo de prueba antes de continuar.',
+    en: 'Your account needs to authorize test tournament trading before continuing.',
+  },
+  wallet_not_found: {
+    es: 'No encontramos la cuenta del torneo de prueba. Vuelve a iniciar sesión.',
+    en: 'Your test tournament account was not found. Please sign in again.',
+  },
+  insufficient_gas: {
+    es: 'Tu cuenta necesita fondos para completar esta operación de prueba.',
+    en: 'Your account needs funding to complete this test trade.',
   },
 };
 
@@ -439,13 +458,7 @@ export function socialLinkStartUrl(provider, returnTo = '/earn') {
 // set). Category and status pages need every market, not just the
 // curated ones.
 export async function fetchMarkets({ status = 'active', category, limit, featured } = {}) {
-  const q = new URLSearchParams();
-  if (status) q.set('status', status);
-  if (category) q.set('category', category);
-  if (limit) q.set('limit', String(limit));
-  if (featured) q.set('featured', featured);
-  const { markets = [] } = await getJson(`/api/points/markets?${q}`);
-  return markets;
+  return pointsExecution.markets({ status, category, limit, featured });
 }
 
 export async function fetchAicmOverview() {
@@ -456,10 +469,7 @@ export async function fetchMarket(id) {
   // For parallel (amm_mode='parallel') markets the payload also carries
   // a `legs: [...]` array with one entry per outcome. Attach it onto the
   // returned market object so callers can reach it without a second call.
-  const payload = await getJson(`/api/points/market?id=${encodeURIComponent(id)}`);
-  const { market, legs } = payload;
-  if (!market) return market;
-  return Array.isArray(legs) ? { ...market, legs } : market;
+  return pointsExecution.market(id);
 }
 
 export async function fetchLeagueStandings({ league, home, away } = {}) {
@@ -476,7 +486,7 @@ export async function fetchLeagueStandings({ league, home, away } = {}) {
  * 0-100, `t` is a unix-seconds timestamp. Usable directly as the `data`
  * prop on the shared Sparkline component.
  */
-export async function fetchPriceHistory(ids, { days = 30, hours, outcome = 0, limit = 200 } = {}) {
+async function fetchPointsPriceHistory(ids, { days = 30, hours, outcome = 0, limit = 200 } = {}) {
   const list = Array.isArray(ids) ? ids : [ids];
   const cleaned = list.filter(n => Number.isInteger(n) || (typeof n === 'string' && n.length > 0));
   if (cleaned.length === 0) return {};
@@ -531,7 +541,7 @@ export async function fetchPnlHistory({ username, days = 0, cycle = 'current' } 
   }
 }
 
-export async function fetchTradeActivity(ids, { days = 1, hours, outcome = 0, buckets = 48 } = {}) {
+async function fetchPointsTradeActivity(ids, { days = 1, hours, outcome = 0, buckets = 48 } = {}) {
   const list = Array.isArray(ids) ? ids : [ids];
   const cleaned = list.filter(n => Number.isInteger(n) || (typeof n === 'string' && n.length > 0));
   if (cleaned.length === 0) return {};
@@ -550,7 +560,7 @@ export async function fetchTradeActivity(ids, { days = 1, hours, outcome = 0, bu
   }
 }
 
-export async function fetchTradeTape(ids, { hours = 24 * 7, limit = 20, details = false } = {}) {
+async function fetchPointsTradeTape(ids, { hours = 24 * 7, limit = 20, details = false } = {}) {
   const list = Array.isArray(ids) ? ids : [ids];
   const cleaned = list.filter(n => Number.isInteger(n) || (typeof n === 'string' && n.length > 0));
   if (cleaned.length === 0) return {};
@@ -568,23 +578,44 @@ export async function fetchTradeTape(ids, { hours = 24 * 7, limit = 20, details 
   }
 }
 
+async function executionRead(action, ids, options, legacy) {
+  const list = [...new Set((Array.isArray(ids) ? ids : [ids]).map(Number).filter(id => Number.isSafeInteger(id) && id > 0))];
+  if (!list.length) return {};
+  // Charts/tapes are optional; an unavailable chain index renders an empty
+  // state, never a chart from the other ledger.
+  try {
+    const cleaned = Object.fromEntries(Object.entries(options).filter(([, value]) => value != null));
+    return await pointsExecution.publicRead(action, list, cleaned, legacy);
+  } catch { return {}; }
+}
+
+export function fetchPriceHistory(ids, options = {}) {
+  return executionRead('prices', ids, { days: 30, outcome: 0, limit: 200, ...options }, fetchPointsPriceHistory);
+}
+
+export function fetchTradeActivity(ids, options = {}) {
+  return executionRead('activity', ids, { days: 1, outcome: 0, buckets: 48, ...options }, fetchPointsTradeActivity);
+}
+
+export function fetchTradeTape(ids, options = {}) {
+  return executionRead('tape', ids, { hours: 168, limit: 20, ...options }, fetchPointsTradeTape);
+}
+
 // ─── Trading ────────────────────────────────────────────────────────────────
-export async function quoteBuy({ marketId, outcomeIndex, collateral }) {
-  return postJson('/api/points/quote-buy', { marketId, outcomeIndex, collateral });
+export async function quoteBuy(args) {
+  return pointsExecution.trade('quote-buy', args);
 }
 
 // `minSharesOut` / `maxAvgPrice` are slippage guards — the server
 // holds a row lock on the market during the trade, so if the AMM
 // moved past these bounds between the user's quote and now, it
 // rejects with `price_moved` (HTTP 409) so the UI can re-quote.
-export async function executeBuy({ marketId, outcomeIndex, collateral, minSharesOut, maxAvgPrice }) {
-  return postJson('/api/points/buy', {
-    marketId, outcomeIndex, collateral, minSharesOut, maxAvgPrice,
-  });
+export async function executeBuy(args) {
+  return pointsExecution.trade('buy', args);
 }
 
-export async function quoteSell({ marketId, outcomeIndex, shares }) {
-  return postJson('/api/points/quote-sell', { marketId, outcomeIndex, shares });
+export async function quoteSell(args) {
+  return pointsExecution.trade('quote-sell', args);
 }
 
 export async function fetchOrderBook({ marketId, outcomeIndex = 0, levels = 8 }) {
@@ -632,29 +663,37 @@ export async function cancelLimitOrder(orderId) {
 // `minCollateralOut` is the sell-side slippage guard — the lowest
 // MXNP payout the user will accept. Server bails with `price_moved`
 // if the locked quote undershoots.
-export async function executeSell({ marketId, outcomeIndex, shares, minCollateralOut }) {
-  return postJson('/api/points/sell', {
-    marketId, outcomeIndex, shares, minCollateralOut,
-  });
+export async function executeSell(args) {
+  return pointsExecution.trade('sell', args);
 }
 
-export async function redeemWinnings({ marketId, outcomeIndex }) {
-  return postJson('/api/points/redeem', { marketId, outcomeIndex });
+export async function redeemWinnings(args) {
+  return pointsExecution.trade('redeem', args);
 }
 
 // ─── Portfolio ──────────────────────────────────────────────────────────────
-export async function fetchPositions() {
-  return getJson('/api/points/positions');
+export async function fetchPositions({ mode } = {}) {
+  const chain = await pointsExecution.portfolio(mode);
+  if (chain) return chain;
+  const result = await getJson('/api/points/positions');
+  for (const position of result.positions || []) pointsExecution.remember({ ...position, id: position.marketId, mode: 'points' });
+  return result;
 }
 
 export async function fetchClaimableSummary() {
+  const portfolio = await pointsExecution.portfolio();
+  if (portfolio) return { count: portfolio.positions.filter(p => p.canRedeem).length };
   return getJson('/api/points/claimable');
 }
 
-export async function fetchHistory({ cycle = 'current' } = {}) {
+export async function fetchHistory({ cycle = 'current', mode } = {}) {
+  const portfolio = await pointsExecution.portfolio(mode);
+  if (portfolio) return portfolio;
   const q = new URLSearchParams();
   q.set('cycle', cycle || 'current');
-  return getJson(`/api/points/history?${q}`);
+  const result = await getJson(`/api/points/history?${q}`);
+  for (const item of result.history || []) pointsExecution.remember({ ...item, id: item.marketId, mode: 'points' });
+  return result;
 }
 
 export async function fetchMakerRewards() {

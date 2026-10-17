@@ -147,6 +147,7 @@ export default function PointsMarketCard({ market, userPosition }) {
   const localizedOutcomes = localizedOutcomeLabels({ ...market, outcomes: rawOutcomes }, lang);
   const outcomes = localizedOutcomes.length === rawOutcomes.length ? localizedOutcomes : rawOutcomes;
   const marketTitle = localizedTitle(market, lang) || market.question || '';
+  const pricesUnavailable = market.mode === 'onchain' && market.executionReady === false;
   const prices = Array.isArray(market.prices) && market.prices.length === rawOutcomes.length
     ? market.prices
     : rawOutcomes.map((_, i) => (i === 0 ? 0.5 : 1 / rawOutcomes.length));
@@ -190,6 +191,7 @@ export default function PointsMarketCard({ market, userPosition }) {
     ? market.legOutcomes
     : null;
   const canOpenDrawer = !isResolved
+    && market.executionReady !== false
     && !isSeriesPending
     && market.status === 'active'
     && (market.ammMode !== 'parallel' || parallelLegs !== null);
@@ -547,7 +549,7 @@ export default function PointsMarketCard({ market, userPosition }) {
                     color: 'var(--text-muted)',
                     whiteSpace: 'nowrap',
                   }}>
-                    +{gain}
+                    {pricesUnavailable ? '—' : `+${gain}`}
                   </span>
                   <span style={{
                     fontFamily: 'var(--font-display)',
@@ -556,7 +558,7 @@ export default function PointsMarketCard({ market, userPosition }) {
                     minWidth: 32,
                     textAlign: 'right',
                   }}>
-                    {pct}%
+                    {pricesUnavailable ? '—' : `${pct}%`}
                   </span>
                 </span>
               </div>
@@ -614,6 +616,7 @@ export default function PointsMarketCard({ market, userPosition }) {
             ? {
                 ...market,
                 id: parallelLegs[drawerIndex],
+                ...(market.mode === 'onchain' ? market.legs?.[drawerIndex] : {}),
                 question: marketTitle,
                 title: marketTitle,
                 ammMode: 'unified',

@@ -27,6 +27,7 @@ import {
   quoteParlay,
 } from '../lib/pointsApi.js';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
+import { usePointsExecution } from '../lib/PointsExecution.jsx';
 import { useLang, useT } from '@app/lib/i18n.js';
 import { useIsMobile } from '@app/lib/useIsMobile.js';
 import {
@@ -121,6 +122,8 @@ function countdownParts(totalSeconds) {
 
 export default function PointsHome({ onOpenLogin }) {
   const { authenticated, refresh } = usePointsAuth();
+  const { mode } = usePointsExecution();
+  const onchain = mode === 'onchain';
   const t = useT();
   const lang = useLang();
   const [searchParams] = useSearchParams();
@@ -205,6 +208,7 @@ export default function PointsHome({ onOpenLogin }) {
   }, [authenticated]);
 
   useEffect(() => {
+    if (onchain) return undefined;
     let cancelled = false;
     async function loadCycle() {
       try {
@@ -266,13 +270,13 @@ export default function PointsHome({ onOpenLogin }) {
   // Home = Trending. Always active, never pending (those live on
   // /c/porresolver). Search narrows the visible list through mapMarkets.
   const filtered = useMemo(() => {
-    const out = mapMarkets.filter(m => shouldShowOnHome(m, featuredTeamKeys));
+    const out = mapMarkets.filter(m => onchain || shouldShowOnHome(m, featuredTeamKeys));
     return sortMarketsByLiveThenEndDate(out);
   }, [mapMarkets, featuredTeamKeys]);
 
   const carouselMarkets = useMemo(() => (
-    sortMarketsByLiveThenEndDate(mapMarkets.filter(m => shouldShowOnHome(m, featuredTeamKeys)))
-  ), [mapMarkets, featuredTeamKeys]);
+    sortMarketsByLiveThenEndDate(mapMarkets.filter(m => onchain ? m.executionReady : shouldShowOnHome(m, featuredTeamKeys)))
+  ), [mapMarkets, featuredTeamKeys, onchain]);
 
   const homeMapMarkets = useMemo(() => (
     sharedMapLoaded && sharedMapMarkets.length > 0
@@ -397,7 +401,7 @@ export default function PointsHome({ onOpenLogin }) {
           : <PointsActivityCarousel markets={carouselMarkets} count={7} />
       )}
 
-      {cycleCountdown && (
+      {!onchain && cycleCountdown && (
         <section style={{
           padding: isMobile ? '18px 16px 0' : '24px 48px 0',
           maxWidth: 1280,
@@ -511,25 +515,25 @@ export default function PointsHome({ onOpenLogin }) {
             >
               Mercados
             </button>
-            <button
+            {!onchain && <button
               type="button"
               className={`filter-btn${comboOpen ? ' active' : ''}`}
               onClick={() => setComboOpen(true)}
               style={{ fontSize: 11 }}
             >
               Combinada
-            </button>
-            <button
+            </button>}
+            {!onchain && <button
               type="button"
               className={`filter-btn${trendingView === 'map' && !comboOpen ? ' active' : ''}`}
               onClick={() => setTrendingView('map')}
               style={{ fontSize: 11 }}
             >
               Mapa
-            </button>
+            </button>}
           </div>
         )}
-        <CombinadaMarketPickerDrawer
+        {!onchain && <CombinadaMarketPickerDrawer
           open={comboOpen}
           onClose={() => setComboOpen(false)}
           legs={parlaySlip}
@@ -548,7 +552,7 @@ export default function PointsHome({ onOpenLogin }) {
           onClear={handleClearParlaySlip}
           onOpenLogin={onOpenLogin}
           onAddLeg={handleAddParlayLeg}
-        />
+        />}
         {loading && <MarketGridSkeleton count={6} />}
         {error && !loading && (
           <div style={{
@@ -594,7 +598,7 @@ export default function PointsHome({ onOpenLogin }) {
       </section>
 
       {/* ── How it works ──────────────────────────────────── */}
-      <section id="how-it-works" style={{
+      {!onchain && <section id="how-it-works" style={{
         padding: isMobile ? '40px 16px 56px' : '60px 48px 80px',
         maxWidth: 1280,
         margin: '0 auto',
@@ -618,7 +622,7 @@ export default function PointsHome({ onOpenLogin }) {
             </div>
           ))}
         </div>
-      </section>
+      </section>}
 
       {/* ── Partners ───────────────────────────────────────────
           Sits below "Cómo funciona" as the last section on home.
@@ -627,7 +631,7 @@ export default function PointsHome({ onOpenLogin }) {
           MXNB is the peso-pegged stablecoin we'll eventually use for
           on-chain settlement. Logos are text badges for now to keep
           the build self-contained — can swap in SVG art later. */}
-      <section id="partners" style={{
+      {!onchain && <section id="partners" style={{
         padding: isMobile ? '32px 16px 48px' : '48px 48px 72px',
         maxWidth: 1280,
         margin: '0 auto',
@@ -706,7 +710,7 @@ export default function PointsHome({ onOpenLogin }) {
             </a>
           ))}
         </div>
-      </section>
+      </section>}
     </>
   );
 }

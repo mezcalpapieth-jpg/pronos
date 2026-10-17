@@ -2,7 +2,7 @@
 
 Branch: `onchain-sepolia`
 
-Status: contracts and preview runtime shipped; the single-market approval, indexing, and quote rehearsal is verified. Points execution guards are shipped. The frontend adapter, user delegation/funding, and tournament-cycle work remain. This branch must stay hidden behind flags until the next tournament reset.
+Status: contracts and preview runtime shipped; the single-market approval, indexing, and quote rehearsal is verified. Points execution guards are shipped. The Points frontend adapter is implemented locally and verified with isolated fixtures; it still needs commit, preview deployment, and a real user-wallet rehearsal. User delegation/funding and tournament-cycle work remain. This branch must stay hidden behind flags until the next tournament reset.
 
 ## Goal
 
@@ -239,7 +239,9 @@ Tasks:
 
 ### 5. Points Frontend Adapter
 
-Tasks:
+Implemented locally on 2026-10-17; preview deployment and real wallet verification remain pending. See the checkpoint below.
+
+Scope:
 
 - Add a market client adapter used by cards, detail, trade modal, portfolio, and history.
 - Dispatch by market mode:
@@ -607,3 +609,25 @@ The single technical test passed through the deployed pending-market admin route
 Validation passed: all 122 Solidity tests, 86 focused deployment/runtime/admin JavaScript tests, 51 execution-boundary and related trading tests, both Points and MVP Vite builds, and `git diff --check`. The proof record distinguishes automated checks from the live API/receipt evidence. No user reset, user token allocation, policy consent, or gas-sponsorship activation occurred.
 
 Pointbreak local, tracking, and remote refs remain `47aa9e19115d64bc36a2684e5eeb685caef117ba`. All 100 Vercel environment records outside this branch, including nine Pointbreak records, remain unchanged. Production deployment `dpl_C4bVYurgBRwVYqZAJJChri7uQpzz` retains that SHA and its four aliases, including `pronos.io` and `www.pronos.io`.
+
+### Points Frontend Adapter — Local Implementation, 2026-10-17
+
+Implemented on `onchain-sepolia`, based on `aab9412e06e07f6733ee3ce7513dc2240476217a`. These changes are local; this checkpoint does not claim a commit, push, or preview deployment.
+
+- A shared execution adapter routes cards, detail, buy, sell, redeem, portfolio, charts and trade history by market mode. Points keeps its existing endpoints. Test markets use protocol quotes and transactions, with 1% minimum-output protection and six-decimal share amounts. A signing failure never retries against the Points ledger.
+- A read-only `/api/points/onchain` bridge is enabled only for the opted-in `onchain-sepolia` Preview on chain `421614`, with the configured collateral and both factories. It maps the stable Points ID to the protocol database ID by chain, pool and configured factory, and checks the contract market ID separately. Missing, ambiguous or unindexed mappings stop execution. Contract ID `0` remains valid.
+- The preview defaults to `Torneo de prueba` and offers a separate `Points` selector. It reads the authenticated user's token balance over RPC without changing their Points balance. Mode/account changes remount the UI; private portfolio responses are not cached. Optional charts may be empty when unavailable, but cannot substitute Points history for test-market history.
+- Portfolio positions, per-outcome basis, realized PnL and history come from immutable buys, sells and redemptions. Partial exits remove proportional basis; completed redemption removes claimable shares. V1 resolution values `1/2` become Points outcome indexes `0/1`; V2 retains its zero-based indexes. Invalid accounting or missing valuation returns an explicit unavailable state.
+- Test mode hides unsupported limit orders, combinadas, Points rewards, scoring/leaderboards, cycle filters and the Points welcome-bonus copy. Users retain `Comprar`, `Vender` and `Cobrar`; normal pages expose no wallet coordinates, gas, approval transactions or explorer links. Existing admin transaction/debug output remains available.
+
+Validation: **79 focused tests passed**, including endpoint gating, session-wallet isolation, identity collisions, protocol routing, legacy Points parallel legs, fees, partial sells and redemption accounting. Both Points and MVP Vite builds passed. An isolated localhost browser fixture exercised buy → partial sell → resolve → redeem, history/detail navigation and switching back to Points. The real read handler and read model ran against injected fixture SQL/RPC data; transaction routes only changed in-memory fixtures. The request trace submitted protocol database ID `3`, never Points ID `360636` or contract ID `0`: buy 50 MXNP with `minSharesOut=96.525`, sell 58.75 shares with `minCollateralOut=27.918`, then redeem 58.75 shares. The fixture balance moved `1,250 → 1,200 → 1,228.20 → 1,286.95`; redemption left zero positions and total PnL `+26.95`. Switching to Points restored its independent 777-point fixture balance and existing tabs. This is browser/contract-interface verification with simulated data, not a real signed-wallet rehearsal or live database verification.
+
+Remaining work before activation:
+
+1. Review, commit and deploy the adapter to this branch's preview; verify the actual read-only mappings, RPC balance and served bundles there.
+2. Obtain a test user's explicit delegation consent, fund only the authorized test wallet, and verify gas handling. Perform a real buy/sell/resolve/redeem rehearsal with receipt and indexer readback. The earlier aggregate audit found zero current delegation policies; implementing the adapter does not grant them.
+3. Arrange preview indexing during that rehearsal. Production cron does not run this preview; until a preview scheduler is configured, manual indexing must advance the portfolio after confirmed transactions.
+4. Fix cancellation-refund indexing before testing refunds: its current zero-share redemption rows lack per-outcome burn attribution. The new read model deliberately reports those accounts unavailable instead of retaining stale claimable holdings. Historical binary resolution corrections also need outcome-at-redemption evidence before that workflow can be supported reliably.
+5. Implement tournament reset/funding dry runs, issuance limits, cycle registration, scoring and reward behavior. The test selector is a rehearsal surface, not tournament-launch readiness.
+
+No user funds, policies, live Points data, Vercel settings, deployment aliases or Pointbreak files/refs were changed by this implementation.

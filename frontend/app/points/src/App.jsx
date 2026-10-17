@@ -23,6 +23,7 @@ import PointsWelcomeModal, { hasBeenWelcomed } from './components/PointsWelcomeM
 import PointsIntroModal, { hasSeenIntro } from './components/PointsIntroModal.jsx';
 import { trackPublicityConversion, trackPublicityLanding } from './lib/pointsApi.js';
 import { isVideoDemoActive } from './demo/demoFlag.js';
+import { usePointsExecution } from './lib/PointsExecution.jsx';
 
 const PointsHome = lazy(() => import('./pages/PointsHome.jsx'));
 const PointsMarketDetail = lazy(() => import('./pages/PointsMarketDetail.jsx'));
@@ -238,6 +239,7 @@ export default function App() {
 
 function PointsAppChrome({ pathname, basename }) {
   const { authenticated, user, loading } = usePointsAuth();
+  const execution = usePointsExecution();
   const [loginOpen, setLoginOpen] = useState(false);
   const [welcomeOpen, setWelcomeOpen] = useState(false);
   const [introOpen, setIntroOpen] = useState(false);
@@ -351,16 +353,16 @@ function PointsAppChrome({ pathname, basename }) {
         open={loginOpen}
         onClose={() => setLoginOpen(false)}
       />
-      <PointsWelcomeModal
+      {execution.mode !== 'onchain' && <PointsWelcomeModal
         open={welcomeOpen}
         username={user?.username}
         onClose={() => setWelcomeOpen(false)}
-      />
-      <PointsIntroModal
+      />}
+      {execution.mode !== 'onchain' && <PointsIntroModal
         open={introOpen}
         onClose={() => setIntroOpen(false)}
         onCreateAccount={() => setLoginOpen(true)}
-      />
+      />}
       {isVideoDemoActive() && (
         <Suspense fallback={null}>
           <DemoControlPanel />
@@ -374,8 +376,10 @@ function PointsAppChrome({ pathname, basename }) {
 // Renders the ticker only on the Home page to match the landing's layout.
 function Shell({ onOpenLogin, isAdmin }) {
   const location = useLocation();
+  const execution = usePointsExecution();
   const path = location.pathname;
   const isHome = path === '/';
+  const pointsOnly = execution.mode === 'onchain' && ['/earn', '/torneo'].includes(path);
 
   // CategoryBar is the universal browsing affordance — show it on home,
   // category pages, AND market detail so users can always jump to
@@ -389,9 +393,13 @@ function Shell({ onOpenLogin, isAdmin }) {
 
   return (
     <>
-      {isHome && <PointsTicker />}
+      {isHome && execution.mode !== 'onchain' && <PointsTicker />}
       <PointsNav onOpenLogin={onOpenLogin} isAdmin={isAdmin} />
       {showCategoryBar && <PointsCategoryBar />}
+      {pointsOnly ? <main style={{ maxWidth: 700, margin: '48px auto', padding: 24 }}>
+        <p>Esta sección corresponde al torneo Points. El torneo de prueba tiene un saldo y operaciones separados.</p>
+        <button className="btn-primary" onClick={() => execution.setMode('points')}>Ver Points</button>
+      </main> :
       <Suspense fallback={<RouteFallback />}>
         <Routes>
           <Route path="/i" element={<PublicityRedirect source="instagram" />} />
@@ -428,7 +436,7 @@ function Shell({ onOpenLogin, isAdmin }) {
           <Route path="/privacy" element={<PrivacyPolicy />} />
           <Route path="/terms"   element={<TermsOfService />} />
         </Routes>
-      </Suspense>
+      </Suspense>}
       <Footer />
     </>
   );
