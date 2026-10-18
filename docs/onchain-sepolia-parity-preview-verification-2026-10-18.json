@@ -1,0 +1,105 @@
+{
+  "checkedAt": "2026-10-18T17:38:47.320Z",
+  "sha": "129b65dc908dbae8f901656a4e65025199f510e6",
+  "preview": {
+    "id": "dpl_CKaa13tHcV2c4zd2hw57M4TKM7NB",
+    "url": "https://pronos-5eezt0xoi-mezcalpapieth-jpgs-projects.vercel.app",
+    "alias": "https://pronos-git-onchain-sepolia-mezcalpapieth-jpgs-projects.vercel.app",
+    "state": "READY"
+  },
+  "boundaries": {
+    "environmentRecordsUnchanged": 156,
+    "workerEnvironmentRecordsUnchanged": 12,
+    "productionUnchanged": {
+      "id": "dpl_6JgQP3KfXVvA2jXMWVovp11Z6epa",
+      "aliases": [
+        "pronos.io",
+        "www.pronos.io",
+        "pronos-chi.vercel.app",
+        "pronos-mezcalpapieth-jpgs-projects.vercel.app"
+      ]
+    },
+    "pointbreakUnchanged": {
+      "local": "47aa9e19115d64bc36a2684e5eeb685caef117ba",
+      "tracking": "e71de9cf34fb1a454018b69da93bb0d9c3355aaf"
+    },
+    "tokenAndSupplyUnchanged": {
+      "token": "0x6ed6c00c2b4cf9f5989866f4c5862d4cded67ef9",
+      "totalSupply": "50000000000000",
+      "accounts": {
+        "reserve": {
+          "address": "0x0Caa37c077924038e14e9D8dE46B5208788e52CF",
+          "balance": "2802243689456225488",
+          "nonce": 53
+        },
+        "operations": {
+          "address": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+          "balance": "488842499590000",
+          "nonce": 23
+        },
+        "gas": {
+          "address": "0x252a1cfa015612EFB8C7c2f1643A9F541b866990",
+          "balance": "99499580000000000",
+          "nonce": 1
+        }
+      }
+    },
+    "totalSupplyMxnp": "50000000",
+    "ethBalancesAndNoncesUnchanged": true,
+    "noChainTransactions": true,
+    "noMigration": true,
+    "noCycleActivation": true
+  },
+  "http": {
+    "checkedAt": "2026-10-18T17:35:13.938Z",
+    "config": {
+      "enabled": true,
+      "chainId": 421614,
+      "symbol": "MXNP"
+    },
+    "guestAdminStatus": 401,
+    "guestAdminError": "not_authenticated",
+    "aliasHtmlMatched": true,
+    "entryPath": "/points/assets/index-DldEoK8d.js",
+    "entryHash": "cf9eb8a9dd405f45e67c32f36cb73cd42166a3643e7924782740d9a6b4a8b0c8",
+    "adminChunk": "PointsAdmin-dANl3NhR.js",
+    "portfolioChunk": "PointsPortfolio-DNCetkAT.js",
+    "previewApprovalSelectorServed": true,
+    "onchainPortfolioServed": true
+  },
+  "readiness": {
+    "ok": true,
+    "blockers": [],
+    "warnings": [],
+    "reviews": [
+      {
+        "id": "cre_webhook_dry_run",
+        "title": "CRE sigue en modo revisión",
+        "detail": "Sin secreto, Chainlink CRE no puede enviar resoluciones al webhook.",
+        "fix": "Set CRE_RESOLUTION_WEBHOOK_SECRET before enabling CRE workflows"
+      }
+    ],
+    "routerVerified": true,
+    "gas": {
+      "enabled": true,
+      "configured": true,
+      "ready": true,
+      "funder": "0x252a1cfa015612efb8c7c2f1643a9f541b866990",
+      "targetEth": "0.0005",
+      "minimumEth": "0.0002",
+      "walletDailyEth": "0.002",
+      "globalDailyEth": "0.1",
+      "reserveEth": "0.01",
+      "schemaReady": true,
+      "pendingTransfers": 0,
+      "balanceEth": "0.09949958",
+      "signerVerified": true,
+      "dailyBudgetUsedEth": "0.0005010973508"
+    }
+  },
+  "databaseBoundary": {"checked_at":"2026-10-18T17:44:30.081Z","tournament_migration_applied":false,"active_cycles":[{"id":5,"label":"Torneo Octubre 2026","status":"active","ends_at":"2026-11-01T05:59:00+00:00","started_at":"2026-10-01T06:00:00+00:00"}],"indexer":[{"chain_id":421614,"last_block":320472954,"updated_at":"2026-10-18T17:43:37.988958+00:00","factory_address":"0xb6cf9f65ab82c17c8e9d58d06073ca3af3e5443d"},{"chain_id":421614,"last_block":320472954,"updated_at":"2026-10-18T17:43:38.641194+00:00","factory_address":"0x33c1cdd4e22a9732ad808f2ad7efe82211b65c6a"}]},
+  "limitations": [
+    "Read-only shared-library/RPC/Neon readiness; no fresh admin login or trade rehearsal.",
+    "CRE webhook remains in review mode."
+  ]
+}

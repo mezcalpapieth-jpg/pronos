@@ -29,3 +29,7 @@ The calculator trusts its operator-supplied canonical snapshot. It does **not** 
 Next, build the read-only indexer adapter that verifies those facts and persists cycle/market registration and a reproducible snapshot hash. Existing `trades`/`redemptions` tables do not contain every required field: their insertion timestamps are not canonical block timestamps, and cancellation burn attribution remains incomplete. Do not guess those fields or treat arbitrary share transfers as purchases. A reorg requires rebuilding the snapshot. Late signups need separately reviewed registration/funding limits. Rewards, archived-cycle UI and cancellation/correction rehearsals remain separate roadmap work.
 
 Validation: 13 focused tests cover grant provenance, foreign transfers/wallets/markets, fee handling, partial redemptions, binary and multi-outcome marks, replay/conflicting logs, capital/holding limits, cutoff/hash checks, exact large integer math, and the actual offline CLI.
+
+## Canonical adapter follow-up
+
+The [read-only snapshot adapter](./onchain-sepolia-canonical-snapshots-2026-10-18.md) now supplies bounded RPC-backed input, reviewed factory registrations, exact funding proofs and immutable private artifacts. The raw offline calculator still accepts operator-supplied input and is not a payout authorization tool. Full-scale resumable capture, unsupported lifecycle accounting and activation requirements in the adapter runbook remain open. This follow-up is local and is not included in the parity Preview at `129b65d`.

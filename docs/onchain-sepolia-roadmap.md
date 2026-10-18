@@ -808,3 +808,21 @@ All 156 main-project environment records and 12 worker records matched the basel
 Added funded-plan registrations and a pure, integer-unit scoring calculator with an offline operator command. It ignores raw token balances/transfers, excludes operations, uses gross buy/net sell cashflows and values outstanding claims without double-counting redemptions. Canonical block/hash marks, replay detection and cash/holding limits fail closed. Thirteen focused tests include the actual CLI. This does not change the live leaderboard or current cycle. The [shadow-scoring guide](./onchain-sepolia-shadow-scoring-2026-10-18.md) records the input contract and limits.
 
 Next: implement and verify the read-only indexer snapshot/registration adapter before connecting scoring. Canonical timestamp/hash coverage, on-chain factory membership, funding finality, late signups, cancellation/refund/correction accounting, rewards and archived-cycle UI remain required before tournament activation.
+
+## Pointbreak parity Preview release — 2026-10-18
+
+Pushed `129b65dc908dbae8f901656a4e65025199f510e6` to `onchain-sepolia`. Its Git Preview `dpl_CKaa13tHcV2c4zd2hw57M4TKM7NB` is READY and the branch alias points to that deployment. Both URLs serve matching Points HTML/entry JavaScript; the lazy admin approval selector and on-chain portfolio guard are present. Public on-chain configuration reports enabled Arbitrum Sepolia / MXNP, and the admin readiness endpoint correctly rejects a guest with 401.
+
+Read-only shared readiness libraries, current public configuration, RPC and fresh isolated Neon SELECTs passed with zero blockers/warnings. Router code/bindings, factory roles, funding schema and prior signer evidence verified; gas funding has zero pending transfers and 0.09949958 ETH available. Scheduled indexing continues successfully. The existing CRE webhook dry-run review remains open. No fresh owner/admin login, signing probe or buy/sell/redeem rehearsal was performed.
+
+All 156 main-project and 12 worker environment records are unchanged. Current MXNP remains `0x6ed6c00c2b4cf9f5989866f4c5862d4cded67ef9` with 50,000,000 supply. Reserve/operations/gas-wallet ETH balances and nonces match the baseline. The active cycle remains ID 5, `Torneo Octubre 2026`, and future tournament tables remain absent. No ETH was spent and no chain transaction, migration, token deployment, mint or cycle switch was performed.
+
+Pointbreak local stays `47aa9e19115d64bc36a2684e5eeb685caef117ba`; tracking/remote stay `e71de9cf34fb1a454018b69da93bb0d9c3355aaf`. Production remains READY `dpl_6JgQP3KfXVvA2jXMWVovp11Z6epa` with unchanged aliases. See the [release verification](./onchain-sepolia-parity-preview-verification-2026-10-18.json) and [parity checkpoint](./onchain-sepolia-pointbreak-parity-2026-10-18.md) for scope and validation.
+
+## Roadmap continuation: canonical shadow snapshots — 2026-10-18
+
+Implemented locally after the deployed SHA: read-only canonical snapshot/market-registration adapter and private operator command. It verifies the reviewed complete factory registry, final exact mint receipts before start, canonical block timestamps/log receipts, historical marks and deployment bindings. It rechecks hashes for reorgs, uses actual gross buy/net sell/redemption events and refuses unsupported lifecycle histories or incomplete/bounded-out capture. Output remains shadow-only, disconnected from the current cycle, leaderboard and rewards.
+
+All **44 focused tests passed without skips**, including 13 new snapshot test groups and the local PostgreSQL funding recovery suite. No live future-cycle snapshot is claimed because that token/funding/migration was explicitly deferred. The [adapter runbook](./onchain-sepolia-canonical-snapshots-2026-10-18.md) documents private artifacts, operator review, trust boundaries and capture limits. This new work is not part of the already deployed Preview.
+
+Next: resumable capture for full-tournament scale, late-registration limits and cancellation/refund/correction accounting; then archived-cycle presentation and reviewed reward eligibility. Keep actual cycle deployment, funding and activation deferred until explicitly requested.
