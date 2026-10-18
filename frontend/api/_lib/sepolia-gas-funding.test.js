@@ -79,6 +79,21 @@ test('zero-ETH user is topped up before trading, using one persisted native tran
   assert.deepEqual(f.counts(), { signs: 1, sends: 1, authorizations: 1 });
 });
 
+test('Turnkey can locate the gas signer when ledger addresses are lowercase', async () => {
+  const f = fixture();
+  assert.equal(f.args.settings.funder, funder.address.toLowerCase());
+  assert.notEqual(f.args.settings.funder, funder.address);
+  const sign = f.args.sign;
+  f.args.sign = args => {
+    // Turnkey looks up wallet accounts using their case-sensitive address.
+    assert.equal(args.signWithAddress, funder.address);
+    return sign(args);
+  };
+  const result = await ensureSepoliaGas(f.args);
+  assert.equal(result.funded, true);
+  assert.equal(f.records[0].funder_address, funder.address.toLowerCase());
+});
+
 test('already funded users bypass the ledger and funding signer', async () => {
   const f = fixture(); f.balance('0.0003');
   f.args.store = null; f.args.sign = () => assert.fail('must not sign');

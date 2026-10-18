@@ -60,7 +60,10 @@ export async function ensureSepoliaGas({ ownerAddr, suborgId, gasUnits, settings
     const maxCost = value.add(gasLimit.mul(fees.maxFeePerGas));
     if ((await provider.getBalance(settings.funder)).lt(maxCost.add(settings.reserve))) throw gasError();
     const unsigned = ethers.utils.serializeTransaction({ ...transaction, from: undefined, nonce: latestNonce, gasLimit });
-    const signed = await sign({ suborgId: settings.suborgId, signWithAddress: settings.funder, unsignedTx: unsigned });
+    // Turnkey's account lookup is case-sensitive; keep lowercase ledger
+    // identities, but use the account's checksummed EVM address for signing.
+    const signed = await sign({ suborgId: settings.suborgId,
+      signWithAddress: ethers.utils.getAddress(settings.funder), unsignedTx: unsigned });
     // Verify the signer returned precisely the requested transfer, not another
     // nonce, recipient, gas cap or chain. Only this persisted payload is sent.
     const parsed = ethers.utils.parseTransaction(signed);
