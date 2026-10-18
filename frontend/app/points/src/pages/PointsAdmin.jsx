@@ -3651,7 +3651,7 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
     }
   }
 
-  async function resolveMarket(marketOrId, winningOutcomeIndex) {
+  async function resolveMarket(marketOrId, winningOutcomeIndex, finalScore = '') {
     const market = marketOrId && typeof marketOrId === 'object' ? marketOrId : null;
     const marketId = market?.id || marketOrId;
     const winningOutcomeIndexes = normalizeOutcomeSelection(winningOutcomeIndex);
@@ -3662,6 +3662,7 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
         marketId,
         winningOutcomeIndex: primaryOutcomeIndex,
         ...(winningOutcomeIndexes.length > 1 ? { winningOutcomeIndexes } : {}),
+        finalScore,
       });
       // In-place patch instead of refetching the whole list — the
       // refetch would scroll the page back to the top and lose the
@@ -3673,6 +3674,7 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
         ...m,
         status: 'resolved',
         outcome: primaryOutcomeIndex,
+        finalScore: finalScore.trim() || null,
         resolvedAt: new Date().toISOString(),
         parallelLegs: Array.isArray(m.parallelLegs)
           ? m.parallelLegs.map((leg, index) => ({
@@ -4556,7 +4558,7 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
                 <ResolveControls
                   market={m}
                   resolving={resolving === m.id}
-                  onResolve={(winnerIndex) => resolveMarket(m, winnerIndex)}
+                  onResolve={(winnerIndex, finalScore) => resolveMarket(m, winnerIndex, finalScore)}
                   multiple={m.ammMode === 'parallel'}
                 />
               )}
@@ -4607,6 +4609,9 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
             </div>
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <button type="button" className="btn-secondary" onClick={() => setEditing(m)}>
+                Editar resultado
+              </button>
               <span style={{
                 fontFamily: 'var(--font-mono)',
                 fontSize: 10,
@@ -4852,6 +4857,7 @@ function EditMarketModal({ market, onClose, onSaved, onCancel }) {
     : editOutcomes.map(() => '');
   const initialMarketImageUrl = market.imageUrl || '';
   const [question, setQuestion] = useState(market.question || '');
+  const [finalScore, setFinalScore] = useState(market.finalScore || '');
   const [category, setCategory] = useState(market.category || 'general');
   const [imageUrl, setImageUrl] = useState(initialMarketImageUrl);
   const [outcomeImages, setOutcomeImages] = useState(initialOutcomeImages);
@@ -4879,7 +4885,7 @@ function EditMarketModal({ market, onClose, onSaved, onCancel }) {
   const initialEndMinute = isoToMinutePart(market.endTime);
   const initialCategory = market.category || 'general';
   const canEditOutcomeImages = editOutcomes.length >= 2;
-  const canEditParallelReserves = market.ammMode === 'parallel' && initialParallelReserveRows.length > 0;
+  const canEditParallelReserves = market.status === 'active' && market.ammMode === 'parallel' && initialParallelReserveRows.length > 0;
 
   function normalizeEditedIso(dateValue, hourValue, minuteValue, initialDateValue, initialHourValue, initialMinuteValue, label) {
     const touched =
@@ -4995,6 +5001,7 @@ function EditMarketModal({ market, onClose, onSaved, onCancel }) {
     try {
       await adminEditMarket({
         marketId: market.id,
+        finalScore: finalScore.trim() !== (market.finalScore || '').trim() ? finalScore : undefined,
         question: question.trim() !== (market.question || '').trim() ? question.trim() : undefined,
         startTime: nextStart.value,
         endTime: nextEnd.value,
@@ -5091,6 +5098,9 @@ function EditMarketModal({ market, onClose, onSaved, onCancel }) {
           }}
         />
 
+        {market.status === 'resolved' && (
+          <FinalResultField value={finalScore} onChange={setFinalScore} disabled={saving} />
+        )}
         <label style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>
           Categoría
         </label>
@@ -5700,6 +5710,24 @@ function resolvedOutcomeLabel(market) {
   return outcomeLabelsForIndexes(outcomes, resolvedOutcomeIndexes(market));
 }
 
+function FinalResultField({ value, onChange, disabled }) {
+  return (
+    <label style={{ display: 'flex', flexDirection: 'column', gap: 5, flexBasis: '100%', margin: '8px 0', fontSize: 11, color: 'var(--text-secondary)' }}>
+      Resultado final (banner público, opcional)
+      <input
+        type="text"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        disabled={disabled}
+        maxLength={240}
+        placeholder="Ej. México 3-2 Brasil · Inflación: 3.8%"
+        style={{ width: '100%', minWidth: 180, padding: '8px 10px', borderRadius: 8, background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
+      />
+      <span>Se muestra en la tarjeta del mercado y en su página. Déjalo vacío para ocultarlo.</span>
+    </label>
+  );
+}
+
 function ResolveControls({
   market,
   resolving,
@@ -5715,6 +5743,11 @@ function ResolveControls({
     .filter(index => index < outcomes.length);
   const normalizedInitial = safeInitial.length > 0 ? safeInitial : [0];
   const [selected, setSelected] = useState(normalizedInitial);
+  const [finalScore, setFinalScore] = useState(market.finalScore || '');
+
+  useEffect(() => {
+    setFinalScore(market.finalScore || '');
+  }, [market.id, market.finalScore]);
 
   useEffect(() => {
     setSelected(normalizedInitial);
@@ -5787,8 +5820,11 @@ function ResolveControls({
           ))}
         </select>
       )}
+      {market.status === 'active' && (
+        <FinalResultField value={finalScore} onChange={setFinalScore} disabled={resolving} />
+      )}
       <button
-        onClick={() => onResolve(multiple ? selected : primarySelected)}
+        onClick={() => onResolve(multiple ? selected : primarySelected, finalScore)}
         disabled={resolving}
         className="btn-primary"
         style={{ padding: '6px 12px', fontSize: 11 }}

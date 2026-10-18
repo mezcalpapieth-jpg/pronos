@@ -15,6 +15,7 @@ import { cachedJson, createApiTimer, setCacheHeaders } from '../_lib/api-perform
 import { PRONOS_TREASURY_USERNAME } from '../_lib/points-limit-orders.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 import { publicMarketTranslationFields } from '../_lib/market-translations.js';
+import { resolvedMarketPrices } from '../_lib/points-resolution-display.js';
 import { binaryPricesWithBookTrade, pricesWithBookTrades } from '../_lib/points-display-prices.js';
 import { TOURNAMENT_APPROVED_MARKET_START_ISO } from '../_lib/points-tournament-config.js';
 import { pendingApprovalSettings } from '../_lib/onchain-preview-approval.js';
@@ -69,7 +70,7 @@ function pricesFromReserves(reserves, outcomeCount) {
 }
 
 function binaryLegPricesFromRow({ reserves, status, outcome }, fallbackYes = 0.5) {
-  if (String(status || '') === 'resolved') {
+  if (String(status || '') === 'resolved' && outcome != null) {
     const resolvedOutcome = Number(outcome);
     if (resolvedOutcome === 0) return [1, 0];
     if (resolvedOutcome === 1) return [0, 1];
@@ -490,7 +491,7 @@ export default async function handler(req, res) {
           const reserves = parseJsonb(r.reserves, []).map(Number);
           const basePrices = pricesFromReserves(reserves, outcomes.length);
           const displayTrades = parseJsonb(r.display_trade_outcomes, []);
-          const prices = outcomes.length === 2
+          const prices = resolvedMarketPrices({ status: r.status, outcome: r.outcome, outcomes }) || (outcomes.length === 2
             ? binaryPricesWithBookTrade(basePrices, {
               status: r.status,
               outcomeIndex: r.display_trade_outcome_index,
@@ -500,7 +501,7 @@ export default async function handler(req, res) {
             : pricesWithBookTrades(basePrices, {
               status: r.status,
               trades: displayTrades,
-            });
+            }));
           // "Live" is the red EN VIVO pill — only for fixed-window sports
           // events. Two defenses against open-ended prediction markets
           // accidentally showing live:

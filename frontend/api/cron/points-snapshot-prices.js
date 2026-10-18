@@ -113,9 +113,11 @@ export default async function handler(req, res) {
     const purged = await sql`
       WITH cutoffs AS (
         SELECT m.id,
-               LEAST(m.end_time, p.end_time,
-                 CASE WHEN m.status IN ('resolved', 'canceled') THEN COALESCE(m.resolved_at, m.end_time, m.created_at) END,
-                 CASE WHEN p.status IN ('resolved', 'canceled') THEN COALESCE(p.resolved_at, p.end_time, p.created_at) END
+               LEAST(
+                 CASE WHEN m.status = 'resolved' THEN COALESCE(m.resolved_at, m.end_time, m.created_at)
+                   WHEN m.status = 'canceled' THEN LEAST(m.end_time, COALESCE(m.resolved_at, m.created_at)) ELSE m.end_time END,
+                 CASE WHEN p.status = 'resolved' THEN COALESCE(p.resolved_at, p.end_time, p.created_at)
+                   WHEN p.status = 'canceled' THEN LEAST(p.end_time, COALESCE(p.resolved_at, p.created_at)) ELSE p.end_time END
                ) AS closed_at
           FROM points_markets m
           LEFT JOIN points_markets p ON p.id = m.parent_id

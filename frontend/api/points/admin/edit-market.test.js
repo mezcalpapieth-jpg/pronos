@@ -16,7 +16,7 @@ test('active market edit syncs mañanera resolver phrase from quoted question', 
 test('active api-price market edits sync threshold and operator from question', () => {
   assert.match(source, /syncApiPriceFromQuestion/);
   assert.match(source, /resolverConfig: syncedMananera\.resolverConfig/);
-  assert.match(source, /const nextResolverConfig = syncedWeather\.resolverConfig \|\| null/);
+  assert.match(source, /const nextResolverConfig = syncResolver \? \(syncedWeather\.resolverConfig \|\| null\) : existingResolverConfig/);
 });
 
 test('active weather market edits sync forecast date from question or end date', () => {

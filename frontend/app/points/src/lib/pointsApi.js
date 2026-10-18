@@ -1045,7 +1045,7 @@ export async function adminBulkHideMarkets({
 }
 
 // ─── Admin — edit market (question + timing + category + market/outcome images + parallel reserves) ─
-export async function adminEditMarket({ marketId, question, startTime, endTime, category, imageUrl, outcomeImages, parallelLegs }) {
+export async function adminEditMarket({ marketId, question, startTime, endTime, category, imageUrl, outcomeImages, parallelLegs, finalScore }) {
   return postJson('/api/points/admin/edit-market', {
     marketId,
     question,
@@ -1055,6 +1055,7 @@ export async function adminEditMarket({ marketId, question, startTime, endTime, 
     imageUrl,
     outcomeImages,
     parallelLegs,
+    finalScore,
   });
 }
 

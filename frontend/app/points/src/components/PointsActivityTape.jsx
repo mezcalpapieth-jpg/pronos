@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useLang, useT } from '@app/lib/i18n.js';
 
 const BUY_COLOR = 'var(--yes)';
@@ -178,9 +179,17 @@ export default function PointsActivityTape({
                     background: accent,
                     flexShrink: 0,
                   }} />
-                  <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    @{item.username || t('points.activity.tapeUser')}
-                  </span>
+                  {item.username ? (
+                    <Link
+                      to={`/u/${encodeURIComponent(item.username)}`}
+                      onClick={(event) => event.stopPropagation()}
+                      style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'inherit', textDecoration: 'underline', textUnderlineOffset: 2 }}
+                    >
+                      @{item.username}
+                    </Link>
+                  ) : (
+                    <span>@{t('points.activity.tapeUser')}</span>
+                  )}
                   <span style={{
                     color: accent,
                     fontFamily: 'var(--font-mono)',

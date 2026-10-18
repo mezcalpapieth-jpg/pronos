@@ -14,10 +14,10 @@ test('active clocks advance until the trading deadline, then freeze even while p
   }
 });
 
-test('resolved and canceled markets use the earlier of close and settlement, never the time of viewing', () => {
+test('resolved markets freeze at settlement; canceled markets retain their trading cutoff', () => {
   for (const status of ['resolved', 'canceled']) {
     const market = { status, end_time: close, resolved_at: close + hour };
-    assert.deepEqual(marketChartClock(market, close + 1000 * hour), { endMs: close, frozen: true });
+    assert.deepEqual(marketChartClock(market, close + 1000 * hour), { endMs: status === 'resolved' ? close + hour : close, frozen: true });
     market.resolved_at = close - hour;
     assert.deepEqual(marketChartClock(market, close + hour), { endMs: close - hour, frozen: true });
     market.end_time = null;
@@ -37,8 +37,8 @@ test('parallel legs share their parent window while early-resolved legs cannot a
     status: id === 1 ? 'resolved' : 'active', end_time: close,
     resolved_at: id === 1 ? close - 48 * hour : null }));
   const windows = chartWindowsFromRows(rows, 24, close + 1000 * hour);
-  assert.deepEqual(windows.map(row => row.start), [new Date(close - 24 * hour).toISOString(), new Date(close - 24 * hour).toISOString()]);
-  assert.ok(windows.every(row => row.frozen && row.end === new Date(close).toISOString()));
+  assert.deepEqual(windows.map(row => row.start), [new Date(close - 23 * hour).toISOString(), new Date(close - 23 * hour).toISOString()]);
+  assert.ok(windows.every(row => row.frozen && row.end === new Date(close + hour).toISOString()));
   assert.equal(windows[0].dataEnd, new Date(close - 48 * hour).toISOString());
   assert.equal(windows[1].dataEnd, new Date(close).toISOString());
 });

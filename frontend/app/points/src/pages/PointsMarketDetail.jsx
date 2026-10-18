@@ -3391,7 +3391,8 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
   const marketOpenedAt = market.createdAt
     ? Math.floor(new Date(market.createdAt).getTime() / 1000)
     : null;
-  // Closed charts count backward from the trading cutoff, never today.
+  // Resolved charts count backward from settlement; pending/canceled
+  // charts use the trading cutoff. Neither drifts with the viewing time.
   // The APIs use the same clock for prices and activity.
   // Polymarket-style clamp: a market younger than the selected range
   // charts its own life (created 8:22 → axis starts 8:22), so every line
@@ -3473,6 +3474,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
     return Math.round((displayPrices[i] ?? 0) * 100);
   }
   function chartPctFor(i) {
+    if (isResolved) return pctFor(i);
     const last = displayHistoryByOutcome?.[i]?.at(-1);
     return chartFrozen && last && Number.isFinite(Number(last.p)) ? Number(last.p) : pctFor(i);
   }
@@ -3916,7 +3918,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
                 letterSpacing: '0.1em',
                 color: 'var(--text-muted)',
               }}>
-                <span>{chartFrozen ? t('points.detail.priceBeforeClose') : t('points.detail.priceRealtime')}</span>
+                <span>{isResolved ? t('points.detail.priceResolved') : chartFrozen ? t('points.detail.priceBeforeClose') : t('points.detail.priceRealtime')}</span>
                 <div
                   role="group"
                   aria-label={t('points.detail.chartRange')}

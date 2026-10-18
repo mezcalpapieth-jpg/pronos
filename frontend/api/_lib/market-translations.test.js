@@ -7,6 +7,27 @@ import {
   translateOutcomeLabel,
 } from './market-translations.js';
 
+test('active tournament titles repair stored Spanish and legacy generated English fallbacks', () => {
+  const cases = [
+    ['¿Quién sale de La Granja VIP esta semana?', 'Who leaves La Granja VIP this week?'],
+    ['¿Quién gana el Balón de Oro masculino 2026?', "Who will win the 2026 men's Ballon d'Or?", 'Quién gana el Balón de Oro masculino 2026 · Balon de Oro masculino 2026', { kind: 'award', categoryLabel: 'Quién gana el Balón de Oro masculino 2026', awardLabel: 'Balon de Oro masculino 2026' }],
+    ['Huevo blanco: precio a mayoreo al cierre de octubre 2026', 'White egg: wholesale price at October 2026 close'],
+    ['¿Jesucristo regresa antes del 1 de noviembre de 2026?', 'Will Jesus Christ return before November 1, 2026?'],
+    ['¿GPT Astra 6.1+ será lanzado públicamente antes de que termine Octubre 2026?', 'Will GPT Astra 6.1+ be publicly released before the end of October 2026?'],
+    ['Diésel promedio nacional cierre de octubre > $27.50', 'Diesel national average at October close > $27.50', 'Diésel national average octubre close > $27.50'],
+  ];
+  for (const [question, expected, legacy = question, source = {}] of cases) {
+    for (const en of [null, { question: legacy, outcomes: ['Yes', 'No'] }]) {
+      const fields = publicMarketTranslationFields({ question, outcomes: ['Sí', 'No'], sourceData: { ...source, translations: { en } } });
+      assert.equal(fields.title_en, expected);
+      assert.equal(fields.title_es, question);
+      assert.deepEqual(fields.outcomes_en, ['Yes', 'No']);
+    }
+    const fields = publicMarketTranslationFields({ question, outcomes: ['Sí', 'No'], sourceData: { translations: { en: { question: 'Curated English question' } } } });
+    assert.equal(fields.title_en, 'Curated English question');
+  }
+});
+
 test('attachMarketTranslations stores bilingual Netflix text', () => {
   const spec = attachMarketTranslations({
     question: '¿Lovesick entra al Top 3 de Netflix México esta semana?',

@@ -455,7 +455,6 @@ export default function PointsMarketCard({ market, userPosition }) {
         >
           {visibleOutcomeRows.map((row) => {
             const { index: i, label, rawLabel, price: livePrice, logo, countryLabel } = row;
-            const accent = accentFor(i);
             // Resolved markets collapse to a binary 100 / 0 display so
             // the card matches what the detail page already does — no
             // more stale "Bad Bunny 67%" showing after Bad Bunny won.
@@ -465,6 +464,9 @@ export default function PointsMarketCard({ market, userPosition }) {
                   : (Number(market.outcome) === i ? 1 : 0))
               : null;
             const pct = Math.round((resolvedPrice ?? livePrice) * 100);
+            const accent = isResolved
+              ? (pct === 100 ? ACCENTS[0] : { bg: 'var(--surface2)', border: 'var(--border)', fg: 'var(--text-muted)' })
+              : accentFor(i);
             const gain = previewGain(livePrice);
             const teamProfile = findTeamByName(market.sport, rawLabel);
             const rowOnClick = (e) => {
@@ -562,14 +564,14 @@ export default function PointsMarketCard({ market, userPosition }) {
                   borderRadius: 100,
                   flexShrink: 0,
                 }}>
-                  <span style={{
+                  {isResolved ? (pct === 100 && <span title={t('detail.winner')} style={{ color: accent.fg }}>✓</span>) : <span style={{
                     fontFamily: 'var(--font-mono)',
                     fontSize: 10,
                     color: 'var(--text-muted)',
                     whiteSpace: 'nowrap',
                   }}>
                     {pricesUnavailable ? '—' : `+${gain}`}
-                  </span>
+                  </span>}
                   <span style={{
                     fontFamily: 'var(--font-display)',
                     fontSize: 14,

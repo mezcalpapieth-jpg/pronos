@@ -29,7 +29,7 @@ test('closed chart SQL freezes prices/activity and retains the closing history a
     CREATE TABLE points_markets (
       id INT PRIMARY KEY, parent_id INT, status TEXT DEFAULT 'active',
       end_time TIMESTAMPTZ, resolved_at TIMESTAMPTZ, created_at TIMESTAMPTZ DEFAULT NOW() - INTERVAL '200 days',
-      outcomes JSONB DEFAULT '["A","B"]', reserves JSONB DEFAULT '[1000,1000]', amm_mode TEXT DEFAULT 'unified'
+      outcome INT DEFAULT 0, outcomes JSONB DEFAULT '["A","B"]', reserves JSONB DEFAULT '[1000,1000]', amm_mode TEXT DEFAULT 'unified'
     );
     CREATE TABLE points_price_snapshots (
       id SERIAL PRIMARY KEY, market_id INT, prices JSONB, reserves JSONB, snapshotted_at TIMESTAMPTZ DEFAULT NOW()
@@ -68,14 +68,14 @@ test('closed chart SQL freezes prices/activity and retains the closing history a
       (1,'late','buy',0,1,'[1000,1000]','[1000,1000]',NOW()-INTERVAL '89 days',1000),
       (1,'treasury','buy',0,0.5,'[1000,1000]','[1000,1000]',NOW()-INTERVAL '90 days 1 hour',2000);
   `);
-  const windows = await loadChartWindows(sql, [1, 2, 3, 4, 11, 12, 999], 24);
+  const windows = await loadChartWindows(sql, [1, 2, 3, 4, 11, 12, 999], 48);
   const bindings = { windows, maxPoints: 20, outcomeIdx: 0, tradeRowCap: 240, PRONOS_TREASURY_USERNAME: 'treasury', bucketSeconds: 1800 };
   const [sampleQuery, boundaryQuery, tradeQuery] = queries(historySource);
   assert.equal(queries(historySource).length, 3);
 
-  await t.test('sampled rows and trade overlays exclude settlement tails and all post-close activity', async () => {
+  await t.test('sampled rows include settlement history while trade overlays exclude post-close activity', async () => {
     const samples = await run(sql, sampleQuery, bindings);
-    assert.deepEqual(samples.filter(row => row.market_id === 1).map(row => row.id), [103,104]);
+    assert.deepEqual(samples.filter(row => row.market_id === 1).map(row => row.id), [103,104,105]);
     assert.deepEqual(samples.filter(row => row.market_id === 2).map(row => row.id), [202]);
     assert.deepEqual(samples.filter(row => row.market_id === 3).map(row => row.id), [301]);
     assert.deepEqual(samples.filter(row => row.market_id === 4).map(row => row.id), [401]);
@@ -111,8 +111,8 @@ test('closed chart SQL freezes prices/activity and retains the closing history a
     assert.ok(purgeQuery);
     await run(sql, purgeQuery);
     const remaining = (await db.query('SELECT id FROM points_price_snapshots ORDER BY id')).rows.map(row => row.id);
-    assert.deepEqual(remaining, [102,103,104,202,301,401,1101,1201]);
-    assert.deepEqual((await run(sql, sampleQuery, bindings)).filter(row => row.market_id === 1).map(row => row.id), [103,104]);
+    assert.deepEqual(remaining, [102,103,104,105,202,301,401,1101,1201]);
+    assert.deepEqual((await run(sql, sampleQuery, bindings)).filter(row => row.market_id === 1).map(row => row.id), [103,104,105]);
     assert.deepEqual((await run(sql, boundaryQuery, bindings)).find(row => row.market_id === 1).prices, [0.4,0.6]);
   });
 });
