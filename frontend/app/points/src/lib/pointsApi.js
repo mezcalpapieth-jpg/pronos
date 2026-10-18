@@ -7,7 +7,15 @@
  */
 import { createExecutionAdapter } from './executionAdapter.js';
 import { delegationCoversMarket } from './delegationCoverage.js';
-export { authorizeDelegation, revokeDelegation } from '@app/lib/pointsAuth.js';
+// Load owner-session helpers only when authorization is requested.
+export async function authorizeDelegation() {
+  const auth = await import('@app/lib/pointsAuth.js');
+  return auth.authorizeDelegation();
+}
+export async function revokeDelegation() {
+  const auth = await import('@app/lib/pointsAuth.js');
+  return auth.revokeDelegation();
+}
 
 let tradingConsentHandler;
 export function setTradingConsentHandler(handler) {

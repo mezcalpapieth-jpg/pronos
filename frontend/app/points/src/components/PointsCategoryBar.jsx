@@ -17,6 +17,7 @@ import React from 'react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { useLang, useT } from '@app/lib/i18n.js';
 import { stocksEnabled } from '../lib/stockApi.js';
+import { usePointsExecution } from '../lib/PointsExecution.jsx';
 
 // Order here = visual order in the bar. Each entry maps a URL slug
 // (used in /c/<slug>) to the i18n key that produces the label.
@@ -75,6 +76,7 @@ function RegionalCategoryLabel() {
 }
 
 export default function PointsCategoryBar() {
+  const { mode } = usePointsExecution();
   const navigate = useNavigate();
   const location = useLocation();
   const params = useParams();
@@ -92,7 +94,7 @@ export default function PointsCategoryBar() {
     <div className="category-bar">
       <div className="category-bar-inner">
         <div className="market-filters">
-          {CATEGORY_TABS.map(cat => {
+          {CATEGORY_TABS.filter(cat => mode !== 'onchain' || !cat.stocks).map(cat => {
             const isActive = active === cat.slug;
             if (cat.stocks) return <button type="button" key={cat.slug} onClick={() => handleClick(cat.slug)}
               className="filter-btn" aria-current={isActive ? 'page' : undefined}

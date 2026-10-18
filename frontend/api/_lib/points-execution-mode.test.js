@@ -4,6 +4,8 @@ import test from 'node:test';
 import vm from 'node:vm';
 import { assertPointsExecution, pointsExecutionLock } from './points-execution-mode.js';
 import { executePointsBuy, executePointsSell } from './points-trading-service.js';
+import { cancelPointsMarket } from './points-cancel-market.js';
+import { redeemWinningPosition } from './points-redemption.js';
 import { createLimitOrder, executeLimitOrderById } from './points-limit-orders.js';
 
 const isExecutionError = error => error.status === 409 && error.message === 'onchain_market_requires_protocol';
@@ -65,6 +67,8 @@ for (const route of ['quote-buy','quote-sell','redeem']) {
       ensurePointsSchema:async()=>{},schemaSql:{},
       requireSession:()=>({username:'preview-admin',sub:'preview-admin'}),
       pointsExecutionLock,assertPointsExecution,
+      redeemWinningPosition: (client, args) => redeemWinningPosition(client, { ...args,
+        window: { scoringStartIso: '2026-10-01T06:00:00Z', rankingCutoffAt: '2026-11-01T05:59:59Z' } }),
       sql:async strings => (await query(strings.join(''))).rows,
       withTransaction:async fn=>fn({query}),
       TOURNAMENT_APPROVED_MARKET_START_ISO:'2026-08-01T00:00:00Z',console,
@@ -78,3 +82,34 @@ for (const route of ['quote-buy','quote-sell','redeem']) {
     assert.equal(queries,1);
   });
 }
+
+
+test('Points cancellation rejects on-chain markets before refunds or ledger changes', async () => {
+  let queries = 0;
+  await assert.rejects(cancelPointsMarket({ async query(text) {
+    assert.equal(++queries, 1);
+    assert.match(text, /SELECT[\s\S]*mode[\s\S]*FROM points_markets/);
+    return { rows: [{ id: 7, mode: 'onchain', status: 'active' }] };
+  } }, 7), isExecutionError);
+  assert.equal(queries, 1);
+});
+
+test('Points early-No resolution rejects an on-chain child before settlement', async () => {
+  const source = await readFile(new URL('../points/admin/resolve-parallel-leg-no.js', import.meta.url), 'utf8');
+  let queries = 0;
+  const context = { console, assertPointsExecution,
+    applyCors: () => false, requirePointsAdmin: () => ({ username: 'admin' }),
+    ensurePointsSchema: async () => {}, neon: () => ({}),
+    withTransaction: async fn => fn({ async query(text) {
+      assert.equal(++queries, 1);
+      assert.match(text, /SELECT[\s\S]*mode[\s\S]*FROM points_markets/);
+      return { rows: [{ id: 7, parent_id: 6, mode: 'onchain', status: 'active' }] };
+    } }), process: { env: {} },
+  };
+  vm.runInNewContext(source.replace(/^import .*;\n/gm, '').replace('export default ', '') + '\nglobalThis.handler = handler;', context);
+  const res = { status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; } };
+  await context.handler({ method: 'POST', body: { legMarketId: 7 } }, res);
+  assert.equal(res.code, 409);
+  assert.equal(res.body.error, 'onchain_market_requires_protocol');
+  assert.equal(queries, 1);
+});

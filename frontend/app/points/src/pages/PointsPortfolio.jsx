@@ -40,7 +40,7 @@ import {
 } from '../lib/pointsApi.js';
 import PnlChartCard from '../components/PnlChartCard.jsx';
 import { emitPointsRefresh, onPointsRefresh } from '../lib/pointsLiveRefresh.js';
-import { fetchStockPortfolio, stocksEnabled, mergePnlSeries, stockErrorMessage } from '../lib/stockApi.js';
+import { fetchStockPortfolio, stocksEnabled as pointsStocksEnabled, mergePnlSeries, stockErrorMessage } from '../lib/stockApi.js';
 import { StockPositions, StockHistory } from '../components/StockShared.jsx';
 
 function fmt(n) {
@@ -1050,6 +1050,7 @@ export default function PointsPortfolio() {
   const { authenticated, user, loading: authLoading, refresh } = usePointsAuth();
   const { mode } = usePointsExecution();
   const onchain = mode === 'onchain';
+  const stocksEnabled = pointsStocksEnabled && !onchain;
   const executionBalance = useExecutionBalance();
   const [tab, setTab] = useState('activo'); // 'activo' | 'combinadas' | 'historial' | 'recompensas'
   const [positions, setPositions] = useState([]);

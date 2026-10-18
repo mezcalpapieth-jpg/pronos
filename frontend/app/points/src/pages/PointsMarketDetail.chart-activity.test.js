@@ -120,8 +120,8 @@ test('outcome logos fall back to initials when a supplied image fails', () => {
 });
 
 test('points API client exposes anonymous trade activity endpoint', () => {
-  assert.match(apiSource, /export async function fetchTradeActivity/);
-  assert.match(apiSource, /export async function fetchTradeTape/);
+  assert.match(apiSource, /export function fetchTradeActivity/);
+  assert.match(apiSource, /export function fetchTradeTape/);
   assert.match(apiSource, /\/api\/points\/trade-activity\?/);
   assert.match(apiSource, /\/api\/points\/trade-tape\?/);
   assert.match(apiSource, /hours, outcome = 0/);

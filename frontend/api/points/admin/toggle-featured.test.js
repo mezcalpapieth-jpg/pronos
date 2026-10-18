@@ -24,14 +24,14 @@ test('adding a pending trophy raises uniform defaults visibly without repricing 
     INSERT INTO points_pending_markets (id,end_time) VALUES (5,'2026-12-01');`);
     const update = (id, flag = true) => db.transaction(client => updatePendingTournamentFeature(client, id, flag));
     const [sports] = await update(1);
-    assert.equal(Number(sports.seed_liquidity), 10000);
-    assert.deepEqual(sports.seed_liquidities, [10000,10000,10000]);
+    assert.equal(Number(sports.seed_liquidity), 7500);
+    assert.deepEqual(sports.seed_liquidities, [7500,7500,7500]);
     assert.deepEqual((await update(1))[0], sports);
     assert.deepEqual((await update(1,false))[0].seed_liquidities, sports.seed_liquidities);
-    assert.deepEqual((await update(2))[0].seed_liquidities, [5000,5000,5000]);
+    assert.deepEqual((await update(2))[0].seed_liquidities, [3750,3750,3750]);
     assert.deepEqual((await update(3))[0].seed_liquidities, [1000,2000,3000]);
     assert.deepEqual((await update(4))[0].seed_liquidities, [1000,1000,1000]);
-    assert.deepEqual((await update(5))[0].seed_liquidities, [10000,10000,10000]);
+    assert.deepEqual((await update(5))[0].seed_liquidities, [7500,7500,7500]);
     assert.deepEqual(await update(999), []);
   } finally { await db.close(); }
 });

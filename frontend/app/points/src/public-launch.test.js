@@ -66,12 +66,12 @@ test('public points errors use safe user copy instead of backend details', () =>
 test('buy modal mirrors tournament minimum before submitting', () => {
   assert.match(buyModalSource, /TOURNAMENT_MIN_BUY_MXNP = 100/);
   assert.match(buyModalSource, /minimumEntrySatisfied = false/);
-  assert.match(buyModalSource, /const requiresMinimumEntry = !minimumEntrySatisfied/);
+  assert.match(buyModalSource, /const requiresMinimumEntry = market\?\.mode !== 'onchain' && !minimumEntrySatisfied/);
   assert.match(buyModalSource, /requiresMinimumEntry && numAmount > 0 && numAmount < TOURNAMENT_MIN_BUY_MXNP/);
   assert.match(buyModalSource, /belowMinimum \|\| quoteState !== 'ready'/);
   assert.match(buyModalSource, /points\.buy\.minimumEntryHint/);
   assert.match(buyModalSource, /points\.buy\.topUpHint/);
-  assert.doesNotMatch(buyModalSource, /minSharesOut/);
+  assert.match(buyModalSource, /market\.mode === 'onchain' \? \{ minSharesOut:/);
   assert.match(translationLine('points.buy.minimumEntryHint'), /Mínimo \{amount\} MXNP/);
   assert.match(translationLine('points.buy.topUpHint'), /Ya cubriste este mercado/);
   assert.match(translationLine('points.buy.errorTournamentMin'), /mínimo para cubrir un mercado/);

@@ -253,6 +253,8 @@ export default async function handler(req, res) {
 }
 
 async function list(req, res) {
+  const approvalSettings = pendingApprovalSettings();
+  const approvalOptions = pendingApprovalOptions({ previewApprovalMode: req.query?.previewApprovalMode });
   const status = ['pending', 'approved', 'rejected', 'all'].includes(req.query.status)
     ? req.query.status
     : 'pending';
@@ -484,9 +486,9 @@ async function list(req, res) {
   const filteredRows = filteredPendingRows(rows, req.query || {});
 
   return res.status(200).json({
-    approvalSettings: pendingApprovalSettings(),
+    approvalSettings,
     pending: filteredRows.map(row => {
-      const r = pendingRowWithOpeningLiquidity(row);
+      const r = pendingRowWithOpeningLiquidity(row, { mode: approvalOptions.mode });
       const sourceData = parseJsonb(r.source_data, {});
       return {
         id: r.id,

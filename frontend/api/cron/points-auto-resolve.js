@@ -1604,6 +1604,7 @@ export async function runAutoResolve({ dry = false, sportsOnly = false } = {}) {
         ON noc.market_id = m.id
        AND noc.checkpoint_key = 'next-opponent'
       WHERE m.status = 'active'
+        AND COALESCE(m.mode, 'points') = 'points'
         AND m.end_time IS NOT NULL
         AND m.parent_id IS NULL
         AND (

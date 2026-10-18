@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
+import { attachPointsOpeningLiquidity } from '../../_lib/market-pricing.js';
 import { pendingApprovalOptions, pendingApprovalSettings } from '../../_lib/onchain-preview-approval.js';
 
 const source = await readFile(new URL('./pending-markets.js', import.meta.url), 'utf8');
@@ -12,12 +13,13 @@ const previewEnv = {
 
 // Run the actual route with isolated auth, DB and deployment boundaries.
 // No database credentials or chain transactions are used by these tests.
-function harness(env, { approvalError, authenticated = true } = {}) {
+function harness(env, { approvalError, authenticated = true, rows = [] } = {}) {
   const calls = { schema: 0, sql: 0, approved: [] };
   const context = {
     process: { env },
     console: { error() {} },
-    neon: () => async () => { calls.sql++; return []; },
+    neon: () => async strings => { calls.sql++; return strings.join('').includes('FROM points_pending_markets p') ? rows : []; },
+    attachPointsOpeningLiquidity,
     applyCors: () => false,
     requirePointsAdmin: (_req, res) => {
       if (authenticated) return { username: 'test-admin' };
@@ -42,13 +44,13 @@ function harness(env, { approvalError, authenticated = true } = {}) {
   vm.runInNewContext(`${executable}\napproveOne = mocks.approveOne; globalThis.handler = handler;`, context);
   return {
     calls,
-    async request(body, method = 'POST') {
+    async request(body, method = 'POST', query = {}) {
       const res = {
         statusCode: 200,
         status(code) { this.statusCode = code; return this; },
         json(value) { this.body = JSON.parse(JSON.stringify(value)); return this; },
       };
-      await context.handler({ method, body, query: {} }, res);
+      await context.handler({ method, body, query }, res);
       return res;
     },
   };
@@ -120,4 +122,21 @@ test('preview setting does not bypass Points admin authentication', async () => 
   const res = await api.request({ id: 7, action: 'approve' });
   assert.equal(res.statusCode, 401);
   assert.deepEqual(api.calls, { schema: 0, sql: 0, approved: [] });
+});
+
+
+test('preview seed display follows the chosen approval destination without changing saved seeds', async () => {
+  const row = { id: 7, status: 'pending', question: 'Test', category: 'deportes',
+    outcomes: ['A', 'B', 'C'], seed_liquidity: 1000, seed_liquidities: [1000,1000,1000], source_data: {} };
+  const api = harness(previewEnv, { rows: [row] });
+  for (const [query, expected] of [[{}, 1000], [{ previewApprovalMode: 'onchain' }, 1000], [{ previewApprovalMode: 'points' }, 7500]]) {
+    const res = await api.request(undefined, 'GET', query);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.pending[0].seedLiquidity, expected);
+    assert.deepEqual(res.body.pending[0].seedLiquidities, [expected,expected,expected]);
+  }
+  assert.equal(row.seed_liquidity, 1000);
+  const production = harness({ ...previewEnv, VERCEL_ENV: 'production' }, { rows: [row] });
+  assert.equal((await production.request(undefined, 'GET')).body.pending[0].seedLiquidity, 7500);
+  assert.equal((await production.request(undefined, 'GET', { previewApprovalMode: 'onchain' })).statusCode, 403);
 });

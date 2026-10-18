@@ -382,7 +382,7 @@ function Shell({ onOpenLogin, isAdmin }) {
   const execution = usePointsExecution();
   const path = location.pathname;
   const isHome = path === '/';
-  const pointsOnly = execution.mode === 'onchain' && ['/earn', '/torneo'].includes(path);
+  const pointsOnly = execution.mode === 'onchain' && (['/earn', '/torneo'].includes(path) || path === '/stocks' || path.startsWith('/stocks/'));
 
   // CategoryBar is the universal browsing affordance — show it on home,
   // category pages, AND market detail so users can always jump to

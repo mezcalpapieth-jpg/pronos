@@ -21,7 +21,7 @@ async function fixture(t) {
     CREATE TABLE points_balances(username TEXT PRIMARY KEY,balance NUMERIC(20,6),updated_at TIMESTAMPTZ);
     INSERT INTO points_users(username) VALUES('ana'),('ben');
     INSERT INTO points_balances VALUES('ana',900,NOW()),('ben',900,NOW());
-    CREATE TABLE points_markets(id INT PRIMARY KEY,parent_id INT,created_at TIMESTAMPTZ DEFAULT '2026-10-02T06:00Z',
+    CREATE TABLE points_markets(id INT PRIMARY KEY,parent_id INT,mode TEXT DEFAULT 'points',created_at TIMESTAMPTZ DEFAULT '2026-10-02T06:00Z',
       tournament_featured BOOLEAN DEFAULT true,status TEXT,outcome INT,reserves JSONB DEFAULT '[1000,1000]',
       outcomes JSONB DEFAULT '["Yes","No"]',start_time TIMESTAMPTZ,end_time TIMESTAMPTZ,resolved_at TIMESTAMPTZ,resolver_config JSONB DEFAULT '{}');
     INSERT INTO points_markets(id,status,outcome,resolved_at) VALUES
@@ -153,4 +153,17 @@ test('a snapshot failure rolls back collections, ledgers and positions together'
   assert.equal((await db.query('SELECT COUNT(*)::int AS n FROM points_cycle_snapshots')).rows[0].n, 0);
   assert.equal((await db.query('SELECT status FROM points_parlay_tickets WHERE id=1')).rows[0].status, 'open');
   assert.equal(Number((await db.query("SELECT shares FROM points_positions WHERE username='ana' AND market_id=1")).rows[0].shares), 200);
+});
+
+
+test('Points cutoff collection leaves on-chain shares and balances untouched', async t => {
+  const db = await fixture(t);
+  await db.exec("UPDATE points_markets SET mode='onchain' WHERE id=1");
+  await assert.rejects(db.transaction(tx => redeemWinningPosition(tx, {
+    username: 'ana', marketId: 1, outcomeIndex: 0, window,
+  })), { message: 'onchain_market_requires_protocol', status: 409 });
+  assert.deepEqual(await db.transaction(tx => collectCyclePositionWinnings(tx, window)), { collected: 0, payout: 0 });
+  assert.equal(await balance(db), 900);
+  assert.equal(Number((await db.query("SELECT shares FROM points_positions WHERE market_id=1 AND username='ana'")).rows[0].shares), 200);
+  assert.equal((await db.query('SELECT COUNT(*)::int AS n FROM points_distributions')).rows[0].n, 0);
 });

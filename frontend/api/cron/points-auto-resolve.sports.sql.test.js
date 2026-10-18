@@ -11,7 +11,7 @@ test('the minute sports pass finds early finals and rescheduled games without wa
   t.after(() => db.close());
   await db.exec(`
     CREATE TABLE points_markets (
-      id INT PRIMARY KEY, question TEXT, category TEXT, start_time TIMESTAMPTZ,
+      id INT PRIMARY KEY, mode TEXT DEFAULT 'points', question TEXT, category TEXT, start_time TIMESTAMPTZ,
       end_time TIMESTAMPTZ DEFAULT NOW() + INTERVAL '5 hours', resolver_type TEXT DEFAULT 'sports_api',
       resolver_config JSONB DEFAULT '{"source":"espn","shape":"binary"}',
       outcomes JSONB, amm_mode TEXT, sport TEXT, league TEXT, source TEXT, source_event_id TEXT,
@@ -31,7 +31,9 @@ test('the minute sports pass finds early finals and rescheduled games without wa
       (9,NOW()-INTERVAL '2 hours'),
       (10,NOW()-INTERVAL '2 hours'),
       (11,NOW()-INTERVAL '2 hours'),
-      (12,NOW()-INTERVAL '2 hours');
+      (12,NOW()-INTERVAL '2 hours'),
+      (13,NOW()-INTERVAL '2 hours');
+    UPDATE points_markets SET mode='onchain' WHERE id=13;
     UPDATE points_markets SET resolver_type='manual_review',end_time=NOW()-INTERVAL '1 hour' WHERE id=6;
     UPDATE points_markets SET resolver_type='weather_api',end_time=NOW()-INTERVAL '1 hour' WHERE id=7;
     UPDATE points_markets SET status='resolved' WHERE id=8;

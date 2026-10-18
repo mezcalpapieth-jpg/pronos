@@ -15,7 +15,7 @@ const clock = () => new Date('2026-10-19T13:59:05Z');
 const payload = { state: 'scored', score: 51, startedAt: clock().toISOString(), capturedAt: '2026-10-19T13:59:08Z' };
 async function database() {
   const db = new PGlite();
-  await db.exec(`CREATE TABLE points_markets (id INTEGER PRIMARY KEY, parent_id INTEGER, status TEXT DEFAULT 'active',
+  await db.exec(`CREATE TABLE points_markets (id INTEGER PRIMARY KEY, parent_id INTEGER, mode TEXT DEFAULT 'points', status TEXT DEFAULT 'active',
     resolver_type TEXT DEFAULT 'api_chart', resolver_config JSONB, outcomes JSONB, outcome INTEGER,
     resolved_at TIMESTAMPTZ, resolved_by TEXT);
     CREATE TABLE points_positions (market_id INTEGER, username TEXT, outcome_index INTEGER, shares NUMERIC, cost_basis NUMERIC, updated_at TIMESTAMPTZ);

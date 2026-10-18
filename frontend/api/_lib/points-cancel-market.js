@@ -1,11 +1,13 @@
+import { assertPointsExecution } from './points-execution-mode.js';
 import { releaseOpenLimitOrdersForMarkets } from './points-limit-orders.js';
 
 // Call inside withTransaction. This is the same remaining-cost-basis refund used by Admin.
 export async function cancelPointsMarket(client, marketId, { actor, reason, expectedConfig = null, expectedOutcomes = null } = {}) {
-  const found = await client.query(`SELECT id, status, parent_id, resolver_config FROM points_markets WHERE id = $1 FOR UPDATE`, [marketId]);
+  const found = await client.query(`SELECT id, status, parent_id, resolver_config, mode FROM points_markets WHERE id = $1 FOR UPDATE`, [marketId]);
   const market = found.rows[0];
   const fail = (message, status = 400, detail = null) => { throw Object.assign(new Error(message), { status, detail }); };
   if (!market) fail('market_not_found', 404);
+  assertPointsExecution(market);
   if (market.parent_id) fail('cannot_cancel_leg_directly', 400, `Market ${marketId} is a leg of parent ${market.parent_id}. Cancel the parent instead.`);
   if (market.status !== 'active') fail('market_not_active', 400, `Current status is ${market.status}.`);
   if (expectedConfig) {
@@ -14,7 +16,8 @@ export async function cancelPointsMarket(client, marketId, { actor, reason, expe
     [marketId, JSON.stringify(expectedConfig), expectedOutcomes ? JSON.stringify(expectedOutcomes) : null]);
     if (!same.rows.length) fail('market_contract_changed');
   }
-  const related = await client.query(`SELECT id FROM points_markets WHERE id = $1 OR parent_id = $1 ORDER BY id FOR UPDATE`, [marketId]);
+  const related = await client.query(`SELECT id, mode FROM points_markets WHERE id = $1 OR parent_id = $1 ORDER BY id FOR UPDATE`, [marketId]);
+  related.rows.forEach(assertPointsExecution);
   const ids = related.rows.map(r => Number(r.id));
   await releaseOpenLimitOrdersForMarkets(client, ids, { reason: 'market_cancelled', status: 'cancelled' });
   await client.query(`SELECT market_id, username, outcome_index, shares, cost_basis FROM points_positions

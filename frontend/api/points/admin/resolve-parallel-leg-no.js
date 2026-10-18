@@ -1,3 +1,4 @@
+import { assertPointsExecution } from '../../_lib/points-execution-mode.js';
 /**
  * POST /api/points/admin/resolve-parallel-leg-no
  * Body: { legMarketId, parentMarketId?, reason?, finalScore? }
@@ -73,7 +74,7 @@ export default async function handler(req, res) {
 
     const result = await withTransaction(async (client) => {
       const legResult = await client.query(
-        `SELECT id, parent_id, leg_label, status, amm_mode, outcome, outcomes, final_score,
+        `SELECT id, mode, parent_id, leg_label, status, amm_mode, outcome, outcomes, final_score,
                 resolver_config
            FROM points_markets
           WHERE id = $1
@@ -82,6 +83,7 @@ export default async function handler(req, res) {
       );
       if (legResult.rows.length === 0) throw httpError('leg_market_not_found', 404);
       const leg = legResult.rows[0];
+      assertPointsExecution(leg);
       if (!leg.parent_id) throw httpError('market_is_not_parallel_leg', 400);
       if (parentMarketId != null && Number(leg.parent_id) !== parentMarketId) {
         throw httpError('parent_market_mismatch', 400);
@@ -94,7 +96,7 @@ export default async function handler(req, res) {
       }
 
       const parentResult = await client.query(
-        `SELECT id, status, amm_mode
+        `SELECT id, mode, status, amm_mode
            FROM points_markets
           WHERE id = $1
           FOR UPDATE`,
@@ -102,6 +104,7 @@ export default async function handler(req, res) {
       );
       if (parentResult.rows.length === 0) throw httpError('parent_market_not_found', 404);
       const parent = parentResult.rows[0];
+      assertPointsExecution(parent);
       if (parent.status !== 'active') {
         throw httpError('parent_market_not_active', 400, `Current status is ${parent.status}.`);
       }

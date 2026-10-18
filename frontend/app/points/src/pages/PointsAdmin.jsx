@@ -8260,6 +8260,7 @@ function PendingMarketsTable({ onQueueChange }) {
         topicFilter,
         featureFilter: curationFilter,
       });
+      if (previewApprovalMode) q.set('previewApprovalMode', previewApprovalMode);
       const r = await adminListPendingMarkets(q);
       setRows(r.pending || []);
       setApprovalSettings(r.approvalSettings || null);
@@ -8282,6 +8283,7 @@ function PendingMarketsTable({ onQueueChange }) {
     geoFilter,
     topicFilter,
     curationFilter,
+    previewApprovalMode,
   ]);
 
   useEffect(() => {
