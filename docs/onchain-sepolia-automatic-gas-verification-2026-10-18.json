@@ -1,0 +1,2116 @@
+{
+  "verifiedAt": "2026-10-18T13:26:00.876Z",
+  "branch": "onchain-sepolia",
+  "chainId": 421614,
+  "runtimeSourceSha": "940fb9bb3d7e062eec2a5fe5de8a1d710c1da28c",
+  "deployment": {
+    "id": "dpl_5B2dPBNv3r5QqvfkmAu53gYHQaRf",
+    "sha": "940fb9bb3d7e062eec2a5fe5de8a1d710c1da28c",
+    "state": "READY",
+    "url": "pronos-h7jheb9pn-mezcalpapieth-jpgs-projects.vercel.app",
+    "target": null,
+    "alias": "pronos-git-onchain-sepolia-mezcalpapieth-jpgs-projects.vercel.app"
+  },
+  "funding": {
+    "reserveTransfer": {
+      "checkedAt": "2026-10-18T13:06:02.444Z",
+      "chainId": 421614,
+      "from": "0x0Caa37c077924038e14e9D8dE46B5208788e52CF",
+      "to": "0x252a1cfa015612EFB8C7c2f1643A9F541b866990",
+      "amountETH": "0.1",
+      "hash": "0x8a2aed91d4ef605a1e1f698109b5c2f8d191261423fbb2d22ead342903d933f1",
+      "blockNumber": 320409502,
+      "status": 1,
+      "feeETH": "0.000000420294",
+      "reserveAfterETH": "2.802243689456225488",
+      "funderAfterETH": "0.1"
+    },
+    "userTransfers": [
+      {
+        "nonce": "0",
+        "status": "confirmed",
+        "tx_hash": "0xc3394f4f22ee3a0bf66fc3a2bef397ea76397af964462e42039a98469de49f1b",
+        "chain_id": 421614,
+        "suborg_id": "5b2501db-f366-4957-bc42-108c4ca8eab6",
+        "amount_wei": "500000000000000",
+        "created_at": "2026-10-18T13:19:49.077337+00:00",
+        "confirmed_at": "2026-10-18T13:19:53.616265+00:00",
+        "max_cost_wei": "501097350800000",
+        "funder_address": "0x252a1cfa015612efb8c7c2f1643a9f541b866990",
+        "wallet_address": "0x7d114623c6822b996788727554390e2549c996da",
+        "signer_key_hash": "50acf3c89bd209f38a5eaaac24d0fed4a50fc3f06d5cd304c9df86504870d875"
+      }
+    ],
+    "finalGasWalletETH": "0.09949958",
+    "finalReserveETH": "2.802243689456225488",
+    "oneConfirmedUserTopUp": true,
+    "signupOrIdleFunding": false
+  },
+  "authorization": {
+    "username": "frmm",
+    "wallet": "0x7D114623c6822b996788727554390e2549c996Da",
+    "authorizedAt": "2026-10-18T13:08:03.635Z",
+    "policyId": "13453e36-7910-4e83-b033-a26c9d3557f4",
+    "scope": "router",
+    "router": "0x25bc3c0f0c41516167f096ac4bf785f60bbbe843",
+    "expiresAt": null,
+    "normalFrontendDelegationClient": true,
+    "realOtpOwnerCredential": true,
+    "rootQuorumUnchanged": true,
+    "coverageChecks": 7,
+    "additionalOwnerConsent": false,
+    "createdBeforeBothTestPools": true
+  },
+  "collateral": {
+    "at": "2026-10-18T13:09:08.262Z",
+    "from": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+    "to": "0x7D114623c6822b996788727554390e2549c996Da",
+    "token": "0x6ed6c00c2b4cf9f5989866f4c5862d4cded67ef9",
+    "amountMXNP": "100",
+    "userBeforeMXNP": "0.0",
+    "userAfterMXNP": "100.0",
+    "totalSupplyMXNP": "50000000.0",
+    "newMint": false,
+    "txHash": "0x1150a3734629c312b9392b049f51350f815f759e38050cc116441a383f28bb7f",
+    "status": 1,
+    "blockNumber": 320410227,
+    "userETH": "0.0"
+  },
+  "markets": {
+    "v1": {
+      "pendingId": 37699,
+      "pointsId": 360641,
+      "protocolId": 9,
+      "chainMarketId": "1",
+      "factory": "0xb6cf9f65ab82c17c8e9d58d06073ca3af3e5443d",
+      "pool": "0xbba1c1386b8906971c1edbc64eb8eee30b4cb5f5",
+      "normalAdminApproval": {
+        "ok": true,
+        "action": "approve",
+        "id": 37699,
+        "marketId": 360641
+      },
+      "hiddenFromHome": true,
+      "technicalFixture": true,
+      "resolution": {
+        "txHash": "0x9d4b650bf140f4cfc799fa83725dbadd3693e3507853ecb0b766a82f1ae16e7e",
+        "blockNumber": 320413345,
+        "marketId": "1",
+        "outcome": 1,
+        "factoryVariant": "v1",
+        "chainId": 421614
+      }
+    },
+    "v2": {
+      "pendingId": 37700,
+      "pointsId": 360642,
+      "protocolId": 10,
+      "chainMarketId": "1",
+      "factory": "0x33c1cdd4e22a9732ad808f2ad7efe82211b65c6a",
+      "pool": "0x508ed5716d8baf66de9ec39fe0bd32628a26e51d",
+      "normalAdminApproval": {
+        "ok": true,
+        "action": "approve",
+        "id": 37700,
+        "marketId": 360642
+      },
+      "hiddenFromHome": true,
+      "technicalFixture": true,
+      "resolution": {
+        "txHash": "0x08844aba8ca58796f8ba8764f9d896ff26469c5c824c6f14bbf69f783b2d957e",
+        "blockNumber": 320413405,
+        "marketId": "1",
+        "outcome": 0,
+        "factoryVariant": "v2",
+        "chainId": 421614
+      }
+    }
+  },
+  "transactions": [
+    {
+      "action": "buy-v1",
+      "at": "2026-10-18T13:19:40.811Z",
+      "ethBefore": "0.0",
+      "body": {
+        "marketId": 360641,
+        "outcomeIndex": 0,
+        "collateral": 5,
+        "minSharesOut": 9.428156
+      },
+      "quote": {
+        "collateral": 5,
+        "fee": 0.125,
+        "feePct": 2.5,
+        "sharesOut": 9.52339,
+        "avgPrice": 0.5118975490870373,
+        "payout": 9.52339,
+        "profit": 4.523389999999999,
+        "priceBefore": 0.5,
+        "priceAfter": null,
+        "currentPrice": 0.5,
+        "postTradePrice": null,
+        "priceImpactPts": null,
+        "pricesBefore": [
+          0.5,
+          0.5
+        ],
+        "pricesAfter": null
+      },
+      "result": {
+        "ok": true,
+        "mode": "protocol",
+        "sharesOut": 9.52339,
+        "fee": 0.125,
+        "txHash": "0xda16c2e256d821548121d2f27f096219eb33f831bb8213259aa9e8c92085b56a",
+        "blockNumber": 320412755
+      },
+      "ethAfter": "0.000494749222466",
+      "receipt": {
+        "status": 1,
+        "blockNumber": 320412755,
+        "gasUsed": "213544",
+        "gasPriceWei": "20164000",
+        "feeETH": "0.000004305901216",
+        "from": "0x7D114623c6822b996788727554390e2549c996Da",
+        "to": "0x25bC3C0F0c41516167F096Ac4bf785f60bBbe843"
+      }
+    },
+    {
+      "action": "sell-v1",
+      "at": "2026-10-18T13:20:28.947Z",
+      "ethBefore": "0.000494749222466",
+      "body": {
+        "marketId": 360641,
+        "outcomeIndex": 0,
+        "shares": 1,
+        "minCollateralOut": 0.503762
+      },
+      "quote": {
+        "shares": 1,
+        "gross": 0.522535,
+        "fee": 0.013684,
+        "feePct": 2.6187719482905454,
+        "collateralOut": 0.508851,
+        "priceBefore": 0.523781,
+        "priceAfter": null,
+        "currentPrice": 0.523781,
+        "postTradePrice": null,
+        "priceImpactPts": null,
+        "pricesBefore": [
+          0.523781,
+          0.476218
+        ],
+        "pricesAfter": null
+      },
+      "result": {
+        "ok": true,
+        "mode": "protocol",
+        "collateralOut": 0.508851,
+        "fee": 0.013684,
+        "txHash": "0x37b779d9aa57c93f201f47ef92150aa92e4c3a67f6da6649ae7d04b0493dc2e0",
+        "blockNumber": 320412920
+      },
+      "ethAfter": "0.000490434007456",
+      "receipt": {
+        "status": 1,
+        "blockNumber": 320412920,
+        "gasUsed": "169265",
+        "gasPriceWei": "20034000",
+        "feeETH": "0.00000339105501",
+        "from": "0x7D114623c6822b996788727554390e2549c996Da",
+        "to": "0x25bC3C0F0c41516167F096Ac4bf785f60bBbe843"
+      }
+    },
+    {
+      "action": "buy-v2",
+      "at": "2026-10-18T13:21:03.421Z",
+      "ethBefore": "0.000490434007456",
+      "body": {
+        "marketId": 360642,
+        "outcomeIndex": 0,
+        "collateral": 5,
+        "minSharesOut": 13.883796
+      },
+      "quote": {
+        "collateral": 5,
+        "fee": 0.1,
+        "feePct": 2,
+        "sharesOut": 14.024037,
+        "avgPrice": 0.34940010497690505,
+        "payout": 14.024037,
+        "profit": 9.024037,
+        "priceBefore": 0.333333,
+        "priceAfter": null,
+        "currentPrice": 0.333333,
+        "postTradePrice": null,
+        "priceImpactPts": null,
+        "pricesBefore": [
+          0.333333,
+          0.333333,
+          0.333333
+        ],
+        "pricesAfter": null
+      },
+      "result": {
+        "ok": true,
+        "mode": "protocol",
+        "sharesOut": 14.024037,
+        "fee": 0.1,
+        "txHash": "0x4ed3f5f8ee1966a986a1d0b2114cfa34a76ec6392e8a68efb49057593222a477",
+        "blockNumber": 320413032
+      },
+      "ethAfter": "0.000485652927456",
+      "receipt": {
+        "status": 1,
+        "blockNumber": 320413032,
+        "gasUsed": "239054",
+        "gasPriceWei": "20000000",
+        "feeETH": "0.00000478108",
+        "from": "0x7D114623c6822b996788727554390e2549c996Da",
+        "to": "0x25bC3C0F0c41516167F096Ac4bf785f60bBbe843"
+      }
+    },
+    {
+      "action": "sell-v2",
+      "at": "2026-10-18T13:21:56.016Z",
+      "ethBefore": "0.000485652927456",
+      "body": {
+        "marketId": 360642,
+        "outcomeIndex": 0,
+        "shares": 1,
+        "minCollateralOut": 0.361089
+      },
+      "quote": {
+        "shares": 1,
+        "gross": 0.364737,
+        "fee": 0,
+        "feePct": 0,
+        "collateralOut": 0.364737,
+        "priceBefore": 0.365949,
+        "priceAfter": null,
+        "currentPrice": 0.365949,
+        "postTradePrice": null,
+        "priceImpactPts": null,
+        "pricesBefore": [
+          0.365949,
+          0.317025,
+          0.317025
+        ],
+        "pricesAfter": null
+      },
+      "result": {
+        "ok": true,
+        "mode": "protocol",
+        "collateralOut": 0.364737,
+        "fee": 0,
+        "txHash": "0x98dfce831a1a72f90d45cac7996c238a826511b9155e995ba8388c9abee708af",
+        "blockNumber": 320413259
+      },
+      "ethAfter": "0.00047940678246",
+      "receipt": {
+        "status": 1,
+        "blockNumber": 320413259,
+        "gasUsed": "264558",
+        "gasPriceWei": "20082000",
+        "feeETH": "0.000005312853756",
+        "from": "0x7D114623c6822b996788727554390e2549c996Da",
+        "to": "0x25bC3C0F0c41516167F096Ac4bf785f60bBbe843"
+      }
+    },
+    {
+      "action": "redeem-v1",
+      "at": "2026-10-18T13:23:08.617Z",
+      "ethBefore": "0.00047940678246",
+      "body": {
+        "marketId": 360641,
+        "outcomeIndex": 0,
+        "amount": 8.52339
+      },
+      "result": {
+        "ok": true,
+        "mode": "protocol",
+        "payout": 8.52339,
+        "txHash": "0xf4278088dd4156a87b3a2fb85b2e0b3342291822b616e76b469b3130c3e0bd88",
+        "blockNumber": 320413518
+      },
+      "ethAfter": "0.000477037879836",
+      "receipt": {
+        "status": 1,
+        "blockNumber": 320413518,
+        "gasUsed": "117168",
+        "gasPriceWei": "20218000",
+        "feeETH": "0.000002368902624",
+        "from": "0x7D114623c6822b996788727554390e2549c996Da",
+        "to": "0x25bC3C0F0c41516167F096Ac4bf785f60bBbe843"
+      }
+    },
+    {
+      "action": "redeem-v2",
+      "at": "2026-10-18T13:23:40.304Z",
+      "ethBefore": "0.000477037879836",
+      "body": {
+        "marketId": 360642,
+        "outcomeIndex": 0,
+        "amount": 13.024037
+      },
+      "result": {
+        "ok": true,
+        "mode": "protocol",
+        "payout": 13.024037,
+        "txHash": "0xb2906eb8fa4a97c2d08e08af889064fd28d62816a87651016896203eb0ad532d",
+        "blockNumber": 320413634
+      },
+      "ethAfter": "0.000474646472156",
+      "receipt": {
+        "status": 1,
+        "blockNumber": 320413634,
+        "gasUsed": "118810",
+        "gasPriceWei": "20128000",
+        "feeETH": "0.00000239140768",
+        "from": "0x7D114623c6822b996788727554390e2549c996Da",
+        "to": "0x25bC3C0F0c41516167F096Ac4bf785f60bBbe843"
+      }
+    }
+  ],
+  "chainReconciliation": {
+    "at": "2026-10-18T13:24:33.383Z",
+    "chainId": 421614,
+    "initialUserETH": "0.0",
+    "nativeFunding": {
+      "hash": "0xc3394f4f22ee3a0bf66fc3a2bef397ea76397af964462e42039a98469de49f1b",
+      "status": 1,
+      "blockNumber": 320412718,
+      "amountETH": "0.0005",
+      "feeETH": "0.00000042"
+    },
+    "user": {
+      "address": "0x7D114623c6822b996788727554390e2549c996Da",
+      "nonce": 9,
+      "transactions": 9,
+      "tradingTransactions": 6,
+      "approvalTransactions": 3,
+      "totalFeesETH": "0.000025353527844",
+      "remainingETH": "0.000474646472156",
+      "balanceMXNP": "112.421015",
+      "reconciled": true
+    },
+    "approvals": [
+      {
+        "address": "0x6ed6c00c2b4cf9f5989866f4c5862d4cded67ef9",
+        "txHash": "0xd4288d367cfedda3d02251642d352d82ff3c2aec4f40f31a4d7d348856de6fc5",
+        "blockNumber": 320412737,
+        "gasUsed": "46679",
+        "feeWei": "944876318000"
+      },
+      {
+        "address": "0x0c059fe84d1a733d1d698dd04a2f594df883dfb4",
+        "txHash": "0x608cd3fcb98334a11192f0bc68c8c8499b302738b46aa9e5cc8a5c6a400c9076",
+        "blockNumber": 320412903,
+        "gasUsed": "46208",
+        "feeWei": "924160000000"
+      },
+      {
+        "address": "0xac7474e5ff1b98d5d6268a76ae409f972717436b",
+        "txHash": "0xffb071140f070227959cb161771005410e8dfb997a6a93629a4691db9fe7bc49",
+        "blockNumber": 320413240,
+        "gasUsed": "46230",
+        "feeWei": "933291240000"
+      }
+    ],
+    "shares": [
+      {
+        "version": "v1",
+        "address": "0x0c059fe84d1a733d1d698dd04a2f594df883dfb4",
+        "marketId": "1",
+        "operatorApproved": true,
+        "balances": [
+          {
+            "outcomeIndex": 0,
+            "tokenId": "2",
+            "user": "0",
+            "router": "0"
+          },
+          {
+            "outcomeIndex": 1,
+            "tokenId": "3",
+            "user": "0",
+            "router": "0"
+          }
+        ]
+      },
+      {
+        "version": "v2",
+        "address": "0xac7474e5ff1b98d5d6268a76ae409f972717436b",
+        "marketId": "1",
+        "operatorApproved": true,
+        "balances": [
+          {
+            "outcomeIndex": 0,
+            "tokenId": "256",
+            "user": "0",
+            "router": "0"
+          },
+          {
+            "outcomeIndex": 1,
+            "tokenId": "257",
+            "user": "0",
+            "router": "0"
+          },
+          {
+            "outcomeIndex": 2,
+            "tokenId": "258",
+            "user": "0",
+            "router": "0"
+          }
+        ]
+      }
+    ],
+    "collateralSupplyMXNP": "50000000.0",
+    "newMint": false,
+    "routerCollateral": "0.0",
+    "gasWalletETH": "0.09949958",
+    "reserveETH": "2.802243689456225488",
+    "operations": {
+      "address": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "mxnp": "49998200.0",
+      "eth": "0.00048884249959"
+    }
+  },
+  "protocolLedger": {
+    "trades": [
+      {
+        "id": 17,
+        "side": "buy",
+        "is_yes": true,
+        "trader": "0x7d114623c6822b996788727554390e2549c996da",
+        "fee_amt": 0.125,
+        "tx_hash": "0xda16c2e256d821548121d2f27f096219eb33f831bb8213259aa9e8c92085b56a",
+        "log_index": 18,
+        "market_id": 9,
+        "created_at": "2026-10-18T13:20:37.722084+00:00",
+        "shares_amt": 9.52339,
+        "block_number": 320412755,
+        "outcome_index": 0,
+        "collateral_amt": 5,
+        "price_at_trade": 0.511898
+      },
+      {
+        "id": 18,
+        "side": "sell",
+        "is_yes": true,
+        "trader": "0x7d114623c6822b996788727554390e2549c996da",
+        "fee_amt": 0.013684,
+        "tx_hash": "0x37b779d9aa57c93f201f47ef92150aa92e4c3a67f6da6649ae7d04b0493dc2e0",
+        "log_index": 9,
+        "market_id": 9,
+        "created_at": "2026-10-18T13:21:37.933988+00:00",
+        "shares_amt": 1,
+        "block_number": 320412920,
+        "outcome_index": 0,
+        "collateral_amt": 0.508851,
+        "price_at_trade": 0.508851
+      },
+      {
+        "id": 19,
+        "side": "buy",
+        "is_yes": true,
+        "trader": "0x7d114623c6822b996788727554390e2549c996da",
+        "fee_amt": 0.1,
+        "tx_hash": "0x4ed3f5f8ee1966a986a1d0b2114cfa34a76ec6392e8a68efb49057593222a477",
+        "log_index": 30,
+        "market_id": 10,
+        "created_at": "2026-10-18T13:21:38.529786+00:00",
+        "shares_amt": 14.024037,
+        "block_number": 320413032,
+        "outcome_index": 0,
+        "collateral_amt": 5,
+        "price_at_trade": 0.3494
+      },
+      {
+        "id": 20,
+        "side": "sell",
+        "is_yes": true,
+        "trader": "0x7d114623c6822b996788727554390e2549c996da",
+        "fee_amt": 0,
+        "tx_hash": "0x98dfce831a1a72f90d45cac7996c238a826511b9155e995ba8388c9abee708af",
+        "log_index": 9,
+        "market_id": 10,
+        "created_at": "2026-10-18T13:22:38.318765+00:00",
+        "shares_amt": 1,
+        "block_number": 320413259,
+        "outcome_index": 0,
+        "collateral_amt": 0.364737,
+        "price_at_trade": 0.364737
+      }
+    ],
+    "redemptions": [
+      {
+        "id": 8,
+        "payout": 8.52339,
+        "shares": 8.52339,
+        "tx_hash": "0xf4278088dd4156a87b3a2fb85b2e0b3342291822b616e76b469b3130c3e0bd88",
+        "log_index": 6,
+        "market_id": 9,
+        "created_at": "2026-10-18T13:23:37.795313+00:00",
+        "block_number": 320413518,
+        "user_address": "0x7d114623c6822b996788727554390e2549c996da",
+        "outcome_index": null
+      },
+      {
+        "id": 9,
+        "payout": 13.024037,
+        "shares": 13.024037,
+        "tx_hash": "0xb2906eb8fa4a97c2d08e08af889064fd28d62816a87651016896203eb0ad532d",
+        "log_index": 12,
+        "market_id": 10,
+        "created_at": "2026-10-18T13:24:38.693757+00:00",
+        "block_number": 320413634,
+        "user_address": "0x7d114623c6822b996788727554390e2549c996da",
+        "outcome_index": 0
+      }
+    ],
+    "markets": [
+      {
+        "id": 9,
+        "status": "resolved",
+        "outcome": 1,
+        "tx_hash": "0x6de24da7312ad538bf8dce4ecaaff1593229e39c4aa873f8de6738759c4b9a7b",
+        "chain_id": 421614,
+        "outcomes": [
+          "Sí",
+          "No"
+        ],
+        "question": "PRUEBA TÉCNICA V1: gas automático sin ETH del usuario (2026-10-18)",
+        "market_id": 1,
+        "resolved_at": "2026-10-18T13:22:37.334611+00:00",
+        "pool_address": "0xbba1c1386b8906971c1edbc64eb8eee30b4cb5f5",
+        "outcome_count": 2,
+        "factory_address": "0xb6cf9f65ab82c17c8e9d58d06073ca3af3e5443d",
+        "protocol_version": "v1"
+      },
+      {
+        "id": 10,
+        "status": "resolved",
+        "outcome": 0,
+        "tx_hash": "0x7087c7ced17003c6cea7444419ec1dd44dc46a0dc694ca2bba550a5038be8293",
+        "chain_id": 421614,
+        "outcomes": [
+          "Primero",
+          "Segundo",
+          "Tercero"
+        ],
+        "question": "PRUEBA TÉCNICA V2: reutilizar gas y autorización en mercado futuro (2026-10-18)",
+        "market_id": 1,
+        "resolved_at": "2026-10-18T13:23:37.974513+00:00",
+        "pool_address": "0x508ed5716d8baf66de9ec39fe0bd32628a26e51d",
+        "outcome_count": 3,
+        "factory_address": "0x33c1cdd4e22a9732ad808f2ad7efe82211b65c6a",
+        "protocol_version": "v2"
+      }
+    ],
+    "factoryCheckpoints": [
+      {
+        "chain_id": 421614,
+        "last_block": 320050561,
+        "updated_at": "2026-10-17T10:42:46.150574+00:00",
+        "factory_address": "0x01117f713868d53b4c89b049501ab35a4d0f7a12"
+      },
+      {
+        "chain_id": 421614,
+        "last_block": 320413826,
+        "updated_at": "2026-10-18T13:24:38.773169+00:00",
+        "factory_address": "0x33c1cdd4e22a9732ad808f2ad7efe82211b65c6a"
+      },
+      {
+        "chain_id": 421614,
+        "last_block": 320050561,
+        "updated_at": "2026-10-17T10:42:45.93111+00:00",
+        "factory_address": "0x5190065138397a38d74b90110e80448a1ba17122"
+      },
+      {
+        "chain_id": 421614,
+        "last_block": 320413826,
+        "updated_at": "2026-10-18T13:24:39.824123+00:00",
+        "factory_address": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3"
+      },
+      {
+        "chain_id": 421614,
+        "last_block": 320413826,
+        "updated_at": "2026-10-18T13:24:38.1316+00:00",
+        "factory_address": "0xb6cf9f65ab82c17c8e9d58d06073ca3af3e5443d"
+      },
+      {
+        "chain_id": 421614,
+        "last_block": 320413826,
+        "updated_at": "2026-10-18T13:24:40.054085+00:00",
+        "factory_address": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6"
+      }
+    ]
+  },
+  "automaticIndexing": {
+    "manualTriggerUsed": false,
+    "allRunsSuccessful": true,
+    "indexedEvents": [
+      {
+        "kind": "markets",
+        "version": "v1",
+        "txHash": "0x6de24da7312ad538bf8dce4ecaaff1593229e39c4aa873f8de6738759c4b9a7b",
+        "blockNumber": 320410997,
+        "runId": "1541d41c-e0ac-4120-8c8e-42545243e960",
+        "indexedAt": "2026-10-18T13:12:39.872778+00:00"
+      },
+      {
+        "kind": "resolutions",
+        "version": "v1",
+        "txHash": "0x9d4b650bf140f4cfc799fa83725dbadd3693e3507853ecb0b766a82f1ae16e7e",
+        "blockNumber": 320413345,
+        "runId": "df2992c2-4343-4723-b1d4-b70934eeb622",
+        "indexedAt": "2026-10-18T13:22:39.654192+00:00"
+      },
+      {
+        "kind": "trades",
+        "version": "v1",
+        "txHash": "0xda16c2e256d821548121d2f27f096219eb33f831bb8213259aa9e8c92085b56a",
+        "blockNumber": 320412755,
+        "runId": "21e3f684-e683-496f-905b-eb9f127f296b",
+        "indexedAt": "2026-10-18T13:20:39.577063+00:00"
+      },
+      {
+        "kind": "trades",
+        "version": "v1",
+        "txHash": "0x37b779d9aa57c93f201f47ef92150aa92e4c3a67f6da6649ae7d04b0493dc2e0",
+        "blockNumber": 320412920,
+        "runId": "c23129a3-5839-44c0-9169-77c88a943736",
+        "indexedAt": "2026-10-18T13:21:39.831454+00:00"
+      },
+      {
+        "kind": "redemptions",
+        "version": "v1",
+        "txHash": "0xf4278088dd4156a87b3a2fb85b2e0b3342291822b616e76b469b3130c3e0bd88",
+        "blockNumber": 320413518,
+        "runId": "de5d3a83-e9f5-4423-afba-3bfc1e41b31a",
+        "indexedAt": "2026-10-18T13:23:39.583959+00:00"
+      },
+      {
+        "kind": "markets",
+        "version": "v2",
+        "txHash": "0x7087c7ced17003c6cea7444419ec1dd44dc46a0dc694ca2bba550a5038be8293",
+        "blockNumber": 320411087,
+        "runId": "45164cea-37fc-4d0a-86c6-7ce20e278658",
+        "indexedAt": "2026-10-18T13:13:39.884832+00:00"
+      },
+      {
+        "kind": "resolutions",
+        "version": "v2",
+        "txHash": "0x08844aba8ca58796f8ba8764f9d896ff26469c5c824c6f14bbf69f783b2d957e",
+        "blockNumber": 320413405,
+        "runId": "de5d3a83-e9f5-4423-afba-3bfc1e41b31a",
+        "indexedAt": "2026-10-18T13:23:39.583959+00:00"
+      },
+      {
+        "kind": "trades",
+        "version": "v2",
+        "txHash": "0x4ed3f5f8ee1966a986a1d0b2114cfa34a76ec6392e8a68efb49057593222a477",
+        "blockNumber": 320413032,
+        "runId": "c23129a3-5839-44c0-9169-77c88a943736",
+        "indexedAt": "2026-10-18T13:21:39.831454+00:00"
+      },
+      {
+        "kind": "trades",
+        "version": "v2",
+        "txHash": "0x98dfce831a1a72f90d45cac7996c238a826511b9155e995ba8388c9abee708af",
+        "blockNumber": 320413259,
+        "runId": "df2992c2-4343-4723-b1d4-b70934eeb622",
+        "indexedAt": "2026-10-18T13:22:39.654192+00:00"
+      },
+      {
+        "kind": "redemptions",
+        "version": "v2",
+        "txHash": "0xb2906eb8fa4a97c2d08e08af889064fd28d62816a87651016896203eb0ad532d",
+        "blockNumber": 320413634,
+        "runId": "dfb0da30-124e-4604-b33e-4b307ed7081c",
+        "indexedAt": "2026-10-18T13:24:40.064125+00:00"
+      }
+    ],
+    "runs": [
+      {
+        "id": "1541d41c-e0ac-4120-8c8e-42545243e960",
+        "report": {
+          "block": 320411057,
+          "status": "ok",
+          "factories": [
+            {
+              "status": "ok",
+              "address": "0xb6cf9f65ab82c17c8e9d58d06073ca3af3e5443d",
+              "toBlock": 320411057,
+              "version": "v1",
+              "fromBlock": 320410825,
+              "processed": {
+                "trades": 0,
+                "markets": 1,
+                "lifecycle": 0,
+                "liquidity": 1,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            },
+            {
+              "status": "ok",
+              "address": "0x33c1cdd4e22a9732ad808f2ad7efe82211b65c6a",
+              "toBlock": 320411057,
+              "version": "v2",
+              "fromBlock": 320410825,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            },
+            {
+              "status": "ok",
+              "address": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+              "toBlock": 320411057,
+              "version": "v1",
+              "fromBlock": 320410825,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            },
+            {
+              "status": "ok",
+              "address": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+              "toBlock": 320411057,
+              "version": "v2",
+              "fromBlock": 320410825,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            }
+          ],
+          "processed": {
+            "trades": 0,
+            "markets": 1,
+            "lifecycle": 0,
+            "liquidity": 1,
+            "redemptions": 0,
+            "resolutions": 0
+          },
+          "durationMs": 2339,
+          "protocolOnly": true
+        },
+        "status": "ok",
+        "trigger": "cron",
+        "source_sha": "0c9e27210b451e29b484fe795c6fc8da26e5993f",
+        "started_at": "2026-10-18T13:12:37.528897+00:00",
+        "completed_at": "2026-10-18T13:12:39.872778+00:00"
+      },
+      {
+        "id": "45164cea-37fc-4d0a-86c6-7ce20e278658",
+        "report": {
+          "block": 320411287,
+          "status": "ok",
+          "factories": [
+            {
+              "status": "ok",
+              "address": "0xb6cf9f65ab82c17c8e9d58d06073ca3af3e5443d",
+              "toBlock": 320411287,
+              "version": "v1",
+              "fromBlock": 320411058,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            },
+            {
+              "status": "ok",
+              "address": "0x33c1cdd4e22a9732ad808f2ad7efe82211b65c6a",
+              "toBlock": 320411287,
+              "version": "v2",
+              "fromBlock": 320411058,
+              "processed": {
+                "trades": 0,
+                "markets": 1,
+                "lifecycle": 0,
+                "liquidity": 1,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            },
+            {
+              "status": "ok",
+              "address": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+              "toBlock": 320411287,
+              "version": "v1",
+              "fromBlock": 320411058,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            },
+            {
+              "status": "ok",
+              "address": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+              "toBlock": 320411287,
+              "version": "v2",
+              "fromBlock": 320411058,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            }
+          ],
+          "processed": {
+            "trades": 0,
+            "markets": 1,
+            "lifecycle": 0,
+            "liquidity": 1,
+            "redemptions": 0,
+            "resolutions": 0
+          },
+          "durationMs": 2350,
+          "protocolOnly": true
+        },
+        "status": "ok",
+        "trigger": "cron",
+        "source_sha": "0c9e27210b451e29b484fe795c6fc8da26e5993f",
+        "started_at": "2026-10-18T13:13:37.528628+00:00",
+        "completed_at": "2026-10-18T13:13:39.884832+00:00"
+      },
+      {
+        "id": "833ada2f-e10f-4a55-9407-1538d0cf9739",
+        "report": {
+          "block": 320411517,
+          "status": "ok",
+          "factories": [
+            {
+              "status": "ok",
+              "address": "0xb6cf9f65ab82c17c8e9d58d06073ca3af3e5443d",
+              "toBlock": 320411517,
+              "version": "v1",
+              "fromBlock": 320411288,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            },
+            {
+              "status": "ok",
+              "address": "0x33c1cdd4e22a9732ad808f2ad7efe82211b65c6a",
+              "toBlock": 320411517,
+              "version": "v2",
+              "fromBlock": 320411288,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            },
+            {
+              "status": "ok",
+              "address": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+              "toBlock": 320411517,
+              "version": "v1",
+              "fromBlock": 320411288,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            },
+            {
+              "status": "ok",
+              "address": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+              "toBlock": 320411517,
+              "version": "v2",
+              "fromBlock": 320411288,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            }
+          ],
+          "processed": {
+            "trades": 0,
+            "markets": 0,
+            "lifecycle": 0,
+            "liquidity": 0,
+            "redemptions": 0,
+            "resolutions": 0
+          },
+          "durationMs": 2357,
+          "protocolOnly": true
+        },
+        "status": "ok",
+        "trigger": "cron",
+        "source_sha": "0c9e27210b451e29b484fe795c6fc8da26e5993f",
+        "started_at": "2026-10-18T13:14:37.192545+00:00",
+        "completed_at": "2026-10-18T13:14:39.554196+00:00"
+      },
+      {
+        "id": "e3d6d144-4b95-4cef-86ea-99d73ffe4851",
+        "report": {
+          "block": 320411754,
+          "status": "ok",
+          "factories": [
+            {
+              "status": "ok",
+              "address": "0xb6cf9f65ab82c17c8e9d58d06073ca3af3e5443d",
+              "toBlock": 320411754,
+              "version": "v1",
+              "fromBlock": 320411518,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            },
+            {
+              "status": "ok",
+              "address": "0x33c1cdd4e22a9732ad808f2ad7efe82211b65c6a",
+              "toBlock": 320411754,
+              "version": "v2",
+              "fromBlock": 320411518,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            },
+            {
+              "status": "ok",
+              "address": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+              "toBlock": 320411754,
+              "version": "v1",
+              "fromBlock": 320411518,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            },
+            {
+              "status": "ok",
+              "address": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+              "toBlock": 320411754,
+              "version": "v2",
+              "fromBlock": 320411518,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            }
+          ],
+          "processed": {
+            "trades": 0,
+            "markets": 0,
+            "lifecycle": 0,
+            "liquidity": 0,
+            "redemptions": 0,
+            "resolutions": 0
+          },
+          "durationMs": 2593,
+          "protocolOnly": true
+        },
+        "status": "ok",
+        "trigger": "cron",
+        "source_sha": "0c9e27210b451e29b484fe795c6fc8da26e5993f",
+        "started_at": "2026-10-18T13:15:37.375909+00:00",
+        "completed_at": "2026-10-18T13:15:39.974046+00:00"
+      },
+      {
+        "id": "2c1d1d6f-2586-44d0-a708-88449d815ae4",
+        "report": {
+          "block": 320411980,
+          "status": "ok",
+          "factories": [
+            {
+              "status": "ok",
+              "address": "0xb6cf9f65ab82c17c8e9d58d06073ca3af3e5443d",
+              "toBlock": 320411980,
+              "version": "v1",
+              "fromBlock": 320411755,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            },
+            {
+              "status": "ok",
+              "address": "0x33c1cdd4e22a9732ad808f2ad7efe82211b65c6a",
+              "toBlock": 320411980,
+              "version": "v2",
+              "fromBlock": 320411755,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            },
+            {
+              "status": "ok",
+              "address": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+              "toBlock": 320411980,
+              "version": "v1",
+              "fromBlock": 320411755,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            },
+            {
+              "status": "ok",
+              "address": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+              "toBlock": 320411980,
+              "version": "v2",
+              "fromBlock": 320411755,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            }
+          ],
+          "processed": {
+            "trades": 0,
+            "markets": 0,
+            "lifecycle": 0,
+            "liquidity": 0,
+            "redemptions": 0,
+            "resolutions": 0
+          },
+          "durationMs": 2394,
+          "protocolOnly": true
+        },
+        "status": "ok",
+        "trigger": "cron",
+        "source_sha": "0c9e27210b451e29b484fe795c6fc8da26e5993f",
+        "started_at": "2026-10-18T13:16:37.208049+00:00",
+        "completed_at": "2026-10-18T13:16:39.606999+00:00"
+      },
+      {
+        "id": "0f80708a-5dc1-49a4-a995-71eb37667ffa",
+        "report": {
+          "block": 320412212,
+          "status": "ok",
+          "factories": [
+            {
+              "status": "ok",
+              "address": "0xb6cf9f65ab82c17c8e9d58d06073ca3af3e5443d",
+              "toBlock": 320412212,
+              "version": "v1",
+              "fromBlock": 320411981,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            },
+            {
+              "status": "ok",
+              "address": "0x33c1cdd4e22a9732ad808f2ad7efe82211b65c6a",
+              "toBlock": 320412212,
+              "version": "v2",
+              "fromBlock": 320411981,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            },
+            {
+              "status": "ok",
+              "address": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+              "toBlock": 320412212,
+              "version": "v1",
+              "fromBlock": 320411981,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            },
+            {
+              "status": "ok",
+              "address": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+              "toBlock": 320412212,
+              "version": "v2",
+              "fromBlock": 320411981,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            }
+          ],
+          "processed": {
+            "trades": 0,
+            "markets": 0,
+            "lifecycle": 0,
+            "liquidity": 0,
+            "redemptions": 0,
+            "resolutions": 0
+          },
+          "durationMs": 2414,
+          "protocolOnly": true
+        },
+        "status": "ok",
+        "trigger": "cron",
+        "source_sha": "0c9e27210b451e29b484fe795c6fc8da26e5993f",
+        "started_at": "2026-10-18T13:17:37.505087+00:00",
+        "completed_at": "2026-10-18T13:17:39.924139+00:00"
+      },
+      {
+        "id": "429927a6-a52c-4589-ad6e-946a4d015ec8",
+        "report": {
+          "block": 320412442,
+          "status": "ok",
+          "factories": [
+            {
+              "status": "ok",
+              "address": "0xb6cf9f65ab82c17c8e9d58d06073ca3af3e5443d",
+              "toBlock": 320412442,
+              "version": "v1",
+              "fromBlock": 320412213,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            },
+            {
+              "status": "ok",
+              "address": "0x33c1cdd4e22a9732ad808f2ad7efe82211b65c6a",
+              "toBlock": 320412442,
+              "version": "v2",
+              "fromBlock": 320412213,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            },
+            {
+              "status": "ok",
+              "address": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+              "toBlock": 320412442,
+              "version": "v1",
+              "fromBlock": 320412213,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            },
+            {
+              "status": "ok",
+              "address": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+              "toBlock": 320412442,
+              "version": "v2",
+              "fromBlock": 320412213,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            }
+          ],
+          "processed": {
+            "trades": 0,
+            "markets": 0,
+            "lifecycle": 0,
+            "liquidity": 0,
+            "redemptions": 0,
+            "resolutions": 0
+          },
+          "durationMs": 2711,
+          "protocolOnly": true
+        },
+        "status": "ok",
+        "trigger": "cron",
+        "source_sha": "0c9e27210b451e29b484fe795c6fc8da26e5993f",
+        "started_at": "2026-10-18T13:18:37.20583+00:00",
+        "completed_at": "2026-10-18T13:18:39.92233+00:00"
+      },
+      {
+        "id": "c62cb1db-adbf-4890-b7d6-a8f1e2384ac8",
+        "report": {
+          "block": 320412668,
+          "status": "ok",
+          "factories": [
+            {
+              "status": "ok",
+              "address": "0xb6cf9f65ab82c17c8e9d58d06073ca3af3e5443d",
+              "toBlock": 320412668,
+              "version": "v1",
+              "fromBlock": 320412443,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            },
+            {
+              "status": "ok",
+              "address": "0x33c1cdd4e22a9732ad808f2ad7efe82211b65c6a",
+              "toBlock": 320412668,
+              "version": "v2",
+              "fromBlock": 320412443,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            },
+            {
+              "status": "ok",
+              "address": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+              "toBlock": 320412668,
+              "version": "v1",
+              "fromBlock": 320412443,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            },
+            {
+              "status": "ok",
+              "address": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+              "toBlock": 320412668,
+              "version": "v2",
+              "fromBlock": 320412443,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            }
+          ],
+          "processed": {
+            "trades": 0,
+            "markets": 0,
+            "lifecycle": 0,
+            "liquidity": 0,
+            "redemptions": 0,
+            "resolutions": 0
+          },
+          "durationMs": 2368,
+          "protocolOnly": true
+        },
+        "status": "ok",
+        "trigger": "cron",
+        "source_sha": "0c9e27210b451e29b484fe795c6fc8da26e5993f",
+        "started_at": "2026-10-18T13:19:37.322315+00:00",
+        "completed_at": "2026-10-18T13:19:39.69654+00:00"
+      },
+      {
+        "id": "21e3f684-e683-496f-905b-eb9f127f296b",
+        "report": {
+          "block": 320412899,
+          "status": "ok",
+          "factories": [
+            {
+              "status": "ok",
+              "address": "0xb6cf9f65ab82c17c8e9d58d06073ca3af3e5443d",
+              "toBlock": 320412899,
+              "version": "v1",
+              "fromBlock": 320412669,
+              "processed": {
+                "trades": 1,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            },
+            {
+              "status": "ok",
+              "address": "0x33c1cdd4e22a9732ad808f2ad7efe82211b65c6a",
+              "toBlock": 320412899,
+              "version": "v2",
+              "fromBlock": 320412669,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            },
+            {
+              "status": "ok",
+              "address": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+              "toBlock": 320412899,
+              "version": "v1",
+              "fromBlock": 320412669,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            },
+            {
+              "status": "ok",
+              "address": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+              "toBlock": 320412899,
+              "version": "v2",
+              "fromBlock": 320412669,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            }
+          ],
+          "processed": {
+            "trades": 1,
+            "markets": 0,
+            "lifecycle": 0,
+            "liquidity": 0,
+            "redemptions": 0,
+            "resolutions": 0
+          },
+          "durationMs": 2347,
+          "protocolOnly": true
+        },
+        "status": "ok",
+        "trigger": "cron",
+        "source_sha": "0c9e27210b451e29b484fe795c6fc8da26e5993f",
+        "started_at": "2026-10-18T13:20:37.225516+00:00",
+        "completed_at": "2026-10-18T13:20:39.577063+00:00"
+      },
+      {
+        "id": "c23129a3-5839-44c0-9169-77c88a943736",
+        "report": {
+          "block": 320413130,
+          "status": "ok",
+          "factories": [
+            {
+              "status": "ok",
+              "address": "0xb6cf9f65ab82c17c8e9d58d06073ca3af3e5443d",
+              "toBlock": 320413130,
+              "version": "v1",
+              "fromBlock": 320412900,
+              "processed": {
+                "trades": 1,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            },
+            {
+              "status": "ok",
+              "address": "0x33c1cdd4e22a9732ad808f2ad7efe82211b65c6a",
+              "toBlock": 320413130,
+              "version": "v2",
+              "fromBlock": 320412900,
+              "processed": {
+                "trades": 1,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            },
+            {
+              "status": "ok",
+              "address": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+              "toBlock": 320413130,
+              "version": "v1",
+              "fromBlock": 320412900,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            },
+            {
+              "status": "ok",
+              "address": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+              "toBlock": 320413130,
+              "version": "v2",
+              "fromBlock": 320412900,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            }
+          ],
+          "processed": {
+            "trades": 2,
+            "markets": 0,
+            "lifecycle": 0,
+            "liquidity": 0,
+            "redemptions": 0,
+            "resolutions": 0
+          },
+          "durationMs": 2435,
+          "protocolOnly": true
+        },
+        "status": "ok",
+        "trigger": "cron",
+        "source_sha": "0c9e27210b451e29b484fe795c6fc8da26e5993f",
+        "started_at": "2026-10-18T13:21:37.390905+00:00",
+        "completed_at": "2026-10-18T13:21:39.831454+00:00"
+      },
+      {
+        "id": "df2992c2-4343-4723-b1d4-b70934eeb622",
+        "report": {
+          "block": 320413368,
+          "status": "ok",
+          "factories": [
+            {
+              "status": "ok",
+              "address": "0xb6cf9f65ab82c17c8e9d58d06073ca3af3e5443d",
+              "toBlock": 320413368,
+              "version": "v1",
+              "fromBlock": 320413131,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 1
+              }
+            },
+            {
+              "status": "ok",
+              "address": "0x33c1cdd4e22a9732ad808f2ad7efe82211b65c6a",
+              "toBlock": 320413368,
+              "version": "v2",
+              "fromBlock": 320413131,
+              "processed": {
+                "trades": 1,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            },
+            {
+              "status": "ok",
+              "address": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+              "toBlock": 320413368,
+              "version": "v1",
+              "fromBlock": 320413131,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            },
+            {
+              "status": "ok",
+              "address": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+              "toBlock": 320413368,
+              "version": "v2",
+              "fromBlock": 320413131,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            }
+          ],
+          "processed": {
+            "trades": 1,
+            "markets": 0,
+            "lifecycle": 0,
+            "liquidity": 0,
+            "redemptions": 0,
+            "resolutions": 1
+          },
+          "durationMs": 2421,
+          "protocolOnly": true
+        },
+        "status": "ok",
+        "trigger": "cron",
+        "source_sha": "0c9e27210b451e29b484fe795c6fc8da26e5993f",
+        "started_at": "2026-10-18T13:22:37.227845+00:00",
+        "completed_at": "2026-10-18T13:22:39.654192+00:00"
+      },
+      {
+        "id": "de5d3a83-e9f5-4423-afba-3bfc1e41b31a",
+        "report": {
+          "block": 320413594,
+          "status": "ok",
+          "factories": [
+            {
+              "status": "ok",
+              "address": "0xb6cf9f65ab82c17c8e9d58d06073ca3af3e5443d",
+              "toBlock": 320413594,
+              "version": "v1",
+              "fromBlock": 320413369,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 1,
+                "resolutions": 0
+              }
+            },
+            {
+              "status": "ok",
+              "address": "0x33c1cdd4e22a9732ad808f2ad7efe82211b65c6a",
+              "toBlock": 320413594,
+              "version": "v2",
+              "fromBlock": 320413369,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 1
+              }
+            },
+            {
+              "status": "ok",
+              "address": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+              "toBlock": 320413594,
+              "version": "v1",
+              "fromBlock": 320413369,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            },
+            {
+              "status": "ok",
+              "address": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+              "toBlock": 320413594,
+              "version": "v2",
+              "fromBlock": 320413369,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            }
+          ],
+          "processed": {
+            "trades": 0,
+            "markets": 0,
+            "lifecycle": 0,
+            "liquidity": 0,
+            "redemptions": 1,
+            "resolutions": 1
+          },
+          "durationMs": 2345,
+          "protocolOnly": true
+        },
+        "status": "ok",
+        "trigger": "cron",
+        "source_sha": "0c9e27210b451e29b484fe795c6fc8da26e5993f",
+        "started_at": "2026-10-18T13:23:37.234263+00:00",
+        "completed_at": "2026-10-18T13:23:39.583959+00:00"
+      },
+      {
+        "id": "dfb0da30-124e-4604-b33e-4b307ed7081c",
+        "report": {
+          "block": 320413826,
+          "status": "ok",
+          "factories": [
+            {
+              "status": "ok",
+              "address": "0xb6cf9f65ab82c17c8e9d58d06073ca3af3e5443d",
+              "toBlock": 320413826,
+              "version": "v1",
+              "fromBlock": 320413595,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            },
+            {
+              "status": "ok",
+              "address": "0x33c1cdd4e22a9732ad808f2ad7efe82211b65c6a",
+              "toBlock": 320413826,
+              "version": "v2",
+              "fromBlock": 320413595,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 1,
+                "resolutions": 0
+              }
+            },
+            {
+              "status": "ok",
+              "address": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+              "toBlock": 320413826,
+              "version": "v1",
+              "fromBlock": 320413595,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            },
+            {
+              "status": "ok",
+              "address": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+              "toBlock": 320413826,
+              "version": "v2",
+              "fromBlock": 320413595,
+              "processed": {
+                "trades": 0,
+                "markets": 0,
+                "lifecycle": 0,
+                "liquidity": 0,
+                "redemptions": 0,
+                "resolutions": 0
+              }
+            }
+          ],
+          "processed": {
+            "trades": 0,
+            "markets": 0,
+            "lifecycle": 0,
+            "liquidity": 0,
+            "redemptions": 1,
+            "resolutions": 0
+          },
+          "durationMs": 2581,
+          "protocolOnly": true
+        },
+        "status": "ok",
+        "trigger": "cron",
+        "source_sha": "0c9e27210b451e29b484fe795c6fc8da26e5993f",
+        "started_at": "2026-10-18T13:24:37.478341+00:00",
+        "completed_at": "2026-10-18T13:24:40.064125+00:00"
+      }
+    ]
+  },
+  "frontend": {
+    "finalBalance": {
+      "mode": "onchain",
+      "chainId": 421614,
+      "symbol": "MXNP",
+      "balance": "112.421015"
+    },
+    "remainingPositions": 0,
+    "history": [
+      {
+        "id": 360642,
+        "mode": "onchain",
+        "parentMarketId": null,
+        "legLabel": null,
+        "question": "PRUEBA TÉCNICA V2: reutilizar gas y autorización en mercado futuro (2026-10-18)",
+        "category": "general",
+        "outcomes": [
+          "Primero",
+          "Segundo",
+          "Tercero"
+        ],
+        "chainId": 421614,
+        "chainAddress": "0x508ed5716d8baf66de9ec39fe0bd32628a26e51d",
+        "chainMarketId": "1",
+        "protocolMarketId": 10,
+        "factoryAddress": "0x33c1cdd4e22a9732ad808f2ad7efe82211b65c6a",
+        "status": "resolved",
+        "outcome": 0,
+        "endTime": "2026-10-19T13:09:06.000Z",
+        "prices": [
+          0.363527,
+          0.318236,
+          0.318236
+        ],
+        "volume24h": 5.364737,
+        "liquidity": 91.511226,
+        "snapshotAt": "2026-10-18T13:24:38.768Z",
+        "executionReady": true,
+        "marketId": 360642,
+        "transactions": [
+          {
+            "side": "buy",
+            "outcomeIndex": 0,
+            "outcomeLabel": "Primero",
+            "shares": 14.024037,
+            "collateral": 5,
+            "fee": 0.1,
+            "createdAt": "2026-10-18T13:21:38.529Z"
+          },
+          {
+            "side": "sell",
+            "outcomeIndex": 0,
+            "outcomeLabel": "Primero",
+            "shares": 1,
+            "collateral": 0.364737,
+            "fee": 0,
+            "createdAt": "2026-10-18T13:22:38.318Z"
+          },
+          {
+            "side": "redeem",
+            "outcomeIndex": 0,
+            "outcomeLabel": "Primero",
+            "shares": 13.024037,
+            "collateral": 13.024037,
+            "fee": 0,
+            "createdAt": "2026-10-18T13:24:38.693Z"
+          }
+        ],
+        "totalInvested": 5,
+        "totalReceived": 13.388774,
+        "markToMarket": 0,
+        "claimablePayout": 0,
+        "canRedeem": false,
+        "outcomeStatus": "won",
+        "winningOutcomeIndex": 0,
+        "winningOutcomeLabel": "Primero",
+        "pickedOutcomeLabel": "Primero",
+        "netPnl": 8.388774
+      },
+      {
+        "id": 360641,
+        "mode": "onchain",
+        "parentMarketId": null,
+        "legLabel": null,
+        "question": "PRUEBA TÉCNICA V1: gas automático sin ETH del usuario (2026-10-18)",
+        "category": "general",
+        "outcomes": [
+          "Sí",
+          "No"
+        ],
+        "chainId": 421614,
+        "chainAddress": "0xbba1c1386b8906971c1edbc64eb8eee30b4cb5f5",
+        "chainMarketId": "1",
+        "protocolMarketId": 9,
+        "factoryAddress": "0xb6cf9f65ab82c17c8e9d58d06073ca3af3e5443d",
+        "status": "resolved",
+        "outcome": 0,
+        "endTime": "2026-10-19T13:09:06.000Z",
+        "prices": [
+          0.5212891508377846,
+          0.4787108491622155
+        ],
+        "volume24h": 5.508851,
+        "liquidity": 95.829075,
+        "snapshotAt": "2026-10-18T13:24:38.126Z",
+        "executionReady": true,
+        "marketId": 360641,
+        "transactions": [
+          {
+            "side": "buy",
+            "outcomeIndex": 0,
+            "outcomeLabel": "Sí",
+            "shares": 9.52339,
+            "collateral": 5,
+            "fee": 0.125,
+            "createdAt": "2026-10-18T13:20:37.722Z"
+          },
+          {
+            "side": "sell",
+            "outcomeIndex": 0,
+            "outcomeLabel": "Sí",
+            "shares": 1,
+            "collateral": 0.508851,
+            "fee": 0.013684,
+            "createdAt": "2026-10-18T13:21:37.933Z"
+          },
+          {
+            "side": "redeem",
+            "outcomeIndex": 0,
+            "outcomeLabel": "Sí",
+            "shares": 8.52339,
+            "collateral": 8.52339,
+            "fee": 0,
+            "createdAt": "2026-10-18T13:23:37.795Z"
+          }
+        ],
+        "totalInvested": 5,
+        "totalReceived": 9.032240999999999,
+        "markToMarket": 0,
+        "claimablePayout": 0,
+        "canRedeem": false,
+        "outcomeStatus": "won",
+        "winningOutcomeIndex": 0,
+        "winningOutcomeLabel": "Sí",
+        "pickedOutcomeLabel": "Sí",
+        "netPnl": 4.032240999999999
+      }
+    ],
+    "servedAssets": {
+      "checkedAt": "2026-10-18T13:21:33.506Z",
+      "deploymentId": "dpl_5B2dPBNv3r5QqvfkmAu53gYHQaRf",
+      "sha": "940fb9bb3d7e062eec2a5fe5de8a1d710c1da28c",
+      "base": "https://pronos-h7jheb9pn-mezcalpapieth-jpgs-projects.vercel.app",
+      "branchAlias": "https://pronos-git-onchain-sepolia-mezcalpapieth-jpgs-projects.vercel.app",
+      "entry": "/points/assets/index-C8aJRzeb.js",
+      "lazyPath": "/points/assets/PointsBuyModal-DdsPwInR.js",
+      "branchAliasMatched": true,
+      "gasErrorCopyVerified": true,
+      "guardedBuyModuleVerified": true,
+      "config": {
+        "enabled": true,
+        "chainId": 421614,
+        "symbol": "MXNP"
+      },
+      "guestAuthentication": {
+        "authenticated": false
+      },
+      "adminGuestStatus": 401,
+      "htmlSHA256": "30d806871fa345e59cd125b5194e80e202f3c8eb3e8cfc5ffe4087ffa0605b0f",
+      "entrySHA256": "8601e491c97cc680910700aabebbf71d9c75de7cbe6b72b812ca16b643450dba",
+      "authenticatedReadinessVerified": true,
+      "zeroETHRehearsalCompleted": true
+    }
+  },
+  "readiness": {
+    "at": "2026-10-18T13:24:13.742Z",
+    "gas": {
+      "sponsorshipEnabled": false,
+      "autoFunding": {
+        "enabled": true,
+        "configured": true,
+        "ready": true,
+        "funder": "0x252a1cfa015612efb8c7c2f1643a9f541b866990",
+        "targetEth": "0.0005",
+        "minimumEth": "0.0002",
+        "walletDailyEth": "0.002",
+        "globalDailyEth": "0.1",
+        "reserveEth": "0.01",
+        "schemaReady": true,
+        "pendingTransfers": 0,
+        "balanceEth": "0.09949958",
+        "signerVerified": true,
+        "dailyBudgetUsedEth": "0.0005010973508"
+      }
+    },
+    "launch": {
+      "ready": true,
+      "blockerCount": 0,
+      "reviewCount": 1,
+      "blockers": [],
+      "reviews": [
+        {
+          "id": "cre_webhook_dry_run",
+          "title": "CRE sigue en modo revisión",
+          "detail": "Sin secreto, Chainlink CRE no puede enviar resoluciones al webhook.",
+          "fix": "Set CRE_RESOLUTION_WEBHOOK_SECRET before enabling CRE workflows"
+        }
+      ],
+      "nextSteps": [
+        "Set CRE_RESOLUTION_WEBHOOK_SECRET before enabling CRE workflows"
+      ]
+    },
+    "warnings": [],
+    "tradingAuthorization": {
+      "scope": "router",
+      "routerConfigured": true,
+      "verified": true,
+      "address": "0x25bc3c0f0c41516167f096ac4bf785f60bbbe843",
+      "factories": [
+        "0xb6cf9f65ab82c17c8e9d58d06073ca3af3e5443d",
+        "0x33c1cdd4e22a9732ad808f2ad7efe82211b65c6a"
+      ],
+      "collateral": "0x6ed6c00c2b4cf9f5989866f4c5862d4cded67ef9",
+      "shares": {
+        "v1": "0x0c059fe84d1a733d1d698dd04a2f594df883dfb4",
+        "v2": "0xac7474e5ff1b98d5d6268a76ae409f972717436b"
+      }
+    }
+  },
+  "separatePointsLedger": {
+    "before": {
+      "username": "frmm",
+      "balance": "10120.534665",
+      "trades": 274
+    },
+    "after": {
+      "username": "frmm",
+      "balance": "10120.534665",
+      "trades": 274
+    },
+    "unchanged": true
+  },
+  "fix": {
+    "commit": "940fb9bb3d7e062eec2a5fe5de8a1d710c1da28c",
+    "cause": "Turnkey address lookup is case-sensitive; the database stores lowercase identifiers.",
+    "change": "Checksum the dedicated funder address at the Turnkey signWith boundary.",
+    "priorFailedBuySentNoETH": true,
+    "regressionFailedBeforeFixAndPassedAfter": true,
+    "focusedTestsPassed": 31
+  },
+  "boundaries": {
+    "checkedAt": "2026-10-18T13:20:33.829Z",
+    "branch": "onchain-sepolia",
+    "pushedSHA": "940fb9bb3d7e062eec2a5fe5de8a1d710c1da28c",
+    "pointbreak": {
+      "local": "47aa9e19115d64bc36a2684e5eeb685caef117ba",
+      "tracking": "47aa9e19115d64bc36a2684e5eeb685caef117ba",
+      "remote": "47aa9e19115d64bc36a2684e5eeb685caef117ba"
+    },
+    "production": {
+      "id": "dpl_C4bVYurgBRwVYqZAJJChri7uQpzz",
+      "sha": "47aa9e19115d64bc36a2684e5eeb685caef117ba",
+      "state": "READY",
+      "aliases": [
+        "pronos.io",
+        "www.pronos.io",
+        "pronos-chi.vercel.app",
+        "pronos-mezcalpapieth-jpgs-projects.vercel.app"
+      ]
+    },
+    "preview": {
+      "id": "dpl_5B2dPBNv3r5QqvfkmAu53gYHQaRf",
+      "sha": "940fb9bb3d7e062eec2a5fe5de8a1d710c1da28c",
+      "state": "READY",
+      "url": "pronos-h7jheb9pn-mezcalpapieth-jpgs-projects.vercel.app",
+      "target": null,
+      "alias": "pronos-git-onchain-sepolia-mezcalpapieth-jpgs-projects.vercel.app"
+    },
+    "outsideBranchEnvironmentRecordsUnchanged": 100
+  },
+  "scopeNotes": [
+    "Real frontend delegation and execution modules plus authenticated deployed APIs and real Arbitrum Sepolia receipts were exercised; browser click-through was not exercised.",
+    "Both technical fixtures went pending first and were deployed via the normal preview admin approval API.",
+    "User funding happens on an eligible low-balance trade; no idle user batch funding or tournament reset was performed.",
+    "Production launch is not established: tournament reset/issuance limits, registration/scoring/rewards and cancellation/correction rehearsals remain. CRE remains in review mode."
+  ]
+}

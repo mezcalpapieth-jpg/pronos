@@ -2,7 +2,7 @@
 
 Branch: `onchain-sepolia`
 
-Status: contracts, preview runtime, Points execution guards, frontend adapter, persistent owner delegation, automatic indexing and sell-fee presentation are deployed to the isolated preview. Stable router authorization is verified: one consent before pool creation covered real buy/sell/resolve/redeem rehearsals on subsequent binary and three-outcome markets. Existing MXNP is reused; Pointbreak and Pronos production are unchanged. Automatic normal-user gas funding is implemented locally with persistent limits and retry protection; its dedicated wallet, preview migration, deployment and live zero-ETH rehearsal remain. Tournament reset/funding limits, registration/scoring/rewards and remaining lifecycle rehearsals also remain. This branch must stay hidden behind flags until the next tournament reset.
+Status: contracts, preview runtime, Points execution guards, frontend adapter, persistent owner delegation, automatic indexing and sell-fee presentation are deployed to the isolated preview. Stable router authorization is verified: one consent before pool creation covered real buy/sell/resolve/redeem rehearsals on subsequent binary and three-outcome markets. Automatic normal-user gas funding is active and verified: one 0.0005-ETH top-up covered an initially zero-ETH user's V1/V2 buys, sells, redemptions and initial token approvals. Existing MXNP is reused; Pointbreak and Pronos production are unchanged. Tournament reset/funding limits, registration/scoring/rewards and remaining lifecycle rehearsals remain. This branch must stay hidden behind flags until the next tournament reset.
 
 ## Goal
 
@@ -94,7 +94,7 @@ Required states:
 - User has a Turnkey sub-org.
 - User has an EVM wallet address.
 - User has an active delegation policy.
-- Wallet gets Sepolia gas automatically before trading once the preview gas-funding service is activated.
+- On the opted-in preview, an eligible low-balance wallet receives Sepolia gas automatically before trading. Signup and idle users receive no gas allocation.
 - Wallet receives the reset allocation of tournament MXNP.
 
 ### Mock Coin
@@ -205,7 +205,7 @@ Tasks:
 - Snapshot current off-chain tournament state before reset.
 - Create or verify Turnkey wallets for eligible users.
 - Check each eligible user's owner-approved delegation; request consent where absent. The reset job cannot grant itself signing authority.
-- Fund each wallet with testnet gas.
+- Prepare gas on demand before eligible trading; do not distribute ETH to every wallet at reset.
 - Mint or transfer exactly `500 MXNP` to each eligible tournament wallet.
 - Store cycle metadata:
   - cycle ID
@@ -454,7 +454,8 @@ Days 24-25: launch prep
 10. Done (2026-10-17): implement owner-approved, persistent, non-root preview delegation with verified revocation and separate login/signing credentials. See the persistent delegation checkpoint below.
 11. Done (2026-10-17): configure automatic preview indexing and deploy/verify corrected sell-quote fee presentation.
 12. Done (2026-10-17): deploy compatible factories/share tokens and the stable router using existing MXNP; verify one owner grant covers future binary and three-outcome markets through buy/sell/resolve/redeem and automatic indexing.
-13. Remaining: establish gas support for normal users and run the tournament reset/funding dry run before allocations. Issuance limits, registration, scoring, reward issuance and cancellation/correction accounting remain launch work.
+13. Done (2026-10-18): activate bounded, on-demand gas support and verify an initially zero-ETH normal wallet through V1/V2 buy/sell/resolve/redeem, including automatic indexing.
+14. Remaining: run the isolated tournament reset/funding dry run before allocations. Issuance limits, registration, scoring, reward issuance and cancellation/correction accounting remain launch work.
 
 ### Preview Admin Approval Setting
 
@@ -771,3 +772,17 @@ Next: release/configure the dedicated gas wallet and preview schema, fund it fro
 Created dedicated Turnkey gas wallet `0x252a1cfa015612EFB8C7c2f1643A9F541b866990` and verified the existing backend credential can sign a native Arbitrum Sepolia transfer from it without broadcasting. Applied the exported migration transactionally only to preview branch `br-sweet-dream-amb6hlfe`, verified both tables/all five indexes and application-role write access, and retained the indexer's restricted access. Configured only the three gas settings on the `onchain-sepolia` Preview; the flag remains false and all 100 outside-branch environment records remain unchanged. The 93 focused tests passed again before release.
 
 The incoming reserve still held **0.002244109750225488 ETH** at 17:53 UTC, so the new wallet is unfunded. The initial 0.1-ETH float, activation and real zero-ETH trading rehearsal depend on the incoming funds. No funding transfer, successful live readiness or completed zero-ETH user flow is claimed. See the activation guide for the exact destination, limits and remaining steps.
+
+### Automatic User Gas — Activated and Verified, 2026-10-18
+
+The reserve reached **2.902244109750225488 ETH**, a **2.9-ETH increase** from the prior checkpoint. Funded the dedicated Turnkey gas wallet with **0.1 ETH** and enabled automatic funding only for this branch's Preview. The real zero-ETH buy exposed a case-sensitive Turnkey signer lookup; checksumming only the signing address fixed it. Commit **`940fb9bb3d7e062eec2a5fe5de8a1d710c1da28c`** is pushed and its Preview is READY. The new regression failed before the fix and passed after it, with **31 focused tests passing**.
+
+The `frmm` owner approved the persistent router grant once through normal OTP verification and the frontend delegation client, before the two new technical pools existed. The human root quorum is unchanged. Transferred **100 existing MXNP** while this wallet still held zero ETH and had zero transactions. Pending rows **37699/37700** became Points **360641/360642**, protocol **9/10**, each factory's contract ID **1**, through the normal deployed admin approval and automatic deployment flow. Each seed used 100 existing MXNP. Both fixtures are test markets hidden from the homepage.
+
+The first buy received **0.0005 ETH** automatically. That one confirmed ledger transfer covered **six successful buy/sell/redeem calls and three initial token approvals** across the binary and three-outcome pools. The grant stayed unchanged with no additional owner consent. Actual frontend adapter/API calls and receipts were verified; browser click-through was not exercised. Thirteen successful scheduled indexer runs ingested two creations, four trades, two resolutions and two redemptions without manual triggers. Portfolio positions and actual share balances are now zero.
+
+The user consumed **0.000025353527844 ETH** in fees and retains **0.000474646472156 ETH / 112.421015 MXNP**. The gas wallet retains **0.09949958 ETH**, and the reserve **2.802243689456225488 ETH**. Total supply remains **50 million MXNP**, with no mint or tournament reset. The separate ledger stays **10120.534665 Points / 274 trades**. Readiness reports automatic funding ready, signer verified, schema ready, zero pending payments, no warnings and zero configuration blockers; CRE review mode remains explicit.
+
+Pointbreak local/tracking/remote refs remain `47aa9e19115d64bc36a2684e5eeb685caef117ba`; Pronos production remains `dpl_C4bVYurgBRwVYqZAJJChri7uQpzz` with unchanged aliases. All **100** environment records outside this branch remain unchanged. See the [verification record](./onchain-sepolia-automatic-gas-verification-2026-10-18.json) and [activation/recovery guide](./onchain-sepolia-automatic-gas-2026-10-17.md).
+
+Next: isolated tournament reset/funding dry run and enforceable per-cycle issuance limits; then registration, event-derived scoring, rewards and cancellation/refund/correction rehearsals. Native gas stays automatic and on demand. A dedicated admin gas dashboard/alerts remain a possible operational follow-up; they have not been implemented by this checkpoint.

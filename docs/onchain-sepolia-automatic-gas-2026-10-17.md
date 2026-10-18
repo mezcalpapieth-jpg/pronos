@@ -1,6 +1,22 @@
 # Automatic user gas on Arbitrum Sepolia
 
-Branch: `onchain-sepolia`. Automatic funding remains disabled pending the incoming ETH reserve. Pointbreak is unchanged.
+Branch: `onchain-sepolia`. Automatic funding is active and verified on the isolated Preview as of 2026-10-18. Pointbreak and production are unchanged.
+
+## Activation and real rehearsal, 2026-10-18
+
+The reserve held **2.902244109750225488 ETH** before activation, an increase of **2.9 ETH** from the prior checkpoint. Transferred **0.1 ETH** to the dedicated gas wallet in transaction `0x8a2aed91d4ef605a1e1f698109b5c2f8d191261423fbb2d22ead342903d933f1`; the reserve now holds **2.802243689456225488 ETH**. Its local private key remains outside hosted runtime configuration.
+
+Enabled only Preview / `onchain-sepolia`. Runtime commit **`940fb9bb3d7e062eec2a5fe5de8a1d710c1da28c`** is READY at [the verified preview](https://pronos-h7jheb9pn-mezcalpapieth-jpgs-projects.vercel.app), with the branch alias pointing to the same deployment. A real signing failure exposed Turnkey's case-sensitive address lookup: lowercase database identities must be checksummed at the `signWith` boundary. The regression failed before the fix and passed after it; **31 focused tests passed**. The failed attempt transferred no ETH and created no funding entry.
+
+The `frmm` owner completed normal OTP verification and the actual frontend delegation flow once, preserving the human root quorum. That persistent router grant predates both technical pools. Transferred **100 existing MXNP** to this wallet while its ETH balance and transaction count were still zero. Both fixtures went through pending and the deployed admin approval/auto-deploy API, with 100 MXNP seed each; they are marked as tests and hidden from the homepage.
+
+The first buy automatically received **0.0005 ETH** in transaction `0xc3394f4f22ee3a0bf66fc3a2bef397ea76397af964462e42039a98469de49f1b`. The same top-up covered V1 binary and V2 three-outcome buy, sell and redemption, plus the initial ERC20 approval and two share-token operator approvals. No further owner consent or ETH transfer was needed. The six actions used the actual frontend adapter and authenticated deployed APIs; this was not browser click-through testing. Thirteen successful scheduled runs indexed both creations, four trades, two resolutions and two redemptions without a manual trigger.
+
+Final chain reconciliation: **9 user transactions**, **0.000025353527844 ETH** in actual user fees, **0.000474646472156 ETH** remaining, **112.421015 MXNP**, no remaining shares or portfolio positions. The gas wallet holds **0.09949958 ETH**; its transfer fee was **0.00000042 ETH**. Exactly one funding ledger row is confirmed, with no pending transfers. Total MXNP supply remains **50 million**. The separate Points ledger remains **10120.534665 Points / 274 trades**.
+
+Authenticated readiness reports automatic funding enabled/configured/ready, schema ready, signer verified, zero pending payments, no warnings and zero launch-configuration blockers. The sole explicit review is CRE review mode. This does not establish tournament launch readiness: reset/issuance limits, registration, scoring, rewards and cancellation/correction rehearsals remain. Pointbreak local/tracking/remote refs, production deployment and all **100** outside-branch environment records remain unchanged.
+
+The [public verification record](./onchain-sepolia-automatic-gas-verification-2026-10-18.json) includes receipts, exact balances, authorization, scheduled indexing ranges and release boundaries. Earlier sections below are historical checkpoints and the operator procedure; the activation record above supersedes their pending funding status.
 
 ## Release configuration, 2026-10-17
 
@@ -51,7 +67,7 @@ Activation order:
 
    The schema must be installed by a migration role. Grant the preview application role SELECT/INSERT/UPDATE on both `sepolia_gas_lock` and `sepolia_gas_transfers` if it is a different role. The indexer needs no access or redeployment.
 
-4. After the reserve arrives, transfer an initial **0.1 ETH** from that reserve to the dedicated gas wallet. This amount leaves most of the proposed reserve separate. It is a suggested initial float, not a transfer performed by this implementation. No MXNP mint is involved.
+4. After the reserve arrives, transfer an initial **0.1 ETH** from that reserve to the dedicated gas wallet. This amount leaves most of the reserve separate. This step was completed on 2026-10-18 as recorded above; do not repeat it merely when following this checklist. No MXNP mint is involved.
 5. Set `ONCHAIN_AUTO_GAS_FUNDING_ENABLED=true` only for Preview / `onchain-sepolia`, then deploy that branch's Preview. Leave `GAS_SPONSORSHIP_ENABLED=false`; the status exposes native prefunding separately.
 6. Rehearse with an owner-authorized normal account holding MXNP and **zero native ETH**: buy with its initial approval, sell, resolve and redeem. Verify exactly one successful `sepolia_gas_transfers` entry, the native transfer receipt, successful trade receipts and normal automatic indexing. Retry the same account on a later pool and confirm it reuses both ETH and the router grant. A depleted balance should top up again only within the cooldown and rolling limits.
 7. Check authenticated `/api/points/admin/onchain-status`, especially `gas.autoFunding`. Configuration alone never reports ready: the live probe requires the actual chain, a dedicated EOA, table/write access, matching funder, reserve, remaining global budget, no unresolved payment, and a confirmed ledger transfer signed with the current public-key fingerprint. A prior transfer is historical permission evidence; it cannot guarantee that permissions have not subsequently been revoked. The real funded trade rehearsal remains required.
