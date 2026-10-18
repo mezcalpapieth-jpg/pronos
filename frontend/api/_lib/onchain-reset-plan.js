@@ -191,10 +191,10 @@ export function buildOnchainResetPlan({
   }
   if (options.apply) {
     blockers.push({
-      id: 'apply_not_implemented',
-      title: 'Apply mode is intentionally disabled',
-      detail: 'This reset skeleton only builds an audit plan. DB writes and chain funding are a later guarded step.',
-      fix: 'Run without --apply for now',
+      id: 'use_tournament_workflow',
+      title: 'Use the reviewed tournament workflow for writes',
+      detail: 'This legacy command audits the current configuration. New-token funding requires a fresh deployment manifest and an immutable reviewed snapshot.',
+      fix: 'Use onchain-sepolia-tournament.mjs plan, prepare and fund',
     });
   }
   if (!hasEnv(env, 'ONCHAIN_CHAIN_ID')) {
@@ -412,11 +412,11 @@ export function buildOnchainResetPlan({
     blockers: uniqueById(blockers),
     warnings,
     nextActions: [
-      'Deploy TournamentMXNP and both protocol factories on Arbitrum Sepolia.',
-      'Set Sepolia env values for token, collateral, factories, share tokens, RPC, owner, and indexer.',
-      'Create or refresh Turnkey wallets and delegated policies for every selected user.',
-      'Pre-fund eligible wallets with Sepolia ETH or ship a gas sponsorship path.',
-      'Implement the guarded apply step that snapshots the old cycle, opens the on-chain cycle, mints MXNP, and records tx hashes.',
+      'If a second cycle is approved, deploy a fresh zero-supply MXNP, factories, share tokens and router with DeployTournamentCycle.s.sol.',
+      'Use onchain-sepolia-tournament.mjs to snapshot all eligible wallets and review separate user and market-liquidity budgets.',
+      'Prepare the reviewed plan in the isolated preview ledger, then resume capped batch funding until every receipt is confirmed.',
+      'Review the runtime handoff, preserve old claims and indexing, and deploy only the onchain-sepolia preview when authorized.',
+      'Users authorize the new router once through the normal owner flow. ETH remains automatically funded on demand.',
     ],
   };
 }

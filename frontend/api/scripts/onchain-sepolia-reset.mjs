@@ -46,7 +46,10 @@ Options:
   --limit=5000                 max points_users rows to inspect
   --preview-limit=20           max users shown in previews
   --strict                     exit non-zero if the dry run has blockers
-  --apply                      currently rejected; apply mode is not implemented
+  --apply                      rejected here; use onchain-sepolia-tournament.mjs
+
+For a future new-token cycle use onchain-sepolia-tournament.mjs help.
+That workflow records a reviewed wallet snapshot and resumes durable batch mints.
 `);
 }
 

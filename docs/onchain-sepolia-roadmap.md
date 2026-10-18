@@ -786,3 +786,11 @@ The user consumed **0.000025353527844 ETH** in fees and retains **0.000474646472
 Pointbreak local/tracking/remote refs remain `47aa9e19115d64bc36a2684e5eeb685caef117ba`; Pronos production remains `dpl_C4bVYurgBRwVYqZAJJChri7uQpzz` with unchanged aliases. All **100** environment records outside this branch remain unchanged. See the [verification record](./onchain-sepolia-automatic-gas-verification-2026-10-18.json) and [activation/recovery guide](./onchain-sepolia-automatic-gas-2026-10-17.md).
 
 Next: isolated tournament reset/funding dry run and enforceable per-cycle issuance limits; then registration, event-derived scoring, rewards and cancellation/refund/correction rehearsals. Native gas stays automatic and on demand. A dedicated admin gas dashboard/alerts remain a possible operational follow-up; they have not been implemented by this checkpoint.
+
+## Optional second-cycle reset/funding implementation — 2026-10-18
+
+Prepared locally on `onchain-sepolia` for a **possible future second on-chain Points tournament**. The user explicitly deferred deploying or spending on a new token. No new contracts, mint, live migration, runtime switch, user authorization, commit/push or deployment was performed for this implementation. Pointbreak is untouched.
+
+Added a future deployment script that reuses the unchanged MXNP/ERC1155/factory/router contracts with a new collateral address and zero initial supply. Added a guarded operator workflow with immutable eligible-wallet snapshots, uniform opening grants, a separate operations liquidity budget, explicit issuance caps, a private resumable signed-transaction ledger, owner leases, exact receipt verification and safe retry behavior. Existing Points data, old tokens, pool collateral and outstanding claims are preserved; ETH remains automatically funded on demand. Users need one new owner authorization for each new tournament router.
+
+The full Solidity suite and local PostgreSQL funding recovery tests passed. The [future-cycle runbook](./onchain-sepolia-tournament-cycles-2026-10-18.md) documents plan/prepare/fund/status, activation handoff and remaining historical settlement requirements. Runtime activation is deliberately separate; automatic multi-cycle historical UI/routing, late signups, scoring and rewards remain roadmap work. The current preview continues using the existing token.

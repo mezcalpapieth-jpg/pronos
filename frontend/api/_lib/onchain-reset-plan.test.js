@@ -124,7 +124,7 @@ test('buildOnchainResetPlan reports missing Sepolia env and rejects apply mode',
 
   assert.equal(plan.ok, false);
   assert.equal(plan.dryRun, false);
-  assert.ok(blockerIds.includes('apply_not_implemented'));
+  assert.ok(blockerIds.includes('use_tournament_workflow'));
   assert.ok(blockerIds.includes('chain_not_arbitrum_sepolia'));
   assert.ok(blockerIds.includes('onchain_rpc_url_missing'));
   assert.ok(blockerIds.includes('onchain_tournament_mxnp_address_missing'));
