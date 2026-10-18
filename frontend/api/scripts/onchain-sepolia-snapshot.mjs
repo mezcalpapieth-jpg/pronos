@@ -10,7 +10,7 @@ import { buildTournamentSnapshot } from '../_lib/sepolia-tournament-snapshot.js'
 
 // Explicit environment only; never load production/root .env or a signer.
 export async function snapshotCommand(values, { env=process.env, sqlFor=neon,
-  providerFor=url=>new ethers.providers.JsonRpcProvider(url) }={}) {
+  providerFor=url=>new ethers.providers.JsonRpcProvider(url), buildSnapshot=buildTournamentSnapshot }={}) {
     if (!values.input || !values.output || !/^[a-f0-9]{64}$/.test(values['reviewed-plan-hash'] || '')
       || !/^[a-f0-9]{64}$/.test(values['reviewed-registry-hash'] || '')
       || !isSepoliaGasDatabase(env.ONCHAIN_SNAPSHOT_DATABASE_URL)) throw Error('explicit_preview_inputs_required');
@@ -21,9 +21,9 @@ export async function snapshotCommand(values, { env=process.env, sqlFor=neon,
     const sql = sqlFor(env.ONCHAIN_SNAPSHOT_DATABASE_URL);
     const result = await sql`SELECT plan, plan_hash, status FROM sepolia_tournament_cycles WHERE cycle_id = ${request.cycleId}`;
     const cycles = Array.isArray(result) ? result : result.rows;
-    if (cycles.length !== 1) throw Error('funded_cycle_required');
+    if (cycles.length !== 1 || cycles[0].plan.cycleId !== request.cycleId) throw Error('funded_cycle_required');
     const attempts = await sql`SELECT batch_index, tx_hash FROM sepolia_tournament_mints WHERE cycle_id = ${request.cycleId} AND status = 'confirmed' ORDER BY batch_index`;
-    const artifact = await buildTournamentSnapshot({ cycle:cycles[0], fromBlock:request.fromBlock,
+    const artifact = await buildSnapshot({ cycle:cycles[0], fromBlock:request.fromBlock,
       asOfBlock:request.asOfBlock, registry:request.registry,
       reviewedPlanHash:values['reviewed-plan-hash'], reviewedRegistryHash:values['reviewed-registry-hash'],
       funding:(Array.isArray(attempts) ? attempts : attempts.rows).map(r => ({ batchIndex:Number(r.batch_index), txHash:r.tx_hash })) }, {

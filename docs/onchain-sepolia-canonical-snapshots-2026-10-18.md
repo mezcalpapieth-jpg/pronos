@@ -1,6 +1,6 @@
 # Read-only tournament snapshot adapter
 
-Implemented locally after the parity Preview release at `129b65dc908dbae8f901656a4e65025199f510e6`. This adapter is not included in that deployed SHA. It is an operator-only shadow tool for a possible future tournament; the current token, cycle, trading APIs, indexer, leaderboard and rewards are unchanged.
+Committed and pushed as `89450fd981bdfcae56710f9454a7944dc82eb679`; its exact-source Preview `dpl_GWTMWSE6EWQ5YTsmGzxYo1nUc7HZ` is READY. This is an operator-only shadow tool for a possible future tournament; the current token, cycle, trading APIs, indexer, leaderboard and rewards are unchanged. See the [release evidence](./onchain-sepolia-snapshot-preview-verification-2026-10-18.json). The subsequent [resumable full-tournament capture](./onchain-sepolia-full-tournament-capture-2026-10-18.md) is local continuation work and is not included in that release.
 
 ## Verification and output
 
@@ -61,6 +61,6 @@ The command SELECTs the cycle plan/status, confirmed batch IDs/transaction hashe
 
 **44 focused tests passed with zero skips**, including the local PostgreSQL funding suite and 13 new snapshot test groups. The new tests cover deterministic V1/V2 marks and redemptions, exact funding provenance, incomplete registry/indexer coverage, boundary/finality checks, historical pinned calls, forged/removed/reverted logs, reorgs, lifecycle refusals, replay/resource limits and the complete injected operator pipeline. The pipeline tests both Neon response shapes, SELECT-only queries, private file permissions and refusal to overwrite an artifact; CLI help/refusal are exercised in child processes.
 
-No future token has been deployed/funded, and the tournament tables remain unapplied. There is therefore no live funded-cycle snapshot or fresh trading rehearsal claimed here. Current live verification covers the parity Preview and its existing contracts/configuration separately.
+No future token has been deployed/funded, and the tournament tables remain unapplied. There is therefore no live funded-cycle snapshot or fresh trading rehearsal claimed here. Current live verification covers the snapshot Preview and its existing contracts/configuration separately.
 
 Capture is intentionally bounded to 100 markets, a 2,000,000-block interval (including creation), 50,000 returned scoring/lifecycle logs and 10,000 RPC requests. A longer or busier tournament needs reviewed resumable capture/checkpoints before activation; this version refuses rather than truncates. Cutoffs after the cycle end, late registrations, cancellations/refunds/corrections, external-transfer reconciliation, archived-cycle routing/UI and reward eligibility/payouts remain separate work. Persisting operational registration/snapshot records in a database is also deferred; this implementation persists immutable private artifacts only. No schema migration is required for the adapter itself, beyond the existing future-cycle plan/funding schema when that workflow is eventually activated.

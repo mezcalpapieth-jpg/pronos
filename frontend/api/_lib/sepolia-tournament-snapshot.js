@@ -39,6 +39,9 @@ const creation = {
   V2: new ethers.utils.Interface(['event MarketCreated(uint256 indexed marketId,address pool,string question,string category,uint256 endTime,string resolutionSource,string[] outcomes)']),
 };
 
+export const TOURNAMENT_SNAPSHOT_LIMITS = Object.freeze({ maxBlocks:2_000_000, maxMarkets:100, maxLogs:50_000, maxRequests:10_000 });
+export const TOURNAMENT_CAPTURE_LIMITS = Object.freeze({ maxBlocks:40_000_000, maxMarkets:1000, maxLogs:500_000, maxRequests:25_000_000 });
+
 // A reviewed allowlist must cover every market in these cycle-only factories.
 // Adding a market changes the hash and requires a new review, never a payout.
 export function tournamentMarketRegistry({ cycleId, planHash: digest, markets }) {
@@ -54,7 +57,9 @@ export function tournamentMarketRegistry({ cycleId, planHash: digest, markets })
 // execution or protocol-indexer import (the latter initializes a write client).
 // The RPC is a trusted source; this is not a consensus or receipt-trie proof.
 export async function buildTournamentSnapshot({ cycle, reviewedPlanHash, registry,
-  reviewedRegistryHash, funding, fromBlock, asOfBlock }, { provider, readIndexerCoverage }) {
+  reviewedRegistryHash, funding, fromBlock, asOfBlock }, { provider, readIndexerCoverage,
+  fullTournamentCapture = false }) {
+  const limits = fullTournamentCapture ? TOURNAMENT_CAPTURE_LIMITS : TOURNAMENT_SNAPSHOT_LIMITS;
   const { plan, digest } = tournamentRegistrations({ cycle, reviewedPlanHash });
   const d = plan.deployment;
   const manifest = tournamentMarketRegistry(registry);
@@ -62,13 +67,13 @@ export async function buildTournamentSnapshot({ cycle, reviewedPlanHash, registr
   if (manifest.cycleId !== plan.cycleId || manifest.planHash !== digest
     || registryHash !== reviewedRegistryHash) fail('reviewed_market_registry_required');
   integer(fromBlock); integer(asOfBlock);
-  if (fromBlock < 1 || asOfBlock < fromBlock || asOfBlock - fromBlock > 2_000_000
-    || manifest.markets.length > 100) fail('snapshot_bounds_exceeded');
+  if (fromBlock < 1 || asOfBlock < fromBlock || asOfBlock - fromBlock > limits.maxBlocks
+    || manifest.markets.length > limits.maxMarkets) fail('snapshot_bounds_exceeded');
   if ((await provider.getNetwork()).chainId !== TOURNAMENT_CHAIN_ID) fail('rpc_chain_mismatch');
   const tip = integer(await provider.getBlockNumber());
   if (tip - asOfBlock < 1) fail('snapshot_needs_two_confirmations');
   let requests = 0, logCount = 0;
-  const budget = () => { if (++requests > 10_000) fail('snapshot_request_budget_exceeded'); };
+  const budget = () => { if (++requests > limits.maxRequests) fail('snapshot_request_budget_exceeded'); };
   const blocks = new Map(), receipts = new Map(), slots = new Map();
   async function block(n) {
     integer(n);
@@ -173,7 +178,7 @@ export async function buildTournamentSnapshot({ cycle, reviewedPlanHash, registr
       const created = creation[version].parseLog(log);
       if (created.args.marketId.toString() !== entry.marketId || address(created.args.pool) !== entry.pool) fail('market_creation_mismatch');
       const registeredBlock = r.blockNumber;
-      if (asOfBlock - Math.min(fromBlock, registeredBlock) > 2_000_000) fail('snapshot_bounds_exceeded');
+      if (asOfBlock - Math.min(fromBlock, registeredBlock) > limits.maxBlocks) fail('snapshot_bounds_exceeded');
       for (const [field, expected] of [['factory',factory],['collateral',d.token],['token',d[`share${version}`]]]) {
         if (address(await read(entry.pool, `${field}() view returns(address)`)) !== expected) fail('pool_binding_mismatch');
       }
@@ -199,7 +204,7 @@ export async function buildTournamentSnapshot({ cycle, reviewedPlanHash, registr
         budget(); const logs = await provider.getLogs({ address: entry.pool, fromBlock: from,
           toBlock: Math.min(from + 1999, asOfBlock), topics: [Object.keys(abi.events).map(name => abi.getEventTopic(name))] });
         logCount += logs.length;
-        if (logCount > 50_000) fail('snapshot_log_budget_exceeded');
+        if (logCount > limits.maxLogs) fail('snapshot_log_budget_exceeded');
         for (const log of logs) {
           if (address(log.address) !== entry.pool || log.blockNumber < from || log.blockNumber > Math.min(from + 1999,asOfBlock)) fail('log_outside_requested_range');
           const timestamp = await verifyLog(log), parsed = abi.parseLog(log), a = parsed.args;

@@ -1,0 +1,175 @@
+{
+  "checkedAt": "2026-10-18T17:56:00.374Z",
+  "sha": "89450fd981bdfcae56710f9454a7944dc82eb679",
+  "preview": {
+    "id": "dpl_GWTMWSE6EWQ5YTsmGzxYo1nUc7HZ",
+    "sha": "89450fd981bdfcae56710f9454a7944dc82eb679",
+    "url": "https://pronos-ahiaq7dz8-mezcalpapieth-jpgs-projects.vercel.app",
+    "alias": "https://pronos-git-onchain-sepolia-mezcalpapieth-jpgs-projects.vercel.app",
+    "state": "READY",
+    "buildMs": 263106
+  },
+  "validation": {
+    "focusedTests": 44,
+    "skipped": 0,
+    "gitPreviewBuild": "succeeded"
+  },
+  "boundaries": {
+    "environmentRecordsUnchanged": 156,
+    "workerEnvironmentRecordsUnchanged": 12,
+    "productionUnchanged": {
+      "id": "dpl_6JgQP3KfXVvA2jXMWVovp11Z6epa",
+      "aliases": [
+        "pronos.io",
+        "www.pronos.io",
+        "pronos-chi.vercel.app",
+        "pronos-mezcalpapieth-jpgs-projects.vercel.app"
+      ]
+    },
+    "pointbreakUnchanged": {
+      "local": "47aa9e19115d64bc36a2684e5eeb685caef117ba",
+      "tracking": "e71de9cf34fb1a454018b69da93bb0d9c3355aaf",
+      "remote": "e71de9cf34fb1a454018b69da93bb0d9c3355aaf"
+    },
+    "tokenAndSupplyUnchanged": {
+      "token": "0x6ed6c00c2b4cf9f5989866f4c5862d4cded67ef9",
+      "totalSupply": "50000000000000",
+      "accounts": {
+        "reserve": {
+          "address": "0x0Caa37c077924038e14e9D8dE46B5208788e52CF",
+          "balance": "2802243689456225488",
+          "nonce": 53
+        },
+        "operations": {
+          "address": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+          "balance": "488842499590000",
+          "nonce": 23
+        },
+        "gas": {
+          "address": "0x252a1cfa015612EFB8C7c2f1643A9F541b866990",
+          "balance": "99499580000000000",
+          "nonce": 1
+        }
+      }
+    },
+    "totalSupplyMxnp": "50000000",
+    "ethBalancesAndNoncesUnchanged": true,
+    "noEthSpent": true,
+    "noChainTransactions": true,
+    "noMigration": true,
+    "noCycleActivation": true
+  },
+  "http": {
+    "checkedAt": "2026-10-18T17:55:57.362Z",
+    "config": {
+      "enabled": true,
+      "chainId": 421614,
+      "symbol": "MXNP"
+    },
+    "guestAdminStatus": 401,
+    "aliasHtmlMatched": true,
+    "aliasScriptMatched": true,
+    "entry": "/points/assets/index-DldEoK8d.js",
+    "entrySha256": "cf9eb8a9dd405f45e67c32f36cb73cd42166a3643e7924782740d9a6b4a8b0c8",
+    "adminChunk": "PointsAdmin-dANl3NhR.js",
+    "previewApprovalSelectorServed": true,
+    "operatorAdapter": "Repository-only operator command; no browser API route or live future-cycle rehearsal."
+  },
+  "readiness": {
+    "ok": true,
+    "blockers": [],
+    "warnings": [],
+    "reviews": [
+      {
+        "id": "cre_webhook_dry_run",
+        "title": "CRE sigue en modo revisión",
+        "detail": "Sin secreto, Chainlink CRE no puede enviar resoluciones al webhook.",
+        "fix": "Set CRE_RESOLUTION_WEBHOOK_SECRET before enabling CRE workflows"
+      }
+    ],
+    "routerVerified": true,
+    "factoryRolesVerified": true,
+    "gas": {
+      "enabled": true,
+      "configured": true,
+      "ready": true,
+      "funder": "0x252a1cfa015612efb8c7c2f1643a9f541b866990",
+      "targetEth": "0.0005",
+      "minimumEth": "0.0002",
+      "walletDailyEth": "0.002",
+      "globalDailyEth": "0.1",
+      "reserveEth": "0.01",
+      "schemaReady": true,
+      "pendingTransfers": 0,
+      "balanceEth": "0.09949958",
+      "signerVerified": true,
+      "dailyBudgetUsedEth": "0.0005010973508"
+    }
+  },
+  "databaseBoundary": {
+    "checkedAt": "2026-10-18T17:52:41.549Z",
+    "tournamentMigrationApplied": false,
+    "activeCycles": [
+      {
+        "id": 5,
+        "label": "Torneo Octubre 2026",
+        "ends_at": "2026-11-01T05:59:00+00:00",
+        "started_at": "2026-10-01T06:00:00+00:00"
+      }
+    ],
+    "configuredIndexerCheckpoints": [
+      {
+        "factory": "0xb6cf9f65ab82c17c8e9d58d06073ca3af3e5443d",
+        "lastBlock": 320474982,
+        "updatedAt": "2026-10-18T17:52:38.062957+00:00"
+      },
+      {
+        "factory": "0x33c1cdd4e22a9732ad808f2ad7efe82211b65c6a",
+        "lastBlock": 320474982,
+        "updatedAt": "2026-10-18T17:52:38.834551+00:00"
+      },
+      {
+        "factory": "0x69440742a168635d9fa7cc0cfb0935afffe79ad3",
+        "lastBlock": 320474982,
+        "updatedAt": "2026-10-18T17:52:40.037345+00:00"
+      },
+      {
+        "factory": "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6",
+        "lastBlock": 320474982,
+        "updatedAt": "2026-10-18T17:52:40.315453+00:00"
+      }
+    ],
+    "latestScheduledRuns": [
+      {
+        "status": "ok",
+        "trigger": "cron",
+        "startedAt": "2026-10-18T17:52:37.291577+00:00",
+        "completedAt": "2026-10-18T17:52:40.323543+00:00",
+        "sourceSha": "0c9e27210b451e29b484fe795c6fc8da26e5993f",
+        "block": 320474982
+      },
+      {
+        "status": "ok",
+        "trigger": "cron",
+        "startedAt": "2026-10-18T17:51:37.201492+00:00",
+        "completedAt": "2026-10-18T17:51:45.240414+00:00",
+        "sourceSha": "0c9e27210b451e29b484fe795c6fc8da26e5993f",
+        "block": 320474760
+      },
+      {
+        "status": "ok",
+        "trigger": "cron",
+        "startedAt": "2026-10-18T17:50:37.197645+00:00",
+        "completedAt": "2026-10-18T17:50:40.080239+00:00",
+        "sourceSha": "0c9e27210b451e29b484fe795c6fc8da26e5993f",
+        "block": 320474537
+      }
+    ]
+  },
+  "limitations": [
+    "Read-only shared-library/RPC/Neon readiness and served browser assets; no fresh owner/admin login, signing probe or trading rehearsal.",
+    "The snapshot adapter is an operator command in the repository, not a browser route. No live future funded-cycle capture was possible or attempted.",
+    "CRE webhook remains in dry-run review mode. Resumable full-tournament capture was implemented locally after this deployed SHA."
+  ],
+  "finalBoundaryCheckedAt": "2026-10-18T18:06:22.211Z"
+}
