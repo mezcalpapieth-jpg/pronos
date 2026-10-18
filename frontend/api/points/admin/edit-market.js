@@ -1,6 +1,6 @@
 /**
  * POST /api/points/admin/edit-market
- * Body: { marketId, question?, startTime?, endTime?, category?, imageUrl?, outcomeImages?, parallelLegs? }
+ * Body: { marketId, question?, startTime?, endTime?, category?, imageUrl?, outcomeImages?, parallelLegs?, finalScore? }
  *
  * Admin-only. Updates the editable fields of a points market:
  *   - question: the user-facing title
@@ -100,6 +100,14 @@ export default async function handler(req, res) {
 
     const body = req.body || {};
     const { marketId, question, startTime, endTime, category, parallelLegs } = body;
+    const hasFinalScorePatch = body.finalScore !== undefined;
+    let nextFinalScore = null;
+    if (hasFinalScorePatch && body.finalScore !== null) {
+      if (typeof body.finalScore !== 'string') return res.status(400).json({ error: 'invalid_final_score' });
+      const text = body.finalScore.trim();
+      if (text.length > 240) return res.status(400).json({ error: 'final_score_too_long' });
+      nextFinalScore = text || null;
+    }
     const hasMarketImagePatch = Object.prototype.hasOwnProperty.call(body, 'imageUrl')
       || Object.prototype.hasOwnProperty.call(body, 'image_url');
     const rawMarketImageUrl = hasMarketImagePatch
@@ -203,7 +211,10 @@ export default async function handler(req, res) {
       endTime: nextEndTime ?? existing.end_time,
       resolverConfig: syncedApiPrice.resolverConfig,
     });
-    const nextResolverConfig = syncedWeather.resolverConfig || null;
+    // Editing only a public result must not resync a settled resolver or
+    // revalidate its old trading deadline.
+    const syncResolver = !hasFinalScorePatch || nextQuestion !== null || nextStartTime !== null || nextEndTime !== null;
+    const nextResolverConfig = syncResolver ? (syncedWeather.resolverConfig || null) : existingResolverConfig;
     const resolverConfigChanged = !sameJson(nextResolverConfig, existingResolverConfig);
     if (nextQuestion !== null || nextEndTime !== null || resolverConfigChanged) {
       const deadlineCheck = validateBeforeMonthDeadline({
@@ -224,6 +235,7 @@ export default async function handler(req, res) {
       && nextCategory === null
       && !hasMarketImagePatch
       && !hasOutcomeImagesPatch
+      && !hasFinalScorePatch
       && nextParallelLegs === null
       && !resolverConfigChanged
     ) {
@@ -235,7 +247,7 @@ export default async function handler(req, res) {
     const effectiveEnd = nextEndTime !== null
       ? new Date(nextEndTime)
       : (existing.end_time ? new Date(existing.end_time) : null);
-    if (effectiveStart && effectiveEnd && effectiveStart.getTime() >= effectiveEnd.getTime()) {
+    if ((nextStartTime !== null || nextEndTime !== null) && effectiveStart && effectiveEnd && effectiveStart.getTime() >= effectiveEnd.getTime()) {
       return res.status(400).json({
         error: 'invalid_time_window',
         detail: 'start_time_must_be_before_end_time',
@@ -279,6 +291,13 @@ export default async function handler(req, res) {
         UPDATE points_markets
         SET image_url = ${nextMarketImageUrl}
         WHERE id = ${mid} OR parent_id = ${mid}
+      `;
+    }
+    if (hasFinalScorePatch) {
+      await sql`
+        UPDATE points_markets
+        SET final_score = ${nextFinalScore}
+        WHERE id = ${mid}
       `;
     }
     if (hasOutcomeImagesPatch) {
@@ -395,7 +414,7 @@ export default async function handler(req, res) {
     }
 
     const rows = await sql`
-      SELECT id, question, category, image_url, start_time, end_time, status, outcome, outcomes, outcome_images, amm_mode
+      SELECT id, question, category, image_url, start_time, end_time, status, outcome, outcomes, outcome_images, amm_mode, final_score
       FROM points_markets
       WHERE id = ${mid}
       LIMIT 1
@@ -412,6 +431,7 @@ export default async function handler(req, res) {
         endTime: r.end_time,
         status: r.status,
         outcome: r.outcome,
+        finalScore: r.final_score || null,
         outcomes: r.outcomes,
         outcomeImages: r.outcome_images,
         ammMode: r.amm_mode || 'unified',

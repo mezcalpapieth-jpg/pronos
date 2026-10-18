@@ -8,18 +8,23 @@ export function chartWindowsFromRows(rows, windowHours, now = Date.now()) {
     };
     const clock = marketChartClock(parent, now);
     const ownClock = marketChartClock(row, now);
+    const tradingCutoffs = [row.end_time, parent.end_time]
+      .filter(value => value != null && value !== '')
+      .map(value => new Date(value).getTime()).filter(Number.isFinite);
     return {
       id: Number(row.id), frozen: clock.frozen,
+      status: row.status, outcome: row.outcome, outcomes: row.outcomes,
       start: new Date(clock.endMs - windowHours * 3600000).toISOString(),
       end: new Date(clock.endMs).toISOString(),
       dataEnd: new Date(Math.min(clock.endMs, ownClock.endMs)).toISOString(),
+      tradeEnd: new Date(Math.min(clock.endMs, ownClock.endMs, ...tradingCutoffs)).toISOString(),
     };
   });
 }
 
 export async function loadChartWindows(sql, ids, windowHours) {
   const rows = await sql`
-    SELECT m.id, m.parent_id, m.status, m.end_time, m.resolved_at, m.created_at,
+    SELECT m.id, m.parent_id, m.status, m.outcome, m.outcomes, m.end_time, m.resolved_at, m.created_at,
            p.status AS parent_status, p.end_time AS parent_end_time,
            p.resolved_at AS parent_resolved_at, p.created_at AS parent_created_at
       FROM points_markets m
@@ -32,6 +37,7 @@ export async function loadChartWindows(sql, ids, windowHours) {
     ids: windows.map(row => row.id),
     starts: windows.map(row => row.start),
     ends: windows.map(row => row.dataEnd),
+    tradeEnds: windows.map(row => row.tradeEnd),
     frozen: windows.length > 0 && windows.every(row => row.frozen),
   };
 }

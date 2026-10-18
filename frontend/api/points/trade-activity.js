@@ -87,7 +87,7 @@ export default async function handler(req, res) {
                 w.window_start + FLOOR(EXTRACT(EPOCH FROM (created_at - w.window_start)) / ${bucketSeconds})
                   * ${bucketSeconds} * INTERVAL '1 second' AS bucket_at
               FROM points_trades t
-              JOIN UNNEST(${windows.ids}::int[], ${windows.starts}::timestamptz[], ${windows.ends}::timestamptz[])
+              JOIN UNNEST(${windows.ids}::int[], ${windows.starts}::timestamptz[], ${windows.tradeEnds}::timestamptz[])
                 AS w(market_id, window_start, window_end) ON w.market_id = t.market_id
               WHERE side IN ('buy', 'sell')
                 AND username <> ${PRONOS_TREASURY_USERNAME}
@@ -115,7 +115,7 @@ export default async function handler(req, res) {
               w.window_start + FLOOR(EXTRACT(EPOCH FROM (created_at - w.window_start)) / ${bucketSeconds})
                 * ${bucketSeconds} * INTERVAL '1 second' AS bucket_at
             FROM points_trades t
-            JOIN UNNEST(${windows.ids}::int[], ${windows.starts}::timestamptz[], ${windows.ends}::timestamptz[])
+            JOIN UNNEST(${windows.ids}::int[], ${windows.starts}::timestamptz[], ${windows.tradeEnds}::timestamptz[])
               AS w(market_id, window_start, window_end) ON w.market_id = t.market_id
             WHERE outcome_index = ${outcomeIdx}
               AND side IN ('buy', 'sell')

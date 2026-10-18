@@ -369,9 +369,27 @@ function translateByPattern(question, sourceData = {}, spec = {}) {
   return original;
 }
 
+function translateTournamentQuestion(question) {
+  const text = stripQuestionMarks(question);
+  let match = text.match(/^Quién sale de (.+?) esta semana$/i);
+  if (match) return `Who leaves ${match[1]} this week?`;
+  match = text.match(/^Quién gana el Balón de Oro (masculino|femenino) (\d{4})$/i);
+  if (match) return `Who will win the ${match[2]} ${match[1].toLowerCase() === 'masculino' ? "men's" : "women's"} Ballon d'Or?`;
+  match = text.match(/^Huevo blanco: precio (?:a )?mayoreo al cierre de (.+)$/i);
+  if (match) return `White egg: wholesale price at ${translateSpanishDatePhrase(match[1])} close`;
+  match = text.match(/^Jesucristo regresa antes del (.+)$/i);
+  if (match) return `Will Jesus Christ return before ${translateSpanishDatePhrase(match[1])}?`;
+  match = text.match(/^(.+?) será lanzado públicamente antes de que termine (.+)$/i);
+  if (match) return `Will ${match[1]} be publicly released before the end of ${translateSpanishDatePhrase(match[2])}?`;
+  match = text.match(/^Di[eé]sel promedio nacional cierre de (.+?) > (.+)$/i);
+  if (match) return `Diesel national average at ${translateSpanishDatePhrase(match[1])} close > ${match[2]}`;
+  return '';
+}
+
 export function translateMarketQuestion(question, sourceData = {}, spec = {}) {
   const normalizedSourceData = normalizeObject(sourceData);
   return firstString(
+    translateTournamentQuestion(question),
     translateKnownKind(question, normalizedSourceData),
     translateByPattern(question, normalizedSourceData, spec),
     question,
@@ -395,6 +413,12 @@ export function buildMarketTranslations(spec = {}) {
   const existingEn = normalizeTranslationBranch(existing.en);
   const question = cleanString(spec.question || spec.title);
   const outcomes = normalizeOutcomes(spec.outcomes);
+  // Older generators saved their Spanish fallback as if it were English.
+  // Repair those generated fallbacks while preserving curated translations.
+  const generatedEnglish = translateMarketQuestion(question, sourceData, spec);
+  const staleEnglish = !existingEn.question || [
+    question, translateKnownKind(question, sourceData), translateByPattern(question, sourceData, spec),
+  ].includes(existingEn.question);
   const soccerNationalTranslations = spec.sport === 'soccer'
     ? nationalTeamMarketTranslations({
       leagueCode: sourceData.leagueCode,
@@ -411,7 +435,7 @@ export function buildMarketTranslations(spec = {}) {
       : existingEs.outcomes?.length === outcomes.length ? existingEs.outcomes : outcomes,
   };
   const en = {
-    question: soccerNationalTranslations?.en?.question || existingEn.question || translateMarketQuestion(question, sourceData, spec),
+    question: soccerNationalTranslations?.en?.question || (staleEnglish ? generatedEnglish : existingEn.question),
     outcomes: soccerNationalTranslations?.en?.outcomes?.length === outcomes.length
       ? soccerNationalTranslations.en.outcomes
       : existingEn.outcomes?.length === outcomes.length

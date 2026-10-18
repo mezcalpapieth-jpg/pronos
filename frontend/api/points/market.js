@@ -24,6 +24,7 @@ import { readSession } from '../_lib/session.js';
 import { isAdminUsername } from '../_lib/points-admin.js';
 import { publicMarketTranslationFields } from '../_lib/market-translations.js';
 import { binaryPricesWithBookTrade, pricesWithBookTrades } from '../_lib/points-display-prices.js';
+import { resolvedMarketPrices } from '../_lib/points-resolution-display.js';
 import { BANXICO_FIX_RESOLUTION_CRITERIA } from '../_lib/banxico.js';
 import { FRANKFURTER_RESOLUTION_CRITERIA, FRANKFURTER_SOURCE } from '../_lib/frankfurter.js';
 import { COINGECKO_TOKEN_MCAP_SOURCE } from '../_lib/solana-token-mcap.js';
@@ -140,7 +141,7 @@ function pricesFromReserves(reserves, outcomeCount) {
 }
 
 function binaryLegPricesFromRow({ reserves, status, outcome }, fallbackYes = 0.5) {
-  if (String(status || '') === 'resolved') {
+  if (String(status || '') === 'resolved' && outcome != null) {
     const resolvedOutcome = Number(outcome);
     if (resolvedOutcome === 0) return [1, 0];
     if (resolvedOutcome === 1) return [0, 1];
@@ -245,7 +246,7 @@ function summarizeCryptoMarketRow(row) {
     id: row.id,
     question: row.question,
     outcomes,
-    prices: pricesFromReserves(reserves, outcomes.length),
+    prices: resolvedMarketPrices({ ...row, outcomes }) || pricesFromReserves(reserves, outcomes.length),
     status: row.status,
     outcome: row.outcome,
     resolvedAt: row.resolved_at,
@@ -825,7 +826,7 @@ export default async function handler(req, res) {
       const reserves = parseJsonb(r.reserves, []).map(Number);
       const basePrices = pricesFromReserves(reserves, outcomes.length);
       const displayTrades = parseJsonb(r.display_trade_outcomes, []);
-      const prices = outcomes.length === 2
+      const prices = resolvedMarketPrices({ status: r.status, outcome: r.outcome, outcomes }) || (outcomes.length === 2
         ? binaryPricesWithBookTrade(basePrices, {
           status: r.status,
           outcomeIndex: r.display_trade_outcome_index,
@@ -835,7 +836,7 @@ export default async function handler(req, res) {
         : pricesWithBookTrades(basePrices, {
           status: r.status,
           trades: displayTrades,
-        });
+        }));
 
       const marketPayload = applySeriesDetailGateToMarket({
           id: r.id,

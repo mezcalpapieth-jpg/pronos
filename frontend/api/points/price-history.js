@@ -3,8 +3,8 @@
  * GET /api/points/price-history?ids=1,2,3&hours=4&limit=200
  *
  * Returns sampled price snapshots for one or more markets over the
- * last `days` days (default 30, max 60), ending at the trading cutoff for
- * closed markets rather than today. Used by the home grid and market
+ * last `days` days (default 30, max 60), ending at settlement for resolved
+ * markets or the trading cutoff while awaiting resolution. Used by the home grid and market
  * detail page to render sparkline charts without replaying every trade.
  *
  * NB: path is flat (not nested under `markets/`) because Vercel's
@@ -31,6 +31,7 @@ import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { loadChartWindows } from '../_lib/points-chart-windows.js';
+import { appendResolutionPoint } from '../_lib/points-resolution-display.js';
 import { setCacheHeaders } from '../_lib/api-performance.js';
 import { PRONOS_TREASURY_USERNAME } from '../_lib/points-limit-orders.js';
 import {
@@ -177,7 +178,7 @@ export default async function handler(req, res) {
           ) AS rn
         FROM points_trades t
         JOIN points_markets m ON m.id = t.market_id
-        JOIN UNNEST(${windows.ids}::int[], ${windows.starts}::timestamptz[], ${windows.ends}::timestamptz[])
+        JOIN UNNEST(${windows.ids}::int[], ${windows.starts}::timestamptz[], ${windows.tradeEnds}::timestamptz[])
           AS w(market_id, window_start, window_end) ON w.market_id = t.market_id
         WHERE t.username <> ${PRONOS_TREASURY_USERNAME}
           AND t.side IN ('buy', 'sell')
@@ -251,6 +252,11 @@ export default async function handler(req, res) {
         .filter(pt => Number.isFinite(pt.t) && Number.isFinite(pt.p))
         .sort((a, b) => a.t - b.t || a._id - b._id)
         .map(({ t, p }) => ({ t, p }));
+    }
+    // Derive settlement from the recorded outcome, so older resolutions,
+    // early-resolved parallel legs, and corrected results work as well.
+    for (const window of windows.windows) {
+      history[window.id] = appendResolutionPoint(history[window.id], window, outcomeIdx);
     }
 
     return res.status(200).json({ history });
