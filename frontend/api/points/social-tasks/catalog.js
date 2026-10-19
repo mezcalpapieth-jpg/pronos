@@ -92,6 +92,7 @@ export default async function handler(req, res) {
   if (cors) return cors;
   if (req.method !== 'GET') return res.status(405).json({ error: 'method_not_allowed' });
 
+  res.setHeader('Cache-Control', 'private, no-store');
   const session = readSession(req, res);
   const requestedTaskKey = String(req.query.task || '').trim();
   const surface = String(req.query.surface || '').trim().toLowerCase();
@@ -123,12 +124,12 @@ export default async function handler(req, res) {
     try {
       if (schemaReady) {
         const [submissionRows, socialRows] = await Promise.all([
-          sql`
+          schemaSql`
           SELECT task_key, status, reviewed_at, rejection_note
           FROM social_tasks
           WHERE LOWER(username) = ${session.username.toLowerCase()}
         `,
-          sql`
+          schemaSql`
           SELECT provider, handle
           FROM points_social_links
           WHERE LOWER(username) = ${session.username.toLowerCase()}

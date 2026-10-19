@@ -22,6 +22,7 @@ export default async function handler(req, res) {
   const cors = applyCors(req, res, { methods: 'GET, POST, OPTIONS', credentials: true });
   if (cors) return cors;
 
+  res.setHeader('Cache-Control', 'private, no-store');
   const session = requireSession(req, res);
   if (!session) return;
   if (!session.username) return res.status(400).json({ error: 'username_required' });

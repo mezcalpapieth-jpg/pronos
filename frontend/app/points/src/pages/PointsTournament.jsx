@@ -11,6 +11,8 @@ import {
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { useLang } from '@app/lib/i18n.js';
 import { useIsMobile } from '@app/lib/useIsMobile.js';
+import SocialTaskAccountPrompt from '../components/SocialTaskAccountPrompt.jsx';
+import { hasSocialTaskAccount, SOCIAL_LINKS_CHANGED_EVENT } from '../lib/socialTaskAccount.js';
 import { LeaderboardSkeleton } from '../components/PointsSkeleton.jsx';
 import { pointsPublicAssetSrc } from '@app/lib/publicAssets.js';
 import { isVideoDemoActive, videoDemoPollMs } from '../demo/demoFlag.js';
@@ -1321,8 +1323,8 @@ function TournamentSocialTaskSpotlight({
             lineHeight: 1.5,
           }}>
             {lang === 'en'
-              ? 'Save your social account in the Profile / Earn tab before sending, so the team knows it was you.'
-              : 'Guarda tu cuenta social en la pestana Perfil / Ganar antes de enviarla, para que sepamos que fuiste tu.'}
+              ? 'Add your social account before sending, so the team knows it was you. You can also manage it in Profile / Earn.'
+              : 'Añade tu cuenta social antes de enviarla, para que sepamos que fuiste tú. También puedes administrarla en Perfil / Ganar.'}
           </p>
           {task && (
             <div style={{
@@ -1467,6 +1469,7 @@ export default function PointsTournament() {
   const [startNoticeOpen, setStartNoticeOpen] = useState(false);
   const [tick, setTick] = useState(0);
   const [socialTasks, setSocialTasks] = useState([]);
+  const [socialAccountTask, setSocialAccountTask] = useState(null);
   const [socialTasksLoading, setSocialTasksLoading] = useState(true);
   const [socialSubmittingKey, setSocialSubmittingKey] = useState(null);
   const [socialMessage, setSocialMessage] = useState(null);
@@ -1558,10 +1561,21 @@ export default function PointsTournament() {
     };
   }, [authenticated, user?.username]);
 
+  useEffect(() => {
+    window.addEventListener(SOCIAL_LINKS_CHANGED_EVENT, loadTournamentSocialTasks);
+    return () => window.removeEventListener(SOCIAL_LINKS_CHANGED_EVENT, loadTournamentSocialTasks);
+  }, [authenticated, user?.username]);
+
   async function handleSubmitTournamentSocialTask(task) {
     if (!authenticated) {
       setSocialError(publicErrorMessage('not_authenticated', lang));
       setSocialMessage(null);
+      return;
+    }
+    if (!hasSocialTaskAccount(task)) {
+      setSocialError(null);
+      setSocialMessage(null);
+      setSocialAccountTask(task);
       return;
     }
     setSocialSubmittingKey(task.key);
@@ -1574,6 +1588,10 @@ export default function PointsTournament() {
         : 'Enviada a revision. La vamos a revisar contra tu cuenta social guardada.');
       await loadTournamentSocialTasks();
     } catch (error) {
+      if (error?.code === 'social_account_required') {
+        setSocialAccountTask(task);
+        return;
+      }
       setSocialError(publicErrorMessage(error, lang));
     } finally {
       setSocialSubmittingKey(null);
@@ -1736,6 +1754,12 @@ export default function PointsTournament() {
         </TournamentCard>
       </div>
 
+      {socialAccountTask && <SocialTaskAccountPrompt key={socialAccountTask.key} task={socialAccountTask}
+        onCancel={() => setSocialAccountTask(null)} onSaved={async link => {
+          const task = { ...socialAccountTask, socialAccount: link.handle };
+          setSocialAccountTask(null);
+          await handleSubmitTournamentSocialTask(task);
+        }} />}
       <TournamentSocialTaskSpotlight
         tasks={socialTasks}
         loading={socialTasksLoading}

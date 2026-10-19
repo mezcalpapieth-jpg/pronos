@@ -15,6 +15,8 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { useLang, useT } from '@app/lib/i18n.js';
 import { useIsMobile } from '@app/lib/useIsMobile.js';
+import SocialTaskAccountPrompt from '../components/SocialTaskAccountPrompt.jsx';
+import { hasSocialTaskAccount, SOCIAL_LINKS_CHANGED_EVENT } from '../lib/socialTaskAccount.js';
 import {
   claimDaily,
   fetchDailyStatus,
@@ -544,7 +546,7 @@ function socialTaskNetworkLabel(task) {
 
 function socialTaskAccountText(task) {
   const account = task?.socialAccount || task?.social_account || null;
-  return account ? `@${String(account).replace(/^@/, '')}` : 'null';
+  return hasSocialTaskAccount(task) ? `@${String(account).trim().replace(/^@/, '')}` : 'Sin cuenta guardada';
 }
 
 function SocialTaskRow({ task, onSubmit }) {
@@ -712,7 +714,11 @@ function SocialLinksCard() {
       setErr(publicErrorMessage(e, lang, 'social_link_failed'));
     }
   }
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    window.addEventListener(SOCIAL_LINKS_CHANGED_EVENT, load);
+    return () => window.removeEventListener(SOCIAL_LINKS_CHANGED_EVENT, load);
+  }, []);
 
   // Surface the callback's link/link_error query params as a banner.
   // The callback redirects to /earn?linked=x on success or
@@ -765,7 +771,6 @@ function SocialLinksCard() {
         handle: draft.handle,
         isPublic: !!draft.isPublic,
       });
-      await load();
       setOk(lang === 'en' ? 'Social profile saved.' : 'Perfil social guardado.');
     } catch (e) {
       setErr(publicErrorMessage(e, lang, 'social_link_failed'));
@@ -780,7 +785,6 @@ function SocialLinksCard() {
     setOk(null);
     try {
       await unlinkSocial(provider);
-      await load();
     } catch (e) {
       setErr(publicErrorMessage(e, lang, 'social_link_failed'));
     } finally {
@@ -1232,6 +1236,7 @@ function SocialTasksCard() {
   const location = useLocation();
   const taskKey = new URLSearchParams(location.search).get('task');
   const [tasks, setTasks] = useState(null);
+  const [accountTask, setAccountTask] = useState(null);
   const [err, setErr] = useState(null);
   const [ok, setOk] = useState(null);
 
@@ -1243,11 +1248,19 @@ function SocialTasksCard() {
       setErr(publicErrorMessage(e, lang, 'load_failed'));
     }
   }
-  useEffect(() => { load(); }, [taskKey]);
+  useEffect(() => {
+    load();
+    window.addEventListener(SOCIAL_LINKS_CHANGED_EVENT, load);
+    return () => window.removeEventListener(SOCIAL_LINKS_CHANGED_EVENT, load);
+  }, [taskKey]);
 
   async function handleSubmit(task) {
     setErr(null);
     setOk(null);
+    if (!hasSocialTaskAccount(task)) {
+      setAccountTask(task);
+      return;
+    }
     try {
       const result = await submitSocialTask(task.key);
       await load();
@@ -1257,6 +1270,10 @@ function SocialTasksCard() {
           : 'Follow de X verificado automáticamente. MXNP acreditado.');
       }
     } catch (e) {
+      if (e?.code === 'social_account_required') {
+        setAccountTask(task);
+        return;
+      }
       if ((e?.code === 'x_account_required' || e?.code === 'x_reconnect_required')
         && task?.requiresProvider === 'x') {
         window.location.href = socialLinkStartUrl('x', '/earn');
@@ -1268,6 +1285,12 @@ function SocialTasksCard() {
 
   return (
     <section style={panelStyle}>
+      {accountTask && <SocialTaskAccountPrompt key={accountTask.key} task={accountTask}
+        onCancel={() => setAccountTask(null)} onSaved={async link => {
+          const task = { ...accountTask, socialAccount: link.handle };
+          setAccountTask(null);
+          await handleSubmit(task);
+        }} />}
       <div style={eyebrowStyle}>Tareas sociales</div>
       <h3 style={panelTitleStyle}>Tareas verificadas de Pronos</h3>
       <p style={panelBodyStyle}>

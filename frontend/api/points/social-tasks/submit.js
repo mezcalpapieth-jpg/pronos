@@ -24,6 +24,7 @@ import {
   xUserFollowsTargetFromUserToken,
 } from '../../_lib/x-oauth.js';
 import { findSocialTaskByKey } from './catalog.js';
+import { submitManualSocialTask } from '../../_lib/social-task-submission.js';
 
 const sql = neon(process.env.DATABASE_URL);
 const X_AUTO_REVIEWER = 'x:auto';
@@ -270,42 +271,18 @@ export default async function handler(req, res) {
     }
 
     const storedProofUrl = proofUrl || task.url || null;
-    // UPSERT: first-time inserts a pending row. Re-submissions only
-    // allowed if the existing row was previously rejected (the user
-    // can fix their mistake and try again).
-    const result = await sql`
-      INSERT INTO social_tasks (username, task_key, status, reward, proof_url)
-      VALUES (${username}, ${task.key}, 'pending', ${task.reward}, ${storedProofUrl})
-      ON CONFLICT (username, task_key) DO UPDATE
-      SET status = CASE
-            WHEN social_tasks.status = 'rejected' THEN 'pending'
-            ELSE social_tasks.status
-          END,
-          proof_url = CASE
-            WHEN social_tasks.status = 'rejected' THEN EXCLUDED.proof_url
-            ELSE social_tasks.proof_url
-          END,
-          rejection_note = CASE
-            WHEN social_tasks.status = 'rejected' THEN NULL
-            ELSE social_tasks.rejection_note
-          END,
-          reviewer = CASE
-            WHEN social_tasks.status = 'rejected' THEN NULL
-            ELSE social_tasks.reviewer
-          END,
-          reviewed_at = CASE
-            WHEN social_tasks.status = 'rejected' THEN NULL
-            ELSE social_tasks.reviewed_at
-          END
-      RETURNING status, id
-    `;
-    const { status, id } = result[0] || {};
+    const { status, id } = await withTransaction(client => submitManualSocialTask(client, {
+      username, task, proofUrl: storedProofUrl,
+    }));
 
     if (status === 'approved') {
       return res.status(409).json({ error: 'already_approved' });
     }
     return res.status(200).json({ ok: true, id, status });
   } catch (e) {
+    if (e?.code === 'social_account_required' || e?.code === 'invalid_task_network') {
+      return res.status(e.status).json({ error: e.code, provider: e.provider || null, hint: e.hint || null });
+    }
     console.error('[social-tasks/submit] failed', { message: e?.message, code: e?.code });
     return res.status(500).json({ error: 'submit_failed' });
   }
