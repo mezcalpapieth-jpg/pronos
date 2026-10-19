@@ -14,11 +14,13 @@
  *     /u endpoint returns (no client-side override).
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { historyPnlValue } from '../lib/historyPnl.js';
 import { fetchPnlHistory } from '../lib/pointsApi.js';
 import PnlChartCard from '../components/PnlChartCard.jsx';
+
+const AdminRiskPanel = lazy(() => import('../components/AdminRiskPanel.jsx'));
 
 function fmt(n, d = 2) {
   const v = Number(n);
@@ -445,6 +447,14 @@ export default function PointsUserProfile() {
       )}
       {tab === 'historial' && (
         <HistoryList rows={history} onOpen={mid => navigate(`/market?id=${mid}`)} />
+      )}
+
+      {/* The profile API includes admin fields only for a verified admin session.
+          Risk data is fetched separately from the existing admin-guarded API. */}
+      {showAdminSocials && (
+        <Suspense fallback={<p style={{ color: 'var(--text-muted)' }}>Cargando riesgo · admin…</p>}>
+          <AdminRiskPanel key={user.username} profileUsername={user.username} />
+        </Suspense>
       )}
     </main>
   );

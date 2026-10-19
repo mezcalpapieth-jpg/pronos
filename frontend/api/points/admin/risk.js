@@ -183,6 +183,7 @@ export default async function handler(req, res) {
 
   const admin = requirePointsAdmin(req, res);
   if (!admin) return;
+  res.setHeader('Cache-Control', 'private, no-store');
 
   try {
     await ensurePointsSchema(getSchemaSql());
