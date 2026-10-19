@@ -17,6 +17,7 @@
  * provides .category-bar, .markets-grid, .section-header, etc.
  */
 import React, { useEffect, useMemo, useState } from 'react';
+import { matchesMarketSearch, normalizeSearchText } from '../lib/marketSearch.js';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   createParlay,
@@ -256,10 +257,10 @@ export default function PointsHome({ onOpenLogin }) {
   // Map mode is broader than the home cards: it should expose every
   // active market with a geo signal, while the card grid stays curated.
   const mapMarkets = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
+    const q = normalizeSearchText(searchQuery);
     const now = Date.now();
     let out = markets.filter(m => !isPendingMarket(m, now));
-    if (q) out = out.filter(m => (m.question || '').toLowerCase().includes(q));
+    if (q) out = out.filter(m => matchesMarketSearch(m, q));
     return sortMarketsByLiveThenEndDate(out);
   }, [markets, searchQuery]);
 

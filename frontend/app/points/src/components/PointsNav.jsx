@@ -10,6 +10,7 @@
  * No wallet-chain UI, no RPC, no Privy — this is an off-chain points app.
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { matchesMarketSearch, normalizeSearchText } from '../lib/marketSearch.js';
 import { Link, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { useT, useLang, setLang } from '@app/lib/i18n.js';
@@ -117,10 +118,10 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
   }
 
   const searchResults = useMemo(() => {
-    const q = (searchValue || '').trim().toLowerCase();
+    const q = normalizeSearchText(searchValue);
     if (!q) return [];
     return searchCache
-      .filter(m => (m.question || '').toLowerCase().includes(q))
+      .filter(m => matchesMarketSearch(m, q))
       .slice(0, 8);
   }, [searchCache, searchValue]);
 

@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const source = await readFile(new URL('./PointsAdmin.jsx', import.meta.url), 'utf8');
+const source = await readFile(new URL('./PointsAdmin.jsx', import.meta.url), 'utf8')
+  + await readFile(new URL('../components/AdminRiskPanel.jsx', import.meta.url), 'utf8');
 const apiSource = await readFile(new URL('../lib/pointsApi.js', import.meta.url), 'utf8');
 
 test('Points admin exposes a risk review tab', () => {
@@ -11,7 +12,7 @@ test('Points admin exposes a risk review tab', () => {
   assert.match(source, /\['create', 'markets', 'stats', 'pending', 'social', 'support', 'deck', 'cycles', 'risk', 'api', 'launch', 'strategies'\]/);
   assert.match(source, /\{ id: 'risk',\s+label: 'Riesgo' \}/);
   assert.match(source, /\{tab === 'risk' && <RiskPanel \/>\}/);
-  assert.match(source, /function RiskPanel\(\)/);
+  assert.match(source, /function RiskPanel\(/);
   assert.match(apiSource, /export async function adminListRisk/);
   assert.match(apiSource, /\/api\/points\/admin\/risk/);
   assert.match(apiSource, /export async function adminUpdateRiskReview/);

@@ -19,6 +19,7 @@
  * that plumbing will have null values and fall into the "Todos" bucket.
  */
 import React, { useEffect, useMemo, useState } from 'react';
+import { matchesMarketSearch, normalizeSearchText } from '../lib/marketSearch.js';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useT } from '@app/lib/i18n.js';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
@@ -198,8 +199,8 @@ function isPromotedAicmChildMarket(m) {
 }
 
 function aicmHubMatchesSearch(searchQuery) {
-  const q = String(searchQuery || '').trim().toLowerCase();
-  return !q || AICM_HUB_SEARCH_TEXT.includes(q);
+  const q = normalizeSearchText(searchQuery);
+  return !q || normalizeSearchText(AICM_HUB_SEARCH_TEXT).includes(q);
 }
 
 function isRecentlyOpenedMarket(m, now = Date.now()) {
@@ -307,7 +308,7 @@ export default function PointsCategoryPage() {
   }, [isNewMarketsShelf]);
 
   const filtered = useMemo(() => {
-    const q = searchQuery.toLowerCase();
+    const q = normalizeSearchText(searchQuery);
     const now = isNewMarketsShelf ? nowMs : Date.now();
     const isPending = (m) =>
       m.status === 'active'
@@ -373,7 +374,7 @@ export default function PointsCategoryPage() {
     }
 
     if (q) {
-      out = out.filter(m => (m.question || '').toLowerCase().includes(q));
+      out = out.filter(m => matchesMarketSearch(m, q));
     }
 
     return prioritizeFeaturedMarkets(out, featuredTeamKeys);

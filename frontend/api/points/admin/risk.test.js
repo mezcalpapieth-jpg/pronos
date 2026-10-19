@@ -55,3 +55,37 @@ test('admin risk endpoint is non-punitive and excludes the Pronos treasury from 
   assert.doesNotMatch(source, /UPDATE points_positions/);
   assert.doesNotMatch(source, /INSERT INTO points_distributions/);
 });
+
+
+test('risk data rejects signed-in non-admins and unauthenticated visitors before database access', async () => {
+  const saved = Object.fromEntries(['POINTS_SESSION_SECRET', 'POINTS_ADMIN_USERNAMES', 'DATABASE_URL', 'DATABASE_READ_URL']
+    .map(key => [key, process.env[key]]));
+  process.env.POINTS_SESSION_SECRET = 'pointbreak-risk-test-only-secret';
+  process.env.POINTS_ADMIN_USERNAMES = 'testadmin';
+  delete process.env.DATABASE_URL;
+  delete process.env.DATABASE_READ_URL;
+  try {
+    const { default: handler } = await import('./risk.js');
+    const { createSessionToken } = await import('../../_lib/session.js');
+    const token = createSessionToken({ suborgId: 'local-risk-test', username: 'testviewer' });
+    for (const [cookie, expectedStatus, expectedError] of [
+      ['', 401, 'not_authenticated'],
+      [`pronos_points_session=${token}`, 403, 'not_admin'],
+    ]) {
+      const res = {
+        statusCode: 200, headers: {}, body: null,
+        setHeader(key, value) { this.headers[key] = value; },
+        status(code) { this.statusCode = code; return this; },
+        json(body) { this.body = body; return this; },
+        end() { return this; },
+      };
+      await handler({ method: 'GET', headers: { cookie }, query: { username: 'someone' } }, res);
+      assert.equal(res.statusCode, expectedStatus);
+      assert.deepEqual(res.body, { error: expectedError });
+    }
+  } finally {
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  }
+});
