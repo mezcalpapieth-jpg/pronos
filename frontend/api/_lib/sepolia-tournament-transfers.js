@@ -100,7 +100,7 @@ export function reconcileTournamentTransfers({ users, registered, events, assetL
     if ((byTx.get(event.txHash)||[]).some(m=>m.logIndex>=first.logIndex && m.logIndex<event.logIndex
       && (m.from===event.wallet || m.to===event.wallet) && !ids.has(identity(m)))) fail('interleaved_user_transfers_require_review');
   }
-  const external=[];
+  const external=[], eligibleEvents=[], eligibleRemovals=[];
   function debitCash(account,amount) {
     if (amount>account.cash) fail('transfer_exceeds_actual_cash');
     const eligible=amount===0n?0n:ceil(amount*account.eligibleCash,account.cash);
@@ -116,11 +116,12 @@ export function reconcileTournamentTransfers({ users, registered, events, assetL
   function trade(event) {
     const account=accounts.get(event.wallet), market=registered.get(event.pool);
     const shares=units(event.sharesUnits), cash=units(event.collateralUnits);
+    let scoredShares=0n, scoredCash=0n;
     if (event.side==='buy') {
       if (cash===0n || cash>account.cash) fail('purchase_exceeds_actual_cash');
       const eligibleShares=shares*account.eligibleCash/account.cash;
       const eligibleBasis=cash*account.eligibleCash/account.cash;
-      debitCash(account,cash);
+      scoredCash=debitCash(account,cash);scoredShares=eligibleShares;
       const p=position(account,keyOf(event));p.shares+=shares;p.eligible+=eligibleShares;p.basis+=cash;p.eligibleBasis+=eligibleBasis;
     } else if (event.side==='refund') {
       let maximum=0n, eligibleMaximum=0n;
@@ -133,19 +134,22 @@ export function reconcileTournamentTransfers({ users, registered, events, assetL
         maximum+=reduction;eligibleMaximum+=min(eligibleReduction,removed.basis);p.basis-=reduction;
       }
       if (cash>maximum) fail('refund_exceeds_cost_basis');
-      account.cash+=cash;account.eligibleCash+=maximum===0n?0n:cash*eligibleMaximum/maximum;
+      scoredCash=maximum===0n?0n:cash*eligibleMaximum/maximum;
+      account.cash+=cash;account.eligibleCash+=scoredCash;
     } else {
       const p=position(account,keyOf(event));
       if (shares>p.shares || p.shares===0n) fail('sale_or_redemption_exceeds_actual_holdings');
       if (event.side==='redeem' && (market.status!=='resolved' || event.outcome!==market.winner || cash!==shares)) fail('invalid_redemption');
       const eligibleCash=cash*p.eligible/p.shares, reduction=p.basis*shares/p.shares;
-      debitShares(p,shares,false);
+      scoredShares=debitShares(p,shares,false).eligible;scoredCash=eligibleCash;
       // Contracts retain purchase basis after redemption; only sales and
       // cancellation refunds reduce it. Scoring basis is a separate budget.
       if (event.side==='sell') p.basis-=reduction;
       account.cash+=cash;account.eligibleCash+=eligibleCash;
     }
     if (account.granted) account.eventCount++;
+    if (account.granted && (scoredShares>0n || scoredCash>0n)) eligibleEvents.push({...event,
+      sharesUnits:scoredShares.toString(),collateralUnits:scoredCash.toString()});
   }
   for (const m of movements) {
     const action=actions.get(identity(m));
@@ -157,7 +161,10 @@ export function reconcileTournamentTransfers({ users, registered, events, assetL
       if (sender) debitCash(sender,amount);
       if (recipient) {recipient.cash+=amount;if(grants.has(identity(m))){recipient.eligibleCash+=amount;recipient.granted=true;}}
     } else {
-      if (sender) debitShares(position(sender,keyOf(m)),amount);
+      if (sender) {
+        const removed=debitShares(position(sender,keyOf(m)),amount);
+        if (sender.granted && removed.eligible>0n) eligibleRemovals.push({...m,wallet:sender.wallet,sharesUnits:removed.eligible.toString()});
+      }
       if (recipient) position(recipient,keyOf(m)).shares+=amount;
     }
     if ((sender||recipient) && !grants.has(identity(m))) external.push(m);
@@ -170,9 +177,10 @@ export function reconcileTournamentTransfers({ users, registered, events, assetL
       if(p.eligible<0n || p.eligible>p.shares || p.eligibleBasis<0n) fail('eligible_balance_invariant');
       const [pool,outcome]=key.split(':'),market=registered.get(pool);
       const claim=p.shares===0n?0n:min(p.eligibleBasis,p.basis*p.eligible/p.shares);
-      open+=market.status==='canceled'?claim:p.eligible*market.prices[Number(outcome)]/SCALE;
+      const value=market.status==='canceled'?claim:p.eligible*market.prices[Number(outcome)]/SCALE;
+      open+=value;
       const common={wallet:a.wallet,pool,outcomeIndex:Number(outcome)};
-      accountingPositions.push({...common,sharesUnits:p.eligible.toString(),costBasisUnits:p.eligibleBasis.toString()});
+      accountingPositions.push({...common,sharesUnits:p.eligible.toString(),costBasisUnits:p.eligibleBasis.toString(),valueUnits:value.toString()});
       actualPositions.push({...common,sharesUnits:p.shares.toString(),costBasisUnits:p.basis.toString()});
     }
     const equity=a.eligibleCash+open;
@@ -181,7 +189,7 @@ export function reconcileTournamentTransfers({ users, registered, events, assetL
       equityUnits:equity.toString(),pnlUnits:(equity-units(a.openingUnits)).toString(),eventCount:a.eventCount};
   });
   rows.sort((a,b)=>BigInt(a.pnlUnits)===BigInt(b.pnlUnits)?a.username.localeCompare(b.username):BigInt(a.pnlUnits)>BigInt(b.pnlUnits)?-1:1);
-  return {rows:rows.map((r,i)=>({...r,rank:i+1})),accountingPositions,actualPositions,
+  return {rows:rows.map((r,i)=>({...r,rank:i+1})),accountingPositions,actualPositions,eligibleEvents,eligibleRemovals,
     transferReconciliation:{version:1,policy:'exclude_incoming_proportional_outgoing',externalMovements:external,
       scoredEvents:rows.reduce((n,r)=>n+r.eventCount,0),historicalBalancesVerified:false}};
 }

@@ -12,6 +12,7 @@
  * pre-check would just race the indexer's lag.
  */
 import { neon } from '@neondatabase/serverless';
+import { assertTournamentTradingOpen } from '../_lib/sepolia-tournament-season.js';
 import { applyCors } from '../_lib/cors.js';
 import { requireSession } from '../_lib/session.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
@@ -56,6 +57,7 @@ export default async function handler(req, res) {
   if (!Number.isFinite(n) || n <= 0)       return res.status(400).json({ error: 'invalid_shares' });
 
   try {
+    await assertTournamentTradingOpen();
     const marketRows = await sql`
       SELECT id, status, pool_address, outcomes, end_time
       FROM protocol_markets

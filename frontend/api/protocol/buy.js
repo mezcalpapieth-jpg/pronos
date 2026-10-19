@@ -19,6 +19,7 @@
  */
 import { neon } from '@neondatabase/serverless';
 import { prepareTournamentJoin } from '../_lib/sepolia-tournament-user-join.js';
+import { assertTournamentTradingOpen } from '../_lib/sepolia-tournament-season.js';
 import { applyCors } from '../_lib/cors.js';
 import { requireSession } from '../_lib/session.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
@@ -86,6 +87,7 @@ export default async function handler(req, res) {
   if (!Number.isFinite(amt) || amt <= 0)   return res.status(400).json({ error: 'invalid_amount' });
 
   try {
+    await assertTournamentTradingOpen();
     // Resolve the market — must be active + on-chain (has pool_address).
     const marketRows = await sql`
       SELECT id, question, status, pool_address, outcomes, outcome_count, start_time,

@@ -16,6 +16,11 @@ const fail = message => { throw new Error(message); };
 const canonical = value => Array.isArray(value) ? value.map(canonical)
   : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().map(k => [k, canonical(value[k])])) : value;
 export const planHash = plan => createHash('sha256').update(JSON.stringify(canonical(plan))).digest('hex');
+// Bind closing to the entire confirmed enrollment ledger, including transfers
+// mined too late to participate. Canonical grant times are proved separately.
+export const seasonLateJoinsHash = joins => planHash(joins.map(r=>({txHash:r.txHash,
+  username:r.username,wallet:r.wallet,suborg:r.suborg,openingUnits:r.openingUnits,planHash:r.planHash,
+})).sort((a,b)=>a.txHash.localeCompare(b.txHash)));
 export function address(value) {
   if (!ethers.utils.isAddress(value || '') || /^0x0{40}$/i.test(value)) fail('invalid_nonzero_address');
   return value.toLowerCase();

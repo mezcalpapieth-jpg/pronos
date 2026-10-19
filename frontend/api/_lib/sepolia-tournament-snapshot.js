@@ -63,7 +63,7 @@ export function tournamentMarketRegistry({ cycleId, planHash: digest, markets })
 // execution or protocol-indexer import (the latter initializes a write client).
 // The RPC is a trusted source; this is not a consensus or receipt-trie proof.
 export async function buildTournamentSnapshot({ cycle, reviewedPlanHash, registry,
-  reviewedRegistryHash, funding, lateJoins = [], fromBlock, asOfBlock, expectedCutoffHash }, { provider, readIndexerCoverage,
+  reviewedRegistryHash, funding, lateJoins = [], fromBlock, asOfBlock, expectedCutoffHash, final = false }, { provider, readIndexerCoverage,
   fullTournamentCapture = false }) {
   const limits = fullTournamentCapture ? TOURNAMENT_CAPTURE_LIMITS : TOURNAMENT_SNAPSHOT_LIMITS;
   const { plan, digest, users:openingUsers } = tournamentRegistrations({ cycle, reviewedPlanHash });
@@ -133,6 +133,14 @@ export async function buildTournamentSnapshot({ cycle, reviewedPlanHash, registr
   const start = Date.parse(plan.startsAt), end = Date.parse(plan.endsAt);
   if (first.timestamp * 1000 < start || previous.timestamp * 1000 >= start
     || pinned.timestamp * 1000 < start || pinned.timestamp * 1000 > end) fail('cycle_block_boundary_mismatch');
+  let cutoffBoundary;
+  if (final) {
+    if (tip-asOfBlock<2) fail('final_boundary_needs_two_confirmations');
+    const next = await block(asOfBlock + 1);
+    if (pinned.timestamp * 1000 >= end || next.timestamp * 1000 < end) fail('final_cycle_boundary_required');
+    cutoffBoundary = { endsAt: plan.endsAt, nextBlock: { blockNumber: next.number,
+      blockHash: hash(next.hash), timestamp: new Date(next.timestamp * 1000).toISOString() } };
+  }
   const coverage = await readIndexerCoverage([d.factoryV1, d.factoryV2]);
   for (const factory of [d.factoryV1, d.factoryV2]) {
     const rows = coverage.filter(r => r.chainId === TOURNAMENT_CHAIN_ID && address(r.factory) === factory);
@@ -209,9 +217,10 @@ export async function buildTournamentSnapshot({ cycle, reviewedPlanHash, registr
       const r = await receipt(entry.creationTxHash);
       const log = r.logs.find(l => l.logIndex === entry.creationLogIndex);
       if (!log || address(log.address) !== factory) fail('market_creation_missing');
-      await verifyLog(log);
+      const createdAt = await verifyLog(log);
       const created = creation[version].parseLog(log);
-      if (created.args.marketId.toString() !== entry.marketId || address(created.args.pool) !== entry.pool) fail('market_creation_mismatch');
+      if (created.args.marketId.toString() !== entry.marketId || address(created.args.pool) !== entry.pool
+        || !created.args.endTime.eq(binding.endTime)) fail('market_creation_mismatch');
       const registeredBlock = r.blockNumber;
       if (asOfBlock - Math.min(fromBlock, registeredBlock) > limits.maxBlocks) fail('snapshot_bounds_exceeded');
       for (const [field, expected] of [['factory',factory],['collateral',d.token],['token',d[`share${version}`]]]) {
@@ -227,6 +236,7 @@ export async function buildTournamentSnapshot({ cycle, reviewedPlanHash, registr
       const disputed = await read(entry.pool, 'disputed() view returns(bool)');
       const market = { chainId: TOURNAMENT_CHAIN_ID, pool: entry.pool, factory, collateral: d.token,
         marketId: entry.marketId, outcomeCount, registeredBlock, resolved, disputed, status: canceled ? 'canceled' : resolved ? 'resolved' : 'active',
+        createdAt, endsAt: new Date(binding.endTime.toNumber() * 1000).toISOString(),
         markBlock: asOfBlock, markBlockHash: hash(pinned.hash) };
       if (resolved && !canceled) market.winner = Number(await read(entry.pool, 'outcome() view returns(uint8)')) - (version === 'V1' ? 1 : 0);
       else if (!canceled) market.pricesUnits = version === 'V1' ? [
@@ -265,6 +275,9 @@ export async function buildTournamentSnapshot({ cycle, reviewedPlanHash, registr
         }
       }
       verifyPoolLifecycle(history,market,version);
+      const resolution = history.filter(l => l.parsed.name === 'MarketResolved')
+        .sort((a,b) => a.blockNumber-b.blockNumber || a.logIndex-b.logIndex).at(-1);
+      if (resolution) market.resolvedAt = new Date((await block(resolution.blockNumber)).timestamp * 1000).toISOString();
     }
   }
   if (markets.length !== manifest.markets.length) fail('market_outside_cycle');
@@ -355,7 +368,11 @@ export async function buildTournamentSnapshot({ cycle, reviewedPlanHash, registr
   }
   scores.transferReconciliation.historicalBalancesVerified=true;
   budget();if (hash((await provider.getBlock(asOfBlock))?.hash)!==hash(pinned.hash)) fail('snapshot_reorg');
-  const artifact = { version: 2, mode: 'shadow', readyForRewards: false, registry: manifest,
+  const artifact = { version: final ? 3 : 2, mode: 'shadow', readyForRewards: false,
+    ...(cutoffBoundary ? {cutoffBoundary,lateJoinReferences:lateJoins.map(r=>({
+      txHash:hash(r.txHash),username:r.username,wallet:address(r.wallet),suborg:r.suborg,
+      openingUnits:plan.allocationUnits,planHash:digest,
+    })).sort((a,b)=>a.txHash.localeCompare(b.txHash))} : {}), registry: manifest,
     registryHash, funding: fundingProof, snapshot, scores };
   return { ...artifact, snapshotHash: planHash(artifact) };
 }

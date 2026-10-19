@@ -58,7 +58,7 @@ export async function captureTournamentSnapshot(input, { provider, readIndexerCo
     || registry.markets.length>TOURNAMENT_CAPTURE_LIMITS.maxMarkets) fail('snapshot_bounds_exceeded');
   if (!Array.isArray(input.funding)) fail('complete_funding_receipts_required');
   const identity={version:2,transferReconciliationVersion:1,cycleId:plan.cycleId,planHash:digest,registryHash:input.reviewedRegistryHash,
-    lateJoins:input.lateJoins || [],
+    lateJoins:input.lateJoins || [], ...(input.final ? {final:true} : {}),
     fromBlock:input.fromBlock,asOfBlock:input.asOfBlock,
     funding:input.funding.map(r=>({batchIndex:integer(r.batchIndex),txHash:hash(r.txHash)})).sort((a,b)=>a.batchIndex-b.batchIndex),
     limits:TOURNAMENT_CAPTURE_LIMITS,addressBatchSize:GROUP,pageBlocks:PAGE,logSplitThreshold:LOG_CAP,logPageFormat:1};
@@ -150,7 +150,7 @@ export async function captureTournamentSnapshot(input, { provider, readIndexerCo
     const captured={
       getNetwork:async()=>network,getBlockNumber:async()=>tip,
       getBlock:async n=>{
-        integer(n);if(n>input.asOfBlock)fail('capture_future_block');
+        integer(n);if(n>input.asOfBlock+(input.final?1:0))fail('capture_future_block');
         return cached('getBlock',[n],()=>live(()=>provider.getBlock(n)));
       },
       getCode:async(to,n)=>cached('getCode',[target(to),cutoff(n)],()=>live(()=>provider.getCode(to,n))),
@@ -180,6 +180,10 @@ export async function captureTournamentSnapshot(input, { provider, readIndexerCo
     // per-block reads are reused only under that same independently read hash.
     const finalNetwork=await provider.getNetwork(), finalBlock=await provider.getBlock(input.asOfBlock);
     if(finalNetwork.chainId!==TOURNAMENT_CHAIN_ID || hash(finalBlock?.hash)!==anchor.blockHash)fail('capture_anchor_reorg');
+    if (artifact?.cutoffBoundary) {
+      const next=await provider.getBlock(input.asOfBlock+1);
+      if (hash(next?.hash)!==artifact.cutoffBoundary.nextBlock.blockHash) fail('capture_anchor_reorg');
+    }
     const progress={mode:'shadow',readyForRewards:false,checkpointHash:manifest.manifestHash,anchor,...stats};
     if(error===pause)return {status:'paused',...progress};
     if(error)throw error;

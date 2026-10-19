@@ -176,7 +176,7 @@ function positionValue(position) {
   };
 }
 
-function buildPenalty({ user, activity, now, window }) {
+export function buildPenalty({ user, activity, now, window }) {
   const penaltyEndKey = completedPenaltyEndKey(now, window);
   if (!penaltyEndKey) return { activeDays: 0, inactiveDays: 0, inactivityPenalty: 0 };
 
@@ -247,7 +247,7 @@ function rowMarketOutcome(row) {
   return Number.isInteger(outcome) ? outcome : null;
 }
 
-function isTouchMarketRow(row) {
+export function isTouchMarketRow(row) {
   const sourceData = parseJson(row.pending_source_data ?? row.source_data, {});
   const resolverConfig = parseJson(row.resolver_config, {});
   const kinds = [
@@ -586,6 +586,19 @@ async function readLiquidityRewardRows(db, startIso, cutoffIso) {
   }
 }
 
+export function compareTournamentRows(a, b) {
+  const scoreDiff = b.score - a.score;
+  if (scoreDiff !== 0) return scoreDiff;
+  const inactiveDiff = a.inactiveDays - b.inactiveDays;
+  if (inactiveDiff !== 0) return inactiveDiff;
+  const marketsDiff = b.qualifyingMarkets - a.qualifyingMarkets;
+  if (marketsDiff !== 0) return marketsDiff;
+  const aCreated = new Date(a.createdAt || 0).getTime();
+  const bCreated = new Date(b.createdAt || 0).getTime();
+  if (aCreated !== bCreated) return aCreated - bCreated;
+  return String(a.username).localeCompare(String(b.username));
+}
+
 export async function buildTournamentLeaderboardRows(
   db,
   { limit = 500, now = new Date(), window = null, includeConvictionBreakdown = false } = {},
@@ -795,18 +808,7 @@ export async function buildTournamentLeaderboardRows(
     };
   });
 
-  ranked.sort((a, b) => {
-    const scoreDiff = b.score - a.score;
-    if (scoreDiff !== 0) return scoreDiff;
-    const inactiveDiff = a.inactiveDays - b.inactiveDays;
-    if (inactiveDiff !== 0) return inactiveDiff;
-    const marketsDiff = b.qualifyingMarkets - a.qualifyingMarkets;
-    if (marketsDiff !== 0) return marketsDiff;
-    const aCreated = new Date(a.createdAt || 0).getTime();
-    const bCreated = new Date(b.createdAt || 0).getTime();
-    if (aCreated !== bCreated) return aCreated - bCreated;
-    return String(a.username).localeCompare(String(b.username));
-  });
+  ranked.sort(compareTournamentRows);
 
   ranked.forEach((row, index) => {
     row.rank = index + 1;

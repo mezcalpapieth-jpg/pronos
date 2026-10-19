@@ -36,7 +36,7 @@ export async function snapshotCommand(values, { env=process.env, sqlFor=neon,
     const joinRows=Array.isArray(joins)?joins:joins.rows;
     if (joinRows.some(r=>r.status!=='confirmed')) throw Error('pending_join_reconciliation_required');
     const artifact = await buildSnapshot({ cycle:cycles[0], fromBlock:request.fromBlock,
-      asOfBlock:request.asOfBlock, expectedCutoffHash:anchor.hash, registry:request.registry,
+      asOfBlock:request.asOfBlock, expectedCutoffHash:anchor.hash, registry:request.registry, final:request.final === true,
       reviewedPlanHash:values['reviewed-plan-hash'], reviewedRegistryHash:values['reviewed-registry-hash'],
       lateJoins:joinRows.map(r=>({planHash:r.plan_hash,username:r.username,wallet:r.wallet_address,suborg:r.suborg_id,txHash:r.tx_hash})),
       funding:(Array.isArray(attempts) ? attempts : attempts.rows).map(r => ({ batchIndex:Number(r.batch_index), txHash:r.tx_hash })) }, {
