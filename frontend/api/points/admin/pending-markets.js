@@ -24,6 +24,7 @@ import { normalizeSeedLiquidities } from '../../_lib/market-liquidity.js';
 import { attachDefaultSuggestedPricing, attachPointsOpeningLiquidity, seedLiquiditiesFromProbabilities } from '../../_lib/market-pricing.js';
 import { tryAttachPolymarketPricing } from '../../_lib/polymarket-pricing.js';
 import { LCDLF_SOURCE } from '../../_lib/lcdlf-official.js';
+import { assertGranjaVipFinalNominees } from '../../_lib/granja-vip-official.js';
 import { syncMananeraPhraseFromQuestion } from '../../_lib/mananera-market-sync.js';
 import { syncApiPriceFromQuestion } from '../../_lib/api-price-market-sync.js';
 import { syncWeatherDateFromMarket } from '../../_lib/weather-market-sync.js';
@@ -709,6 +710,9 @@ export async function approveOne(pid, reviewer, note, opts = {}) {
       err.detail = deadlineCheck.detail;
       throw err;
     }
+    // Pointbreak approvals re-read Friday's official final lineup, including
+    // older provisional drafts that were generated before this guard existed.
+    if (!isOnchain) await assertGranjaVipFinalNominees(resolverConfig, outcomes);
     const marketSourceEventId = marketSourceEventForApproval(r, pid);
     const tagBundle = deriveMarketTags({
       ...r,
