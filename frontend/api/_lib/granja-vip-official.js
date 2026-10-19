@@ -275,8 +275,10 @@ function participantAliases(row) {
   quoted.forEach(alias => { if (alias) aliases.add(alias); });
   const manual = {
     'rafael mercadante': ['rafa mercadante', 'rafa'],
-    'kevin contreras bicolor': ['kevyn bicolor', 'kevin bicolor', 'bicolor'],
-    'kevyn contreras bicolor': ['kevyn bicolor', 'kevin bicolor', 'bicolor'],
+    'kevin contreras bicolor': ['kevyn contreras bicolor', 'kevyn contreras', 'kevin contreras', 'kevyn bicolor contreras', 'kevin bicolor contreras', 'kevyn bicolor', 'kevin bicolor', 'bicolor'],
+    'kevyn contreras bicolor': ['kevin contreras bicolor', 'kevyn contreras', 'kevin contreras', 'kevyn bicolor contreras', 'kevin bicolor contreras', 'kevyn bicolor', 'kevin bicolor', 'bicolor'],
+    'niurka marcos': ['niurka'],
+    'mario mono osuna': ['mono osuna', 'mono'],
     'daniela alexis bebeshita': ['la bebeshita', 'bebeshita'],
     'abigail pak la coreanera': ['la coreanera', 'coreanera'],
     'manelyk gonzalez': ['mane', 'manelyk'],
@@ -379,7 +381,8 @@ async function fetchFreshText(url, {
 } = {}) {
   const target = new URL(url);
   if (target.protocol !== 'https:' || target.hostname !== 'www.tvazteca.com'
-    || !target.pathname.startsWith('/aztecauno/la-granja-vip/') || target.username || target.password || target.port) {
+    || (!target.pathname.startsWith('/aztecauno/la-granja-vip/')
+      && !/^\/aztecauno\/(?:newslatest-sitemap-latest|sitemap-\d{6})\.xml$/.test(target.pathname)) || target.username || target.password || target.port) {
     throw new Error('granja_vip_untrusted_url');
   }
   if (cacheBust) target.searchParams.set('_pronos', String(Date.now()));
@@ -439,6 +442,24 @@ function officialGranjaLinks(html, baseUrl) {
   return [...links.values()];
 }
 
+function officialGranjaSitemapLinks(xml) {
+  const links = [];
+  for (const [, entry] of xml.matchAll(/<url>\s*([\s\S]*?)<\/url>/g)) {
+    try {
+      const url = new URL(decodeHtmlEntities(entry.match(/<loc>(.*?)<\/loc>/)?.[1] || ''));
+      if (url.protocol !== 'https:' || url.hostname !== 'www.tvazteca.com'
+        || !url.pathname.startsWith('/aztecauno/la-granja-vip/') || url.username || url.password || url.port) continue;
+      const lastmod = new Date(entry.match(/<lastmod>(.*?)<\/lastmod>/)?.[1]);
+      url.search = ''; url.hash = '';
+      // Sitemaps are discovery only. The dated article and its headline must
+      // still be fetched and verified before nominations or a result count.
+      links.push({ url: url.href, title: url.pathname.split('/').filter(Boolean).pop().replace(/-/g, ' '),
+        modifiedAt: Number.isFinite(lastmod.getTime()) ? lastmod.toISOString() : '' });
+    } catch { /* Ignore malformed or non-official sitemap entries. */ }
+  }
+  return links.sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt));
+}
+
 function matchingGranjaRows(text, rows) {
   const normalized = ` ${normalizeGranjaVipName(text)} `;
   return rows.filter(row => participantAliases(row).some(alias => normalized.includes(` ${alias} `)));
@@ -450,6 +471,71 @@ export function extractParticipantsFromOfficialHtml(html, {
   const linked = candidateParticipantLinks(html, { baseUrl });
   const rows = uniqueParticipants(linked);
   return applyStatusMentions(rows, html);
+}
+
+function nominationList(text) {
+  const paragraph = stripHtml(text);
+  const marker = /(?:actualmente los nominados son|son los granjeros que forman parte de la lista de nominados|lista (?:actualizada|final|definitiva) de nominados[\s,:-]*(?:(?:esta|quedo) )?(?:son|integrad[ao]s? por|conformad[ao]s? por|se posicionaron))\s*:?\s*/i.exec(stripAccents(paragraph));
+  // Only names after the explicit list marker count. Earlier sentences can
+  // mention the person who saved/removed a nominee, and sidebars are unrelated.
+  return marker ? paragraph.slice(marker.index + marker[0].length).split(/[.!?;]/)[0] : null;
+}
+
+function completeNominationList(list, rows) {
+  let remaining = ` ${normalizeGranjaVipName(list)} `;
+  const aliases = rows.flatMap(participantAliases).sort((a, b) => b.length - a.length);
+  for (const alias of aliases) remaining = remaining.replaceAll(` ${alias} `, ' ');
+  // An unrecognized entrant must never be silently dropped from the field.
+  return remaining.split(/\s+/).every(word => !word || word === 'y' || word === 'e');
+}
+
+function finalNominationArticle(article, close) {
+  const title = stripAccents(article.title);
+  const day = formatMexicoDateYmd(new Date(article.publishedAt));
+  const friday = formatMexicoDateYmd(new Date(close.getTime() - 2 * 86400000));
+  return /(?:lista|tabla) (?:final|definitiva).*nominad/i.test(title)
+    && day >= friday && new Date(article.publishedAt) < close;
+}
+
+function nominationLinkPriority(link) {
+  const text = stripAccents(`${link.title} ${link.url}`).replace(/-/g, ' ');
+  if (/(?:lista|tabla) (?:final|definitiva).*nominad|finalistas.*capataz|capataz.*finalistas/i.test(text)) return 0;
+  return /lista actualizada.*nominad/i.test(text) ? 1 : 2;
+}
+
+function sameGranjaField(outcomes, rows) {
+  // Use the known participant aliases, including Kevyn/Kevin and Mono Osuna.
+  const remaining = [...(rows || [])];
+  if (!Array.isArray(outcomes) || outcomes.length !== remaining.length) return false;
+  for (const label of outcomes) {
+    const index = remaining.findIndex(row => participantAliases(row).includes(normalizeGranjaVipName(label)));
+    if (index < 0) return false;
+    remaining.splice(index, 1);
+  }
+  return remaining.length === 0;
+}
+
+export async function assertGranjaVipFinalNominees(cfg, outcomes, { fetchImpl = fetch, now = new Date() } = {}) {
+  if (cfg?.kind !== 'granja-vip-elimination') return null;
+  const close = new Date(cfg.resolveAt);
+  const upcomingWeek = formatMexicoDateYmd(nextGranjaVipSundayClose(now));
+  if (!Number.isFinite(close.getTime()) || close <= now || cfg.weekKey !== upcomingWeek
+    || formatMexicoDateYmd(close) !== upcomingWeek) {
+    const error = new Error('granja_nomination_week_mismatch');
+    error.status = 409;
+    error.detail = 'Regenerar el borrador para la próxima gala del domingo antes de aprobarlo.';
+    throw error;
+  }
+  const snapshot = await readGranjaVipOfficialSnapshot({ fetchImpl, now, articleEvidence: cfg.evidence || [] });
+  const reason = !snapshot.nominationFinal ? 'granja_final_nominees_unavailable'
+    : !sameGranjaField(outcomes, snapshot.nominated) ? 'granja_contestant_field_changed_or_unavailable' : null;
+  if (reason) {
+    const error = new Error(reason);
+    error.status = 409;
+    error.detail = 'La aprobación requiere la lista FINAL oficial posterior a la Traición del viernes, con las mismas opciones del mercado. Regenerar el borrador si cambiaron los nominados.';
+    throw error;
+  }
+  return snapshot;
 }
 
 export async function readGranjaVipOfficialSnapshot({
@@ -485,49 +571,72 @@ export async function readGranjaVipOfficialSnapshot({
   const eliminatedNames = normalizeGranjaVipName(stripHtml(eliminatedSection));
   rows = rows.map(row => participantAliases(row).some(alias => ` ${eliminatedNames} `.includes(` ${alias} `))
     ? mergeStatus(row, { key: 'eliminado', label: 'Eliminado/a', raw: 'ELIMINADO' }) : row);
-  let discoveryHtml = officialHtml;
-  for (const path of ['notas-la-granja-vip', 'videos']) {
-    try {
-      const page = await fetchFreshText(new URL(path, sourceUrl).href, { fetchImpl });
-      if (page.ok) discoveryHtml += page.text;
-    } catch { /* Other official listings may still provide evidence. */ }
-  }
   const close = nextGranjaVipSundayClose(now);
+  let discoveryHtml = officialHtml;
+  const sitemapLinks = [];
+  // The show's curated listings omit some current gala articles. TV Azteca
+  // publishes these feeds in robots.txt: monthly covers Friday, news the gala.
+  const months = new Set([close, new Date(close.getTime() - 2 * 86400000)]
+    .map(date => formatMexicoDateYmd(date).slice(0, 7).replace('-', '')));
+  const discoveryUrls = ['notas-la-granja-vip', 'videos'].map(path => new URL(path, sourceUrl).href)
+    .concat('https://www.tvazteca.com/aztecauno/newslatest-sitemap-latest.xml',
+      [...months].map(month => `https://www.tvazteca.com/aztecauno/sitemap-${month}.xml`));
+  await Promise.all(discoveryUrls.map(async url => {
+    try {
+      const page = await fetchFreshText(url, { fetchImpl });
+      if (!page.ok) return;
+      if (new URL(url).pathname.endsWith('.xml')) sitemapLinks.push(...officialGranjaSitemapLinks(page.text));
+      else discoveryHtml += page.text;
+    } catch { /* Other official listings may still provide evidence. */ }
+  }));
   const weekStart = formatMexicoDateYmd(new Date(close.getTime() - 6 * 86400000));
   const weekEnd = formatMexicoDateYmd(close);
   const currentArticles = [];
-  const officialArticleLinks = officialGranjaLinks(discoveryHtml, sourceUrl);
+  const officialArticleLinks = [...new Map([
+    ...officialGranjaLinks(discoveryHtml, sourceUrl),
+    ...sitemapLinks,
+  ].map(link => [link.url, link])).values()]
+    .sort((a, b) => String(b.modifiedAt || '').localeCompare(String(a.modifiedAt || '')));
   if (discoveryHtml || articleEvidence.length) {
     const links = [...new Map([...articleEvidence, ...officialArticleLinks].filter(link => link?.url).map(link => [link.url, link])).values()]
       .filter(link => /nominad|capataz/i.test(`${link.title} ${link.url}`))
-      .filter(link => !/corral|primera-temporada/i.test(`${link.title} ${link.url}`));
-    for (const article of links.slice(0, 12)) {
+      .filter(link => !/corral|primera-temporada/i.test(`${link.title} ${link.url}`))
+      .sort((a, b) => nominationLinkPriority(a) - nominationLinkPriority(b)
+        || String(b.modifiedAt || '').localeCompare(String(a.modifiedAt || '')));
+    await Promise.all(links.slice(0, 12).map(async article => {
       try {
         const articleResponse = await fetchFreshText(article.url, { fetchImpl, cacheBust: true });
-        if (!articleResponse.ok) continue;
+        if (!articleResponse.ok) return;
         const parsed = parseOfficialGranjaArticle(articleResponse.text, article.url);
-        if (!parsed || parsed.publishedAt > now.toISOString()) continue;
+        if (!parsed || parsed.publishedAt > now.toISOString()) return;
         currentArticles.push(parsed);
       } catch {
         // Missing dated evidence must never fall back to sidebar headlines.
       }
-    }
+    }));
   }
   currentArticles.sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
   let nominationPublishedAt = null;
-  for (const article of currentArticles) {
+  let nominationFinal = false;
+  const nomineeArticles = currentArticles.filter(article => {
     const localDate = formatMexicoDateYmd(new Date(article.publishedAt));
-    if (localDate < weekStart || localDate > weekEnd || !/nominad/i.test(article.title)) continue;
-    const list = article.paragraphs.find(text => /(?:actualmente los nominados son|son los granjeros que forman parte de la lista de nominados|lista final de nominados.*(?:son|integrada por))/i.test(stripAccents(text)));
+    return localDate >= weekStart && localDate <= weekEnd && /nominad/i.test(article.title);
+  });
+  const finalArticles = nomineeArticles.filter(article => finalNominationArticle(article, close));
+  // A later final announcement supersedes provisional lists. If its list
+  // cannot be parsed, do not silently fall back to an older final lineup.
+  for (const article of finalArticles.length ? finalArticles.slice(0, 1) : nomineeArticles) {
+    const list = article.paragraphs.map(nominationList).find(Boolean);
     if (!list) continue;
     const articleNominees = matchingGranjaRows(list, rows);
     // Today's eliminated roster cannot invalidate a nomination article from before that gala.
-    if (articleNominees.length < 2 || (!historicalField && articleNominees.some(row => row.statusKey === 'eliminado'))) continue;
+    if (articleNominees.length < 2 || !completeNominationList(list, articleNominees) || (!historicalField && articleNominees.some(row => row.statusKey === 'eliminado'))) continue;
     const keys = new Set(articleNominees.map(row => row.slug));
     rows = rows.map(row => keys.has(row.slug)
       ? { ...row, ...statusFields({ key: 'nominado', label: 'Nominado/a', raw: 'NOMINADO' }) } : row);
     nomineeEvidence = [{ title: article.title, url: article.url, publishedAt: article.publishedAt }];
     nominationPublishedAt = article.publishedAt;
+    nominationFinal = finalNominationArticle(article, close);
     break;
   }
   const capatazClose = nextGranjaVipCapatazClose(now);
@@ -561,6 +670,7 @@ export async function readGranjaVipOfficialSnapshot({
     peones,
     nomineeEvidence,
     nominationPublishedAt,
+    nominationFinal,
     capatazFinalists,
     capatazEvidence,
     officialArticleLinks,
@@ -653,6 +763,9 @@ export function buildGranjaVipWeeklyMarketSpec({
   const contestants = capataz ? snapshot?.capatazFinalists : snapshot?.nominated;
   const datedEvidence = capataz ? snapshot?.capatazEvidence : snapshot?.nomineeEvidence;
   if (!snapshot?.ok || !Array.isArray(contestants) || contestants.length < 2 || !datedEvidence?.length) return null;
+  // Elimination options can change during Friday's Traición. Only publish
+  // drafts after the final lineup is available; Capataz is independent.
+  if (!capataz && snapshot.nominationFinal !== true) return null;
   const closeHour = Number(process.env.GRANJA_VIP_CLOSE_HOUR ?? DEFAULT_CLOSE_HOUR);
   const closeMinute = Number(process.env.GRANJA_VIP_CLOSE_MINUTE ?? DEFAULT_CLOSE_MINUTE);
   const close = capataz ? nextGranjaVipCapatazClose(now) : nextGranjaVipSundayClose(now, { hour: closeHour, minute: closeMinute });
@@ -746,9 +859,9 @@ export async function readGranjaVipOfficialResult(cfg, outcomes, { fetchImpl = f
     fetchImpl, now: new Date(close.getTime() - 60000), historicalField: true, articleEvidence: cfg.evidence || [],
   });
   const field = capataz ? snapshot.capatazFinalists : snapshot.nominated;
-  const fieldNames = (field || []).map(row => normalizeGranjaVipName(row.name)).sort();
-  if (JSON.stringify(fieldNames) !== JSON.stringify(outcomes.map(normalizeGranjaVipName).sort())) {
-    throw defer('granja_contestant_field_changed_or_unavailable', fieldNames.length > 0 || now - close > 86400000);
+  if (!capataz && !snapshot.nominationFinal) throw defer('granja_final_nominees_unavailable', true);
+  if (!sameGranjaField(outcomes, field)) {
+    throw defer('granja_contestant_field_changed_or_unavailable', true);
   }
   const links = snapshot.officialArticleLinks.filter(link => {
     const title = stripAccents(link.title);
@@ -768,8 +881,12 @@ export async function readGranjaVipOfficialResult(cfg, outcomes, { fetchImpl = f
     const explicit = capataz ? /(?:gana|ganador|nuevo|nueva|se convierte|consigue|convirtio).{0,100}capataz|capataz.{0,80}(?:es |gana)/i
       : /(?:es |fue |se convierte|se convirtio).{0,60}eliminad|eliminad[oa].{0,30}(?:es |fue )/i;
     if (!explicit.test(headline) || /\?|empate|abandono|expulsion|cancelad|dos eliminad|doble eliminacion|recuerda|semana pasada|anterior|podria|sera|seria/i.test(headline)) continue;
+    // Result headlines often also name the surviving nominees. Match the
+    // eliminated subject before "es/fue ... eliminado", not those opponents.
+    const elimination = !capataz && /\b(?:es|fue|se convierte en|se convirtio en)\s+(?:\S+\s+){0,4}eliminad[oa]\b/i.exec(headline);
+    const resultSubject = elimination ? headline.slice(0, elimination.index) : article.title;
     const matches = outcomes.map((name, index) => ({ name, index })).filter(row =>
-      matchingGranjaRows(article.title, [{ name: row.name }]).length === 1);
+      matchingGranjaRows(resultSubject, [{ name: row.name }]).length === 1);
     if (matches.length === 1) found.push({ winningIdx: matches[0].index, article });
   }
   const winners = new Set(found.map(row => row.winningIdx));

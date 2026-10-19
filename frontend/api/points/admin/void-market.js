@@ -32,7 +32,7 @@ import { releaseOpenLimitOrdersForMarkets } from '../../_lib/points-limit-orders
 
 const schemaSql = neon(process.env.DATABASE_URL);
 
-async function voidOneMarket(client, marketId, reason, adminUsername) {
+export async function voidOneMarket(client, marketId, reason, adminUsername) {
   const lookup = await client.query(
     `SELECT id, status, amm_mode, parent_id
        FROM points_markets
@@ -108,7 +108,7 @@ async function voidOneMarket(client, marketId, reason, adminUsername) {
   let refundedTotal = 0;
   for (const mid of refundIds) {
     const positions = await client.query(
-      `SELECT id, username, outcome_index, shares, cost_basis
+      `SELECT username, outcome_index, shares, cost_basis
          FROM points_positions
         WHERE market_id = $1 AND shares > 0
         FOR UPDATE`,
@@ -140,8 +140,8 @@ async function voidOneMarket(client, marketId, reason, adminUsername) {
             SET shares = 0,
                 cost_basis = 0,
                 updated_at = NOW()
-          WHERE id = $1`,
-        [p.id],
+          WHERE market_id = $1 AND username = $2 AND outcome_index = $3`,
+        [mid, p.username, p.outcome_index],
       );
       // Distribution audit row for the refund.
       await client.query(

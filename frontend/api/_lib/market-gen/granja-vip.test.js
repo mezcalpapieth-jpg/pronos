@@ -3,13 +3,13 @@ import assert from 'node:assert/strict';
 
 import { generateGranjaVipMarkets } from './granja-vip.js';
 
-test('generateGranjaVipMarkets drafts one elimination market when nominees are official', async () => {
+test('generateGranjaVipMarkets drafts one elimination market after Friday final nominees are official', async () => {
   const fetchImpl = async () => ({
     ok: true,
     status: 200,
     text: async () => `
-      <meta property="article:published_time" content="2026-09-09T17:00:00Z">
-      <article><h1>Lista de nominados de La Granja VIP</h1>
+      <meta property="article:published_time" content="2026-09-12T03:00:00Z">
+      <article><h1>Lista FINAL de nominados de La Granja VIP</h1>
       <p>Actualmente los nominados son: Carlos Trejo, Ivonne Montero y Kunno.</p></article>
       <h3>Granjeros: La Granja VIP Segunda Temporada</h3>
       <a href="/aztecauno/la-granja-vip/carlos-trejo">Carlos Trejo</a>
@@ -26,7 +26,7 @@ test('generateGranjaVipMarkets drafts one elimination market when nominees are o
   });
 
   const specs = await generateGranjaVipMarkets({
-    now: new Date('2026-09-09T18:00:00Z'),
+    now: new Date('2026-09-12T18:00:00Z'),
     fetchImpl,
   });
 
