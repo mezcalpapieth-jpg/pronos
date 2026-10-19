@@ -124,13 +124,16 @@ function seriesWinsFromSeriesObject(series, home, away) {
   let awayWins = null;
   for (const item of competitors) {
     const id = teamId(item?.team || item);
-    const wins = Number(item?.wins ?? item?.record?.wins ?? item?.seriesWins);
-    if (!Number.isFinite(wins)) continue;
+    const rawWins = item?.wins ?? item?.record?.wins ?? item?.seriesWins;
+    if (rawWins == null || !['number', 'string'].includes(typeof rawWins)
+      || String(rawWins).trim() === '') continue;
+    const wins = Number(rawWins);
+    if (!Number.isInteger(wins) || wins < 0) continue;
     if (id && homeId && id === homeId) homeWins = wins;
     if (id && awayId && id === awayId) awayWins = wins;
   }
-  if (homeWins == null && awayWins == null) return null;
-  return { homeWins: homeWins || 0, awayWins: awayWins || 0 };
+  if (homeWins == null || awayWins == null) return null;
+  return { homeWins, awayWins };
 }
 
 function validGameNumber(value) {
@@ -140,22 +143,24 @@ function validGameNumber(value) {
 
 function validSeriesWins(value) {
   if (!value || typeof value !== 'object') return null;
+  if ([value.homeWins, value.awayWins].some(wins => wins == null
+    || !['number', 'string'].includes(typeof wins) || String(wins).trim() === '')) return null;
   const homeWins = Number(value.homeWins);
   const awayWins = Number(value.awayWins);
-  if (!Number.isFinite(homeWins) || !Number.isFinite(awayWins)) return null;
-  return {
-    homeWins: Math.max(0, homeWins),
-    awayWins: Math.max(0, awayWins),
-  };
+  if (!Number.isInteger(homeWins) || !Number.isInteger(awayWins) || homeWins < 0 || awayWins < 0) return null;
+  return { homeWins, awayWins };
 }
 
-function plausibleSeriesWinsForGame(value, gameNumber) {
+function plausibleSeriesWinsForGame(value, gameNumber, bestOf = 7) {
   const wins = validSeriesWins(value);
   if (!wins) return null;
-  const game = validGameNumber(gameNumber);
-  if (!game) return wins;
+  const size = normalizeBestOf(bestOf, 7);
+  const target = Math.floor(size / 2) + 1;
   const totalWins = wins.homeWins + wins.awayWins;
-  return totalWins <= game - 1 ? wins : null;
+  if (wins.homeWins > target || wins.awayWins > target
+    || (wins.homeWins === target && wins.awayWins === target) || totalWins > size) return null;
+  const game = validGameNumber(gameNumber);
+  return !game || totalWins <= game - 1 ? wins : null;
 }
 
 export function buildSeriesKey({ leaguePath, seasonYear, round, homeTeam, awayTeam } = {}) {
@@ -238,6 +243,7 @@ export function extractEspnSeriesMeta(ev, {
     espnSeriesWins: plausibleSeriesWinsForGame(
       seriesWinsFromSeriesObject(series, home, away),
       gameNumber,
+      bestOf,
     ),
   };
 }
@@ -282,7 +288,7 @@ export function normalizeSeriesMeta({ resolverConfig, sourceData, row } = {}) {
     homeTeam: home,
     awayTeam: away,
     teams: [home, away],
-    espnSeriesWins: plausibleSeriesWinsForGame(series?.espnSeriesWins, gameNumber),
+    espnSeriesWins: plausibleSeriesWinsForGame(series?.espnSeriesWins, gameNumber, bestOf),
   };
 }
 
@@ -348,7 +354,7 @@ export function seriesGameGate({ bestOf, gameNumber, teamAWins = 0, teamBWins = 
 export function applySeriesGateToMarket(market, seriesMeta = market?.seriesMeta) {
   if (!market || market.status === 'resolved') return market;
   const gameNumber = validGameNumber(seriesMeta?.gameNumber || market.gameNumber);
-  const wins = plausibleSeriesWinsForGame(seriesMeta?.espnSeriesWins, gameNumber);
+  const wins = plausibleSeriesWinsForGame(seriesMeta?.espnSeriesWins, gameNumber, seriesMeta?.bestOf);
   if (!gameNumber) return market;
   if (gameNumber <= (seriesMeta?.guaranteedGames || Math.floor(normalizeBestOf(seriesMeta?.bestOf, 7) / 2) + 1)) return market;
   const resolvedWins = wins || { homeWins: 0, awayWins: 0 };
@@ -374,7 +380,7 @@ export function applySeriesGateToMarket(market, seriesMeta = market?.seriesMeta)
 export function seriesGateFromMeta(seriesMeta, status = 'active') {
   const gameNumber = validGameNumber(seriesMeta?.gameNumber);
   if (!gameNumber) return null;
-  const wins = plausibleSeriesWinsForGame(seriesMeta?.espnSeriesWins, gameNumber);
+  const wins = plausibleSeriesWinsForGame(seriesMeta?.espnSeriesWins, gameNumber, seriesMeta?.bestOf);
   if (!wins) return null;
   return seriesGameGate({
     bestOf: seriesMeta?.bestOf,
@@ -482,7 +488,7 @@ export function seriesTradeLockFromRows(currentRow, rows = []) {
   if (!items.some((item) => Number(item.id) === Number(currentRow.id))) {
     items.push(summarizeSeriesGateRow(currentRow, currentMeta, currentMeta));
   }
-  const detail = buildSeriesDetail(currentMeta, items);
+  const detail = buildSeriesDetail(currentMeta, items, { currentMarketId: currentRow.id });
   const currentItem = detail?.sequence?.find((item) => Number(item.id) === Number(currentRow.id));
   if (!currentItem?.seriesLocked) return null;
   return {
@@ -495,8 +501,12 @@ export function seriesTradeLockFromRows(currentRow, rows = []) {
 
 function winnerTeamKey(item) {
   if (item?.status !== 'resolved') return null;
+  // A pending source listing is not a settlement. In particular, Number(null)
+  // is zero and used to invent a home-team win for rejected/elapsed listings.
+  if (item.pendingId != null || item.placeholder === true || item.outcome == null
+    || !['number', 'string'].includes(typeof item.outcome) || String(item.outcome).trim() === '') return null;
   const outcome = Number(item.outcome);
-  if (!Number.isInteger(outcome)) return null;
+  if (!Number.isInteger(outcome) || outcome < 0) return null;
   const outcomes = Array.isArray(item.outcomes) ? item.outcomes : [];
   const label = outcomes[outcome];
   return normalizeKeyPart(label);
@@ -514,7 +524,7 @@ function setsOverlap(a, b) {
 }
 
 function officialWinsForTeams(candidateMeta, teamAKeys, teamBKeys, currentGameNumber = candidateMeta?.gameNumber) {
-  const wins = plausibleSeriesWinsForGame(candidateMeta?.espnSeriesWins, currentGameNumber);
+  const wins = plausibleSeriesWinsForGame(candidateMeta?.espnSeriesWins, currentGameNumber, candidateMeta?.bestOf);
   if (!wins) return null;
   const homeKeys = teamKeySet(candidateMeta?.homeTeam);
   const awayKeys = teamKeySet(candidateMeta?.awayTeam);
@@ -534,7 +544,7 @@ function seriesScoreLimitGame(meta, markets) {
   const currentGame = validGameNumber(meta?.gameNumber);
   if (!currentGame) return Infinity;
   const currentRows = markets.filter((market) => Number(market.gameNumber) === currentGame);
-  const currentResolved = currentRows.length > 0 && currentRows.every((market) => market.status === 'resolved');
+  const currentResolved = currentRows.length > 0 && currentRows.every((market) => winnerTeamKey(market));
   return currentResolved ? currentGame : currentGame - 1;
 }
 
@@ -552,9 +562,11 @@ function compareSeriesTime(a, b) {
   return (a._ordinal || 0) - (b._ordinal || 0);
 }
 
-export function buildSeriesDetail(meta, markets = []) {
+export function buildSeriesDetail(meta, markets = [], { currentMarketId } = {}) {
   if (!meta) return null;
-  const normalizedMarkets = markets
+  const bestOf = normalizeBestOf(meta.bestOf, 7);
+  const winTarget = Math.floor(bestOf / 2) + 1;
+  let normalizedMarkets = markets
     .map((market, index) => {
       const marketMeta = market.seriesMeta || normalizeSeriesMeta({ resolverConfig: market.resolverConfig, sourceData: market.sourceData, row: market });
       const explicitGameNumber = validGameNumber(marketMeta?.gameNumber || market.gameNumber);
@@ -566,7 +578,36 @@ export function buildSeriesDetail(meta, markets = []) {
         _ordinal: index + 1,
       };
     })
-    .filter((market) => market.seriesMeta?.key === meta.key);
+    .filter((market) => market.seriesMeta?.key === meta.key
+      && !['rejected', 'expired'].includes(market.status)
+      && (!market.explicitGameNumber || market.explicitGameNumber <= bestOf));
+
+  const seenMarkets = new Set();
+  normalizedMarkets = normalizedMarkets.filter((market) => {
+    if (market.id == null) return true;
+    const identity = String(market.id);
+    if (seenMarkets.has(identity)) return false;
+    seenMarkets.add(identity);
+    return true;
+  });
+
+  // The same pair can play multiple series within the lookup window. A new
+  // published Game 1 starts a new instance, even if ESPN reused a generic key.
+  const anchor = normalizedMarkets.find(market => currentMarketId != null
+    && String(market.id) === String(currentMarketId));
+  const startMs = market => new Date(market.startTime || market.start_time || market.endTime || market.end_time || 0).getTime();
+  const anchorMs = anchor && startMs(anchor);
+  if (Number.isFinite(anchorMs) && anchorMs > 0) {
+    const starts = normalizedMarkets
+      .filter(market => market.id != null && market.pendingId == null && market.explicitGameNumber === 1)
+      .map(startMs).filter(time => Number.isFinite(time) && time > 0);
+    const lower = Math.max(-Infinity, ...starts.filter(time => time <= anchorMs));
+    const upper = Math.min(Infinity, ...starts.filter(time => time > anchorMs));
+    normalizedMarkets = normalizedMarkets.filter(market => {
+      const time = startMs(market);
+      return Number.isFinite(time) && time > 0 && time >= lower && time < upper;
+    });
+  }
 
   const reservedExplicitGames = new Set(normalizedMarkets.map((market) => market.explicitGameNumber).filter(Boolean));
   const usedGames = new Set();
@@ -591,42 +632,79 @@ export function buildSeriesDetail(meta, markets = []) {
     return String(at).localeCompare(String(bt)) || Number(a.id || 0) - Number(b.id || 0);
   });
 
+  // One game contributes at most one win, even if a join repeats a market or
+  // a postponed source listing sits beside the published replacement.
+  const byGame = new Map();
+  const priority = (market) => (currentMarketId != null && String(market.id) === String(currentMarketId) ? 8 : 0)
+    + (market.id != null && market.pendingId == null ? 4 : 0)
+    + (winnerTeamKey(market) ? 2 : 0) + (market.status === 'resolved' ? 1 : 0);
+  for (const market of normalizedMarkets) {
+    if (market.gameNumber > bestOf) continue;
+    const previous = byGame.get(market.gameNumber);
+    if (!previous || priority(market) > priority(previous)) byGame.set(market.gameNumber, market);
+  }
+  normalizedMarkets = [...byGame.values()];
+
   const teamA = meta.teams?.[0] || meta.homeTeam || {};
   const teamB = meta.teams?.[1] || meta.awayTeam || {};
   const teamAKeys = teamKeySet(teamA);
   const teamBKeys = teamKeySet(teamB);
-  const scoreLimitGame = seriesScoreLimitGame(meta, normalizedMarkets);
-  let teamAWins = 0;
-  let teamBWins = 0;
+  const scoreLimitGame = seriesScoreLimitGame({ ...meta, gameNumber: anchor?.gameNumber || meta.gameNumber }, normalizedMarkets);
+  const settledWinners = new Map();
   for (const market of normalizedMarkets) {
-    if (Number.isFinite(scoreLimitGame)) {
-      const marketGame = validGameNumber(market.gameNumber);
-      if (!marketGame || marketGame > scoreLimitGame) continue;
-    }
+    if (market.gameNumber > scoreLimitGame) continue;
     const winner = winnerTeamKey(market);
-    if (!winner) continue;
-    if (teamAKeys.has(winner)) teamAWins += 1;
-    else if (teamBKeys.has(winner)) teamBWins += 1;
-  }
-  const officialCandidates = [meta, ...normalizedMarkets.map(market => market.seriesMeta)].filter(Boolean);
-  let officialWins = null;
-  const officialReferenceGame = Number.isFinite(scoreLimitGame)
-    ? scoreLimitGame + 1
-    : meta.gameNumber;
-  for (const candidate of officialCandidates) {
-    const candidateWins = officialWinsForTeams(candidate, teamAKeys, teamBKeys, officialReferenceGame);
-    if (!candidateWins) continue;
-    if (!officialWins || (candidateWins.teamAWins + candidateWins.teamBWins) >= (officialWins.teamAWins + officialWins.teamBWins)) {
-      officialWins = candidateWins;
-    }
-  }
-  if (officialWins && (officialWins.teamAWins + officialWins.teamBWins) >= (teamAWins + teamBWins)) {
-    teamAWins = officialWins.teamAWins;
-    teamBWins = officialWins.teamBWins;
+    if (teamAKeys.has(winner)) settledWinners.set(market.gameNumber, 'a');
+    else if (teamBKeys.has(winner)) settledWinners.set(market.gameNumber, 'b');
   }
 
-  const bestOf = normalizeBestOf(meta.bestOf, 7);
-  const winTarget = Math.floor(bestOf / 2) + 1;
+  // A stored provider score covers a prefix of the series. Check it against
+  // every published result in that prefix, then add later settled games once.
+  // This also preserves pregame snapshots when only later games were listed.
+  const officialCandidates = [meta, ...normalizedMarkets
+    .filter(market => market.id != null && market.pendingId == null && !market.placeholder)
+    .map(market => market.seriesMeta)].filter(Boolean);
+  let base = { teamAWins: 0, teamBWins: 0 };
+  let coveredGames = 0;
+  const referenceGame = Number.isFinite(scoreLimitGame) ? scoreLimitGame + 1 : null;
+  for (const candidate of officialCandidates) {
+    const candidateGame = validGameNumber(candidate.gameNumber);
+    const limit = referenceGame == null ? candidateGame : Math.min(referenceGame, candidateGame || referenceGame);
+    const wins = officialWinsForTeams(candidate, teamAKeys, teamBKeys, limit);
+    if (!wins) continue;
+    const total = wins.teamAWins + wins.teamBWins;
+    if (total < coveredGames) continue;
+    let knownA = 0;
+    let knownB = 0;
+    let earlyClinch = false;
+    for (const [game, winner] of settledWinners) {
+      if (game > total) continue;
+      if (winner === 'a') knownA += 1;
+      else knownB += 1;
+      if ((knownA >= winTarget || knownB >= winTarget) && game < total) earlyClinch = true;
+    }
+    if (earlyClinch || wins.teamAWins < knownA || wins.teamBWins < knownB) continue;
+    base = wins;
+    coveredGames = total;
+  }
+  let { teamAWins, teamBWins } = base;
+  for (const [game, winner] of settledWinners) {
+    if (game <= coveredGames) continue;
+    if (teamAWins >= winTarget || teamBWins >= winTarget) break;
+    if (winner === 'a') teamAWins += 1;
+    else teamBWins += 1;
+    if (game === coveredGames + 1) coveredGames = game;
+  }
+  const clinched = teamAWins >= winTarget || teamBWins >= winTarget;
+  // A partial tally must not look like the confirmed score of a later game.
+  const currentGame = validGameNumber(anchor?.gameNumber || meta.gameNumber) || Infinity;
+  const requiredGames = Math.max(coveredGames, ...normalizedMarkets
+    .filter(market => market.status === 'resolved' && market.id != null
+      && market.pendingId == null && market.gameNumber <= currentGame)
+    .map(market => market.gameNumber));
+  const scoreComplete = coveredGames >= requiredGames
+    || (clinched && coveredGames === teamAWins + teamBWins);
+
   const guaranteedGames = winTarget;
   const maxActualGame = Math.max(0, ...normalizedMarkets.map((market) => Number(market.gameNumber) || 0));
   const completedGames = Math.min(bestOf, Math.max(
@@ -637,14 +715,12 @@ export function buildSeriesDetail(meta, markets = []) {
   ));
   const sequenceStart = Math.min(1, ...normalizedMarkets.map((market) => Number(market.gameNumber) || 1));
   const shouldShowThrough = Math.max(maxActualGame, Math.min(bestOf, guaranteedGames));
-  const clinched = teamAWins >= winTarget || teamBWins >= winTarget;
-  const summary = seriesScoreSummary({
+  const summary = scoreComplete ? seriesScoreSummary({
     teamAWins,
     teamBWins,
     teamAName: shortTeamName(teamA, 'Equipo A'),
     teamBName: shortTeamName(teamB, 'Equipo B'),
-  });
-  const byGame = new Map(normalizedMarkets.map((market) => [Number(market.gameNumber), market]));
+  }) : null;
   const sequence = [];
   for (let game = sequenceStart; game <= bestOf; game++) {
     const actual = byGame.get(game);
@@ -705,8 +781,9 @@ export function buildSeriesDetail(meta, markets = []) {
 
   return {
     ...meta,
-    teamAWins,
-    teamBWins,
+    teamAWins: scoreComplete ? teamAWins : null,
+    teamBWins: scoreComplete ? teamBWins : null,
+    scoreComplete,
     summary,
     subtitle: seriesSubtitle({ gameNumber: meta.gameNumber, summary }),
     sequence,
