@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import { DOMParser, parseHTML } from 'linkedom';
-import { AA_URL, AA_METHODOLOGY_URL, AA_OUTCOMES, RT_URL, RT_OUTCOMES, isAutomaticContract } from './automated-market-rules.js';
+import { AA_URL, AA_METHODOLOGY_URL, AA_OUTCOMES, RT_URL, RT_OUTCOMES, RT_THRESHOLD_KIND, RT_THRESHOLD_FILMS, isAutomaticContract } from './automated-market-rules.js';
 
-export const CUTOFF_KINDS = ['rotten-tomatoes-cutoff', 'artificial-analysis-cutoff', 'openai-astra-release'];
+export const CUTOFF_KINDS = ['rotten-tomatoes-cutoff', RT_THRESHOLD_KIND, 'artificial-analysis-cutoff', 'openai-astra-release'];
 const OPENAI_RSS = 'https://openai.com/news/rss.xml';
 const OPENAI_MODELS = 'https://developers.openai.com/api/docs/models';
 const CHATGPT_NOTES = 'https://help.openai.com/en/articles/6825453-chatgpt-release-notes';
@@ -49,13 +49,15 @@ async function documentAt(url, fetchImpl) {
   throw cutoffReview('snapshot_redirect_limit');
 }
 
-export function parseRottenTomatoes(html) {
+export function parseRottenTomatoes(html, identity = {
+  url: RT_URL, title: 'Street Fighter', year: 2026, directors: ['Kitao Sakurai'],
+}) {
   const { document: d } = parseHTML(html);
-  if (d.querySelector('link[rel="canonical"]')?.getAttribute('href') !== RT_URL
-    || clean(d.querySelector('h1')?.textContent) !== 'Street Fighter') throw cutoffReview('rt_movie_identity');
+  if (d.querySelector('link[rel="canonical"]')?.getAttribute('href') !== identity.url
+    || clean(d.querySelector('h1')?.textContent) !== identity.title) throw cutoffReview('rt_movie_identity');
   const movie = [...d.querySelectorAll('script[type="application/ld+json"]')].map(n => JSON.parse(n.textContent)).find(row => row['@type'] === 'Movie');
   const directors = Array.isArray(movie?.director) ? movie.director : [movie?.director];
-  if (!directors.some(row => row?.name === 'Kitao Sakurai') || !String(movie?.dateCreated || movie?.datePublished || '').startsWith('2026')) {
+  if (!identity.directors.every(name => directors.some(row => row?.name === name)) || !String(movie?.dateCreated || movie?.datePublished || '').startsWith(String(identity.year))) {
     throw cutoffReview('rt_movie_year_or_director');
   }
   const data = JSON.parse(d.querySelector('#media-scorecard-json')?.textContent || '{}');
@@ -66,13 +68,13 @@ export function parseRottenTomatoes(html) {
   if (!visibleNode || score?.title !== 'Tomatometer' || data.criticsScore?.title !== 'Tomatometer' || clean(panel?.textContent) !== 'Tomatometer'
     || !Number.isInteger(score.reviewCount) || score.reviewCount < 0) throw cutoffReview('rt_missing_critics_panel');
   if ((score.score == null || score.score === '') && (data.criticsScore.score == null || data.criticsScore.score === '') && visible === '') {
-    return { state: 'no-score', evidenceUrl: RT_URL, reviewCount: score.reviewCount };
+    return { state: 'no-score', evidenceUrl: identity.url, reviewCount: score.reviewCount };
   }
   if (!/^\d{1,3}$/.test(String(score.score)) || Number(score.score) > 100
     || score.score !== data.criticsScore.score || visible !== `${score.score}%` || score.scorePercent !== visible) {
     throw cutoffReview('rt_conflicting_critics_score');
   }
-  return { state: 'scored', score: Number(score.score), reviewCount: score.reviewCount, evidenceUrl: RT_URL };
+  return { state: 'scored', score: Number(score.score), reviewCount: score.reviewCount, evidenceUrl: identity.url };
 }
 
 export function parseArtificialAnalysis(html, methodology) {
@@ -180,7 +182,10 @@ export async function collectCutoffEvidence(cfg, { fetchImpl = fetch, clock = ()
   };
   let result;
   if (cfg.kind === 'rotten-tomatoes-cutoff') result = parseRottenTomatoes(await get(RT_URL));
-  else if (cfg.kind === 'artificial-analysis-cutoff') {
+  else if (cfg.kind === RT_THRESHOLD_KIND) {
+    const movie = RT_THRESHOLD_FILMS[cfg.film];
+    result = parseRottenTomatoes(await get(movie.url), movie);
+  } else if (cfg.kind === 'artificial-analysis-cutoff') {
     const methodology = await get(AA_METHODOLOGY_URL);
     const html = await get(AA_URL);
     // A methodology change during capture invalidates this bundle.
@@ -224,10 +229,16 @@ export async function readCutoffResult(cfg, outcomes, { sql, marketId, now = new
     || !Number.isFinite(Date.parse(payload.startedAt)) || !Number.isFinite(Date.parse(payload.capturedAt))
     || Date.parse(row.started_at) !== Date.parse(payload.startedAt) || Date.parse(row.captured_at) !== Date.parse(payload.capturedAt)) throw cutoffReview('snapshot_missing_or_stale');
   let winningIdx;
-  if (cfg.kind === 'rotten-tomatoes-cutoff') {
+  if (cfg.kind === 'rotten-tomatoes-cutoff' || cfg.kind === RT_THRESHOLD_KIND) {
+    if (cfg.kind === RT_THRESHOLD_KIND && (payload.evidenceUrl !== RT_THRESHOLD_FILMS[cfg.film].url
+      || !Number.isInteger(payload.reviewCount) || payload.reviewCount < 0
+      || !payload.documents?.some(doc => doc.url === payload.evidenceUrl && /^[a-f0-9]{64}$/.test(doc.sha256)))) {
+      throw cutoffReview('rt_snapshot_identity_or_archive');
+    }
     if (payload.state === 'no-score') return { cancel: true, resolverInfo: { ...payload, source: 'official-result', kind: cfg.kind, contractHash: contractHash(cfg, outcomes) } };
     if (payload.state !== 'scored' || !Number.isInteger(payload.score) || payload.score < 0 || payload.score > 100) throw cutoffReview('rt_snapshot_invalid');
-    winningIdx = payload.score <= 45 ? 0 : Math.min(10, Math.ceil((payload.score - 45) / 5));
+    winningIdx = cfg.kind === RT_THRESHOLD_KIND ? (payload.score > cfg.threshold ? 0 : 1)
+      : payload.score <= 45 ? 0 : Math.min(10, Math.ceil((payload.score - 45) / 5));
   } else if (cfg.kind === 'artificial-analysis-cutoff') {
     if (payload.state !== 'ranked' || !payload.leader?.creator || !payload.indexVersion) throw cutoffReview('aa_snapshot_invalid');
     const aliases = { OpenAI: 'OpenAI', Google: 'Google', Anthropic: 'Anthropic', xAI: 'xAI', SpaceXAI: 'xAI', Meta: 'Meta' };
@@ -237,5 +248,6 @@ export async function readCutoffResult(cfg, outcomes, { sql, marketId, now = new
     winningIdx = payload.state === 'yes' ? 0 : 1;
   }
   return { winningIdx, resolverInfo: { source: 'official-result', kind: cfg.kind, ...payload,
+    ...(cfg.kind === RT_THRESHOLD_KIND ? { finalScore: `Tomatometer ${payload.score}% · Rotten Tomatoes · ${payload.reviewCount} críticas` } : {}),
     rows: undefined, contractHash: contractHash(cfg, outcomes) } };
 }

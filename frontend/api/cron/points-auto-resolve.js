@@ -212,6 +212,7 @@ function buildFinalScore({ resolverType, cfg, result, resolverInfo, outcomes, wi
     }
 
     if (resolverType === 'api_chart') {
+      if (resolverInfo?.finalScore) return clip(resolverInfo.finalScore);
       const top = resolverInfo?.topArtist || resolverInfo?.topChannel || resolverInfo?.topTrack || resolverInfo?.topTitle;
       if (top) return clip(`#1 ${top}`);
       return clip(winLabel);
