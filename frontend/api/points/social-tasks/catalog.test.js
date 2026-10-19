@@ -90,7 +90,7 @@ test('submit API keeps the X OAuth verification skeleton gated by task metadata'
 });
 
 test('resubmitting a rejected task clears current review metadata', async () => {
-  const submitSource = await readFile(new URL('./submit.js', import.meta.url), 'utf8');
+  const submitSource = await readFile(new URL('../../_lib/social-task-submission.js', import.meta.url), 'utf8');
   assert.match(submitSource, /WHEN social_tasks\.status = 'rejected' THEN 'pending'/);
   assert.match(submitSource, /reviewer = CASE/);
   assert.match(submitSource, /reviewed_at = CASE/);

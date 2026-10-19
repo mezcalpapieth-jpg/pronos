@@ -1,3 +1,5 @@
+import { notifySocialLinksChanged } from './socialTaskAccount.js';
+
 /**
  * Points-app REST client.
  *
@@ -159,6 +161,14 @@ const PUBLIC_ERROR_COPY = {
   social_link_failed: {
     es: 'No pudimos conectar esa cuenta. Intenta otra vez.',
     en: 'Could not connect that account. Try again.',
+  },
+  social_account_required: {
+    es: 'Añade tu cuenta de esta red social antes de enviar la tarea a revisión.',
+    en: 'Add your account for this social network before sending the task for review.',
+  },
+  invalid_handle: {
+    es: 'Ingresa un usuario válido de esta red social.',
+    en: 'Enter a valid username for this social network.',
   },
   invalid_display_name: {
     es: 'Usa un nombre más corto y sin caracteres raros.',
@@ -420,11 +430,15 @@ export async function revokeApiKey(id) {
 }
 
 export async function saveSocialLink({ provider, handle, isPublic = false }) {
-  return postJson('/api/points/social-links', { provider, handle, isPublic });
+  const result = await postJson('/api/points/social-links', { provider, handle, isPublic });
+  notifySocialLinksChanged();
+  return result;
 }
 
 export async function unlinkSocial(provider) {
-  return postJson('/api/points/unlink-social', { provider });
+  const result = await postJson('/api/points/unlink-social', { provider });
+  notifySocialLinksChanged();
+  return result;
 }
 
 // Kick-off URL for the OAuth redirect. Returns a path the browser
