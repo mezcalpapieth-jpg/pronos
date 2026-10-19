@@ -1,13 +1,25 @@
 export const RULES_VERSION = 'official-contracts-2026-10-15-v1';
 export const RT_URL = 'https://www.rottentomatoes.com/m/street_fighter_2026';
+export const RT_THRESHOLD_KIND = 'rotten-tomatoes-threshold-cutoff';
+// Only verified movie identities may be used by the threshold collector.
+export const RT_THRESHOLD_FILMS = {
+  'you-can-see-everything-2026': {
+    url: 'https://www.rottentomatoes.com/m/you_can_see_everything',
+    title: 'You Can See Everything', year: 2026, directors: ['Nathan Fielder', 'Lance Oppenheim'],
+  },
+};
 export const AA_URL = 'https://artificialanalysis.ai/leaderboards/models';
 export const AA_METHODOLOGY_URL = 'https://artificialanalysis.ai/methodology/intelligence-benchmarking';
 export const GDP_OUTCOMES = ['< 0.5%', '0.5% a 1.0%', '1.0% a 1.5%', '1.5% a 2.0%', '2.0% a 2.5%', '2.5% a 3.0%', '3.0% a 3.5%', '3.5% o más'];
 export const RT_OUTCOMES = ['45 o menos', '46 a 50', '51 a 55', '56 a 60', '61 a 65', '66 a 70', '71 a 75', '76 a 80', '81 a 85', '86 a 90', '91 o más'];
 export const AA_OUTCOMES = ['OpenAI', 'Google', 'Anthropic', 'xAI', 'Meta', 'Otro'];
 
-export function automatedRules(kind, { cutoff, targetPeriod = '2026-Q3' } = {}) {
+export function automatedRules(kind, { cutoff, targetPeriod = '2026-Q3', film, threshold } = {}) {
   const date = cutoff ? new Date(cutoff).toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' }) : '';
+  const movie = Object.hasOwn(RT_THRESHOLD_FILMS, film || '') ? RT_THRESHOLD_FILMS[film] : null;
+  if (kind === RT_THRESHOLD_KIND && (!movie || !Number.isInteger(threshold) || threshold < 0 || threshold >= 100)) {
+    throw new Error('invalid_rt_threshold_contract');
+  }
   const commonEs = 'Si faltan pruebas verificables o hay datos contradictorios, pasa a revisión manual; no se estima el resultado.';
   const commonEn = 'Missing verifiable evidence or conflicting data requires manual review; the result is never estimated.';
   const rules = {
@@ -23,6 +35,10 @@ export function automatedRules(kind, { cutoff, targetPeriod = '2026-Q3' } = {}) 
       `Se usa exclusivamente el porcentaje entero All Critics Tomatometer de ${RT_URL} al ${date} a las 08:00:00 CDMX. No cuentan Top Critics, Popcornmeter ni la nota media sobre 10. Se usa la última captura verificada completada antes o exactamente al límite, con antigüedad máxima de 60 segundos; cambios posteriores se ignoran. Los rangos son enteros: 45 o menos, 46 a 50, y así sucesivamente hasta 91 o más. Si la página válida confirma que no hay Tomatometer publicado, se anula mediante el procedimiento de cancelación y devolución de costo pendiente. Una página bloqueada, incompleta o sin captura válida exige revisión manual, nunca un score de cero. ${commonEs}`,
       `Use only the integer All Critics Tomatometer percentage at ${RT_URL} on ${date} at 08:00:00 Mexico City time. Top Critics, Popcornmeter and average ratings out of 10 do not count. Use the last verified capture completed at or before the deadline, at most 60 seconds old; ignore later changes. Integer ranges are 45 or lower, 46 to 50, continuing through 91 or higher. A valid page explicitly showing no Tomatometer triggers cancellation and refund of remaining cost basis. Blocked or incomplete pages, or missing valid captures, require manual review, never a zero score. ${commonEn}`,
     ],
+    [RT_THRESHOLD_KIND]: [
+      `Gana Sí si el porcentaje entero All Critics Tomatometer de ${movie?.title} (${movie?.url}) es estrictamente mayor que ${threshold}% al ${date} a las 23:59:00 CDMX; ${threshold}% o menos corresponde a No. Se evalúa únicamente el score al cierre, no su trayectoria durante la semana. No cuentan Top Critics, Popcornmeter ni la nota media sobre 10. Se usa la última captura verificada completada antes o exactamente al límite, con antigüedad máxima de 60 segundos; cambios posteriores se ignoran. Si la página válida confirma que no hay Tomatometer publicado, se anula y devuelve el costo pendiente. Una página bloqueada, incompleta o sin captura válida exige revisión manual, nunca un score de cero. ${commonEs}`,
+      `Yes wins if the integer All Critics Tomatometer percentage for ${movie?.title} (${movie?.url}) is strictly above ${threshold}% on ${date} at 23:59:00 Mexico City time; ${threshold}% or lower means No. Only the closing score counts, not its path during the week. Top Critics, Popcornmeter and average ratings out of 10 do not count. Use the last verified capture completed at or before the deadline, at most 60 seconds old; ignore later changes. A valid page explicitly showing no Tomatometer triggers cancellation and refund of remaining cost basis. Blocked or incomplete pages, or missing valid captures, require manual review, never a zero score. ${commonEn}`,
+    ],
     'artificial-analysis-cutoff': [
       `Se usa la tabla pública completa y sin filtros de modelos de texto del Artificial Analysis Intelligence Index (${AA_URL}), ordenada de mayor a menor índice, al ${date} a las 23:59:59 CDMX. Se respeta el score visible y, en empate de score visible, el orden oficial visible de la tabla, no el orden de una API ni decimales ocultos. Cada configuración de razonamiento cuenta como aparece listada. Gana el laboratorio creador del modelo líder; un laboratorio no listado corresponde a Otro. Se conserva la versión principal vigente del índice y su metodología, sin mezclar versiones. Se usa la última captura completa anterior o igual al límite con antigüedad máxima de cinco minutos. Una tabla incompleta, empate sin orden verificable o discrepancia de fuentes exige revisión manual. ${commonEs}`,
       `Use the complete, unfiltered public text-model Artificial Analysis Intelligence Index table (${AA_URL}), sorted by descending index, on ${date} at 23:59:59 Mexico City time. Use visible scores and official visible table order for tied visible scores, never API ordering or hidden precision. Each listed reasoning configuration counts separately. The leading model's creator lab wins; an unlisted creator maps to Other. Preserve the current primary index version and methodology without mixing versions. Use the last complete capture at or before the deadline, at most five minutes old. Incomplete tables, unverifiable tie order or conflicting sources require manual review. ${commonEn}`,
@@ -32,9 +48,10 @@ export function automatedRules(kind, { cutoff, targetPeriod = '2026-Q3' } = {}) 
   return { criteria: rules[kind][0], criteriaEn: rules[kind][1] };
 }
 
-export function automaticConfig(kind, { cutoff, resolveAt = cutoff, targetPeriod, openedAt } = {}) {
+export function automaticConfig(kind, { cutoff, resolveAt = cutoff, targetPeriod, openedAt, film, threshold } = {}) {
   return { source: 'official-result', kind, rulesVersion: RULES_VERSION,
-    ...automatedRules(kind, { cutoff, targetPeriod }),
+    ...automatedRules(kind, { cutoff, targetPeriod, film, threshold }),
+    ...(kind === RT_THRESHOLD_KIND ? { film, threshold } : {}),
     ...(cutoff ? { cutoff } : {}), ...(targetPeriod ? { targetPeriod } : {}),
     ...(openedAt ? { openedAt } : {}), resolveAt };
 }
@@ -46,9 +63,10 @@ export function isAutomaticContract(cfg) {
   } else {
     if (!Number.isFinite(Date.parse(cfg.cutoff))) return false;
     const cutoff = new Date(cfg.cutoff);
-    const expectedTime = cfg.kind === 'rotten-tomatoes-cutoff' ? '08:00:00' : '23:59:59';
+    const expectedTime = cfg.kind === 'rotten-tomatoes-cutoff' ? '08:00:00' : cfg.kind === RT_THRESHOLD_KIND ? '23:59:00' : '23:59:59';
     if (cutoff.getUTCMilliseconds() !== 0 || cutoff.toLocaleTimeString('en-GB', { timeZone: 'America/Mexico_City', hour12: false }) !== expectedTime) return false;
   }
+  if (cfg.kind === RT_THRESHOLD_KIND && Date.parse(cfg.resolveAt) < Date.parse(cfg.cutoff)) return false;
   if (cfg.kind === 'openai-astra-release' && (!Number.isFinite(Date.parse(cfg.openedAt)) || Date.parse(cfg.openedAt) > Date.parse(cfg.cutoff))) return false;
   try {
     const rules = automatedRules(cfg.kind, cfg);

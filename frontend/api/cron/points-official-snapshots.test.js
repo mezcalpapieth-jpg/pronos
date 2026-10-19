@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
 import { runOfficialSnapshots, authorizedOfficialSnapshotRequest } from './points-official-snapshots.js';
-import { automaticConfig, RT_OUTCOMES } from '../_lib/automated-market-rules.js';
+import { automaticConfig, RT_OUTCOMES, RT_THRESHOLD_KIND, RT_THRESHOLD_FILMS } from '../_lib/automated-market-rules.js';
 import { readCutoffResult } from '../_lib/official-cutoff-snapshots.js';
 import { cancelPointsMarket } from '../_lib/points-cancel-market.js';
 
@@ -87,4 +87,31 @@ test('cron requires its bearer secret in production and is actually scheduled ev
     if (oldSecret == null) delete process.env.CRON_SECRET; else process.env.CRON_SECRET = oldSecret;
     if (oldEnv == null) delete process.env.VERCEL_ENV; else process.env.VERCEL_ENV = oldEnv;
   }
+});
+
+
+test('Sunday threshold market is selected by the cron and replays its closing score after later updates', async () => {
+  // No connection string: this disposable PGlite database lives entirely in memory.
+  const localDb = new PGlite();
+  const thresholdCfg = automaticConfig(RT_THRESHOLD_KIND, {
+    cutoff: '2026-10-26T05:59:00Z', film: 'you-can-see-everything-2026', threshold: 95,
+  });
+  const url = RT_THRESHOLD_FILMS[thresholdCfg.film].url;
+  const thresholdPayload = { state: 'scored', score: 95, reviewCount: 130, evidenceUrl: url,
+    documents: [{ url, sha256: 'a'.repeat(64) }],
+    startedAt: '2026-10-26T05:58:05Z', capturedAt: '2026-10-26T05:58:08Z' };
+  try {
+    await localDb.exec(`CREATE TABLE points_markets (id INTEGER PRIMARY KEY, parent_id INTEGER,
+      status TEXT, resolver_type TEXT, resolver_config JSONB, outcomes JSONB); ${ddl};`);
+    await localDb.query(`INSERT INTO points_markets (id,status,resolver_type,resolver_config,outcomes)
+      VALUES (2,'active','api_chart',$1::jsonb,$2::jsonb)`, [JSON.stringify(thresholdCfg), JSON.stringify(['Sí', 'No'])]);
+    const report = await runOfficialSnapshots({}, { sql: localDb, ensureSchema: async () => {},
+      clock: () => new Date(thresholdPayload.startedAt),
+      collect: async config => { assert.deepEqual(config, thresholdCfg); return { payload: thresholdPayload, archive: [] }; },
+    });
+    assert.deepEqual(report.written, [2]);
+    const result = await readCutoffResult(thresholdCfg, ['Sí', 'No'], { sql: localDb, marketId: 2, now: new Date('2026-10-28') });
+    assert.equal(result.winningIdx, 1);
+    assert.equal(result.resolverInfo.finalScore, 'Tomatometer 95% · Rotten Tomatoes · 130 críticas');
+  } finally { await localDb.close(); }
 });
