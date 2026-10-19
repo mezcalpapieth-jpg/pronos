@@ -1,5 +1,8 @@
 import { SEPOLIA_TOURNAMENT_JOIN_SCHEMA } from './sepolia-tournament-join-store.js';
 import { SEPOLIA_TOURNAMENT_CLOSE_SCHEMA } from './sepolia-tournament-close-store.js';
+import { SEPOLIA_TOURNAMENT_PROVISIONAL_SCHEMA } from './sepolia-tournament-provisional-store.js';
+import { SEPOLIA_TOURNAMENT_AUTOMATION_SCHEMA } from './sepolia-tournament-automation-store.js';
+import { SEPOLIA_TOURNAMENT_REWARD_SCHEMA } from './sepolia-tournament-reward-store.js';
 // Explicit preview migration, never part of protocol/Points cold starts.
 export const SEPOLIA_TOURNAMENT_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS sepolia_tournament_cycles (
@@ -38,6 +41,9 @@ export const SEPOLIA_TOURNAMENT_SCHEMA = [
     ON sepolia_tournament_mints(cycle_id, batch_index) WHERE status <> 'reverted'`,
   ...SEPOLIA_TOURNAMENT_JOIN_SCHEMA,
   ...SEPOLIA_TOURNAMENT_CLOSE_SCHEMA,
+  ...SEPOLIA_TOURNAMENT_PROVISIONAL_SCHEMA,
+  ...SEPOLIA_TOURNAMENT_AUTOMATION_SCHEMA,
+  ...SEPOLIA_TOURNAMENT_REWARD_SCHEMA,
 ];
 
 export function tournamentStore(sql) {

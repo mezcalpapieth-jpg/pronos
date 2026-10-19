@@ -91,6 +91,20 @@ export function buildTournamentFinalScores({ artifact, reviewedSnapshotHash, con
     || snapshot.lateRegistrations.some(r=>!artifact.lateJoinReferences.some(ref=>planHash(ref)===planHash({
       txHash:r.txHash,username:r.username,wallet:r.wallet,suborg:r.suborg,openingUnits:r.openingUnits,planHash:r.planHash,
     })))) fail('incomplete_late_join_references');
+  const rows=buildSeasonScoreRows({artifact,context,plan,users,window,penaltyAt:plan.endsAt});
+  const rules=sepoliaSeasonRules(plan.allocationUnits);
+  const result={version:1,mode:'final',status:'closed',readyForRewards:false,cycleId:plan.cycleId,label:plan.label,
+    chainId:plan.deployment.chainId,token:plan.deployment.token,planHash:snapshot.reviewedPlanHash,
+    snapshotHash,contextHash:reviewedContextHash,registryHash:artifact.registryHash,
+    lateJoinsHash:seasonLateJoinsHash(artifact.lateJoinReferences),rulesHash:planHash(rules),rules,
+    window,asOf:snapshot.asOf,cutoffBoundary:artifact.cutoffBoundary,totalParticipants:rows.length,rows};
+  return {...result,resultHash:planHash(result)};
+}
+
+// Both provisional and frozen results use the same Points rules. Only the
+// inactivity clock differs: completed days at capture versus the final cutoff.
+export function buildSeasonScoreRows({artifact,context,plan,users,window,penaltyAt}) {
+  const snapshot=artifact.snapshot;
   const scores=buildTournamentShadowScores(snapshot);
   const observed=structuredClone(artifact.scores);
   if (observed.transferReconciliation?.historicalBalancesVerified!==true) fail('verified_transfer_capture_required');
@@ -141,8 +155,8 @@ export function buildTournamentFinalScores({ artifact, reviewedSnapshotHash, con
     const effectiveStart=new Date(Math.max(Date.parse(meta.createdAt),Date.parse(user.timestamp||plan.startsAt))).toISOString();
     // Points counts the operation-close day inclusively. Convert the plan's
     // exclusive boundary to its last included instant before using that rule.
-    const penalty=buildPenalty({user:{created_at:effectiveStart},activity:{active_day_keys:[...state.days]},now:new Date(plan.endsAt),
-      window:{...window,operationCloseAt:new Date(end-1).toISOString()}});
+    const penalty=buildPenalty({user:{created_at:effectiveStart},activity:{active_day_keys:[...state.days]},now:new Date(penaltyAt),
+      window:{...window,operationCloseAt:new Date(Date.parse(plan.endsAt)-1).toISOString()}});
     const pnl=amount(row.pnlUnits), bonus=conviction.bonusByUser.get(row.username)||0;
     const stats=conviction.statsByUser.get(row.username)||{};
     return {username:row.username,createdAt:meta.createdAt,balance:roundTournamentAmount(amount(row.actualCashUnits)),
@@ -157,13 +171,7 @@ export function buildTournamentFinalScores({ artifact, reviewedSnapshotHash, con
       ...penalty,qualifyingMarkets:state.markets.size,qualified:state.markets.size>=TOURNAMENT_QUALIFYING_MARKETS,
       totalActions:state.actions,buyCount:state.buys,liquidityReward:0,parlayPnl:0,parlayTickets:0,parlayWins:0,stockPnl:0};
   }).sort(compareTournamentRows).map((r,i)=>({...r,rank:i+1}));
-  const rules=sepoliaSeasonRules(plan.allocationUnits);
-  const result={version:1,mode:'final',status:'closed',readyForRewards:false,cycleId:plan.cycleId,label:plan.label,
-    chainId:plan.deployment.chainId,token:plan.deployment.token,planHash:snapshot.reviewedPlanHash,
-    snapshotHash,contextHash:reviewedContextHash,registryHash:artifact.registryHash,
-    lateJoinsHash:seasonLateJoinsHash(artifact.lateJoinReferences),rulesHash:planHash(rules),rules,
-    window,asOf:snapshot.asOf,cutoffBoundary:artifact.cutoffBoundary,totalParticipants:rows.length,rows};
-  return {...result,resultHash:planHash(result)};
+  return rows;
 }
 
 export async function verifySeasonCutoff(result, provider) {

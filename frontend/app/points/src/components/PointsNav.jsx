@@ -492,9 +492,9 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
               </>
             )}
             {/* Public — see the desktop nav for why this one isn't gated. */}
-            {execution.mode !== 'onchain' && <Link to="/torneo" onClick={closeMobileMenu} className="points-mobile-menu-row">
+            {(execution.mode !== 'onchain' || execution.tournamentSeason) && <Link to="/torneo" onClick={closeMobileMenu} className="points-mobile-menu-row">
               <span>{t('points.nav.tournament')}</span>
-              {tournamentTaskCount > 0 && (
+              {execution.mode !== 'onchain' && tournamentTaskCount > 0 && (
                 <span className="points-mobile-menu-badge">
                   {tournamentTaskCount > 99 ? '99+' : tournamentTaskCount}
                 </span>
@@ -584,9 +584,9 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
             visitor with no way to find out what they'd be playing for.
             Portfolio and Earn stay gated: both are personal and require
             an account to do anything with. */}
-        {execution.mode !== 'onchain' && <Link to="/torneo" style={navLinkStyle} className="points-nav-link-alert">
+        {(execution.mode !== 'onchain' || execution.tournamentSeason) && <Link to="/torneo" style={navLinkStyle} className="points-nav-link-alert">
           <span>{t('points.nav.tournament')}</span>
-          {tournamentTaskCount > 0 && (
+          {execution.mode !== 'onchain' && tournamentTaskCount > 0 && (
             <span className="points-nav-alert-badge">
               {tournamentTaskCount > 99 ? '99+' : tournamentTaskCount}
             </span>

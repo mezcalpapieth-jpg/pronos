@@ -150,7 +150,7 @@ test('local PostgreSQL: immutable snapshots, fenced outbox, crash recovery and c
       now: new Date('2026-11-01'), sign: async tx => { signedCount++; return owner.signTransaction(tx); },
       verifyDeployment: async (_plan, { expectedSupply }) => assert.equal(supply.toString(), expectedSupply), ...extra });
     const reset = async () => {
-      await db.exec('TRUNCATE sepolia_tournament_closures, sepolia_tournament_joins, sepolia_tournament_mints, sepolia_tournament_lock, sepolia_tournament_cycles');
+      await db.exec('TRUNCATE sepolia_tournament_eligibility, sepolia_standings_checkpoints, sepolia_standings_jobs, sepolia_tournament_standings, sepolia_tournament_closures, sepolia_tournament_joins, sepolia_tournament_mints, sepolia_tournament_lock, sepolia_tournament_cycles');
       await store.register(p, hash);
       supply = 0n; nonce = 0; signedCount = 0; broadcasts = 0; timeout = false;
       sendMode = 'mine'; receiptStatus = 1; receipts.clear();

@@ -46,8 +46,9 @@ const sizeLimit = error => !/rate|429|timeout|network|unauthorized|forbidden/i.t
 // hash. A resume revalidates that hash against the live RPC before cache use.
 // Private cache integrity detects corruption, not a malicious local operator.
 export async function captureTournamentSnapshot(input, { provider, readIndexerCoverage,
-  checkpointDirectory, maxRequests=500 }={}) {
-  if (!checkpointDirectory || !Number.isSafeInteger(maxRequests) || maxRequests<1 || maxRequests>5000) fail('invalid_capture_options');
+  checkpointDirectory, checkpointStore, maxRequests=500, deadline=Infinity }={}) {
+  if ((!checkpointDirectory && !checkpointStore) || !Number.isSafeInteger(maxRequests) || maxRequests<1 || maxRequests>5000) fail('invalid_capture_options');
+  if(checkpointStore && (typeof checkpointStore.read!=='function' || typeof checkpointStore.create!=='function'))fail('invalid_capture_options');
   const {plan,digest}=tournamentRegistrations(input);
   const registry=tournamentMarketRegistry(input.registry);
   if (planHash(registry)!==input.reviewedRegistryHash || registry.planHash!==digest
@@ -62,6 +63,7 @@ export async function captureTournamentSnapshot(input, { provider, readIndexerCo
     fromBlock:input.fromBlock,asOfBlock:input.asOfBlock,
     funding:input.funding.map(r=>({batchIndex:integer(r.batchIndex),txHash:hash(r.txHash)})).sort((a,b)=>a.batchIndex-b.batchIndex),
     limits:TOURNAMENT_CAPTURE_LIMITS,addressBatchSize:GROUP,pageBlocks:PAGE,logSplitThreshold:LOG_CAP,logPageFormat:1};
+  if (checkpointStore) return captureWithStore();
   await privateDirectory(checkpointDirectory);
   const lock=join(checkpointDirectory,'capture.lock');
   let lease;
@@ -71,8 +73,30 @@ export async function captureTournamentSnapshot(input, { provider, readIndexerCo
   try {
     try {await lease.writeFile(JSON.stringify({pid:process.pid,token})+'\n');lockWritten=true;}
     finally {await lease.close();}
-    const manifestPath=join(checkpointDirectory,'manifest.json');
-    let manifest=await readPrivate(manifestPath);
+    await privateDirectory(join(checkpointDirectory,'entries'));
+    checkpointStore={
+      read: async key=>{
+        if(key.startsWith('entries/'))await privateDirectory(join(checkpointDirectory,'entries',key.split('/')[1]));
+        return readPrivate(join(checkpointDirectory,key));
+      },
+      create: async(key,value)=>{
+        const parts=key.split('/');parts.pop();
+        if(parts.length)await privateDirectory(join(checkpointDirectory,...parts));
+        return createJson(join(checkpointDirectory,key),value);
+      },
+    };
+    return await captureWithStore();
+  } finally {
+    if(!lockWritten) {await unlink(lock);}
+    else {
+      const current=await readPrivate(lock);
+      if(current?.token===token)await unlink(lock);
+    }
+  }
+  // Durable adapters provide the same immutable read/create contract and own
+  // their fenced lease. The canonical checks below are shared with file resume.
+  async function captureWithStore() {
+    let manifest=await checkpointStore.read('manifest.json');
     if (manifest) {
       const {manifestHash,...body}=manifest;
       if (manifestHash!==planHash(body) || planHash(manifest.identity)!==planHash(identity)) fail('capture_context_mismatch');
@@ -86,18 +110,17 @@ export async function captureTournamentSnapshot(input, { provider, readIndexerCo
     if (manifest && (manifest.anchor.blockNumber!==anchor.blockNumber || manifest.anchor.blockHash!==anchor.blockHash)) fail('capture_anchor_reorg');
     if (!manifest) {
       const body={identity,anchor};manifest={...body,manifestHash:planHash(body)};
-      await createJson(manifestPath,manifest);
+      await checkpointStore.create('manifest.json',manifest);
     }
-    const entries=join(checkpointDirectory,'entries');await privateDirectory(entries);
     const stats={newReads:0,cacheHits:0}, pause=new Error('capture_paused');
     async function live(read) {
-      if(stats.newReads>=maxRequests)throw pause;
+      if(stats.newReads>=maxRequests || Date.now()>=deadline)throw pause;
       stats.newReads++;return read();
     }
     async function cached(method,args,read) {
-      const key={method,args}, keyHash=planHash(key), shard=join(entries,keyHash.slice(0,2));
-      await privateDirectory(shard);
-      const path=join(shard,keyHash+'.json'), saved=await readPrivate(path);
+      if(Date.now()>=deadline)throw pause;
+      const key={method,args}, keyHash=planHash(key), path=`entries/${keyHash.slice(0,2)}/${keyHash}.json`;
+      const saved=await checkpointStore.read(path);
       if(saved) {
         const {responseHash,...body}=saved;
         if (body.manifestHash!==manifest.manifestHash || planHash(body.key)!==keyHash
@@ -107,7 +130,7 @@ export async function captureTournamentSnapshot(input, { provider, readIndexerCo
       const result=await read();
       if(result==null)fail('capture_rpc_missing_result');
       const body={manifestHash:manifest.manifestHash,key,result:json(result)};
-      await createJson(path,{...body,responseHash:planHash(body)});return body.result;
+      await checkpointStore.create(path,{...body,responseHash:planHash(body)});return body.result;
     }
     const groups=new Map();
     for(const factory of [plan.deployment.factoryV1,plan.deployment.factoryV2]) {
@@ -188,11 +211,5 @@ export async function captureTournamentSnapshot(input, { provider, readIndexerCo
     if(error===pause)return {status:'paused',...progress};
     if(error)throw error;
     return {status:'complete',...progress,artifact};
-  } finally {
-    if(!lockWritten) {await unlink(lock);}
-    else {
-    const current=await readPrivate(lock);
-    if(current?.token===token)await unlink(lock);
-    }
   }
 }

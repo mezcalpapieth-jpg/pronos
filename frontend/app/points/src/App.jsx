@@ -41,6 +41,7 @@ const PointsStocks = lazy(() => import('./pages/PointsStocks.jsx'));
 const PointsStockDetail = lazy(() => import('./pages/PointsStockDetail.jsx'));
 const StockLiveTicker = lazy(() => import('./components/StockLiveTicker.jsx'));
 const PointsTournament = lazy(() => import('./pages/PointsTournament.jsx'));
+const OnchainTournament = lazy(() => import('./pages/OnchainTournament.jsx'));
 const PointsEarn = lazy(() => import('./pages/PointsEarn.jsx'));
 const PointsDeveloper = lazy(() => import('./pages/PointsDeveloper.jsx'));
 const PointsSupport = lazy(() => import('./pages/PointsSupport.jsx'));
@@ -382,7 +383,7 @@ function Shell({ onOpenLogin, isAdmin }) {
   const execution = usePointsExecution();
   const path = location.pathname;
   const isHome = path === '/';
-  const pointsOnly = execution.mode === 'onchain' && (['/earn', '/torneo'].includes(path) || path === '/stocks' || path.startsWith('/stocks/'));
+  const pointsOnly = execution.mode === 'onchain' && (path === '/earn' || (path === '/torneo' && !execution.tournamentSeason) || path === '/stocks' || path.startsWith('/stocks/'));
 
   // CategoryBar is the universal browsing affordance — show it on home,
   // category pages, AND market detail so users can always jump to
@@ -428,7 +429,7 @@ function Shell({ onOpenLogin, isAdmin }) {
           <Route path="/portfolio" element={<PointsPortfolio />} />
           <Route path="/stocks" element={<PointsStocks />} />
           <Route path="/stocks/:ticker" element={<PointsStockDetail onOpenLogin={onOpenLogin} />} />
-          <Route path="/torneo" element={<PointsTournament />} />
+          <Route path="/torneo" element={execution.mode==='onchain'?<OnchainTournament/>:<PointsTournament />} />
           <Route path="/earn" element={<PointsEarn onOpenLogin={onOpenLogin} />} />
           <Route path="/developer" element={<PointsDeveloper onOpenLogin={onOpenLogin} />} />
           <Route path="/support" element={<PointsSupport onOpenLogin={onOpenLogin} />} />

@@ -278,7 +278,7 @@ test('Points admin can edit active market logos and repair active parallel marke
   assert.match(source, /Reserva No/);
   assert.match(source, /Más reserva No = Sí más alto/);
   assert.match(source, /parallelLegs:\s*parallelLegPatches/);
-  assert.match(apiSource, /adminEditMarket\(\{ marketId, question, startTime, endTime, category, imageUrl, outcomeImages, parallelLegs \}\)/);
+  assert.match(apiSource, /adminEditMarket\(\{ marketId, question, startTime, endTime, category, imageUrl, outcomeImages, parallelLegs, finalScore \}\)/);
   assert.match(apiSource, /imageUrl/);
   assert.match(apiSource, /outcomeImages/);
   assert.match(apiSource, /parallelLegs/);
