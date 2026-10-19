@@ -39,3 +39,14 @@ test('formats English series labels through the translation function', () => {
   assert.equal(formatSeriesScoreSummary(meta, { t }), 'Thunder leads 3-1');
   assert.equal(formatSeriesSubtitle(meta, { t }), 'Game 5 · Thunder leads 3-1');
 });
+
+
+test('incomplete series history displays only the game label', () => {
+  const meta = { gameNumber: 3, teamAWins: 1, teamBWins: 0, scoreComplete: false };
+  assert.equal(formatSeriesScoreSummary(meta), null);
+  assert.equal(formatSeriesSubtitle(meta), 'Juego 3');
+});
+
+test('missing score values do not become a fabricated 0-0 tie', () => {
+  assert.equal(formatSeriesScoreSummary({ teamAWins: null, teamBWins: null }), null);
+});

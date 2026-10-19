@@ -11,6 +11,7 @@ function teamName(team, fallback) {
 }
 
 function finiteWins(value) {
+  if (value == null || String(value).trim() === '') return null;
   const number = Number(value);
   return Number.isFinite(number) ? Math.max(0, number) : null;
 }
@@ -29,6 +30,7 @@ export function formatSeriesGameLabel(gameNumber, { t } = {}) {
 }
 
 export function formatSeriesScoreSummary(seriesMeta, { t } = {}) {
+  if (seriesMeta?.scoreComplete === false) return null;
   const a = finiteWins(seriesMeta?.teamAWins);
   const b = finiteWins(seriesMeta?.teamBWins);
   if (a == null || b == null) return seriesMeta?.summary || null;

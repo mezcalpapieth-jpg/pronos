@@ -302,14 +302,12 @@ function summarizeSeriesMarketRow(row, fallbackMeta, rawMeta = null) {
 function summarizePendingSeriesRow(row, fallbackMeta, rawMeta = null) {
   const outcomes = parseJsonb(row.outcomes, ['Sí', 'No']);
   const resolvedMeta = rawMeta || publicSeriesMetaFromRow(row, { requireGameNumber: false });
-  const endMs = row.end_time ? new Date(row.end_time).getTime() : NaN;
-  const isPast = Number.isFinite(endMs) && endMs < Date.now();
   return {
     id: null,
     pendingId: row.pending_id || row.id || null,
     question: row.question,
     outcomes,
-    status: isPast ? 'resolved' : (row.status || 'pending'),
+    status: 'pending',
     outcome: null,
     resolvedAt: null,
     finalScore: null,
@@ -360,6 +358,8 @@ async function loadSeriesDetail(sqlClient, currentRow, currentMeta) {
            p.source_data AS pending_source_data
     FROM points_pending_markets p
     WHERE p.approved_market_id IS NULL
+      AND p.status = 'pending'
+      AND p.end_time > NOW()
       AND p.resolver_type = 'sports_api'
       AND p.resolver_config->>'source' = 'espn'
       AND p.resolver_config->>'leaguePath' = ${currentMeta.leaguePath}
@@ -382,7 +382,7 @@ async function loadSeriesDetail(sqlClient, currentRow, currentMeta) {
   const seriesItems = [...siblings, ...pendingSiblings];
   if (seriesItems.length === 0) return null;
   if (!hasExplicitGameNumber) return null;
-  const detail = buildSeriesDetail(currentMeta, seriesItems);
+  const detail = buildSeriesDetail(currentMeta, seriesItems, { currentMarketId: currentRow.id });
   if (!detail) return null;
   const currentItem = detail.sequence?.find(item => Number(item.id) === Number(currentRow.id));
   const gameNumber = currentItem?.gameNumber || detail.gameNumber || currentMeta.gameNumber || null;
