@@ -12,7 +12,7 @@ async function main() {
   const [command = 'help', ...argv] = process.argv.slice(2);
   const allowed = new Set(['apply', 'expected-host', 'deployment', 'previous-deployment', 'cycle-id',
     'label', 'starts-at', 'ends-at', 'allocation', 'liquidity-mxnp', 'max-total-mxnp', 'batch-size',
-    'out', 'plan', 'plan-hash', 'retry-reverted']);
+    'out', 'plan', 'plan-hash', 'retry-reverted', 'late-join-reserve-mxnp']);
   const flags = Object.fromEntries(argv.map(arg => {
     const match = arg.match(/^--([a-z-]+)(?:=(.*))?$/);
     if (!match || !allowed.has(match[1])) throw new Error('unknown_tournament_argument');
@@ -29,7 +29,7 @@ async function main() {
   schema    Print migration SQL; --apply installs it in the isolated preview DB.
   plan      --deployment=JSON --previous-deployment=JSON --cycle-id=slug --label=...
             --starts-at=ISO --ends-at=ISO --liquidity-mxnp=N --max-total-mxnp=N
-            [--allocation=500] [--batch-size=50] --out=/private/tmp/cycle.json
+            [--allocation=500] [--late-join-reserve-mxnp=N] [--batch-size=50] --out=/private/tmp/cycle.json
             Snapshot all users with a wallet and Turnkey suborg. Verify fresh stack.
   prepare   --plan=JSON --plan-hash=HASH [--apply] Record the immutable snapshot.
   fund      --cycle-id=slug --plan-hash=HASH [--apply] Send/reconcile ONE batch.
@@ -73,6 +73,7 @@ async function main() {
         const plan = buildTournamentPlan({ deployment: read(flags.deployment), previousDeployment, users,
           cycleId: flags['cycle-id'], label: flags.label, startsAt: flags['starts-at'], endsAt: flags['ends-at'],
           allocation: flags.allocation || '500', liquidityMxnp: flags['liquidity-mxnp'], maxTotalMxnp: flags['max-total-mxnp'],
+          lateJoinReserveMxnp: flags['late-join-reserve-mxnp'] || '0',
           batchSize: Number(flags['batch-size'] || 50) });
         await verifyTournamentDeployment(plan, { provider });
         fs.writeFileSync(flags.out, `${JSON.stringify(plan, null, 2)}\n`, { mode: 0o600, flag: 'wx' });

@@ -43,7 +43,7 @@ export function normalizeDeployment(input) {
 // A sorted, immutable snapshot. Neither existing Points balances nor balances
 // of the previous ERC20 determine the new cycle's opening allocation.
 export function buildTournamentPlan({ deployment, previousDeployment, users, cycleId, label,
-  startsAt, endsAt, allocation = '500', liquidityMxnp, maxTotalMxnp, batchSize = 50 }) {
+  startsAt, endsAt, allocation = '500', liquidityMxnp, maxTotalMxnp, lateJoinReserveMxnp = '0', batchSize = 50 }) {
   const next = normalizeDeployment(deployment);
   const previous = normalizeDeployment(previousDeployment);
   if (ADDRESS_FIELDS.slice(0, 6).some(k => Object.values(previous).includes(next[k]))) fail('fresh_deployment_required');
@@ -54,6 +54,8 @@ export function buildTournamentPlan({ deployment, previousDeployment, users, cyc
   const grant = BigInt(parseFixedUnits(allocation));
   const liquidity = BigInt(parseFixedUnits(liquidityMxnp));
   const cap = BigInt(parseFixedUnits(maxTotalMxnp));
+  const reserve = BigInt(parseFixedUnits(lateJoinReserveMxnp));
+  if (reserve < 0n || (reserve > 0n && reserve < grant)) fail('late_join_reserve_too_small');
   if (grant <= 0n || liquidity <= 0n || cap <= 0n) fail('positive_allocation_liquidity_and_cap_required');
   const usernames = new Set(), wallets = new Set(), suborgs = new Set(), skipped = [];
   const recipients = [];
@@ -74,17 +76,19 @@ export function buildTournamentPlan({ deployment, previousDeployment, users, cyc
   recipients.sort((a, b) => a.username < b.username ? -1 : a.username > b.username ? 1 : 0);
   skipped.sort();
   const userUnits = grant * BigInt(recipients.length);
-  const totalUnits = userUnits + liquidity;
+  const totalUnits = userUnits + liquidity + reserve;
   if (totalUnits > cap) fail('cycle_issuance_cap_exceeded');
   const funding = [...recipients, { username: null, wallet: next.operations, suborg: null,
-    units: liquidity.toString(), kind: 'liquidity' }];
+    units: (liquidity + reserve).toString(), kind: 'liquidity' }];
   const batches = [];
   for (let i = 0; i < funding.length; i += batchSize) {
     const entries = funding.slice(i, i + batchSize);
     batches.push({ index: batches.length, recipients: entries,
       units: entries.reduce((sum, r) => sum + BigInt(r.units), 0n).toString() });
   }
-  return { version: 1, strategy: 'new_token_per_tournament', cycleId, label: String(label).trim(),
+  return { version: reserve > 0n ? 2 : 1,
+    ...(reserve > 0n ? { lateJoinReserveUnits: reserve.toString(), lateJoining: 'open_during_cycle' } : {}),
+    strategy: 'new_token_per_tournament', cycleId, label: String(label).trim(),
     startsAt: start.toISOString(), endsAt: end.toISOString(), deployment: next, previousDeployment: previous,
     allocationUnits: grant.toString(), liquidityUnits: liquidity.toString(), maxTotalUnits: cap.toString(),
     userCount: recipients.length, skipped, totalUnits: totalUnits.toString(), batches };
@@ -96,6 +100,7 @@ export function summarizeTournament(plan) {
     users: plan.userCount, skipped: plan.skipped.length, batches: plan.batches.length,
     allocationMxnp: formatFixedUnits(plan.allocationUnits), liquidityMxnp: formatFixedUnits(plan.liquidityUnits),
     totalMxnp: formatFixedUnits(plan.totalUnits), capMxnp: formatFixedUnits(plan.maxTotalUnits),
+    lateJoinReserveMxnp: formatFixedUnits(plan.lateJoinReserveUnits || '0'),
     authorization: 'One owner-approved authorization for the new router per user; previous grants are not copied.',
     gas: 'Existing automatic, on-demand gas funding; no per-user ETH distribution.' };
 }
@@ -107,6 +112,7 @@ export function validateTournamentPlan(plan) {
   const rebuilt = buildTournamentPlan({ deployment: plan.deployment, previousDeployment: plan.previousDeployment,
     users: rows, cycleId: plan.cycleId, label: plan.label, startsAt: plan.startsAt, endsAt: plan.endsAt,
     allocation: formatFixedUnits(plan.allocationUnits), liquidityMxnp: formatFixedUnits(plan.liquidityUnits),
+    lateJoinReserveMxnp: formatFixedUnits(plan.lateJoinReserveUnits || '0'),
     maxTotalMxnp: formatFixedUnits(plan.maxTotalUnits), batchSize: plan.batches[0].recipients.length });
   if (planHash(rebuilt) !== planHash(plan)) fail('invalid_or_modified_tournament_plan');
   return plan;
@@ -115,6 +121,7 @@ export function validateTournamentPlan(plan) {
 // Verify every immutable binding and a zero supply before accepting a fresh
 // deployment. Rechecked during resume to detect ownership or code changes.
 export async function verifyTournamentDeployment(plan, { provider, expectedSupply = '0',
+  allowMarkets = false,
   contractAt = (a, abi) => new ethers.Contract(a, abi, provider) }) {
   const d = plan.deployment;
   if ((await provider.getNetwork()).chainId !== TOURNAMENT_CHAIN_ID) fail('rpc_chain_mismatch');
@@ -135,7 +142,7 @@ export async function verifyTournamentDeployment(plan, { provider, expectedSuppl
       factory.collateral(), factory.token(), factory.tradingRouter(), factory.marketCreator(), factory.owner(), factory.marketCount()]);
     if (address(collateral) !== d.token || address(shares) !== d[`share${version}`]
       || address(router) !== d.router || address(creator) !== d.operations || address(factoryOwner) !== d.owner
-      || !ethers.BigNumber.from(count).isZero()) fail('factory_binding_or_activity_mismatch');
+      || (!allowMarkets && !ethers.BigNumber.from(count).isZero())) fail('factory_binding_or_activity_mismatch');
     const share = contractAt(shares, ['function owner() view returns(address)']);
     if (address(await share.owner()) !== d[`factory${version}`]) fail('share_owner_mismatch');
   }
@@ -159,5 +166,6 @@ export function tournamentRuntimeEnv(plan) {
     FACTORY_ADDRESS: d.factoryV1, PRONOS_FACTORY_ADDRESS: d.factoryV1,
     FACTORY_V2_ADDRESS: d.factoryV2, PRONOS_FACTORY_V2_ADDRESS: d.factoryV2,
     VITE_PRONOS_ARB_SEPOLIA_FACTORY: d.factoryV1, VITE_PRONOS_ARB_SEPOLIA_FACTORY_V2: d.factoryV2,
-    VITE_PRONOS_ARB_SEPOLIA_TOKEN: d.shareV1, VITE_PRONOS_ARB_SEPOLIA_TOKEN_V2: d.shareV2 };
+    VITE_PRONOS_ARB_SEPOLIA_TOKEN: d.shareV1, VITE_PRONOS_ARB_SEPOLIA_TOKEN_V2: d.shareV2,
+    ONCHAIN_TOURNAMENT_LATE_JOIN_ENABLED: 'false' };
 }

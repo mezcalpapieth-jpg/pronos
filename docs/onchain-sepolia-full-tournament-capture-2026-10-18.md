@@ -1,6 +1,6 @@
 # Resumable full-tournament shadow capture
 
-Implemented on `onchain-sepolia` after the snapshot adapter release `89450fd981bdfcae56710f9454a7944dc82eb679`. It changes only operator capture and its tests. Exact release verification is recorded separately in the roadmap. Pointbreak, production, the current token/cycle, trading contracts and APIs remain unchanged. No ETH, transaction, migration, mint, funding or activation is needed to implement or test this tool.
+Committed/pushed on `onchain-sepolia` as `f27acc1d2050ddf1fd30b361bbd8e2f8050ed163`; exact-source Preview `dpl_BZFGSbikq8ertiwgNSRTCjUGzuag` is READY with passing read-only readiness. See the [release verification](./onchain-sepolia-capture-preview-verification-2026-10-18.json). Pointbreak, production, the current token/cycle, trading contracts and APIs remain unchanged. No ETH, transaction, migration, mint, funding or activation was used for this release. The [late-joining/lifecycle follow-up](./onchain-sepolia-late-joining-2026-10-18.md) is included in the requested 2026-10-19 Preview code release; future-cycle activation remains disabled.
 
 ## Capture and verification
 
@@ -12,7 +12,7 @@ Successful RPC responses and decisions to split oversized log queries are saved 
 
 Logs use contiguous fixed 2,000-block pages shared by groups of up to 25 pools from the same factory. Boundary pages can include extra blocks, but only each pool's requested creation-to-cutoff interval enters the canonical builder. Capped parent responses are discarded; only complete child results feed scoring. The RPC must provide complete log responses below its advertised limits: silent truncation below the threshold cannot be detected. Choose a provider whose documented limits are compatible with this threshold, or change and review the fixed capture configuration before use.
 
-The live cutoff hash commits to its ancestors. Under that unchanged anchor, saved per-block reads are reused, including the builder's final block checks; they are not independently re-fetched from RPC on every resume. This is a trusted-RPC/private-operator-cache workflow, not a consensus or receipt-trie proof. The canonical builder still verifies receipt/log membership, timestamps, historical marks and all existing accounting constraints. Unsupported cancellations, disputes, corrections or refunds still stop the capture.
+The live cutoff hash commits to its ancestors. Under that unchanged anchor, saved per-block reads are reused, including the builder's final block checks; they are not independently re-fetched from RPC on every resume. This is a trusted-RPC/private-operator-cache workflow, not a consensus or receipt-trie proof. The canonical builder still verifies receipt/log membership, timestamps, historical marks and all existing accounting constraints. The deployed release refuses cancellations, disputes, corrections and refunds. The follow-up supports validated refunds/corrected resolutions and cleared disputes, while refusing open disputes or inconsistent lifecycle evidence.
 
 | Limit | Bounded snapshot command | Resumable capture command |
 | --- | --- | --- |
@@ -22,7 +22,7 @@ The live cutoff hash commits to its ancestors. Under that unchanged anchor, save
 | Logical builder read budget | 10,000 | 25,000,000 |
 | New data reads per invocation | No resumable quota | Default 500; configurable 1–5,000 |
 
-Successful or paused runs also perform five unmetered chain/cutoff control checks. Requests rejected by a provider consume the data-read quota too. A combined page is limited to 50,000 logs and a receipt to 50,000 logs; these bounds fail rather than truncate. Capturing a full month is supported within the limits, but the maximum block/market/log combination is a hard ceiling, not a measured performance guarantee. Repeated runs traverse saved data again, so local disk reads and scoring cost grow with history even when no new RPC reads are needed.
+Successful or paused runs also perform five unmetered chain/cutoff control checks. The follow-up adds three read-only cutoff controls before querying registrations, binds late-join audit references into the manifest and refuses unresolved join payments; earlier checkpoint formats require a new directory. Requests rejected by a provider consume the data-read quota too. A combined page is limited to 50,000 logs and a receipt to 50,000 logs; these bounds fail rather than truncate. Capturing a full month is supported within the limits, but the maximum block/market/log combination is a hard ceiling, not a measured performance guarantee. Repeated runs traverse saved data again, so local disk reads and scoring cost grow with history even when no new RPC reads are needed.
 
 ## Operator command for a future funded cycle
 
@@ -53,4 +53,4 @@ All **55 focused tests passed without skips**, including the local PostgreSQL fu
 
 Scale fixtures separately exercise a month-length 10,300,100-block cutoff across both pool types, and 600 registered users with 102 markets (101 binary plus one multi-outcome). These use simulated canonical RPC data with real ABI encoding. They are not a live tournament or a 500,000-event stress test.
 
-Next: late-registration eligibility and issuance limits, cancellation/refund/correction accounting and transfer reconciliation; then post-end settlement, archived-cycle routing/presentation and independently reviewed reward eligibility. Database persistence for operational registrations/snapshots remains separate. Capture does not publish a leaderboard or authorize payouts.
+Late-registration eligibility/issuance limits and cancellation/refund/correction shadow accounting are implemented in the follow-up. Remaining work: review/release that continuation, general transfer reconciliation, post-end settlement, archived-cycle routing/presentation and independently reviewed reward eligibility. Live future-cycle deployment/funding/migrations remain deferred. Capture does not publish a leaderboard or authorize payouts.

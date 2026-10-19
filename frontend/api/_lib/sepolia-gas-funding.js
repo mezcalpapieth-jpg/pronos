@@ -25,7 +25,7 @@ async function confirmTransfer(entry, { provider, store }) {
 }
 
 export async function ensureSepoliaGas({ ownerAddr, suborgId, gasUnits, settings = sepoliaGasSettings(),
-  provider, store, sign, authorize, feeQuote = onchainFeeData }) {
+  provider, store, sign, authorize, activity, feeQuote = onchainFeeData }) {
   if (!settings.enabled) return { funded: false, enabled: false };
   if (!settings.configured) throw gasError();
   const owner = ethers.utils.getAddress(ownerAddr).toLowerCase();
@@ -34,11 +34,19 @@ export async function ensureSepoliaGas({ ownerAddr, suborgId, gasUnits, settings
   if (network.chainId !== GAS_CHAIN_ID || !fees.maxFeePerGas?.gt(0)
     || fees.maxFeePerGas.gt(settings.maxFeePerGas)) throw gasError();
   const required = fees.maxFeePerGas.mul(gasUnits).mul(125).div(100);
-  const minimum = required.gt(settings.minimum) ? required : settings.minimum;
+  let minimum = required.gt(settings.minimum) ? required : settings.minimum;
   // Existing funded wallets can trade even if the funding DB/provider signer
   // is unavailable. No transfer or funding authorization is necessary here.
   if ((await provider.getBalance(owner)).gte(minimum)) return { funded: false, enabled: true };
   await authorize(); // Account, live owner grant and actual trade eligibility.
+  // Only server-verified, confirmed economic events unlock the normal float.
+  // A new wallet gets enough for this trade/approvals, with a lifetime ceiling
+  // until it demonstrates activity. Requests and failed trades do not count.
+  const active = await activity();
+  if (typeof active !== 'boolean') throw gasError();
+  const target = active ? settings.target : (required.gt(settings.starterTarget) ? required : settings.starterTarget);
+  minimum = active ? minimum : required;
+  if (target.gt(settings.target) || (!active && target.gt(settings.starterLifetime))) throw gasError();
   if (await provider.getCode(owner) !== '0x') throw gasError();
   const token = randomUUID();
   if (!await store.acquire(settings.funder, token)) throw gasError('gas_funding_pending');
@@ -47,7 +55,7 @@ export async function ensureSepoliaGas({ ownerAddr, suborgId, gasUnits, settings
     if (pending) await confirmTransfer(pending, { provider, store });
     const balance = await provider.getBalance(owner);
     if (balance.gte(minimum)) return { funded: false, enabled: true };
-    const value = settings.target.sub(balance);
+    const value = target.sub(balance);
     const [latestNonce, pendingNonce] = await Promise.all([
       provider.getTransactionCount(settings.funder, 'latest'), provider.getTransactionCount(settings.funder, 'pending'),
     ]);
@@ -74,10 +82,11 @@ export async function ensureSepoliaGas({ ownerAddr, suborgId, gasUnits, settings
     const entry = { tx_hash: ethers.utils.keccak256(signed), signed_tx: signed, nonce: latestNonce,
       funder_address: settings.funder, wallet_address: owner, suborg_id: suborgId,
       signer_key_hash: settings.signerKeyHash,
+      starter: !active,
       amount_wei: value.toString(), max_cost_wei: maxCost.toString() };
     if (!await store.prepare(entry, token, settings)) throw gasError('gas_funding_limit');
     await confirmTransfer(entry, { provider, store });
-    return { funded: true, enabled: true, txHash: entry.tx_hash };
+    return { funded: true, enabled: true, tier: active ? 'active' : 'starter', txHash: entry.tx_hash };
   } finally {
     await store.release(token);
   }

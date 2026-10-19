@@ -18,6 +18,7 @@
  * /api/points/buy.js — completely separate ledger.
  */
 import { neon } from '@neondatabase/serverless';
+import { prepareTournamentJoin } from '../_lib/sepolia-tournament-user-join.js';
 import { applyCors } from '../_lib/cors.js';
 import { requireSession } from '../_lib/session.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
@@ -140,6 +141,10 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'wallet_not_found' });
     }
 
+    const registration = await prepareTournamentJoin(session.sub);
+    if (!['disabled','registered'].includes(registration.status)) {
+      return res.status(409).json({error:'tournament_join_pending'});
+    }
     const result = await buyOnChain({
       suborgId: session.sub,
       ownerAddr,

@@ -34,6 +34,8 @@ export function sepoliaGasSettings(env = process.env) {
     signerKeyHash: createHash('sha256').update(env.TURNKEY_API_PUBLIC_KEY || '').digest('hex'),
     target: ethers.utils.parseEther('0.0005'),
     minimum: ethers.utils.parseEther('0.0002'),
+    starterTarget: ethers.utils.parseEther('0.00005'),
+    starterLifetime: ethers.utils.parseEther('0.0002'),
     walletDaily: ethers.utils.parseEther('0.002'),
     globalDaily: ethers.utils.parseEther('0.1'),
     reserve: ethers.utils.parseEther('0.01'),

@@ -64,15 +64,16 @@ export function useExecutionBalance(requestedMode) {
   const mode = requestedMode || execution.mode;
   const { user, authenticated } = usePointsAuth();
   const [state, setState] = useState({ owner: null, balance: null, loading: true, error: null });
-  const owner = user?.walletAddress || user?.username || null;
+  const owner = user ? `${user.suborgId || ''}:${user.walletAddress || ''}:${user.username || ''}` : null;
   useEffect(() => {
     if (mode !== 'onchain' || !authenticated) return undefined;
     let canceled = false;
     let sequence = 0;
+    const readBalance = pointsExecution.createBalanceReader();
     async function load() {
       const current = ++sequence;
       try {
-        const result = await pointsExecution.balance();
+        const result = await readBalance();
         if (!canceled && current === sequence) setState({ owner, balance: Number(result.balance), loading: false, error: null });
       } catch (error) {
         if (!canceled && current === sequence) setState({ owner, balance: null, loading: false, error: publicErrorMessage(error) });

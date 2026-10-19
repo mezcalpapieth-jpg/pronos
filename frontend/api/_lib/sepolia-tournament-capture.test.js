@@ -94,9 +94,10 @@ test('600 registered users and 101 binary markets fit the full profile and share
   assert.ok(result.artifact.scores.rows.every(r=>r.equityUnits==='500000000'));
 }));
 
-test('changed review, funding, cutoff or checkpoint contents cannot reuse captured responses',async()=>checkpoint(async root=>{
+test('changed review, funding, late joins, cutoff or checkpoint contents cannot reuse captured responses',async()=>checkpoint(async root=>{
   const f=fixture();assert.equal((await run(f,root,1)).status,'paused');
-  for(const mutate of [f=>f.input.asOfBlock=199,f=>f.input.funding[0].txHash=hash(900)]) {
+  for(const mutate of [f=>f.input.asOfBlock=199,f=>f.input.funding[0].txHash=hash(900),
+    f=>f.input.lateJoins=[{txHash:hash(750),wallet:addr(31)}]]) {
     const other=fixture();mutate(other);await assert.rejects(run(other,root),/capture_context_mismatch/);
   }
   const entry=(await files(join(root,'entries')))[0], body=JSON.parse(await readFile(entry,'utf8'));

@@ -58,6 +58,7 @@ export async function captureTournamentSnapshot(input, { provider, readIndexerCo
     || registry.markets.length>TOURNAMENT_CAPTURE_LIMITS.maxMarkets) fail('snapshot_bounds_exceeded');
   if (!Array.isArray(input.funding)) fail('complete_funding_receipts_required');
   const identity={version:1,cycleId:plan.cycleId,planHash:digest,registryHash:input.reviewedRegistryHash,
+    lateJoins:input.lateJoins || [],
     fromBlock:input.fromBlock,asOfBlock:input.asOfBlock,
     funding:input.funding.map(r=>({batchIndex:integer(r.batchIndex),txHash:hash(r.txHash)})).sort((a,b)=>a.batchIndex-b.batchIndex),
     limits:TOURNAMENT_CAPTURE_LIMITS,addressBatchSize:GROUP,pageBlocks:PAGE,logSplitThreshold:LOG_CAP,logPageFormat:1};
@@ -81,6 +82,7 @@ export async function captureTournamentSnapshot(input, { provider, readIndexerCo
     const pinned=await provider.getBlock(input.asOfBlock);
     if (!pinned || pinned.number!==input.asOfBlock || tip-input.asOfBlock<1) fail('snapshot_needs_two_confirmations');
     const anchor={blockNumber:input.asOfBlock,blockHash:hash(pinned.hash)};
+    if (input.expectedCutoffHash && anchor.blockHash!==hash(input.expectedCutoffHash)) fail('capture_anchor_reorg');
     if (manifest && (manifest.anchor.blockNumber!==anchor.blockNumber || manifest.anchor.blockHash!==anchor.blockHash)) fail('capture_anchor_reorg');
     if (!manifest) {
       const body={identity,anchor};manifest={...body,manifestHash:planHash(body)};

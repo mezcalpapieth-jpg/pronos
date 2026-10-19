@@ -73,6 +73,17 @@ test('PostgreSQL funding ledger: leases, fencing, crash recovery and rolling bud
       const tiny = { ...config, globalDaily: remaining }; // Amount fits; fee ceiling makes it exceed.
       assert.equal(await store.prepare(entry({ wallet_address: 'other', suborg_id: 'other' }), token, tiny), false);
     });
+    await t.test('starter lifetime allowance cannot be refreshed by waiting or changing one identity',async()=>{
+      await reset();const token=randomUUID();await store.acquire(funder,token);
+      for(let i=0;i<4;i++) {
+        const e=entry({starter:true,amount_wei:ethers.utils.parseEther('0.00005').toString(),max_cost_wei:ethers.utils.parseEther('0.00006').toString()});
+        assert.equal(await store.prepare(e,token,config),true);await store.settle(e.tx_hash,'confirmed');await age();
+      }
+      await db.exec("UPDATE sepolia_gas_transfers SET created_at=now()-interval '30 days'");
+      const small={starter:true,amount_wei:'1',max_cost_wei:'2'};
+      for(const change of [{},{wallet_address:'new-wallet'},{suborg_id:'new-org'}]) assert.equal(await store.prepare(entry({...small,...change}),token,config),false);
+      assert.equal(await store.prepare(entry(),token,config),true,'confirmed activity lifts only the starter lifetime cap');
+    });
     await t.test('database constraints reject a second pending record and oversized transfers', async () => {
       await reset(); const token = randomUUID(); await store.acquire(funder, token);
       const e = entry(); assert.equal(await store.prepare(e, token, config), true);

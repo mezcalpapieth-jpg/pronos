@@ -61,6 +61,9 @@ export function sepoliaGasStore(sql) {
           ${entry.signer_key_hash}, ${entry.amount_wei}, ${entry.max_cost_wei}, ${entry.nonce}, ${entry.signed_tx}, 'prepared'
         FROM held
         WHERE NOT EXISTS (SELECT 1 FROM sepolia_gas_transfers WHERE status = 'prepared')
+          AND (${!entry.starter} OR (SELECT COALESCE(SUM(amount_wei), 0) FROM sepolia_gas_transfers
+            WHERE (wallet_address = ${entry.wallet_address} OR suborg_id = ${entry.suborg_id})
+              AND status <> 'reverted') + ${entry.amount_wei}::numeric <= ${settings.starterLifetime.toString()}::numeric)
           AND NOT EXISTS (SELECT 1 FROM sepolia_gas_transfers
             WHERE (wallet_address = ${entry.wallet_address} OR suborg_id = ${entry.suborg_id})
               AND created_at > now() - interval '5 minutes')

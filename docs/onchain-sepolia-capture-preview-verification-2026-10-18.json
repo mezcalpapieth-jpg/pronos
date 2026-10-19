@@ -1,0 +1,276 @@
+{
+  "checkedAt": "2026-10-18T18:57:32.470Z",
+  "release": {
+    "id": "dpl_BZFGSbikq8ertiwgNSRTCjUGzuag",
+    "sha": "f27acc1d2050ddf1fd30b361bbd8e2f8050ed163",
+    "url": "https://pronos-ju63wb9kk-mezcalpapieth-jpgs-projects.vercel.app",
+    "alias": "https://pronos-git-onchain-sepolia-mezcalpapieth-jpgs-projects.vercel.app",
+    "state": "READY"
+  },
+  "http": {
+    "checkedAt": "2026-10-18T18:57:12.556Z",
+    "config": {
+      "enabled": true,
+      "chainId": 421614,
+      "symbol": "MXNP"
+    },
+    "guestAdminStatus": 401,
+    "aliasHtmlMatched": true,
+    "aliasScriptMatched": true,
+    "entry": "/points/assets/index-DldEoK8d.js",
+    "entrySha256": "cf9eb8a9dd405f45e67c32f36cb73cd42166a3643e7924782740d9a6b4a8b0c8",
+    "adminChunk": "PointsAdmin-dANl3NhR.js",
+    "previewApprovalSelectorServed": true,
+    "operatorAdapter": "Repository-only operator command; no browser API route or live future-cycle rehearsal."
+  },
+  "readiness": {
+    "ok": true,
+    "env": {
+      "rpc": true,
+      "chainId": 421614,
+      "factoryV1": "0xb6cf9f65ab82c17c8e9d58d06073ca3af3e5443d",
+      "factoryV2": "0x33c1cdd4e22a9732ad808f2ad7efe82211b65c6a",
+      "collateral": "0x6ed6c00c2b4cf9f5989866f4c5862d4cded67ef9",
+      "shareTokenV1": "0x0c059fe84d1a733d1d698dd04a2f594df883dfb4",
+      "shareTokenV2": "0xac7474e5ff1b98d5d6268a76ae409f972717436b",
+      "deployerSuborgId": true,
+      "deployerAddress": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "resolverSuborgId": true,
+      "resolverAddress": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "policiesEnabled": true,
+      "databaseUrl": true,
+      "databaseReadUrl": true,
+      "indexerKey": true,
+      "cronSecret": true
+    },
+    "ownerControls": {
+      "adminSafe": "0x0000000000000000000000000000000000000000",
+      "resolverSafe": "0x0000000000000000000000000000000000000000",
+      "ownerSuborgId": true,
+      "ownerAddress": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "safeConfigured": false,
+      "resolverSafeConfigured": false,
+      "ownerSignerConfigured": true,
+      "configured": true
+    },
+    "turnkey": {
+      "policiesEnabled": true,
+      "organizationId": true,
+      "apiPublicKey": true,
+      "apiPrivateKey": true,
+      "apiBaseUrl": "https://api.turnkey.com",
+      "clientOrganizationId": true,
+      "serverConfigured": true,
+      "clientConfigured": true
+    },
+    "juno": {
+      "apiKey": false,
+      "apiSecret": false,
+      "bearerToken": false,
+      "apiBaseUrl": null,
+      "webhookSecret": false,
+      "cardCheckoutEnabled": false,
+      "applePayEnabled": false,
+      "withdrawalsEnabled": false,
+      "configured": false
+    },
+    "cre": {
+      "webhookSecret": false,
+      "minConfidenceBps": 9000,
+      "maxAgeMs": 21600000
+    },
+    "gas": {
+      "sponsorshipEnabled": false,
+      "autoFunding": {
+        "enabled": true,
+        "configured": true,
+        "ready": true,
+        "funder": "0x252a1cfa015612efb8c7c2f1643a9f541b866990",
+        "targetEth": "0.0005",
+        "minimumEth": "0.0002",
+        "walletDailyEth": "0.002",
+        "globalDailyEth": "0.1",
+        "reserveEth": "0.01",
+        "schemaReady": true,
+        "pendingTransfers": 0,
+        "balanceEth": "0.09949958",
+        "signerVerified": true,
+        "dailyBudgetUsedEth": "0.0005010973508"
+      }
+    },
+    "deployment": {
+      "profile": "sepolia",
+      "networkName": "Arbitrum Sepolia",
+      "testnet": true,
+      "expectedChainId": 421614,
+      "expectedMainnetChainId": 42161,
+      "clientChainId": 421614,
+      "indexerChainId": 421614,
+      "protocolChainId": 421614,
+      "indexerRpc": true,
+      "indexerFactoryV1": "0xb6cf9f65ab82c17c8e9d58d06073ca3af3e5443d",
+      "indexerFactoryV2": "0x33c1cdd4e22a9732ad808f2ad7efe82211b65c6a",
+      "clientFactoryV1": "0xb6cf9f65ab82c17c8e9d58d06073ca3af3e5443d",
+      "clientFactoryV2": "0x33c1cdd4e22a9732ad808f2ad7efe82211b65c6a",
+      "clientCollateral": "0x6ed6c00c2b4cf9f5989866f4c5862d4cded67ef9",
+      "clientShareTokenV1": "0x0c059fe84d1a733d1d698dd04a2f594df883dfb4",
+      "clientShareTokenV2": "0xac7474e5ff1b98d5d6268a76ae409f972717436b"
+    },
+    "policy": {
+      "configuredPoolCount": 0,
+      "indexedPoolCount": 9,
+      "missingPools": [
+        "0x80aa1a6722eb6f72647c0964b64d185c01a39433",
+        "0x1de8137b670fe25c79ac199fb4e0e6182ac39aa9",
+        "0x1aca9bc8ce8b8f2eef41fa4f4b39ee8a7bb0d6e7",
+        "0xcb3149d9b41870f092162ab15a676a39d5058c17",
+        "0x299d5788cd5fc0f10c00fb1d6832c0923a83ffdd",
+        "0x73149f68249625f216b3f1b9bafc052b01ee7654",
+        "0x90a3bb95cff9b893859a5fdf63a55e90d1512e5e",
+        "0xbba1c1386b8906971c1edbc64eb8eee30b4cb5f5",
+        "0x508ed5716d8baf66de9ec39fe0bd32628a26e51d"
+      ],
+      "coverageError": null,
+      "autoIncludesIndexedPools": true
+    },
+    "launch": {
+      "ready": true,
+      "blockerCount": 0,
+      "reviewCount": 1,
+      "blockers": [],
+      "reviews": [
+        {
+          "id": "cre_webhook_dry_run",
+          "title": "CRE sigue en modo revisi\u00f3n",
+          "detail": "Sin secreto, Chainlink CRE no puede enviar resoluciones al webhook.",
+          "fix": "Set CRE_RESOLUTION_WEBHOOK_SECRET before enabling CRE workflows"
+        }
+      ],
+      "nextSteps": [
+        "Set CRE_RESOLUTION_WEBHOOK_SECRET before enabling CRE workflows",
+        "Check gas.autoFunding on the admin status endpoint and complete a real funded trade rehearsal"
+      ]
+    },
+    "warnings": [],
+    "tradingAuthorization": {
+      "scope": "router",
+      "routerConfigured": true,
+      "verified": true,
+      "address": "0x25bc3c0f0c41516167f096ac4bf785f60bbbe843",
+      "factories": [
+        "0xb6cf9f65ab82c17c8e9d58d06073ca3af3e5443d",
+        "0x33c1cdd4e22a9732ad808f2ad7efe82211b65c6a"
+      ],
+      "collateral": "0x6ed6c00c2b4cf9f5989866f4c5862d4cded67ef9",
+      "shares": {
+        "v1": "0x0c059fe84d1a733d1d698dd04a2f594df883dfb4",
+        "v2": "0xac7474e5ff1b98d5d6268a76ae409f972717436b"
+      }
+    },
+    "v1": {
+      "address": "0xb6cf9f65ab82c17c8e9d58d06073ca3af3e5443d",
+      "reachable": true,
+      "owner": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "marketCreator": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "resolver": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "collateral": "0x6ed6C00C2B4cF9f5989866f4c5862D4cdeD67ef9",
+      "deployerAddress": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "resolverAddress": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "expectedCollateral": "0x6ed6c00c2b4cf9f5989866f4c5862d4cded67ef9",
+      "deployerIsOwner": true,
+      "deployerIsMarketCreator": true,
+      "deployerCanCreate": true,
+      "resolverMatches": true,
+      "collateralMatches": true
+    },
+    "v2": {
+      "address": "0x33c1cdd4e22a9732ad808f2ad7efe82211b65c6a",
+      "reachable": true,
+      "owner": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "marketCreator": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "resolver": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "collateral": "0x6ed6C00C2B4cF9f5989866f4c5862D4cdeD67ef9",
+      "deployerAddress": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "resolverAddress": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+      "expectedCollateral": "0x6ed6c00c2b4cf9f5989866f4c5862d4cded67ef9",
+      "deployerIsOwner": true,
+      "deployerIsMarketCreator": true,
+      "deployerCanCreate": true,
+      "resolverMatches": true,
+      "collateralMatches": true
+    },
+    "indexer": {
+      "0xb6cf9f65ab82c17c8e9d58d06073ca3af3e5443d": {
+        "lastBlock": 320488787,
+        "updatedAt": "2026-10-18T18:53:38.026988+00:00"
+      },
+      "0x33c1cdd4e22a9732ad808f2ad7efe82211b65c6a": {
+        "lastBlock": 320488787,
+        "updatedAt": "2026-10-18T18:53:38.749166+00:00"
+      },
+      "0x69440742a168635d9fa7cc0cfb0935afffe79ad3": {
+        "lastBlock": 320488787,
+        "updatedAt": "2026-10-18T18:53:39.999213+00:00"
+      },
+      "0xfcac9cfcf22df809ba365c85dd767c90bb260fd6": {
+        "lastBlock": 320488787,
+        "updatedAt": "2026-10-18T18:53:40.315234+00:00"
+      }
+    }
+  },
+  "boundaries": {
+    "checkedAt": "2026-10-18T19:17:23.916Z",
+    "release": {
+      "id": "dpl_BZFGSbikq8ertiwgNSRTCjUGzuag",
+      "sha": "f27acc1d2050ddf1fd30b361bbd8e2f8050ed163",
+      "url": "https://pronos-ju63wb9kk-mezcalpapieth-jpgs-projects.vercel.app",
+      "alias": "https://pronos-git-onchain-sepolia-mezcalpapieth-jpgs-projects.vercel.app",
+      "state": "READY"
+    },
+    "environmentRecordsUnchanged": [
+      156,
+      12
+    ],
+    "productionUnchanged": {
+      "id": "dpl_6JgQP3KfXVvA2jXMWVovp11Z6epa",
+      "aliases": [
+        "pronos.io",
+        "www.pronos.io",
+        "pronos-chi.vercel.app",
+        "pronos-mezcalpapieth-jpgs-projects.vercel.app"
+      ]
+    },
+    "pointbreakUnchanged": {
+      "local": "47aa9e19115d64bc36a2684e5eeb685caef117ba",
+      "tracking": "e71de9cf34fb1a454018b69da93bb0d9c3355aaf",
+      "remote": "e71de9cf34fb1a454018b69da93bb0d9c3355aaf"
+    },
+    "chainUnchanged": {
+      "token": "0x6ed6c00c2b4cf9f5989866f4c5862d4cded67ef9",
+      "totalSupply": "50000000000000",
+      "accounts": {
+        "reserve": {
+          "address": "0x0Caa37c077924038e14e9D8dE46B5208788e52CF",
+          "balance": "2802243689456225488",
+          "nonce": 53
+        },
+        "operations": {
+          "address": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+          "balance": "488842499590000",
+          "nonce": 23
+        },
+        "gas": {
+          "address": "0x252a1cfa015612EFB8C7c2f1643A9F541b866990",
+          "balance": "99499580000000000",
+          "nonce": 1
+        }
+      }
+    },
+    "noEthSpent": true
+  },
+  "validation": {
+    "focusedTests": 55,
+    "skipped": 0
+  },
+  "scope": "Read-only checks; no fresh signing, trading, migration or cycle activation. Operator capture remains a repository command."
+}

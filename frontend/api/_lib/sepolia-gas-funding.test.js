@@ -39,6 +39,7 @@ function fixture() {
     settle: async (_hash, status) => { entry.status = status; },
   };
   const args = { ownerAddr: owner, suborgId: 'user-org', gasUnits: 720000, settings, provider, store,
+    activity: async () => true,
     authorize: async () => { authorizations++; },
     feeQuote: async () => ({ maxFeePerGas: ethers.utils.parseUnits('0.04', 'gwei'), maxPriorityFeePerGas: ethers.constants.Zero }),
     sign: async ({ unsignedTx }) => { signs++; return funder.signTransaction(ethers.utils.parseTransaction(unsignedTx)); },
@@ -104,6 +105,26 @@ test('partial balance receives only the difference to target', async () => {
   const f = fixture(); f.balance('0.0001');
   await ensureSepoliaGas(f.args);
   assert.equal(f.records[0].amount_wei, ethers.utils.parseEther('0.0004').toString());
+});
+
+test('inactive users receive a small starter float; confirmed activity unlocks the normal target', async () => {
+  const f=fixture();f.args.activity=async()=>false;
+  assert.equal((await ensureSepoliaGas(f.args)).tier,'starter');
+  assert.equal(f.records[0].amount_wei,ethers.utils.parseEther('0.00005').toString());
+  assert.equal(f.records[0].starter,true);
+  assert.equal((await ensureSepoliaGas(f.args)).funded,false);
+  f.balance('0.00001');f.args.activity=async()=>true;
+  assert.equal((await ensureSepoliaGas(f.args)).tier,'active');
+  assert.equal(f.records[1].amount_wei,ethers.utils.parseEther('0.00049').toString());
+});
+
+test('starter allowance covers the bounded trade gas estimate at higher fees and fails closed without activity evidence',async()=>{
+  const f=fixture();f.args.activity=async()=>false;
+  f.args.feeQuote=async()=>({maxFeePerGas:ethers.utils.parseUnits('0.2','gwei'),maxPriorityFeePerGas:ethers.constants.Zero});
+  await ensureSepoliaGas(f.args);
+  assert.equal(f.records[0].amount_wei,ethers.utils.parseEther('0.00018').toString());
+  const invalid=fixture();invalid.args.activity=async()=>undefined;
+  await assert.rejects(ensureSepoliaGas(invalid.args));assert.equal(invalid.counts().signs,0);
 });
 
 test('timeouts recover with the same stored signature and never allocate another nonce', async () => {

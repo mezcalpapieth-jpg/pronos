@@ -273,6 +273,14 @@ const PUBLIC_ERROR_COPY = {
     es: 'Estamos preparando tu operación. Intenta de nuevo en unos segundos.',
     en: 'We are preparing your trade. Please try again in a few seconds.',
   },
+  tournament_join_pending: {
+    es: 'Estamos preparando tu saldo del torneo. Intenta de nuevo en unos segundos.',
+    en: 'We are preparing your tournament balance. Please try again in a few seconds.',
+  },
+  tournament_join_unavailable: {
+    es: 'No pudimos preparar tu inscripción al torneo. Intenta más tarde.',
+    en: 'We could not prepare your tournament entry. Please try again later.',
+  },
   gas_funding_limit: {
     es: 'Alcanzamos el límite temporal de operaciones de prueba. Intenta más tarde.',
     en: 'The temporary test trading limit has been reached. Please try again later.',

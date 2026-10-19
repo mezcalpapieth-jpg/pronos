@@ -31,6 +31,7 @@ test('resolved V1/V2 redemption maps winners and converts holdings into cash onc
 test('unreviewed plans/registries, wrong-chain RPC and insufficient finality refuse before marking',async()=>{
   for (const mutate of [f=>f.input.reviewedPlanHash='0'.repeat(64),f=>f.input.reviewedRegistryHash='0'.repeat(64),
     f=>f.input.cycle.status='prepared',f=>f.options.provider.getNetwork=async()=>({chainId:42161}),
+    f=>f.input.expectedCutoffHash=hash(999),
     f=>f.options.provider.getBlockNumber=async()=>200]) {
     const f=fixture();mutate(f);await assert.rejects(run(f));assert.equal(f.calls.length,0);
   }
@@ -83,16 +84,16 @@ test('removed, forged, reverted, out-of-range and reorged log receipts fail clos
   f.options.provider.getBlock=async n=>{const b=f.block(n);if(seen.has(n))b.hash=hash(999);seen.add(n);return b;};
   await assert.rejects(run(f),/snapshot_reorg/);
 });
-test('historical cancellation, dispute/clear and correction reject even a currently active pool',async()=>{
+test('inconsistent cancellation, dispute/clear and correction history rejects a currently active pool',async()=>{
   for(const name of ['MarketCanceled','ResolutionDisputeOpened','ResolutionDisputeCleared','MarketResolutionCorrected']) {
     const f=fixture(), abi=f.eventAbis[1];
     f.addReceipt(hash(700),150,[f.encoded(abi,name,name==='MarketCanceled'?[0]:name==='MarketResolutionCorrected'?[0,1,2]:[0,1],addr(40))]);
-    await assert.rejects(run(f),/unsupported_market_lifecycle/);
+    await assert.rejects(run(f),/history/);
   }
 });
-test('resolved state must match exactly one canonical resolution and its winner',async()=>{
+test('resolved state and payouts must match canonical resolution history and its winner',async()=>{
   const f=fixture({resolved:true});f.logs.splice(f.logs.findIndex(l=>l.transactionHash===hash(621)),1);
-  await assert.rejects(run(f),/resolution_history_mismatch/);
+  await assert.rejects(run(f),/invalid_redemption_history/);
   const mismatch=fixture({resolved:true});mismatch.contracts.get(addr(40)).state.outcome=2;
   await assert.rejects(run(mismatch),/resolution_mark_mismatch/);
 });

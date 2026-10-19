@@ -2,6 +2,8 @@ import { ethers } from 'ethers';
 import { address, planHash, MINT_ABI, TOURNAMENT_CHAIN_ID } from './sepolia-tournament.js';
 import { tournamentRegistrations, buildTournamentShadowScores } from './sepolia-tournament-scoring.js';
 import { verifyMintReceipt } from './sepolia-tournament-funding.js';
+import { JOIN_ABI, verifyJoinReceipt } from './sepolia-tournament-join.js';
+import { refundBurns, verifyPoolLifecycle } from './sepolia-tournament-lifecycle.js';
 
 const fail = code => { throw new Error(code); };
 const integer = value => {
@@ -57,7 +59,7 @@ export function tournamentMarketRegistry({ cycleId, planHash: digest, markets })
 // execution or protocol-indexer import (the latter initializes a write client).
 // The RPC is a trusted source; this is not a consensus or receipt-trie proof.
 export async function buildTournamentSnapshot({ cycle, reviewedPlanHash, registry,
-  reviewedRegistryHash, funding, fromBlock, asOfBlock }, { provider, readIndexerCoverage,
+  reviewedRegistryHash, funding, lateJoins = [], fromBlock, asOfBlock, expectedCutoffHash }, { provider, readIndexerCoverage,
   fullTournamentCapture = false }) {
   const limits = fullTournamentCapture ? TOURNAMENT_CAPTURE_LIMITS : TOURNAMENT_SNAPSHOT_LIMITS;
   const { plan, digest } = tournamentRegistrations({ cycle, reviewedPlanHash });
@@ -123,6 +125,7 @@ export async function buildTournamentSnapshot({ cycle, reviewedPlanHash, registr
     return new Date(b.timestamp * 1000).toISOString();
   }
   const pinned = await block(asOfBlock), first = await block(fromBlock), previous = await block(fromBlock - 1);
+  if (expectedCutoffHash && hash(pinned.hash)!==hash(expectedCutoffHash)) fail('snapshot_reorg');
   const start = Date.parse(plan.startsAt), end = Date.parse(plan.endsAt);
   if (first.timestamp * 1000 < start || previous.timestamp * 1000 >= start
     || pinned.timestamp * 1000 < start || pinned.timestamp * 1000 > end) fail('cycle_block_boundary_mismatch');
@@ -149,6 +152,29 @@ export async function buildTournamentSnapshot({ cycle, reviewedPlanHash, registr
   }
   if ((await read(d.token, 'totalSupply() view returns(uint256)')).toString() !== plan.totalUnits
     || Number(await read(d.token, 'decimals() view returns(uint8)')) !== 6) fail('cycle_supply_mismatch');
+  if (!Array.isArray(lateJoins) || lateJoins.length>1000) fail('late_join_capture_limit');
+  const lateRegistrations = [], joinToken = new ethers.utils.Interface(JOIN_ABI), joinHashes = new Set();
+  for (const join of lateJoins) {
+    const txHash = hash(join.txHash);
+    if (joinHashes.has(txHash) || join.planHash!==digest) fail('duplicate_or_foreign_join');
+    joinHashes.add(txHash);
+    budget();const candidate = await provider.getTransactionReceipt(txHash);
+    if (!candidate) fail('join_receipt_missing');
+    if (candidate.blockNumber>asOfBlock) continue;
+    const r = await receipt(txHash);
+    verifyJoinReceipt(r,plan,join);
+    budget();const tx = await provider.getTransaction(txHash);
+    if (!tx || hash(tx.hash)!==txHash || tx.blockNumber!==r.blockNumber || hash(tx.blockHash)!==hash(r.blockHash)
+      || tx.chainId!==TOURNAMENT_CHAIN_ID || address(tx.from)!==d.operations || address(tx.to)!==d.token
+      || !ethers.BigNumber.from(tx.value).isZero()
+      || tx.data!==joinToken.encodeFunctionData('transfer',[join.wallet,plan.allocationUnits])) fail('join_transaction_mismatch');
+    const log = r.logs.find(l=>address(l.address)===d.token && l.topics[0]===joinToken.getEventTopic('Transfer'));
+    const timestamp = await verifyLog(log);
+    if (Date.parse(timestamp)>=end) continue; // A delayed transfer grants no post-end scoring entry.
+    lateRegistrations.push({username:join.username,wallet:join.wallet,suborg:join.suborg,planHash:digest,
+      openingUnits:plan.allocationUnits,blockNumber:r.blockNumber,blockHash:hash(r.blockHash),logIndex:log.logIndex,txHash,timestamp});
+  }
+  tournamentRegistrations({cycle,reviewedPlanHash,lateRegistrations});
   budget();
   if (ethers.utils.keccak256(await provider.getCode(d.router, asOfBlock)) !== d.routerCodeHash) fail('router_code_mismatch');
   for (const [field, expected] of [['factoryV1',d.factoryV1],['factoryV2',d.factoryV2],
@@ -186,20 +212,21 @@ export async function buildTournamentSnapshot({ cycle, reviewedPlanHash, registr
       const outcomeCount = version === 'V1' ? 2 : Number(await read(entry.pool, 'outcomeCount() view returns(uint8)'));
       if (version === 'V2' && (Number(binding.outcomeCount) !== outcomeCount
         || created.args.outcomes.length !== outcomeCount)) fail('outcome_registry_mismatch');
-      if (outcomeCount < 2 || outcomeCount > 8 || !await read(entry.pool, 'initialized() view returns(bool)')
-        || await read(entry.pool, 'canceled() view returns(bool)') || await read(entry.pool, 'disputed() view returns(bool)')) fail('unsupported_market_lifecycle');
+      if (outcomeCount < 2 || outcomeCount > 8 || !await read(entry.pool, 'initialized() view returns(bool)')) fail('unsupported_market_lifecycle');
       const resolved = await read(entry.pool, 'resolved() view returns(bool)');
+      const canceled = await read(entry.pool, 'canceled() view returns(bool)');
+      const disputed = await read(entry.pool, 'disputed() view returns(bool)');
       const market = { chainId: TOURNAMENT_CHAIN_ID, pool: entry.pool, factory, collateral: d.token,
-        marketId: entry.marketId, outcomeCount, registeredBlock, status: resolved ? 'resolved' : 'active',
+        marketId: entry.marketId, outcomeCount, registeredBlock, resolved, disputed, status: canceled ? 'canceled' : resolved ? 'resolved' : 'active',
         markBlock: asOfBlock, markBlockHash: hash(pinned.hash) };
-      if (resolved) market.winner = Number(await read(entry.pool, 'outcome() view returns(uint8)')) - (version === 'V1' ? 1 : 0);
-      else market.pricesUnits = version === 'V1' ? [
+      if (resolved && !canceled) market.winner = Number(await read(entry.pool, 'outcome() view returns(uint8)')) - (version === 'V1' ? 1 : 0);
+      else if (!canceled) market.pricesUnits = version === 'V1' ? [
         (await read(entry.pool, 'priceYes() view returns(uint256)')).toString(),
         (await read(entry.pool, 'priceNo() view returns(uint256)')).toString(),
       ] : (await read(entry.pool, 'prices() view returns(uint256[])')).map(String);
       markets.push(market);
       const abi = interfaces[version], seen = new Map();
-      let resolutions = 0;
+      const history = [];
       for (let from = registeredBlock; from <= asOfBlock; from += 2000) {
         budget(); const logs = await provider.getLogs({ address: entry.pool, fromBlock: from,
           toBlock: Math.min(from + 1999, asOfBlock), topics: [Object.keys(abi.events).map(name => abi.getEventTopic(name))] });
@@ -212,25 +239,23 @@ export async function buildTournamentSnapshot({ cycle, reviewedPlanHash, registr
           const fingerprint = planHash({ blockHash: hash(log.blockHash), data: log.data, topics: log.topics });
           if (seen.has(key)) { if (seen.get(key) !== fingerprint) fail('conflicting_event_identity'); continue; }
           seen.set(key, fingerprint);
-          if (['MarketCanceled','ResolutionDisputeOpened','ResolutionDisputeCleared','MarketResolutionCorrected','CancelRefunded'].includes(parsed.name)) fail('unsupported_market_lifecycle');
-          if (parsed.name === 'MarketResolved') {
-            resolutions++;
-            if (a.marketId.toString() !== entry.marketId || !resolved
-              || Number(a.outcome) - (version === 'V1' ? 1 : 0) !== market.winner) fail('resolution_mark_mismatch');
-            continue;
-          }
+          history.push({...log,parsed});
+          if (!['SharesBought','SharesSold','WinningsRedeemed','CancelRefunded'].includes(parsed.name)) continue;
           if (log.blockNumber < fromBlock) fail('trade_precedes_cycle');
-          const side = { SharesBought:'buy', SharesSold:'sell', WinningsRedeemed:'redeem' }[parsed.name];
+          const side = { SharesBought:'buy', SharesSold:'sell', WinningsRedeemed:'redeem', CancelRefunded:'refund' }[parsed.name];
           if (!side) fail('unknown_scoring_event');
-          events.push({ chainId: TOURNAMENT_CHAIN_ID, pool: entry.pool,
+          const burns = side==='refund' ? refundBurns({receipt:await receipt(log.transactionHash),
+            log:{...log,parsed},market,shareToken:d[`share${version}`],version}) : null;
+          if (burns && !burns.length) continue; // Canonical zero-payout no-op.
+          events.push({ ...(burns?{burns}:{}), chainId: TOURNAMENT_CHAIN_ID, pool: entry.pool,
             wallet: address(a.buyer || a.seller || a.user), side, blockNumber: log.blockNumber,
             blockHash: hash(log.blockHash), logIndex: log.logIndex, txHash: hash(log.transactionHash), timestamp,
-            outcomeIndex: version === 'V2' ? Number(a.outcomeIndex) : side === 'redeem' ? null : a.isYes ? 0 : 1,
-            sharesUnits: (a.sharesOut || a.sharesIn || a.shares).toString(),
+            outcomeIndex: side==='refund' ? null : version === 'V2' ? Number(a.outcomeIndex) : side === 'redeem' ? null : a.isYes ? 0 : 1,
+            sharesUnits: side==='refund' ? burns.reduce((sum,b)=>sum+BigInt(b.sharesUnits),0n).toString() : (a.sharesOut || a.sharesIn || a.shares).toString(),
             collateralUnits: (a.collateralIn || a.collateralOut || a.payout).toString() });
         }
       }
-      if (resolutions !== (resolved ? 1 : 0)) fail('resolution_history_mismatch');
+      verifyPoolLifecycle(history,market,version);
     }
   }
   if (markets.length !== manifest.markets.length) fail('market_outside_cycle');
@@ -240,9 +265,25 @@ export async function buildTournamentSnapshot({ cycle, reviewedPlanHash, registr
     budget(); if (hash((await provider.getBlock(n))?.hash) !== hash(b.hash)) fail('snapshot_reorg');
   }
   events.sort((a,b) => a.blockNumber - b.blockNumber || a.logIndex - b.logIndex);
-  const snapshot = { cycle, reviewedPlanHash: digest, fromBlock,
+  const snapshot = { cycle, reviewedPlanHash: digest, lateRegistrations, fromBlock,
     asOf: { blockNumber: asOfBlock, blockHash: hash(pinned.hash), timestamp: new Date(pinned.timestamp * 1000).toISOString() }, markets, events };
   const scores = buildTournamentShadowScores(snapshot);
+  // Cancellation refunds depend on purchase cost basis and current holdings.
+  // External share movements can change the contract's proportional reduction;
+  // refuse that mismatch rather than silently score an invented refund value.
+  const users = tournamentRegistrations({cycle,reviewedPlanHash,lateRegistrations}).users;
+  const positions = new Map(scores.accountingPositions.map(p=>[`${p.wallet}:${p.pool}:${p.outcomeIndex}`,p]));
+  for (const market of markets.filter(m=>m.status==='canceled')) {
+    const version = market.factory===d.factoryV1?'V1':'V2';
+    for (const user of users) for (let outcome=0;outcome<market.outcomeCount;outcome++) {
+      const position=positions.get(`${user.wallet}:${market.pool}:${outcome}`);
+      const tokenId=BigInt(market.marketId)*(version==='V1'?2n:256n)+BigInt(outcome);
+      const balance=await read(d[`share${version}`],'balanceOf(address,uint256) view returns(uint256)',[user.wallet,tokenId.toString()]);
+      const basis=await read(market.pool,'costBasis(address,uint8) view returns(uint256)',[user.wallet,outcome]);
+      if (balance.toString()!==(position?.sharesUnits||'0') || basis.toString()!==(position?.costBasisUnits||'0')) fail('cancellation_balance_or_basis_mismatch');
+    }
+  }
+  budget();if (hash((await provider.getBlock(asOfBlock))?.hash)!==hash(pinned.hash)) fail('snapshot_reorg');
   const artifact = { version: 1, mode: 'shadow', readyForRewards: false, registry: manifest,
     registryHash, funding: fundingProof, snapshot, scores };
   return { ...artifact, snapshotHash: planHash(artifact) };

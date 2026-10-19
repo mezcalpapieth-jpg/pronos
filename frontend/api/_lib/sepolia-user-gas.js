@@ -6,6 +6,7 @@ import { ensureSepoliaGas } from './sepolia-gas-funding.js';
 import { loadTradingDelegation } from './trading-delegation-store.js';
 import { verifyTradingPolicy } from './trading-delegation.js';
 import { signDelegatedTransaction } from './turnkey-delegation.js';
+import { confirmedTradingActivity } from './sepolia-gas-activity.js';
 
 const POOL_ABI = [
   'function token() view returns(address)', 'function collateral() view returns(address)',
@@ -78,7 +79,8 @@ export async function prepareUserTradeGas(args) {
   try {
     const sql = settings.configured ? neon(process.env.DATABASE_URL) : null;
     await ensureSepoliaGas({ ...args, settings, store: sql && sepoliaGasStore(sql),
-      sign: signDelegatedTransaction, authorize: () => authorizeGasTrade({ ...args, sql }) });
+      sign: signDelegatedTransaction, authorize: () => authorizeGasTrade({ ...args, sql }),
+      activity: () => confirmedTradingActivity({ ...args, sql }) });
   } catch (error) {
     if (error.status) throw error;
     console.error('[sepolia-gas]', { code: error.code || 'funding_failed' });

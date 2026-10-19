@@ -7,14 +7,14 @@ export const addr = n => `0x${n.toString(16).padStart(40,'0')}`;
 export const hash = n => `0x${n.toString(16).padStart(64,'0')}`;
 export const base = Date.parse('2026-11-01T00:00:00Z') / 1000;
 const routerCode = '0x6001';
-export function fixture({ resolved=false, asOfBlock=200 }={}) {
+export function fixture({ resolved=false, asOfBlock=200, planOptions={} }={}) {
   const deployment = (n=0) => ({ chainId:421614, token:addr(n+1), factoryV1:addr(n+2),
     factoryV2:addr(n+3), shareV1:addr(n+4), shareV2:addr(n+5), router:addr(n+6),
     owner:addr(90), operations:addr(91), routerCodeHash:ethers.utils.keccak256(routerCode) });
   const plan = buildTournamentPlan({ deployment:deployment(), previousDeployment:deployment(100),
     users:[{username:'alice',wallet_address:addr(30),turnkey_sub_org_id:'alice'}],
     cycleId:'cycle-two',label:'Second cycle', startsAt:'2026-11-01T00:00:00Z',endsAt:'2026-12-01T00:00:00Z',
-    liquidityMxnp:'1000',maxTotalMxnp:'1500' });
+    liquidityMxnp:'1000',maxTotalMxnp:'1500',...planOptions });
   const contracts = new Map(), receipts = new Map(), transactions = new Map(), logs = [];
   function contract(at, signatures, state) {
     contracts.set(at,{abi:new ethers.utils.Interface(signatures.map(s=>`function ${s}`)),state});
@@ -42,13 +42,14 @@ export function fixture({ resolved=false, asOfBlock=200 }={}) {
       'token() view returns(address)','tradingRouter() view returns(address)',
       `markets(uint256) view returns(address pool,string question,string category,uint256 endTime,string resolutionSource,${v===2?'uint8 outcomeCount,':''}bool active)`],
     {marketCount:1,collateral:addr(1),token:shares,tradingRouter:addr(6),markets:[pool,'Question','test',base+1000,'source',...(v===2?[3]:[]),true]});
-    contract(shares,['owner() view returns(address)'],{owner:factory});
+    contract(shares,['owner() view returns(address)','balanceOf(address,uint256) view returns(uint256)'],{owner:factory,balanceOf:()=>0});
     contract(pool,['factory() view returns(address)','collateral() view returns(address)','token() view returns(address)',
       'marketId() view returns(uint256)','outcomeCount() view returns(uint8)',
       ...['initialized','canceled','disputed','resolved'].map(s=>`${s}() view returns(bool)`),
-      'outcome() view returns(uint8)','priceYes() view returns(uint256)','priceNo() view returns(uint256)','prices() view returns(uint256[])'],
+      'outcome() view returns(uint8)','priceYes() view returns(uint256)','priceNo() view returns(uint256)','prices() view returns(uint256[])',
+      'costBasis(address,uint8) view returns(uint256)'],
     {factory,collateral:addr(1),token:shares,marketId:0,outcomeCount:3,initialized:true,canceled:false,disputed:false,
-      resolved,outcome:v===1?1:2,priceYes:'500000',priceNo:'500000',prices:['333333','333333','333333']});
+      resolved,outcome:v===1?1:2,priceYes:'500000',priceNo:'500000',prices:['333333','333333','333333'],costBasis:()=>0});
     const created = new ethers.utils.Interface([v===1
       ? 'event MarketCreated(uint256 indexed marketId,address pool,string question,string category,uint256 endTime)'
       : 'event MarketCreated(uint256 indexed marketId,address pool,string question,string category,uint256 endTime,string resolutionSource,string[] outcomes)']);
@@ -65,6 +66,7 @@ export function fixture({ resolved=false, asOfBlock=200 }={}) {
       'event ResolutionDisputeCleared(uint256 indexed marketId,uint8 outcome)',
       'event MarketResolutionCorrected(uint256 indexed marketId,uint8 oldOutcome,uint8 newOutcome)',
       'event MarketCanceled(uint256 indexed marketId)',
+      'event CancelRefunded(address indexed user,uint256 payout)',
     ]);
     eventAbis[v]=abi;
     addReceipt(hash(600+v),110,[encoded(abi,'SharesBought',[addr(30),v===1?true:2,v===1?'100000000':'60000000','1000000',v===1?'180000000':'170000000'],pool,v-1)]);

@@ -107,11 +107,11 @@ test('redemptions require the resolved winner, exact payout and purchased holdin
   }
 });
 
-test('foreign/stale/duplicated markets and unsupported cancellation/dispute accounting are rejected',()=>{
+test('foreign/stale/duplicated markets and unresolved dispute accounting are rejected',()=>{
   for(const change of [a=>a.markets[0].chainId=42161,a=>a.markets[0].factory=addr(102),
     a=>a.markets[0].collateral=addr(101),a=>a.markets[0].markBlock=199,
     a=>a.markets[0].markBlockHash=hash(199),a=>a.markets.push({...a.markets[0]}),
-    a=>a.markets[0].status='canceled',a=>a.markets[0].status='disputed',
+    a=>a.markets[0].status='disputed',
     a=>a.markets[0].pricesUnits=['0','0']]) {
     const args=input();change(args);assert.throws(()=>buildTournamentShadowScores(args));
   }

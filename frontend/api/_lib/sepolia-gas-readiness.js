@@ -6,6 +6,8 @@ export function gasFundingReadiness(env = process.env) {
   return { enabled: config.enabled, configured: config.configured, ready: false,
     funder: config.funder, targetEth: ethers.utils.formatEther(config.target),
     minimumEth: ethers.utils.formatEther(config.minimum), walletDailyEth: ethers.utils.formatEther(config.walletDaily),
+    starterTargetEth: ethers.utils.formatEther(config.starterTarget),
+    starterLifetimeEth: ethers.utils.formatEther(config.starterLifetime),
     globalDailyEth: ethers.utils.formatEther(config.globalDaily), reserveEth: ethers.utils.formatEther(config.reserve),
     schemaReady: false, pendingTransfers: null, balanceEth: null, signerVerified: false };
 }
