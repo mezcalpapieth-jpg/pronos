@@ -40,6 +40,10 @@ const creation = {
   V1: new ethers.utils.Interface(['event MarketCreated(uint256 indexed marketId,address pool,string question,string category,uint256 endTime)']),
   V2: new ethers.utils.Interface(['event MarketCreated(uint256 indexed marketId,address pool,string question,string category,uint256 endTime,string resolutionSource,string[] outcomes)']),
 };
+const shareTransfers = new ethers.utils.Interface([
+  'event TransferSingle(address indexed operator,address indexed from,address indexed to,uint256 id,uint256 value)',
+  'event TransferBatch(address indexed operator,address indexed from,address indexed to,uint256[] ids,uint256[] values)',
+]);
 
 export const TOURNAMENT_SNAPSHOT_LIMITS = Object.freeze({ maxBlocks:2_000_000, maxMarkets:100, maxLogs:50_000, maxRequests:10_000 });
 export const TOURNAMENT_CAPTURE_LIMITS = Object.freeze({ maxBlocks:40_000_000, maxMarkets:1000, maxLogs:500_000, maxRequests:25_000_000 });
@@ -62,7 +66,7 @@ export async function buildTournamentSnapshot({ cycle, reviewedPlanHash, registr
   reviewedRegistryHash, funding, lateJoins = [], fromBlock, asOfBlock, expectedCutoffHash }, { provider, readIndexerCoverage,
   fullTournamentCapture = false }) {
   const limits = fullTournamentCapture ? TOURNAMENT_CAPTURE_LIMITS : TOURNAMENT_SNAPSHOT_LIMITS;
-  const { plan, digest } = tournamentRegistrations({ cycle, reviewedPlanHash });
+  const { plan, digest, users:openingUsers } = tournamentRegistrations({ cycle, reviewedPlanHash });
   const d = plan.deployment;
   const manifest = tournamentMarketRegistry(registry);
   const registryHash = planHash(manifest);
@@ -136,7 +140,7 @@ export async function buildTournamentSnapshot({ cycle, reviewedPlanHash, registr
   }
   const mint = new ethers.utils.Interface(MINT_ABI);
   if (!Array.isArray(funding) || funding.length !== plan.batches.length) fail('complete_funding_receipts_required');
-  const funded = new Set(), fundingProof = [];
+  const funded = new Set(), fundingProof = [], assetGrants = [];
   for (const batch of plan.batches) {
     const rows = funding.filter(r => r.batchIndex === batch.index);
     if (rows.length !== 1 || funded.has(hash(rows[0].txHash))) fail('duplicate_or_missing_funding_batch');
@@ -148,6 +152,10 @@ export async function buildTournamentSnapshot({ cycle, reviewedPlanHash, registr
       || tx.chainId !== TOURNAMENT_CHAIN_ID || address(tx.from) !== d.owner || address(tx.to) !== d.token
       || !ethers.BigNumber.from(tx.value).isZero() || tx.data !== expected) fail('funding_transaction_mismatch');
     verifyMintReceipt(r, plan, batch);
+    for (const log of r.logs.filter(l=>address(l.address)===d.token && l.topics[0]===mint.getEventTopic('Transfer'))) {
+      const a=mint.parseLog(log).args, wallet=a.to.toLowerCase();
+      if (openingUsers.some(u=>u.wallet===wallet)) assetGrants.push({wallet,txHash,blockNumber:r.blockNumber,blockHash:hash(r.blockHash),logIndex:log.logIndex,itemIndex:0});
+    }
     funded.add(txHash); fundingProof.push({ batchIndex: batch.index, txHash, blockNumber: r.blockNumber, blockHash: hash(r.blockHash) });
   }
   if ((await read(d.token, 'totalSupply() view returns(uint256)')).toString() !== plan.totalUnits
@@ -171,10 +179,11 @@ export async function buildTournamentSnapshot({ cycle, reviewedPlanHash, registr
     const log = r.logs.find(l=>address(l.address)===d.token && l.topics[0]===joinToken.getEventTopic('Transfer'));
     const timestamp = await verifyLog(log);
     if (Date.parse(timestamp)>=end) continue; // A delayed transfer grants no post-end scoring entry.
-    lateRegistrations.push({username:join.username,wallet:join.wallet,suborg:join.suborg,planHash:digest,
+    lateRegistrations.push({username:join.username,wallet:address(join.wallet),suborg:join.suborg,planHash:digest,
       openingUnits:plan.allocationUnits,blockNumber:r.blockNumber,blockHash:hash(r.blockHash),logIndex:log.logIndex,txHash,timestamp});
   }
-  tournamentRegistrations({cycle,reviewedPlanHash,lateRegistrations});
+  const users=tournamentRegistrations({cycle,reviewedPlanHash,lateRegistrations}).users;
+  assetGrants.push(...lateRegistrations.map(r=>({wallet:r.wallet,txHash:r.txHash,blockNumber:r.blockNumber,blockHash:r.blockHash,logIndex:r.logIndex,itemIndex:0})));
   budget();
   if (ethers.utils.keccak256(await provider.getCode(d.router, asOfBlock)) !== d.routerCodeHash) fail('router_code_mismatch');
   for (const [field, expected] of [['factoryV1',d.factoryV1],['factoryV2',d.factoryV2],
@@ -259,6 +268,54 @@ export async function buildTournamentSnapshot({ cycle, reviewedPlanHash, registr
     }
   }
   if (markets.length !== manifest.markets.length) fail('market_outside_cycle');
+  // Capture every collateral/share movement, including pre-start movements
+  // after the first opening mint and activity before a late user's grant.
+  // Restricting this to known trade receipts would silently miss gifts.
+  const captureFrom=Math.min(fromBlock,...fundingProof.map(r=>r.blockNumber),...markets.map(m=>m.registeredBlock));
+  if (asOfBlock-captureFrom>limits.maxBlocks) fail('snapshot_bounds_exceeded');
+  const wallets=new Set(users.map(u=>u.wallet)), movements=[], transferSeen=new Map();
+  const tokenMarkets=new Map();
+  for (const market of markets) {
+    const version=market.factory===d.factoryV1?'V1':'V2';
+    for(let i=0;i<market.outcomeCount;i++) tokenMarkets.set(`${d[`share${version}`]}:${BigInt(market.marketId)*(version==='V1'?2n:256n)+BigInt(i)}`,
+      {pool:market.pool,outcomeIndex:i});
+  }
+  for (const token of [d.token,d.shareV1,d.shareV2]) {
+    const abi=token===d.token?mint:shareTransfers;
+    const names=token===d.token?['Transfer']:['TransferSingle','TransferBatch'];
+    for(let from=captureFrom;from<=asOfBlock;from+=2000) {
+      budget();const to=Math.min(from+1999,asOfBlock);
+      const logs=await provider.getLogs({address:token,fromBlock:from,toBlock:to,topics:[names.map(n=>abi.getEventTopic(n))]});
+      logCount+=logs.length;if(logCount>limits.maxLogs) fail('snapshot_log_budget_exceeded');
+      for (const log of logs) {
+        if(address(log.address)!==token || log.blockNumber<from || log.blockNumber>to) fail('log_outside_requested_range');
+        await verifyLog(log);
+        const key=`${log.transactionHash}:${log.logIndex}`,fingerprint=planHash({blockHash:log.blockHash,data:log.data,topics:log.topics});
+        if(transferSeen.has(key)){if(transferSeen.get(key)!==fingerprint)fail('conflicting_transfer_identity');continue;}
+        transferSeen.set(key,fingerprint);
+        const parsed=abi.parseLog(log),a=parsed.args,fromWallet=a.from.toLowerCase(),toWallet=a.to.toLowerCase();
+        if (!wallets.has(fromWallet)&&!wallets.has(toWallet)) continue;
+        const ids=token===d.token?[null]:parsed.name==='TransferBatch'?a.ids:[a.id];
+        const amounts=token===d.token?[a.value]:parsed.name==='TransferBatch'?a[4]:[a.value];
+        if(ids.length!==amounts.length || ids.length>50_000) fail('invalid_transfer_batch');
+        if(movements.length+ids.length>limits.maxLogs) fail('snapshot_movement_budget_exceeded');
+        for(let i=0;i<ids.length;i++) {
+          const binding=tokenMarkets.get(`${token}:${ids[i]}`);
+          if(token!==d.token && !binding) {if(amounts[i].isZero())continue;fail('transfer_outside_cycle');}
+          movements.push({kind:token===d.token?'cash':'share',token,from:fromWallet,to:toWallet,
+            ...(binding||{}),...(token===d.token?{}:{operator:a.operator.toLowerCase()}),units:amounts[i].toString(),
+            blockNumber:log.blockNumber,blockHash:hash(log.blockHash),txHash:hash(log.transactionHash),logIndex:log.logIndex,itemIndex:i});
+        }
+      }
+    }
+  }
+  for (const r of receipts.values()) for (const log of r.logs) {
+    if (log.blockNumber<captureFrom) continue;
+    const token=address(log.address), abi=token===d.token?mint:shareTransfers;
+    const names=token===d.token?['Transfer']:['TransferSingle','TransferBatch'];
+    if (![d.token,d.shareV1,d.shareV2].includes(token) || !names.some(n=>abi.getEventTopic(n)===log.topics[0])) continue;
+    if (!transferSeen.has(`${log.transactionHash}:${log.logIndex}`)) fail('incomplete_receipt_transfer_coverage');
+  }
   // Numeric historical eth_call is bracketed by hash checks for every block
   // used, including funding/creation blocks and the pricing cutoff.
   for (const [n,b] of blocks) {
@@ -266,25 +323,39 @@ export async function buildTournamentSnapshot({ cycle, reviewedPlanHash, registr
   }
   events.sort((a,b) => a.blockNumber - b.blockNumber || a.logIndex - b.logIndex);
   const snapshot = { cycle, reviewedPlanHash: digest, lateRegistrations, fromBlock,
-    asOf: { blockNumber: asOfBlock, blockHash: hash(pinned.hash), timestamp: new Date(pinned.timestamp * 1000).toISOString() }, markets, events };
+    asOf: { blockNumber: asOfBlock, blockHash: hash(pinned.hash), timestamp: new Date(pinned.timestamp * 1000).toISOString() }, markets, events,
+    assetLedger:{version:1,fromBlock:captureFrom,cycleFromBlock:fromBlock,grants:assetGrants,
+      movements:movements.sort((a,b)=>a.blockNumber-b.blockNumber||a.logIndex-b.logIndex||a.itemIndex-b.itemIndex)} };
   const scores = buildTournamentShadowScores(snapshot);
-  // Cancellation refunds depend on purchase cost basis and current holdings.
-  // External share movements can change the contract's proportional reduction;
-  // refuse that mismatch rather than silently score an invented refund value.
-  const users = tournamentRegistrations({cycle,reviewedPlanHash,lateRegistrations}).users;
-  const positions = new Map(scores.accountingPositions.map(p=>[`${p.wallet}:${p.pool}:${p.outcomeIndex}`,p]));
-  for (const market of markets.filter(m=>m.status==='canceled')) {
-    const version = market.factory===d.factoryV1?'V1':'V2';
-    for (const user of users) for (let outcome=0;outcome<market.outcomeCount;outcome++) {
-      const position=positions.get(`${user.wallet}:${market.pool}:${outcome}`);
-      const tokenId=BigInt(market.marketId)*(version==='V1'?2n:256n)+BigInt(outcome);
-      const balance=await read(d[`share${version}`],'balanceOf(address,uint256) view returns(uint256)',[user.wallet,tokenId.toString()]);
-      const basis=await read(market.pool,'costBasis(address,uint8) view returns(uint256)',[user.wallet,outcome]);
-      if (balance.toString()!==(position?.sharesUnits||'0') || basis.toString()!==(position?.costBasisUnits||'0')) fail('cancellation_balance_or_basis_mismatch');
-    }
+  // Prove actual cash for every registrant and all share IDs, including empty
+  // positions (so omitted gifts are detected). Batch ERC1155 reads keep the
+  // 600-user/full-tournament profile practical. Basis is read for every touched
+  // position; untouched basis is zero by complete pool history replay.
+  for (const row of scores.rows) {
+    if ((await read(d.token,'balanceOf(address) view returns(uint256)',[row.wallet])).toString()!==row.actualCashUnits) fail('collateral_balance_mismatch');
   }
+  const positions=new Map(scores.actualPositions.map(p=>[`${p.wallet}:${p.pool}:${p.outcomeIndex}`,p]));
+  for (const version of ['V1','V2']) {
+    let batch=[];
+    const check = async () => {
+      if (!batch.length) return;
+      const balances=await read(d[`share${version}`],'balanceOfBatch(address[],uint256[]) view returns(uint256[])',
+        [batch.map(p=>p.wallet),batch.map(p=>p.tokenId)]);
+      if (balances.length!==batch.length || balances.some((b,i)=>b.toString()!==(positions.get(batch[i].key)?.sharesUnits||'0'))) fail('share_balance_mismatch');
+      batch=[];
+    };
+    for(const market of markets.filter(m=>m.factory===d[`factory${version}`])) for(const user of users) for(let outcome=0;outcome<market.outcomeCount;outcome++) {
+      batch.push({wallet:user.wallet,tokenId:(BigInt(market.marketId)*(version==='V1'?2n:256n)+BigInt(outcome)).toString(),key:`${user.wallet}:${market.pool}:${outcome}`});
+      if(batch.length===256) await check();
+    }
+    await check();
+  }
+  for(const p of scores.actualPositions) {
+    if ((await read(p.pool,'costBasis(address,uint8) view returns(uint256)',[p.wallet,p.outcomeIndex])).toString()!==p.costBasisUnits) fail('cost_basis_mismatch');
+  }
+  scores.transferReconciliation.historicalBalancesVerified=true;
   budget();if (hash((await provider.getBlock(asOfBlock))?.hash)!==hash(pinned.hash)) fail('snapshot_reorg');
-  const artifact = { version: 1, mode: 'shadow', readyForRewards: false, registry: manifest,
+  const artifact = { version: 2, mode: 'shadow', readyForRewards: false, registry: manifest,
     registryHash, funding: fundingProof, snapshot, scores };
   return { ...artifact, snapshotHash: planHash(artifact) };
 }

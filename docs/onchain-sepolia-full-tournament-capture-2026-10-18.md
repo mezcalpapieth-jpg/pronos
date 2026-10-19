@@ -18,7 +18,7 @@ The live cutoff hash commits to its ancestors. Under that unchanged anchor, save
 | --- | --- | --- |
 | Block span, including pool creation | 2,000,000 | 40,000,000 |
 | Reviewed markets | 100 | 1,000 |
-| Returned scoring/lifecycle logs | 50,000 | 500,000 |
+| Returned pool/asset logs and expanded movement items | 50,000 each | 500,000 each |
 | Logical builder read budget | 10,000 | 25,000,000 |
 | New data reads per invocation | No resumable quota | Default 500; configurable 1–5,000 |
 
@@ -53,4 +53,4 @@ All **55 focused tests passed without skips**, including the local PostgreSQL fu
 
 Scale fixtures separately exercise a month-length 10,300,100-block cutoff across both pool types, and 600 registered users with 102 markets (101 binary plus one multi-outcome). These use simulated canonical RPC data with real ABI encoding. They are not a live tournament or a 500,000-event stress test.
 
-Late-registration eligibility/issuance limits and cancellation/refund/correction shadow accounting are implemented in the follow-up. Remaining work: review/release that continuation, general transfer reconciliation, post-end settlement, archived-cycle routing/presentation and independently reviewed reward eligibility. Live future-cycle deployment/funding/migrations remain deferred. Capture does not publish a leaderboard or authorize payouts.
+Late-registration eligibility/issuance limits and cancellation/refund/correction shadow accounting are implemented in the follow-up. [Transfer reconciliation](./onchain-sepolia-transfer-reconciliation-2026-10-19.md) adds independent token log pages and actual/eligible ledgers. Its version-2 manifest requires a new checkpoint directory. Remaining work: post-end settlement, archived-cycle routing/presentation and independently reviewed reward eligibility. Live future-cycle deployment/funding/migrations remain deferred. Capture does not publish a leaderboard or authorize payouts.

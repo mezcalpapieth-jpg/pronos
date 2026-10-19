@@ -1,5 +1,6 @@
 import { address, planHash, validateTournamentPlan } from './sepolia-tournament.js';
 import { normalizeUsername } from './onchain-reset-plan.js';
+import { reconcileTournamentTransfers } from './sepolia-tournament-transfers.js';
 
 const SCALE = 1_000_000n;
 const fail = code => { throw new Error(code); };
@@ -49,7 +50,7 @@ export function tournamentRegistrations({ cycle, reviewedPlanHash, lateRegistrat
 // factory registration and prices at the pinned block before calling this.
 // No ERC20/1155 balance, mint, transfer or faucet event can add score.
 export function buildTournamentShadowScores({ cycle, reviewedPlanHash, lateRegistrations = [], fromBlock, asOf,
-  markets = [], events = [] }) {
+  markets = [], events = [], assetLedger }) {
   const { plan, digest, users } = tournamentRegistrations({ cycle, reviewedPlanHash, lateRegistrations });
   integer(fromBlock); integer(asOf.blockNumber);
   const blockHash = hash(asOf.blockHash), cutoff = Date.parse(asOf.timestamp);
@@ -105,7 +106,7 @@ export function buildTournamentShadowScores({ cycle, reviewedPlanHash, lateRegis
     const timestamp = Date.parse(row.timestamp);
     if (!Number.isFinite(timestamp)) fail('event_timestamp_required');
     if (blockNumber < fromBlock || blockNumber > asOf.blockNumber || timestamp < start || timestamp > cutoff) { ignored++; continue; }
-    if (account.registeredBlock && (blockNumber < account.registeredBlock
+    if (!assetLedger && account.registeredBlock && (blockNumber < account.registeredBlock
       || (blockNumber===account.registeredBlock && logIndex<=account.registeredLogIndex))) { ignored++;continue; }
     if (blockNumber < market.registeredBlock) fail('event_precedes_market_registration');
     if (timestamp >= end && !['redeem','refund'].includes(row.side)) fail('trade_after_cycle_end');
@@ -143,6 +144,15 @@ export function buildTournamentShadowScores({ cycle, reviewedPlanHash, lateRegis
     seen.set(id, fingerprint); accepted.push(event);
   }
   accepted.sort((a,b) => a.blockNumber - b.blockNumber || a.logIndex - b.logIndex);
+  if (assetLedger) {
+    if (assetLedger.cycleFromBlock!==fromBlock || assetLedger.fromBlock>fromBlock) fail('invalid_asset_ledger');
+    const reconciled=reconcileTournamentTransfers({users,registered,events:accepted,assetLedger,deployment:plan.deployment,
+      asOf:{...asOf,blockHash}});
+    return {mode:'shadow',readyForRewards:false,cycleId:plan.cycleId,planHash:digest,token:plan.deployment.token,
+      chainId:plan.deployment.chainId,asOf:{blockNumber:asOf.blockNumber,blockHash,timestamp:new Date(cutoff).toISOString()},
+      acceptedEvents:reconciled.transferReconciliation.scoredEvents,
+      ignoredEvents:ignored+accepted.length-reconciled.transferReconciliation.scoredEvents,duplicateEvents:duplicates,...reconciled};
+  }
   for (const event of accepted) {
     const account = accounts.get(event.wallet), market = registered.get(event.pool);
     const shares = units(event.sharesUnits), collateral = units(event.collateralUnits);
@@ -190,6 +200,7 @@ export function buildTournamentShadowScores({ cycle, reviewedPlanHash, lateRegis
     token: plan.deployment.token, chainId: plan.deployment.chainId,
     asOf: { blockNumber: asOf.blockNumber, blockHash, timestamp: new Date(cutoff).toISOString() },
     acceptedEvents: accepted.length, ignoredEvents: ignored, duplicateEvents: duplicates,
+    transferReconciliation:{version:1,historicalBalancesVerified:false,policy:'not_captured'},
     accountingPositions:[...accounts.values()].flatMap(a=>[...a.positions].map(([key,shares])=>{
       const [pool,outcome]=key.split(':');return {wallet:a.wallet,pool,outcomeIndex:Number(outcome),sharesUnits:shares.toString(),costBasisUnits:(a.basis.get(key)||0n).toString()};
     })),

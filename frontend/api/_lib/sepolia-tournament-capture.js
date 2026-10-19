@@ -57,7 +57,7 @@ export async function captureTournamentSnapshot(input, { provider, readIndexerCo
     || input.asOfBlock-input.fromBlock>TOURNAMENT_CAPTURE_LIMITS.maxBlocks
     || registry.markets.length>TOURNAMENT_CAPTURE_LIMITS.maxMarkets) fail('snapshot_bounds_exceeded');
   if (!Array.isArray(input.funding)) fail('complete_funding_receipts_required');
-  const identity={version:1,cycleId:plan.cycleId,planHash:digest,registryHash:input.reviewedRegistryHash,
+  const identity={version:2,transferReconciliationVersion:1,cycleId:plan.cycleId,planHash:digest,registryHash:input.reviewedRegistryHash,
     lateJoins:input.lateJoins || [],
     fromBlock:input.fromBlock,asOfBlock:input.asOfBlock,
     funding:input.funding.map(r=>({batchIndex:integer(r.batchIndex),txHash:hash(r.txHash)})).sort((a,b)=>a.batchIndex-b.batchIndex),
@@ -114,6 +114,7 @@ export async function captureTournamentSnapshot(input, { provider, readIndexerCo
       const pools=registry.markets.filter(m=>m.factory===factory).map(m=>m.pool).sort();
       for(let i=0;i<pools.length;i+=GROUP) for(const pool of pools.slice(i,i+GROUP)) groups.set(pool,pools.slice(i,i+GROUP));
     }
+    for (const token of [plan.deployment.token,plan.deployment.shareV1,plan.deployment.shareV2]) groups.set(token,[token]);
     async function page(query) {
       // Persist split decisions as well as complete leaf responses. Otherwise
       // a small per-run quota could repeatedly spend its last read on the same

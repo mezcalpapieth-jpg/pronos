@@ -112,7 +112,11 @@ test('canonical late grant activates scoring only after its receipt and cannot m
   f.addReceipt(join.txHash,115,[f.encoded(abi,'Transfer',[p.deployment.operations,join.wallet,p.allocationUnits],p.deployment.token)]);
   f.transactions.set(join.txHash,{hash:join.txHash,blockNumber:115,blockHash:hash(115),chainId:421614,from:p.deployment.operations,to:p.deployment.token,
     value:0,data:abi.encodeFunctionData('transfer',[join.wallet,p.allocationUnits])});
-  for(const [n,tx] of [[111,751],[116,752]]) f.addReceipt(hash(tx),n,[f.encoded(f.eventAbis[1],'SharesBought',[join.wallet,true,'100000000','1000000','180000000'],addr(40))]);
+  // Activity before registration has real outside funding, which stays excluded.
+  f.addReceipt(hash(749),109,[f.cashLog(p.deployment.operations,join.wallet,'100000000')]);
+  for(const [n,tx] of [[111,751],[116,752]]) f.addReceipt(hash(tx),n,[f.cashLog(join.wallet,addr(40),'100000000'),
+    f.shareLog(1,addr(40),join.wallet,0,'180000000',1),f.encoded(f.eventAbis[1],'SharesBought',[join.wallet,true,'100000000','1000000','180000000'],addr(40),2)]);
+  f.contracts.get(addr(40)).state.costBasis=([wallet,index])=>Number(index)===0?(wallet.toLowerCase()===join.wallet?200000000:50000000):0;
   const result=await buildTournamentSnapshot(f.input,f.options),bob=result.scores.rows.find(r=>r.username==='bob');
   assert.equal(bob.openingUnits,'500000000');assert.equal(bob.cashUnits,'400000000');assert.equal(bob.eventCount,1);
   assert.equal(result.scores.ignoredEvents,1);assert.equal(p.userCount,1);

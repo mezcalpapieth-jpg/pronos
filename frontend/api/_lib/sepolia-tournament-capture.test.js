@@ -48,7 +48,7 @@ test('a month-length cutoff beyond the bounded adapter completes with contiguous
   f.options.provider.getLogs=async q=>{queries.push(q);return original(q);};
   await assert.rejects(buildTournamentSnapshot(f.input,f.options),/snapshot_bounds_exceeded/);
   let result,runs=0;
-  do {result=await run(f,root,5000);runs++;}while(result.status==='paused'&&runs<4);
+  do {result=await run(f,root,5000);runs++;}while(result.status==='paused'&&runs<8);
   assert.equal(result.status,'complete');assert.ok(runs>=3);
   assert.equal(result.artifact.snapshot.asOf.blockNumber,asOfBlock);
   assert.equal(result.artifact.snapshot.events.length,3);
@@ -67,6 +67,9 @@ test('600 registered users and 101 binary markets fit the full profile and share
     cycleId:old.cycleId,label:old.label,startsAt:old.startsAt,endsAt:old.endsAt,liquidityMxnp:'1000',maxTotalMxnp:'301000',batchSize:100});
   f.input.cycle={plan,plan_hash:planHash(plan),status:'funded'};f.input.reviewedPlanHash=planHash(plan);
   f.contracts.get(addr(1)).state.totalSupply=plan.totalUnits;
+  // Replace the original one-user funding history as well as its plan. The
+  // broader asset scan correctly rejects overlapping global log positions.
+  f.logs.splice(0,f.logs.length,...f.logs.filter(l=>l.transactionHash!==hash(500)));
   const mint=new ethers.utils.Interface(MINT_ABI);f.input.funding=[];
   for(const batch of plan.batches) {
     const txHash=hash(50000+batch.index);
@@ -89,7 +92,7 @@ test('600 registered users and 101 binary markets fit the full profile and share
   const original=f.options.provider.getLogs,queries=[];f.options.provider.getLogs=async q=>{queries.push(q);return original(q);};
   const result=await run(f,root,5000);
   assert.equal(result.status,'complete');assert.equal(result.artifact.snapshot.markets.length,102);
-  assert.equal(result.artifact.scores.rows.length,600);assert.equal(queries.length,6);
+  assert.equal(result.artifact.scores.rows.length,600);assert.equal(queries.length,9);
   assert.ok(queries.some(q=>q.address.length===25));
   assert.ok(result.artifact.scores.rows.every(r=>r.equityUnits==='500000000'));
 }));
@@ -103,6 +106,25 @@ test('changed review, funding, late joins, cutoff or checkpoint contents cannot 
   const entry=(await files(join(root,'entries')))[0], body=JSON.parse(await readFile(entry,'utf8'));
   body.result={};await writeFile(entry,JSON.stringify(body),{mode:0o600});
   await assert.rejects(run(f,root),/capture_cache_corrupt/);
+}));
+
+test('legacy checkpoints require a fresh capture directory after transfer reconciliation changes',async()=>checkpoint(async root=>{
+  const f=fixture();await run(f,root,1);
+  const path=join(root,'manifest.json'),manifest=JSON.parse(await readFile(path,'utf8'));
+  manifest.identity.version=1;delete manifest.identity.transferReconciliationVersion;
+  const {manifestHash,...body}=manifest;await writeFile(path,JSON.stringify({...body,manifestHash:planHash(body)}),{mode:0o600});
+  await assert.rejects(run(f,root),/capture_context_mismatch/);
+}));
+
+test('external transfer pages and eligibility resume to the same verified artifact',async()=>checkpoint(async root=>{
+  const f=fixture();
+  f.addReceipt(hash(90000),125,[f.cashLog(addr(91),addr(30),'100000000'),f.shareLog(1,addr(99),addr(30),0,'90000000',1,addr(99))]);
+  const expected=await buildTournamentSnapshot(f.input,f.options);
+  let result,runs=0;
+  do {result=await run(f,root,10);runs++;}while(result.status==='paused'&&runs<30);
+  assert.equal(result.status,'complete');assert.ok(runs>1);assert.deepEqual(result.artifact,expected);
+  assert.equal(result.artifact.scores.rows[0].excludedCashUnits,'100000000');
+  assert.equal(result.artifact.scores.transferReconciliation.externalMovements.length,2);
 }));
 
 test('a reorg or wrong chain on resume or mid-run stops capture and releases its lock',async()=>checkpoint(async root=>{

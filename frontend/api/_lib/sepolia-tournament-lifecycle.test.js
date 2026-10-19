@@ -23,7 +23,7 @@ function refund(f,{v=1,amount=90000000,payout=50000000,batch=false,block=140}={}
   const pool=addr(39+v),share=addr(3+v),outcome=v===1?0:2;
   const args=batch?[pool,addr(30),ethers.constants.AddressZero,[outcome],[amount]]:[pool,addr(30),ethers.constants.AddressZero,outcome,amount];
   return f.addReceipt(hash(800+v+block),block,[f.encoded(shares,batch?'TransferBatch':'TransferSingle',args,share,0),
-    f.encoded(f.eventAbis[v],'CancelRefunded',[addr(30),payout],pool,1)]);
+    ...(payout?[f.cashLog(pool,addr(30),payout,1)]:[]),f.encoded(f.eventAbis[v],'CancelRefunded',[addr(30),payout],pool,2)]);
 }
 test('canceled claims carry remaining purchase basis; partial and full refunds preserve equity exactly',async()=>{
   const f=fixture();cancel(f);const before=await run(f);
@@ -64,13 +64,14 @@ test('refunds refuse missing, foreign or excessive burns/payouts and external ba
     (f)=>{f.contracts.get(addr(4)).state.balanceOf=()=>1;},
   ]) {
     const f=fixture();cancel(f);const logs=refund(f);f.contracts.get(addr(40)).state.costBasis=()=>0;f.contracts.get(addr(4)).state.balanceOf=()=>0;
-    mutate(f,logs);await assert.rejects(run(f),/refund_burns_missing|cancellation_balance_or_basis_mismatch/);
+    mutate(f,logs);await assert.rejects(run(f),/refund_burns_missing|share_balance_mismatch|cost_basis_mismatch/);
   }
   const excessive=fixture();cancel(excessive);refund(excessive,{payout:50000001});
   await assert.rejects(run(excessive),/refund_exceeds_cost_basis/);
 });
 test('refund burn order preserves contract integer rounding for repeated outcomes',async()=>{
   const f=fixture(),artifact=await run(f),input=artifact.snapshot;
+  delete input.assetLedger; // Isolated legacy integer-rounding calculator test.
   input.markets[0].status='canceled';input.markets=input.markets.slice(0,1);
   const buy={...input.events[0],sharesUnits:'4',collateralUnits:'2'};
   const refundEvent={...buy,side:'refund',blockNumber:120,blockHash:hash(120),txHash:hash(900),logIndex:0,
@@ -101,7 +102,7 @@ test('open disputes, missing correction pairs and corrections/cancellations afte
   for(const action of ['MarketResolutionCorrected','MarketCanceled']) {
     const f=fixture({resolved:true}),abi=f.eventAbis[1];
     // Even a payout to a wallet outside the tournament forbids a correction.
-    const redeemed=f.logs.find(l=>l.transactionHash===hash(631));
+    const redeemed=f.logs.find(l=>l.transactionHash===hash(631)&&l.address===addr(40));
     Object.assign(redeemed,abi.encodeEventLog(abi.getEvent('WinningsRedeemed'),[addr(99),90000000,90000000]));
     f.addReceipt(hash(901),150,[f.encoded(abi,'ResolutionDisputeOpened',[0,1],addr(40))]);
     f.addReceipt(hash(902),160,[f.encoded(abi,action,action==='MarketCanceled'?[0]:[0,1,2],addr(40))]);
