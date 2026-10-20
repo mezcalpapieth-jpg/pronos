@@ -1,0 +1,311 @@
+{
+  "checkedAt": "2026-10-20T12:56:19.394Z",
+  "status": "configured_standby",
+  "branch": "onchain-sepolia",
+  "deployment": {
+    "id": "dpl_3qa2RnHBQiqnkL6gBGubyMJqmzi3",
+    "url": "https://pronos-onchain-sepolia-standings-hier6cmgg.vercel.app",
+    "sha": "ffb2ef77e571c6e974aacb2593c33b8e55c72a4a",
+    "mode": "standby",
+    "projectId": "prj_8Et2ZFYdeNNdwuZ67mmT2Z7e3qEJ",
+    "state": "READY",
+    "alias": [
+      "pronos-onchain-sepolia-standings.vercel.app",
+      "pronos-onchain-sepolia-standings-mezcalpapieth-jpgs-projects.vercel.app"
+    ],
+    "target": "production",
+    "targetExplanation": "Production environment of a new isolated preview-worker project; the main application production was not changed.",
+    "nodeVersion": "22.x",
+    "regions": [
+      "iad1"
+    ],
+    "maxDurationSeconds": 300,
+    "gitLinked": false,
+    "cronDefinitions": [],
+    "policyConfigured": false,
+    "publicationEnabled": false
+  },
+  "environment": [
+    {
+      "key": "ONCHAIN_STANDINGS_ENABLED",
+      "type": "plain",
+      "target": [
+        "production"
+      ]
+    },
+    {
+      "key": "CRON_SECRET",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ]
+    },
+    {
+      "key": "PREVIEW_STANDINGS_PROJECT_ID",
+      "type": "plain",
+      "target": [
+        "production"
+      ]
+    },
+    {
+      "key": "CHAIN_ID",
+      "type": "plain",
+      "target": [
+        "production"
+      ]
+    },
+    {
+      "key": "ARB_RPC_URL",
+      "type": "plain",
+      "target": [
+        "production"
+      ]
+    },
+    {
+      "key": "DATABASE_URL",
+      "type": "sensitive",
+      "target": [
+        "production"
+      ]
+    }
+  ],
+  "source": {
+    "uploadedFilesVerified": 243,
+    "noPrivateFiles": true,
+    "sourceSha": "ffb2ef77e571c6e974aacb2593c33b8e55c72a4a"
+  },
+  "sourceDigests": {
+    "source.json": "94d614a78b55ac213e14364f65c8dd46e4a1c225",
+    "worker.js": "a534e0725e0b39d2ed0587e8788ff4b2c863f08a",
+    "vercel.json": "d506c034f98e01141c34c37ae9af57cb8a2f0d4e"
+  },
+  "validation": {
+    "localTests": {
+      "passed": 14,
+      "failed": 0,
+      "skipped": 0,
+      "suites": [
+        "worker authentication and isolation",
+        "committed standby packaging",
+        "durable scheduler and PostgreSQL role grants"
+      ]
+    },
+    "lockedDependencyInstall": true,
+    "standaloneBuild": true,
+    "liveRequests": [
+      {
+        "path": "/api/tick",
+        "method": "GET",
+        "status": 401,
+        "body": {
+          "error": "unauthorized"
+        }
+      },
+      {
+        "path": "/api/tick?ONCHAIN_STANDINGS_ENABLED=true&cycleId=5",
+        "method": "GET",
+        "status": 401,
+        "body": {
+          "error": "unauthorized"
+        }
+      },
+      {
+        "path": "/api/tick",
+        "method": "GET",
+        "status": 401,
+        "body": {
+          "error": "unauthorized"
+        }
+      },
+      {
+        "path": "/api/tick",
+        "method": "POST",
+        "status": 405,
+        "body": {
+          "error": "method_not_allowed"
+        }
+      },
+      {
+        "path": "/api/tick",
+        "method": "GET",
+        "status": 200,
+        "body": {
+          "status": "disabled"
+        }
+      },
+      {
+        "path": "/api/tick?ONCHAIN_STANDINGS_ENABLED=true&cycleId=5",
+        "method": "GET",
+        "status": 200,
+        "body": {
+          "status": "disabled"
+        }
+      },
+      {
+        "path": "/source.json",
+        "method": "GET",
+        "status": 404,
+        "body": null
+      },
+      {
+        "path": "/review.json",
+        "method": "GET",
+        "status": 404,
+        "body": null
+      }
+    ],
+    "restrictedDatabaseLogin": {
+      "checkedAt": "2026-10-20T12:46:29.873Z",
+      "actualPasswordLogin": true,
+      "identity": {
+        "database": "neondb",
+        "role": "sepolia_standings",
+        "statement_timeout": "25s",
+        "lock_timeout": "3s",
+        "can_create_schema_objects": false,
+        "can_create_schemas": false,
+        "memberships": 0
+      },
+      "role": {
+        "rolsuper": false,
+        "rolcreaterole": false,
+        "rolcreatedb": false,
+        "rolreplication": false,
+        "rolbypassrls": false,
+        "rolinherit": false,
+        "rolconnlimit": 6
+      },
+      "writes": [
+        {
+          "name": "sepolia_standings_checkpoints",
+          "insert": true,
+          "update": false,
+          "delete": true,
+          "truncate": false,
+          "trigger": false
+        },
+        {
+          "name": "sepolia_standings_jobs",
+          "insert": true,
+          "update": true,
+          "delete": false,
+          "truncate": false,
+          "trigger": false
+        },
+        {
+          "name": "sepolia_tournament_lock",
+          "insert": true,
+          "update": true,
+          "delete": false,
+          "truncate": false,
+          "trigger": false
+        },
+        {
+          "name": "sepolia_tournament_standings",
+          "insert": true,
+          "update": false,
+          "delete": false,
+          "truncate": false,
+          "trigger": false
+        }
+      ],
+      "deniedChecks": 10,
+      "counts": {
+        "future_cycles": 0,
+        "publications": 0,
+        "jobs": 0,
+        "checkpoints": 0
+      }
+    },
+    "finalDatabaseState": {
+      "checked_at": "2026-10-20T12:55:21.064142+00:00",
+      "future_rows": 0,
+      "current_cycle": {
+        "id": 5,
+        "label": "Torneo Octubre 2026",
+        "status": "active",
+        "ends_at": "2026-11-01T05:59:00+00:00",
+        "closed_at": null,
+        "created_at": "2026-10-01T08:55:21.984747+00:00",
+        "started_at": "2026-10-01T06:00:00+00:00"
+      },
+      "future_tables": [
+        "sepolia_standings_checkpoints",
+        "sepolia_standings_jobs",
+        "sepolia_tournament_closures",
+        "sepolia_tournament_cycles",
+        "sepolia_tournament_eligibility",
+        "sepolia_tournament_joins",
+        "sepolia_tournament_lock",
+        "sepolia_tournament_mints",
+        "sepolia_tournament_standings"
+      ],
+      "public_security_definer_functions": []
+    },
+    "mainPreviewRuntime": {
+      "enabled": true,
+      "chainId": 421614,
+      "symbol": "MXNP",
+      "lateJoining": false,
+      "tournamentSeason": false
+    }
+  },
+  "boundaries": {
+    "checkedAt": "2026-10-20T12:53:36.556Z",
+    "release": {
+      "id": "dpl_3qa2RnHBQiqnkL6gBGubyMJqmzi3",
+      "url": "https://pronos-onchain-sepolia-standings-hier6cmgg.vercel.app",
+      "sha": "ffb2ef77e571c6e974aacb2593c33b8e55c72a4a",
+      "mode": "standby",
+      "projectId": "prj_8Et2ZFYdeNNdwuZ67mmT2Z7e3qEJ"
+    },
+    "environmentRecordsUnchanged": [
+      156,
+      12
+    ],
+    "productionUnchanged": {
+      "id": "dpl_Eoe8XeTRDVUjRHCFaUuFDnhRV4TU",
+      "aliases": [
+        "pronos.io",
+        "www.pronos.io",
+        "pronos-chi.vercel.app",
+        "pronos-mezcalpapieth-jpgs-projects.vercel.app"
+      ]
+    },
+    "pointbreakUnchanged": {
+      "local": "47aa9e19115d64bc36a2684e5eeb685caef117ba",
+      "tracking": "c8aec58f571fee9cf743d2a2268de58eaa739a85",
+      "remote": "c8aec58f571fee9cf743d2a2268de58eaa739a85"
+    },
+    "chainUnchanged": {
+      "token": "0x6ed6c00c2b4cf9f5989866f4c5862d4cded67ef9",
+      "totalSupply": "50000000000000",
+      "accounts": {
+        "reserve": {
+          "address": "0x0Caa37c077924038e14e9D8dE46B5208788e52CF",
+          "balance": "2802243689456225488",
+          "nonce": 53
+        },
+        "operations": {
+          "address": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+          "balance": "488842499590000",
+          "nonce": 23
+        },
+        "gas": {
+          "address": "0x252a1cfa015612EFB8C7c2f1643A9F541b866990",
+          "balance": "99499580000000000",
+          "nonce": 1
+        }
+      }
+    },
+    "noEthSpent": true
+  },
+  "unrelatedUntrackedFilesUnchanged": 14,
+  "sourceCommitIsLocal": true,
+  "branchPushed": false,
+  "remaining": [
+    "A reviewed future funded tournament plan, complete registry/context and policy hash",
+    "Separately authorized active worker release and main-app future-season flags",
+    "Live future-season publication and full tournament rehearsal; no such activation was performed"
+  ]
+}
