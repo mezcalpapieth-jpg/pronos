@@ -24,6 +24,7 @@ function fixture({ route = router, token = a('2'), failRoute = false } = {}) {
     prepareUserTradeGas: async args => { sent.push({ gasPreparation: args.action }); },
     MAX_UINT256: ethers.constants.MaxUint256, COLLATERAL_DECIMALS: 6,
     async signAndBroadcast(tx) {
+      if (tx.execution) return tx.execution.send({ ...tx, step: tx.step || 'trade' });
       sent.push(tx);
       const erc20 = new ethers.utils.Interface(['function approve(address,uint256)']);
       const erc1155 = new ethers.utils.Interface(['function setApprovalForAll(address,bool)']);
@@ -88,4 +89,21 @@ test('legacy direct markets retain exact-pool destinations and existing guarded 
   assert.equal(direct.length, 3);
   const iface = new ethers.utils.Interface(['function buy(bool,uint256,uint256)', 'function sell(bool,uint256,uint256)', 'function redeem(uint256)']);
   assert.deepEqual(direct.map(tx => iface.parseTransaction(tx).name), ['buy','sell','redeem']);
+});
+test('durable dispatch coordinates both approval types and recovers receipts without gas or route reads', async () => {
+  const iface = new ethers.utils.Interface([
+    'event SharesBought(address indexed buyer,bool isYes,uint256 collateralIn,uint256 fee,uint256 sharesOut)',
+    'event SharesSold(address indexed seller,bool isYes,uint256 sharesIn,uint256 collateralOut,uint256 fee)',
+  ]);
+  const receipt = { transactionHash: 'saved-receipt', blockNumber: 10, logs: ['SharesBought','SharesSold'].map(name => ({
+    address: a('a'), ...iface.encodeEventLog(iface.getEvent(name), [a('f'), true, 1000000, 10000, 2000000]),
+  })) };
+  const calls = [], execution = { send: async call => { calls.push(call); return receipt; } }, f = fixture();
+  await f.buyOnChain({ ...f.args, execution }); await f.sellOnChain({ ...f.args, execution }); await f.redeemOnChain({ ...f.args, execution });
+  assert.deepEqual(calls.map(call => call.step), ['collateral_approval','trade','share_approval','trade','trade']);
+  const offline = fixture({ failRoute: true });
+  assert.equal((await offline.buyOnChain({ ...offline.args, execution: { receipt } })).sharesOut, 2);
+  assert.equal((await offline.sellOnChain({ ...offline.args, execution: { receipt } })).txHash, 'saved-receipt');
+  assert.equal((await offline.redeemOnChain({ ...offline.args, execution: { receipt } })).txHash, 'saved-receipt');
+  assert.equal(offline.sent.length, 0);
 });

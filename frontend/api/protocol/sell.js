@@ -1,6 +1,6 @@
 /**
  * POST /api/protocol/sell
- * Body: { marketId, outcomeIndex, shares, minCollateralOut? }
+ * Body: { marketId, outcomeIndex, shares, minCollateralOut?, requestId? }
  *
  * MVP-only on-chain sell. Same shape as /api/protocol/buy.js — the
  * endpoint is a thin wrapper over sellOnChain; indexer reconciles
@@ -12,6 +12,9 @@
  * pre-check would just race the indexer's lag.
  */
 import { neon } from '@neondatabase/serverless';
+import { protocolTradeRequest } from '../_lib/trade-request-runtime.js';
+import { tradeError } from '../_lib/trade-requests.js';
+import { validateTradePlan } from '../_lib/trade-request-validation.js';
 import { assertTournamentTradingOpen } from '../_lib/sepolia-tournament-season.js';
 import { applyCors } from '../_lib/cors.js';
 import { requireSession } from '../_lib/session.js';
@@ -23,7 +26,7 @@ import {
   optionalFiniteNumber,
 } from '../_lib/protocol-trade-guards.js';
 
-const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
+const sql = neon(process.env.DATABASE_URL);
 
 function parseJsonb(value, fallback) {
   if (Array.isArray(value)) return value;
@@ -35,6 +38,7 @@ function parseJsonb(value, fallback) {
 export default async function handler(req, res) {
   const cors = applyCors(req, res, { methods: 'POST, OPTIONS', credentials: true });
   if (cors) return cors;
+  res.setHeader('Cache-Control', 'private, no-store');
   if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
 
   const limited = rateLimit(req, res, {
@@ -57,66 +61,52 @@ export default async function handler(req, res) {
   if (!Number.isFinite(n) || n <= 0)       return res.status(400).json({ error: 'invalid_shares' });
 
   try {
-    await assertTournamentTradingOpen();
-    const marketRows = await sql`
-      SELECT id, status, pool_address, outcomes, end_time
-      FROM protocol_markets
-      WHERE id = ${mid}
-      LIMIT 1
-    `;
-    if (marketRows.length === 0) {
-      return res.status(404).json({ error: 'market_not_found' });
-    }
-    const m = marketRows[0];
-    if (m.status !== 'active') {
-      return res.status(400).json({ error: 'market_closed' });
-    }
-    if (!m.pool_address) {
-      return res.status(400).json({ error: 'market_missing_pool' });
-    }
-    if (m.end_time && new Date(m.end_time) <= new Date()) {
-      return res.status(400).json({ error: 'market_expired' });
-    }
-    const outcomes = parseJsonb(m.outcomes, ['Sí', 'No']);
-    if (oi >= outcomes.length) {
-      return res.status(400).json({ error: 'invalid_outcome_index' });
-    }
-    const quote = await quoteSellOnChain({
-      market: { chain_address: m.pool_address, outcomes },
-      outcomeIndex: oi,
-      shares: n,
-    });
-    enforceProtocolSellSlippage({ quote, minCollateralOut });
-    const txMinCollateralOut = optionalFiniteNumber(minCollateralOut)
-      ?? defaultMinCollateralOut(quote);
+    const response = await protocolTradeRequest({
+      req, session, action: 'sell', payload: { marketId: mid, outcomeIndex: oi, shares: n, minCollateralOut: minCollateralOut ?? null, quoteReference: req.body?.quoteReference ?? null },
+      prepare: async ({ ownerAddr, chainId: expectedChainId }) => {
+        await assertTournamentTradingOpen();
+        const marketRows = await sql`
+          SELECT id, status, pool_address, outcomes, end_time, chain_id
+          FROM protocol_markets
+          WHERE id = ${mid}
+          LIMIT 1
+        `;
+        if (marketRows.length === 0) {
+          throw tradeError('market_not_found', 404);
+        }
+        const m = marketRows[0];
+        if (expectedChainId && Number(m.chain_id) !== expectedChainId) throw tradeError('trade_wrong_chain', 400);
+        if (m.status !== 'active') {
+          throw tradeError('market_closed', 400);
+        }
+        if (!m.pool_address) {
+          throw tradeError('market_missing_pool', 400);
+        }
+        if (m.end_time && new Date(m.end_time) <= new Date()) {
+          throw tradeError('market_expired', 400);
+        }
+        const outcomes = parseJsonb(m.outcomes, ['Sí', 'No']);
+        if (oi >= outcomes.length) {
+          throw tradeError('invalid_outcome_index', 400);
+        }
+        const quote = await quoteSellOnChain({
+          market: { chain_address: m.pool_address, outcomes },
+          outcomeIndex: oi,
+          shares: n,
+        });
+        enforceProtocolSellSlippage({ quote, minCollateralOut });
+        const txMinCollateralOut = optionalFiniteNumber(minCollateralOut)
+          ?? defaultMinCollateralOut(quote);
 
-    const userRows = await sql`
-      SELECT wallet_address FROM points_users
-      WHERE turnkey_sub_org_id = ${session.sub}
-      LIMIT 1
-    `;
-    const ownerAddr = userRows[0]?.wallet_address;
-    if (!ownerAddr) {
-      return res.status(400).json({ error: 'wallet_not_found' });
-    }
-
-    const result = await sellOnChain({
-      suborgId: session.sub,
-      ownerAddr,
-      market: { chain_address: m.pool_address, outcomes },
-      outcomeIndex: oi,
-      shares: n,
-      minCollateralOut: txMinCollateralOut,
+        return { protocolMarketId: mid, chainId: Number(m.chain_id), suborgId: session.sub, ownerAddr, market: { chain_address: m.pool_address, outcomes }, outcomeIndex: oi, shares: n, minCollateralOut: txMinCollateralOut };
+      },
+      validate: plan => validateTradePlan({ sql, action: 'sell', plan }),
+      execute: async (plan, execution) => {
+        const result = await sellOnChain({ ...plan, execution });
+        return { ok: true, mode: 'protocol', collateralOut: result.collateralOut, fee: result.fee, txHash: result.txHash, blockNumber: result.blockNumber };
+      },
     });
-
-    return res.status(200).json({
-      ok: true,
-      mode: 'protocol',
-      collateralOut: result.collateralOut,
-      fee: result.fee,
-      txHash: result.txHash,
-      blockNumber: result.blockNumber,
-    });
+    return res.status(response.httpStatus).json(response.body);
   } catch (e) {
     if (e?.status && typeof e?.message === 'string') {
       return res.status(e.status).json({ error: e.message, detail: e.detail });

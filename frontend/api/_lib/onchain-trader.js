@@ -203,7 +203,8 @@ function chainId() {
  * Returns the receipt after 1 confirmation. Throws with a useful
  * status if any step fails — the endpoint translates to HTTP.
  */
-async function signAndBroadcast({ suborgId, from, to, data, gasLimit }) {
+async function signAndBroadcast({ suborgId, from, to, data, gasLimit, execution, step = 'trade' }) {
+  if (execution) return execution.send({ suborgId, from, to, data, gasLimit, step });
   const prov = provider();
   const nonce = await prov.getTransactionCount(from, 'pending');
   const feeData = await onchainFeeData(prov, chainId());
@@ -245,7 +246,7 @@ async function signAndBroadcast({ suborgId, from, to, data, gasLimit }) {
 // ── Collateral allowance (approve once per spender) ─────────────────
 
 async function ensureCollateralAllowance({
-  suborgId, ownerAddr, ammAddress, amount, collateralAddr = process.env.ONCHAIN_COLLATERAL_ADDRESS,
+  suborgId, ownerAddr, ammAddress, amount, collateralAddr = process.env.ONCHAIN_COLLATERAL_ADDRESS, execution,
 }) {
   const prov = provider();
   const c = new ethers.Contract(collateralAddr, ERC20_ABI, prov);
@@ -260,12 +261,13 @@ async function ensureCollateralAllowance({
     to: collateralAddr,
     data,
     gasLimit: ethers.BigNumber.from(100_000),
+    execution, step: 'collateral_approval',
   });
   return receipt.transactionHash;
 }
 
 async function ensureShareOperatorApproval({
-  suborgId, ownerAddr, ammAddress, tokenAddr,
+  suborgId, ownerAddr, ammAddress, tokenAddr, execution,
 }) {
   const prov = provider();
   const token = new ethers.Contract(tokenAddr, ERC1155_ABI, prov);
@@ -280,6 +282,7 @@ async function ensureShareOperatorApproval({
     to: tokenAddr,
     data,
     gasLimit: ethers.BigNumber.from(120_000),
+    execution, step: 'share_approval',
   });
   return receipt.transactionHash;
 }
@@ -676,13 +679,14 @@ export async function quoteSellOnChain({ market, outcomeIndex, shares }) {
 }
 
 export async function buyOnChain({
-  suborgId, ownerAddr, market, outcomeIndex, collateral, minSharesOut,
+  suborgId, ownerAddr, market, outcomeIndex, collateral, minSharesOut, execution,
 }) {
-  requireReady();
   if (!suborgId) throw new Error('suborgId required');
   if (!ownerAddr) throw new Error('ownerAddr required');
   if (!market?.chain_address) throw new Error('market missing chain_address');
 
+  if (execution?.receipt) return buyReceiptResult(market, execution.receipt);
+  requireReady();
   const ammAddr = market.chain_address;
   const route = await poolTradingRoute(ammAddr, { provider: provider() });
   const collateralUnits = parseCollateralUnits(collateral);
@@ -695,15 +699,17 @@ export async function buyOnChain({
     action: 'buy', binary: isBinary(market), units: collateralUnits, outcomeIndex, minOut: minSharesUnits,
     gasUnits: 700000 });
   await ensureCollateralAllowance({
-    suborgId, ownerAddr, ammAddress: route?.address || ammAddr, amount: collateralUnits,
+    suborgId, ownerAddr, ammAddress: route?.address || ammAddr, amount: collateralUnits, execution,
   });
 
   const data = route ? new ethers.utils.Interface(TRADING_ROUTER_ABI).encodeFunctionData('buy', [ammAddr, outcomeIndex, collateralUnits, minSharesUnits])
     : encodeBuyWithMinOut(market, outcomeIndex, collateralUnits, minSharesUnits);
   const receipt = await signAndBroadcast({
-    suborgId, from: ownerAddr, to: route?.address || ammAddr, data,
+    suborgId, from: ownerAddr, to: route?.address || ammAddr, data, execution,
   });
-
+  return buyReceiptResult(market, receipt);
+}
+function buyReceiptResult(market, receipt) {
   const ev = parseBuyEvent(market, receipt);
   if (!ev) {
     const err = new Error('event_not_found');
@@ -723,13 +729,14 @@ export async function buyOnChain({
 }
 
 export async function sellOnChain({
-  suborgId, ownerAddr, market, outcomeIndex, shares, minCollateralOut,
+  suborgId, ownerAddr, market, outcomeIndex, shares, minCollateralOut, execution,
 }) {
-  requireReady();
   if (!suborgId) throw new Error('suborgId required');
   if (!ownerAddr) throw new Error('ownerAddr required');
   if (!market?.chain_address) throw new Error('market missing chain_address');
 
+  if (execution?.receipt) return sellReceiptResult(market, execution.receipt);
+  requireReady();
   const ammAddr = market.chain_address;
   const route = await poolTradingRoute(ammAddr, { provider: provider() });
   const amm = new ethers.Contract(
@@ -749,15 +756,17 @@ export async function sellOnChain({
     action: 'sell', binary: isBinary(market), units: sharesUnits, outcomeIndex, minOut: minCollateralUnits,
     gasUnits: 720000 });
   await ensureShareOperatorApproval({
-    suborgId, ownerAddr, ammAddress: route?.address || ammAddr, tokenAddr,
+    suborgId, ownerAddr, ammAddress: route?.address || ammAddr, tokenAddr, execution,
   });
 
   const data = route ? new ethers.utils.Interface(TRADING_ROUTER_ABI).encodeFunctionData('sell', [ammAddr, outcomeIndex, sharesUnits, minCollateralUnits])
     : encodeSellWithMinOut(market, outcomeIndex, sharesUnits, minCollateralUnits);
   const receipt = await signAndBroadcast({
-    suborgId, from: ownerAddr, to: route?.address || ammAddr, data,
+    suborgId, from: ownerAddr, to: route?.address || ammAddr, data, execution,
   });
-
+  return sellReceiptResult(market, receipt);
+}
+function sellReceiptResult(market, receipt) {
   const ev = parseSellEvent(market, receipt);
   if (!ev) {
     const err = new Error('event_not_found');
@@ -777,12 +786,13 @@ export async function sellOnChain({
 }
 
 export async function redeemOnChain({
-  suborgId, ownerAddr, market, amount,
+  suborgId, ownerAddr, market, amount, execution,
 }) {
-  requireReady();
   if (!suborgId) throw new Error('suborgId required');
   if (!ownerAddr) throw new Error('ownerAddr required');
   if (!market?.chain_address) throw new Error('market missing chain_address');
+  if (execution?.receipt) return { txHash: execution.receipt.transactionHash, blockNumber: execution.receipt.blockNumber };
+  requireReady();
 
   const units = ethers.utils.parseUnits(String(amount), COLLATERAL_DECIMALS);
   const route = await poolTradingRoute(market.chain_address, { provider: provider() });
@@ -790,7 +800,7 @@ export async function redeemOnChain({
   await prepareUserTradeGas({ suborgId, ownerAddr, provider: provider(), pool: market.chain_address, route,
     action: 'redeem', units, data, target: route?.address || market.chain_address, gasUnits: 600000 });
   const receipt = await signAndBroadcast({
-    suborgId, from: ownerAddr, to: route?.address || market.chain_address, data,
+    suborgId, from: ownerAddr, to: route?.address || market.chain_address, data, execution,
   });
   return {
     txHash: receipt.transactionHash,

@@ -1,12 +1,14 @@
+import { createTradeRequestClient } from './tradeRequests.js';
 const fail = code => { throw Object.assign(new Error(code), { code }); };
 const modes = new Set(['points', 'onchain']);
 
 // Transport injection keeps routing/identity behavior testable without React or
 // a wallet. A failed protocol request must never fall back to the Points ledger.
-export function createExecutionAdapter({ get, post, beforeTrade }) {
+export function createExecutionAdapter({ get, post, beforeTrade, tradeStorage, tradeUuid, tradeChanged }) {
   let configPromise;
   let mode = 'points';
   const identities = new Map(); // public metadata only; no wallet/account data
+  const requests = createTradeRequestClient({ get, post, storage: tradeStorage, uuid: tradeUuid, changed: tradeChanged });
   const bridge = (action, params = {}) => get(`/api/points/onchain?${new URLSearchParams({ action, ...params })}`);
   async function config() {
     if (!configPromise) configPromise = bridge('config').then(result => {
@@ -112,7 +114,11 @@ export function createExecutionAdapter({ get, post, beforeTrade }) {
       if (!(Number(body.amount) > 0)) fail('invalid_amount');
       delete body.outcomeIndex;
     }
-    if (target.mode === 'onchain' && ['buy', 'sell', 'redeem'].includes(action)) await beforeTrade?.(target);
+    if (target.mode === 'onchain' && ['buy', 'sell', 'redeem'].includes(action)) {
+      if ((await config()).durableTrades) return requests.trade(action, body,
+        { sourceMarketId: id, beforeTrade: () => beforeTrade?.(target) });
+      await beforeTrade?.(target);
+    }
     return post(`/api/${target.mode === 'onchain' ? 'protocol' : 'points'}/${action}`, body);
   }
   async function publicRead(action, ids, options, legacy) {
@@ -158,5 +164,7 @@ export function createExecutionAdapter({ get, post, beforeTrade }) {
   }
   return { config, setMode, getMode: () => mode, markets, market, trade, publicRead, portfolio, remember,
     balance: () => bridge('balance'), createBalanceReader,
+    pendingTrade: async () => (await config()).durableTrades ? requests.pending() : null,
+    resumeTrade: async () => (await config()).durableTrades ? requests.resume() : null,
   };
 }

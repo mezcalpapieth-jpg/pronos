@@ -24,7 +24,9 @@ export function setTradingConsentHandler(handler) {
   tradingConsentHandler = handler;
   return () => { if (tradingConsentHandler === handler) tradingConsentHandler = null; };
 }
-export const pointsExecution = createExecutionAdapter({ get: getJson, post: postJson, beforeTrade: async target => {
+export const pointsExecution = createExecutionAdapter({ get: getJson, post: postJson,
+  tradeChanged: () => { if (typeof window !== 'undefined') window.dispatchEvent(new Event('pronos:trade-request')); },
+  beforeTrade: async target => {
   const status = await fetchDelegationStatus();
   if (delegationCoversMarket(status, target)) return;
   if (!tradingConsentHandler) throw Object.assign(new Error('delegation_required'), { code: 'delegation_required' });
@@ -43,12 +45,30 @@ async function handle(res) {
     err.detail = data?.detail || null;
     err.hint = data?.hint || null;
     err.status = res.status;
+    err.requestId = data?.requestId || null;
+    err.tradeStatus = data?.status || null;
     throw err;
   }
   return data;
 }
 
 const PUBLIC_ERROR_COPY = {
+  trade_owner_changed: {
+    es: 'Tu sesión cambió. Actualiza la página para continuar con la cuenta correcta.',
+    en: 'Your session changed. Refresh to continue with the correct account.',
+  },
+  trade_request_pending: {
+    es: 'Tu operación sigue pendiente. Puedes revisar su estado y continuarla sin enviarla de nuevo.',
+    en: 'Your trade is still pending. Check its status and resume it without placing another trade.',
+  },
+  trade_needs_reconciliation: {
+    es: 'Estamos revisando el resultado de tu operación. No necesitas enviarla otra vez.',
+    en: 'We are checking the outcome of your trade. You do not need to submit it again.',
+  },
+  trade_recovery_unavailable: {
+    es: 'No pudimos guardar o recuperar tu operación. Revisa que el almacenamiento del navegador esté disponible.',
+    en: 'We could not save or recover your trade. Check that browser storage is available.',
+  },
   invalid_session: {
     es: 'Tu sesión expiró. Vuelve a iniciar sesión.',
     en: 'Your session expired. Please sign in again.',

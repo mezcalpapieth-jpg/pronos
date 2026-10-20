@@ -16,6 +16,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import PointsLoginModal from '@app/components/PointsLoginModal.jsx';
 import PointsNav from './components/PointsNav.jsx';
+import PendingTradeNotice from './components/PendingTradeNotice.jsx';
 import PointsTicker from './components/PointsTicker.jsx';
 import PointsCategoryBar from './components/PointsCategoryBar.jsx';
 import Footer from '@app/components/Footer.jsx';
@@ -401,6 +402,7 @@ function Shell({ onOpenLogin, isAdmin }) {
       {isHome && execution.mode !== 'onchain' && <PointsTicker />}
       {execution.mode !== 'onchain' && path.startsWith('/stocks') && <Suspense fallback={null}><StockLiveTicker /></Suspense>}
       <PointsNav onOpenLogin={onOpenLogin} isAdmin={isAdmin} />
+      <PendingTradeNotice />
       {showCategoryBar && <PointsCategoryBar />}
       {pointsOnly ? <main style={{ maxWidth: 700, margin: '48px auto', padding: 24 }}>
         <p>Esta sección corresponde al torneo Points. El torneo de prueba tiene un saldo y operaciones separados.</p>

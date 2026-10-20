@@ -10,6 +10,7 @@ import { marketView, portfolioView, jsonArray } from '../_lib/points-onchain-vie
 import { tradingFactories } from '../_lib/trading-router.js';
 import { lateJoinSettings } from '../_lib/sepolia-tournament-user-join.js';
 import { seasonSettings } from '../_lib/sepolia-tournament-season.js';
+import { tradeRequestSettings } from '../_lib/trade-request-runtime.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const addressPattern = /^0x[0-9a-f]{40}$/i;
@@ -73,7 +74,8 @@ export default async function handler(req, res) {
   if (action === 'config') return res.status(200).json({ enabled: settings.enabled,
     chainId: settings.enabled ? settings.chainId : null, symbol: settings.symbol,
     lateJoining: settings.enabled && lateJoinSettings().configured,
-    tournamentSeason: settings.enabled && seasonSettings().configured });
+    tournamentSeason: settings.enabled && seasonSettings().configured,
+    durableTrades: settings.enabled && tradeRequestSettings().enabled });
   if (!settings.enabled) return res.status(403).json({ error: 'onchain_preview_disabled' });
   if (rateLimit(req, res, { key: `points-onchain:${clientIp(req)}`, windowMs: 60000, limit: 120 })) return;
   try {

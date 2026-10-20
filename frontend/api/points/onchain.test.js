@@ -6,6 +6,7 @@ import { tradingFactories } from '../_lib/trading-router.js';
 import { marketView, portfolioView, jsonArray } from '../_lib/points-onchain-view.js';
 import { lateJoinSettings } from '../_lib/sepolia-tournament-user-join.js';
 import { seasonSettings } from '../_lib/sepolia-tournament-season.js';
+import { tradeRequestSettings } from '../_lib/trade-request-runtime.js';
 
 const source = (await readFile(new URL('./onchain.js', import.meta.url), 'utf8'))
   .replace(/^import .+;\n/gm, '').replace(/^export default /gm, '').replace(/^export /gm, '');
@@ -40,6 +41,7 @@ function fixture({ patch = {}, rows = [mapping], trades = [], session = { sub: '
     rateLimit: (req, res) => { if (limited) res.status(429).json({ error: 'rate_limited' }); return limited; }, clientIp: () => 'test-ip',
     pendingApprovalSettings, tradingFactories, marketView, portfolioView, jsonArray, console: { error() {} },
     lateJoinSettings:()=>lateJoinSettings({...env,...patch}),seasonSettings:()=>seasonSettings({...env,...patch}),
+    tradeRequestSettings:()=>tradeRequestSettings({...env,...patch}),
     ethers: { providers: { JsonRpcProvider: class { async getNetwork() { if (rpcFails) throw new Error('down'); return { chainId: rpcChain }; } } },
       Contract: class { async balanceOf(owner) { assert.equal(owner, wallet); return '7500000'; } async decimals() { return 6; } },
       utils: { formatUnits: (value, decimals) => String(Number(value) / 10 ** decimals) } },
@@ -64,7 +66,7 @@ test('only the flagged onchain-sepolia preview enables the runtime; all other en
     assert.equal(f.queries.length, 0); assert.equal(f.authCalls(), 0);
   }
   const f = fixture();
-  assert.deepEqual((await f.request({ action: 'config' })).body, { enabled: true, chainId: 421614, symbol: 'MXNP',lateJoining:false,tournamentSeason:false });
+  assert.deepEqual((await f.request({ action: 'config' })).body, { enabled: true, chainId: 421614, symbol: 'MXNP',lateJoining:false,tournamentSeason:false,durableTrades:false });
   assert.equal(f.queries.length, 0);
 });
 

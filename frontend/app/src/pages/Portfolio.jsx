@@ -20,20 +20,10 @@ import MvpLeaderboard from '../components/MvpLeaderboard.jsx';
 import { usePointsAuth, fetchDelegationStatus } from '../lib/pointsAuth.js';
 import DelegationPrompt from '../components/DelegationPrompt.jsx';
 import { useT } from '../lib/i18n.js';
+import { postProtocolJson as postJson } from '../lib/protocolTradeRequests.js';
 
 async function getJson(url) {
   const res = await fetch(url, { credentials: 'include' });
-  const data = await res.json().catch(() => ({}));
-  return { ok: res.ok, status: res.status, data };
-}
-
-async function postJson(url, body) {
-  const res = await fetch(url, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body || {}),
-  });
   const data = await res.json().catch(() => ({}));
   return { ok: res.ok, status: res.status, data };
 }

@@ -16,6 +16,7 @@ import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { usePointsAuth } from '../lib/pointsAuth.js';
 import { useT } from '../lib/i18n.js';
+import { postProtocolJson as postJson } from '../lib/protocolTradeRequests.js';
 
 const QUICK_AMOUNTS = [5, 10, 25, 50];
 
@@ -26,17 +27,6 @@ const STEPS = {
   SUCCESS:  'success',
   ERROR:    'error',
 };
-
-async function postJson(url, body) {
-  const res = await fetch(url, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body || {}),
-  });
-  const data = await res.json().catch(() => ({}));
-  return { ok: res.ok, status: res.status, data };
-}
 
 export default function BetModal({
   open,
