@@ -1,3 +1,5 @@
+import { analyzeMananeraTranscript, cleanMananeraHtml } from './mananera-transcript-text.js';
+
 export const MANANERA_TRANSCRIPT_SOURCE = 'gob-mx-presidencia-transcript';
 export const MANANERA_YOUTUBE_CAPTIONS_SOURCE = 'youtube-official-captions';
 export const MANANERA_OFFICIAL_BASE_URL = 'https://www.gob.mx/presidencia';
@@ -365,7 +367,7 @@ async function readTranscriptCandidate({
     throw err;
   }
   if (!html) return null;
-  const text = stripHtml(html);
+  const text = cleanMananeraHtml(html);
   if (text.length < 500) {
     if (officialFetchAttempts) {
       officialFetchAttempts.push({
@@ -392,11 +394,18 @@ async function readTranscriptCandidate({
     }
     return null;
   }
+  const analysis = analyzeMananeraTranscript(text);
+  if (!analysis.complete) {
+    officialFetchAttempts?.push({ url: sourceUrl, fetchUrl: url, via, status: 200,
+      reason: analysis.reason, textLength: text.length });
+    return null;
+  }
   return {
     ready: true,
+    complete: true,
     url: sourceUrl,
     title: extractTitle(html),
-    text,
+    text: analysis.transcriptText,
     html: includeRawHtml ? html : undefined,
     searchUrl,
     directUrl,
@@ -1369,7 +1378,8 @@ export async function findMananeraTranscript({
 
   return {
     ready: false,
-    reason: 'official_transcript_not_found',
+    reason: officialFetchAttempts.some(attempt => attempt.reason === 'official_transcript_incomplete')
+      ? 'official_transcript_incomplete' : 'official_transcript_not_found',
     searchUrl,
     directUrl,
     archiveUrl,
@@ -1446,6 +1456,8 @@ export async function readMananeraPhraseResult(cfg = {}, options = {}) {
 
     return {
       ready: true,
+      speakerScope: 'president',
+      transcriptComplete: true,
       yes,
       outcomeIndex: yes ? yesIdx : noIdx,
       count,
@@ -1486,6 +1498,7 @@ export async function readMananeraPhraseResult(cfg = {}, options = {}) {
   const stored = options.storedTranscript || null;
   const dateYmd = configuredDates[0];
   let transcript = stored?.transcriptText && String(stored.dateYmd || '').slice(0, 10) === dateYmd
+    && analyzeMananeraTranscript(stored.transcriptText).complete
     ? {
         ready: true,
         url: stored.url,
@@ -1504,7 +1517,7 @@ export async function readMananeraPhraseResult(cfg = {}, options = {}) {
     });
   }
 
-  if (cfg.youtubeFallback !== false && (!transcript.ready || !transcriptHasTimedSegments(transcript))) {
+  if (cfg.youtubeFallback !== false && !transcript.ready) {
     const youtubeTranscript = await findMananeraYouTubeTranscript({
       dateYmd,
       cfg,
@@ -1514,8 +1527,13 @@ export async function readMananeraPhraseResult(cfg = {}, options = {}) {
         : process.env.YOUTUBE_API_KEY,
     });
     if (youtubeTranscript.ready) {
+      const captionAnalysis = analyzeMananeraTranscript(youtubeTranscript.text);
+      if (!captionAnalysis.complete) {
+        return { ...transcript, ready: false, reason: captionAnalysis.reason,
+          fallbackReason: captionAnalysis.reason, youtubeVideoUrl: youtubeTranscript.url };
+      }
       transcript = youtubeTranscript;
-    } else if (!transcript.ready) {
+    } else {
       return {
         ...transcript,
         fallbackReason: youtubeTranscript.reason || null,
@@ -1525,29 +1543,20 @@ export async function readMananeraPhraseResult(cfg = {}, options = {}) {
         youtubeTranscriptTitle: youtubeTranscript.transcriptTitle || null,
         youtubeCaptionAttempts: youtubeTranscript.captionAttempts || [],
       };
-    } else {
-      transcript = {
-        ...transcript,
-        timestampEvidenceUnavailableReason: youtubeTranscript.reason || 'youtube_captions_not_found',
-        youtubeSearchUrl: youtubeTranscript.searchUrl || buildMananeraYouTubeSearchUrl(dateYmd),
-        youtubeVideoUrl: youtubeTranscript.videoUrl || null,
-        youtubeTranscriptTitle: youtubeTranscript.transcriptTitle || null,
-        youtubeCaptionAttempts: youtubeTranscript.captionAttempts || [],
-      };
     }
   }
   if (!transcript.ready) return transcript;
 
-  const count = countPhraseOccurrences(transcript.text, cfg.phrase);
-  const matchTimestamps = findPhraseMatchTimestamps({
-    segments: transcript.timedSegments,
-    phrase: cfg.phrase,
-    baseUrl: transcript.url,
-  });
+  const analysis = analyzeMananeraTranscript(transcript.text);
+  if (!analysis.complete) return { ready: false, reason: analysis.reason };
+  const count = analysis.presidentTurns.reduce((sum, turn) =>
+    sum + countPhraseOccurrences(turn.texto, cfg.phrase), 0);
+  // Unattributed captions cannot supply timestamps for a president-only count.
+  const matchTimestamps = [];
   const matchPositions = findPhraseMatchPositions({
-    text: transcript.text,
-    phrase: cfg.phrase,
-  });
+    text: analysis.transcriptText, phrase: cfg.phrase, max: Infinity,
+  }).filter(match => analysis.presidentTurns.some(turn =>
+    match.charIndex >= turn.charStart && match.charEnd <= turn.charEnd)).slice(0, 10);
   const requiredMatchTimestamps = requiredTimestampEvidence({
     matchTimestamps,
     count,
@@ -1570,6 +1579,8 @@ export async function readMananeraPhraseResult(cfg = {}, options = {}) {
 
   return {
     ready: true,
+    speakerScope: 'president',
+    transcriptComplete: true,
     yes,
     outcomeIndex: yes ? yesIdx : noIdx,
     count,

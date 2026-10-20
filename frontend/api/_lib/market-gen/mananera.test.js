@@ -32,6 +32,9 @@ test('generateMananeraMarkets creates pending specs with transcript resolver met
   assert.equal(inegi.resolver_config.phrase, 'INEGI');
   assert.equal(inegi.resolver_config.yesOutcome, 0);
   assert.equal(inegi.resolver_config.youtubeFallback, true);
+  assert.equal(inegi.resolver_config.countSpeaker, 'president');
+  assert.equal(inegi.resolver_config.requireCompleteTranscript, true);
+  assert.match(inegi.resolver_config.criteria, /intervenciones de la presidenta/);
   assert.ok(inegi.resolver_config.criteria.includes('YouTube'));
   assert.ok(inegi.resolver_config.sourceUrls.includes('https://www.youtube.com/'));
   assert.match(inegi.source_data.transcriptSource, /YouTube/);
@@ -80,19 +83,19 @@ test('readMananeraPhraseResult sums weekly transcript dates', async () => {
         dateYmd: '2026-08-10',
         url: 'https://example.test/10',
         title: 'Mañanera 10',
-        transcriptText: 'Agua y seguridad. Agua potable.',
+        transcriptText: 'PRESIDENTA DE MÉXICO: Agua y seguridad. Agua potable.\nPREGUNTA: Agua, agua.\n—000—',
       },
       '2026-08-11': {
         dateYmd: '2026-08-11',
         url: 'https://example.test/11',
         title: 'Mañanera 11',
-        transcriptText: 'Sin menciones.',
+        transcriptText: 'PRESIDENTA DE MÉXICO: Sin menciones.\nPREGUNTA: Agua, agua.\n—000—',
       },
       '2026-08-12': {
         dateYmd: '2026-08-12',
         url: 'https://example.test/12',
         title: 'Mañanera 12',
-        transcriptText: 'Habló de agua.',
+        transcriptText: 'PRESIDENTA DE MÉXICO: Habló de agua.\nPREGUNTA: Agua, agua.\n—000—',
       },
     },
   });
@@ -107,4 +110,22 @@ test('readMananeraPhraseResult sums weekly transcript dates', async () => {
     'https://example.test/11',
     'https://example.test/12',
   ]);
+});
+
+test('weekly markets wait for every complete transcript even after a positive day', async () => {
+  const result = await readMananeraPhraseResult({
+    source: MANANERA_TRANSCRIPT_SOURCE,
+    dateYmds: ['2026-08-10', '2026-08-11'], phrase: 'IMSS', threshold: 1,
+    yesOutcome: 0, youtubeFallback: false,
+  }, {
+    storedTranscripts: {
+      '2026-08-10': { dateYmd: '2026-08-10', transcriptText: 'PRESIDENTA DE MÉXICO: IMSS.\n—000—' },
+    },
+    fetchImpl: async () => ({ ok: true, status: 200, text: async () =>
+      `<p>11 de agosto de 2026</p><p>PRESIDENTA DE MÉXICO: ${'Buenos días. '.repeat(60)}</p><p>(CONTINÚA…)</p>` }),
+  });
+  assert.equal(result.ready, false);
+  assert.equal(result.pendingDateYmd, '2026-08-11');
+  assert.equal(result.reason, 'official_transcript_incomplete');
+  assert.equal(result.outcomeIndex, undefined);
 });

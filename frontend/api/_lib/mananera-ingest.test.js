@@ -8,6 +8,8 @@ import {
 import {
   buildMananeraParsedRecord,
   ingestMananeraForDate,
+  readStoredMananeraTranscript,
+  persistMananeraTranscript,
   parseMananeraTurns,
   shouldRunMananeraAttempt,
 } from './mananera-ingest.js';
@@ -43,6 +45,7 @@ function officialHtml({ dateText = '11 de agosto de 2026' } = {}) {
         <p>PRESIDENTA DE MÉXICO, CLAUDIA SHEINBAUM PARDO: Buenos días. Hoy hablamos de seguridad y economía.</p>
         <p>PREGUNTA: Presidenta, ¿qué sigue?</p>
         <p>SECRETARIO DE SEGURIDAD Y PROTECCIÓN CIUDADANA, OMAR GARCÍA HARFUCH: Informamos avances.${filler}</p>
+      <p>—000—</p>
       </body>
     </html>
   `;
@@ -162,7 +165,7 @@ test('falls back from direct 404 to gob.mx archive article discovery', async () 
   const fetchImpl = async (url) => {
     const href = String(url);
     seen.push(href);
-    if (href === directUrl) return notFoundResponse();
+    if (href !== articleUrl && href !== archiveUrl) return notFoundResponse();
     if (href === archiveUrl) {
       return htmlResponse('<a href="/presidencia/articulos/version-estenografica-conferencia-de-prensa-del-06-de-agosto-de-2026">Transcripción</a>');
     }
@@ -173,11 +176,52 @@ test('falls back from direct 404 to gob.mx archive article discovery', async () 
   const result = await ingestMananeraForDate(db, { dateYmd, fetchImpl });
   assert.equal(result.ready, true);
   assert.equal(result.transcript.url, articleUrl);
-  assert.deepEqual(seen, [directUrl, archiveUrl, articleUrl]);
+  assert.equal(seen[0], directUrl);
+  assert.ok(seen.includes(archiveUrl));
+  assert.equal(seen.at(-1), articleUrl);
 });
 
 test('cron attempt gate is keyed to Mexico City weekday attempt hours', () => {
   assert.equal(shouldRunMananeraAttempt(new Date('2026-08-11T18:00:00.000Z')), true);
   assert.equal(shouldRunMananeraAttempt(new Date('2026-08-11T19:00:00.000Z')), false);
   assert.equal(shouldRunMananeraAttempt(new Date('2026-08-15T18:00:00.000Z')), false);
+});
+
+test('rejects incomplete records before writing a complete cache row', async () => {
+  for (const end of ['', '**_(CONTINÚA…)_**']) {
+    assert.throws(() => buildMananeraParsedRecord({
+      dateYmd: '2026-08-11', html: officialHtml().replace('—000—', end),
+    }), /official_transcript_incomplete/);
+  }
+  const db = createFakeDb();
+  await assert.rejects(persistMananeraTranscript(db, {
+    transcriptText: 'PRESIDENTA DE MÉXICO: Buenos días.\n(CONTINÚA…)'
+  }), /official_transcript_incomplete/);
+  assert.equal(db.calls.length, 0);
+});
+
+test('refreshes legacy complete cache rows that actually end in CONTINÚA', async () => {
+  const db = createFakeDb();
+  db.rows.set('2026-08-11', { date_ymd: '2026-08-11', complete: true,
+    transcript_text: 'PRESIDENTA DE MÉXICO: Buenos días.\n**_(CONTINÚA…)_**',
+    turns: [], speakers: [], n_turnos: 1, parse_version: 1 });
+  assert.equal(await readStoredMananeraTranscript(db, '2026-08-11'), null);
+  const result = await ingestMananeraForDate(db, { dateYmd: '2026-08-11',
+    fetchImpl: async () => htmlResponse(officialHtml()) });
+  assert.equal(result.ready, true);
+  assert.equal(result.skipped, false);
+  assert.equal(result.transcript.parseVersion, 2);
+  assert.equal(result.transcript.nTurnos, 3);
+});
+
+test('reparses Markdown speaker boundaries instead of trusting legacy cached turns', async () => {
+  const db = createFakeDb();
+  db.rows.set('2026-08-11', { date_ymd: '2026-08-11', complete: true,
+    transcript_text: '**PRESIDENTA DE MÉXICO:** Buenos días.\n**PREGUNTA: IMSS?**\n**—000—**',
+    turns: [{ hablante: 'PRESIDENTA DE MÉXICO', texto: 'Buenos días. IMSS?' }],
+    speakers: ['PRESIDENTA DE MÉXICO'], n_turnos: 1, parse_version: 1 });
+  const result = await readStoredMananeraTranscript(db, '2026-08-11');
+  assert.equal(result.turns.length, 2);
+  assert.equal(result.turns[1].hablante, 'PREGUNTA');
+  assert.equal(result.turns[0].texto, 'Buenos días.');
 });

@@ -1,34 +1,15 @@
 import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
+import { analyzeMananeraTranscript } from './mananera-transcript-text.js';
+export { cleanMananeraHtml, trimToMananeraTranscript, parseMananeraTurns } from './mananera-transcript-text.js';
 
 import {
   MANANERA_TRANSCRIPT_SOURCE,
   findMananeraTranscript,
 } from './mananera.js';
 
-export const MANANERA_PARSE_VERSION = 1;
+export const MANANERA_PARSE_VERSION = 2;
 export const MANANERA_TIME_ZONE = 'America/Mexico_City';
-
-const SPEAKER_RE = /^\s*([A-ZÁÉÍÓÚÑÜ][A-ZÁÉÍÓÚÑÜ0-9 ,.\-'’«»()]{4,90}?):\s*/gm;
-const BLOCK_TAG_RE = /<(br|p|div|li|h[1-6]|section|article|tr|td|th)\b[^>]*>/gi;
-
-function decodeHtmlEntities(value) {
-  return String(value || '')
-    .replace(/&nbsp;|&#160;/gi, ' ')
-    .replace(/&amp;/gi, '&')
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;|&apos;/gi, "'")
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/&#(\d+);/g, (raw, code) => {
-      const n = Number(code);
-      return Number.isFinite(n) ? String.fromCodePoint(n) : raw;
-    })
-    .replace(/&#x([0-9a-f]+);/gi, (raw, code) => {
-      const n = Number.parseInt(code, 16);
-      return Number.isFinite(n) ? String.fromCodePoint(n) : raw;
-    });
-}
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -133,68 +114,6 @@ export async function fetchWithRetry(fetchImpl, url, options = {}, {
   throw lastError || new Error('fetch_failed');
 }
 
-export function cleanMananeraHtml(html) {
-  const withBreaks = String(html || '')
-    .replace(/<script[\s\S]*?<\/script>/gi, '\n')
-    .replace(/<style[\s\S]*?<\/style>/gi, '\n')
-    .replace(/<noscript[\s\S]*?<\/noscript>/gi, '\n')
-    .replace(BLOCK_TAG_RE, '\n')
-    .replace(/<[^>]+>/g, ' ');
-
-  return decodeHtmlEntities(withBreaks)
-    .replace(/\r/g, '')
-    .split('\n')
-    .map(line => line.replace(/[ \t\f\v]+/g, ' ').trim())
-    .filter(Boolean)
-    .join('\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
-
-export function trimToMananeraTranscript(text) {
-  const raw = String(text || '');
-  const idx = raw.indexOf('PRESIDENTA DE MÉXICO');
-  return (idx >= 0 ? raw.slice(idx) : raw).trim();
-}
-
-export function parseMananeraTurns(transcriptText) {
-  const text = String(transcriptText || '').replace(/\r/g, '').trim();
-  const turns = [];
-  let current = null;
-  let match;
-  SPEAKER_RE.lastIndex = 0;
-
-  while ((match = SPEAKER_RE.exec(text))) {
-    if (current) {
-      const body = text.slice(current.bodyStart, match.index).trim();
-      if (body) {
-        turns.push({
-          orden: turns.length + 1,
-          hablante: current.speaker,
-          texto: body,
-        });
-      }
-    }
-    current = {
-      speaker: match[1].replace(/\s+/g, ' ').trim(),
-      bodyStart: SPEAKER_RE.lastIndex,
-    };
-  }
-
-  if (current) {
-    const body = text.slice(current.bodyStart).trim();
-    if (body) {
-      turns.push({
-        orden: turns.length + 1,
-        hablante: current.speaker,
-        texto: body,
-      });
-    }
-  }
-
-  return turns;
-}
-
 export function buildMananeraParsedRecord({
   dateYmd,
   source = MANANERA_TRANSCRIPT_SOURCE,
@@ -202,12 +121,10 @@ export function buildMananeraParsedRecord({
   fetchedAt = new Date().toISOString(),
   html,
 }) {
-  const cleaned = cleanMananeraHtml(html);
-  const transcriptText = trimToMananeraTranscript(cleaned);
-  const turns = parseMananeraTurns(transcriptText);
-  if (turns.length === 0) {
-    const err = new Error('mananera_parse_empty');
-    err.code = 'mananera_parse_empty';
+  const { complete, reason, transcriptText, turns } = analyzeMananeraTranscript(html);
+  if (!complete) {
+    const err = new Error(reason);
+    err.code = reason;
     throw err;
   }
   const speakers = [...new Set(turns.map(turn => turn.hablante))];
@@ -275,10 +192,26 @@ export async function readStoredMananeraTranscript(db, dateYmd) {
       LIMIT 1`,
     [dateYmd],
   );
-  return normalizeMananeraTranscriptRow(rowsFromResult(result)[0]);
+  const stored = normalizeMananeraTranscriptRow(rowsFromResult(result)[0]);
+  if (!stored) return null;
+  // Old rows were marked complete unconditionally. Revalidate their actual
+  // text so a cached CONTINÚA draft cannot block a later complete revision.
+  const analysis = analyzeMananeraTranscript(stored.transcriptText);
+  if (!analysis.complete) return null;
+  return {
+    ...stored,
+    transcriptText: analysis.transcriptText,
+    turns: analysis.turns,
+    nTurnos: analysis.turns.length,
+    speakers: [...new Set(analysis.turns.map(turn => turn.hablante))],
+    parseVersion: MANANERA_PARSE_VERSION,
+    complete: true,
+  };
 }
 
 export async function persistMananeraTranscript(db, record) {
+  const analysis = analyzeMananeraTranscript(record.transcriptText);
+  if (!analysis.complete) throw new Error(analysis.reason);
   const rawHtml = String(record.rawHtml || '');
   const rawBuffer = Buffer.from(rawHtml, 'utf8');
   const compressed = gzipSync(rawBuffer);
