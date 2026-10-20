@@ -4,11 +4,11 @@ export function validateStandingsWorker(env,source) {
   const db=new URL(env.DATABASE_URL),rpc=new URL(env.ARB_RPC_URL);
   if(env.VERCEL_ENV!=='production' || !env.PREVIEW_STANDINGS_PROJECT_ID
     || env.PREVIEW_STANDINGS_PROJECT_ID!==env.VERCEL_PROJECT_ID
-    || env.VERCEL_PROJECT_ID==='prj_Cq2kBrGtvtU7nVOH3T6yBGJWGRKi'
-    || source?.branch!=='onchain-sepolia' || !/^[a-f0-9]{40}$/.test(source.sha||'')
+    || ['prj_Cq2kBrGtvtU7nVOH3T6yBGJWGRKi','prj_2bv4NAl9EBvRdkOVw1RpAIzbDJNA'].includes(env.VERCEL_PROJECT_ID)
+    || source?.branch!=='onchain-sepolia' || source.mode!=='active' || !/^[a-f0-9]{40}$/.test(source.sha||'')
     || !['postgres:','postgresql:'].includes(db.protocol)
     || !/^ep-delicate-glitter-amp7yrkv(-pooler)?\.c-5\.us-east-1\.aws\.neon\.tech$/.test(db.hostname)
-    || decodeURIComponent(db.username)!=='sepolia_standings' || rpc.protocol!=='https:'
+    || decodeURIComponent(db.username)!=='sepolia_standings' || db.pathname!=='/neondb' || rpc.protocol!=='https:'
     || env.CHAIN_ID!=='421614' || !/^[a-f0-9]{64}$/.test(env.STANDINGS_POLICY_HASH||'')
     || typeof env.CRON_SECRET!=='string' || env.CRON_SECRET.length<32
     || Object.keys(env).some(k=>/PRIVATE_KEY|TURNKEY|CRON_SECRET_MAIN/.test(k)))throw Error('standings_worker_isolation_failed');
