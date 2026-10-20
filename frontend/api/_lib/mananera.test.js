@@ -49,8 +49,9 @@ function transcriptHtml({ dateText = '10 de agosto de 2026', mentions = 'segurid
       <body>
         <article>
           <p>${dateText}</p>
-          <p>${mentions}</p>
+          <p>PRESIDENTA DE MÉXICO, CLAUDIA SHEINBAUM PARDO: ${mentions}</p>
           <p>${filler}</p>
+          <p>—000—</p>
         </article>
       </body>
     </html>
@@ -136,7 +137,8 @@ test('falls back to text-reader extraction for the same official gob.mx page', a
         URL Source: ${articleUrl}
 
         17 de agosto de 2026.
-        La presidenta mencionó huachicol. ${'Contexto oficial de prueba. '.repeat(40)}
+        PRESIDENTA DE MÉXICO, CLAUDIA SHEINBAUM PARDO: La presidenta mencionó huachicol. ${'Contexto oficial de prueba. '.repeat(40)}
+        —000—
       `);
     }
     if (buildMananeraDirectTranscriptUrlVariants('2026-08-17').includes(href)) {
@@ -193,7 +195,7 @@ test('resolves from an ingested stored transcript without fetching gob.mx again'
       dateYmd: '2026-08-10',
       source: MANANERA_TRANSCRIPT_SOURCE,
       url: buildMananeraDirectTranscriptUrl('2026-08-10'),
-      transcriptText: 'PRESIDENTA DE MÉXICO: seguridad pública y seguridad nacional.',
+      transcriptText: 'PRESIDENTA DE MÉXICO: seguridad pública y seguridad nacional.\n—000—',
     },
     fetchImpl: async () => {
       throw new Error('stored transcript should avoid network fetch');
@@ -210,7 +212,7 @@ test('resolves from an ingested stored transcript without fetching gob.mx again'
   assert.equal(result.timestampEvidenceUnavailableReason, 'timed_caption_segments_not_found');
 });
 
-test('falls back to official YouTube captions when gob.mx transcript is delayed or blocked', async () => {
+test('defers when the only available evidence is unattributed YouTube captions', async () => {
   const videoId = 'abc123DEF45';
   const captionBaseUrl = `https://www.youtube.com/api/timedtext?v=${videoId}&lang=es`;
   const captionFiller = 'Texto de caption oficial simulado. '.repeat(40);
@@ -292,89 +294,30 @@ test('falls back to official YouTube captions when gob.mx transcript is delayed 
     yesOutcome: 0,
   }, { fetchImpl, youtubeApiKey: null });
 
-  assert.equal(result.ready, true);
-  assert.equal(result.yes, true);
-  assert.equal(result.outcomeIndex, 0);
-  assert.equal(result.count, 5);
-  assert.equal(result.transcriptSource, MANANERA_YOUTUBE_CAPTIONS_SOURCE);
-  assert.equal(result.transcriptUrl, `https://www.youtube.com/watch?v=${videoId}`);
-  assert.equal(result.videoId, videoId);
-  assert.equal(result.channelTitle, 'Claudia Sheinbaum Pardo');
-  assert.equal(result.captionKind, 'asr');
-  assert.equal(result.firstMatchSeconds, 121);
-  assert.equal(result.firstMatchTimestamp, '2:01');
-  assert.equal(result.firstMatchUrl, `https://www.youtube.com/watch?v=${videoId}&t=121s`);
-  assert.deepEqual(result.requiredMatchTimestamps.map(t => t.label), ['2:01', '3:05', '4:06', '5:07', '6:08']);
-  assert.deepEqual(result.matchTimestamps.map(t => t.label), ['2:01', '3:05', '4:06', '5:07', '6:08']);
+  assert.equal(result.ready, false);
+  assert.equal(result.reason, 'president_speaker_attribution_unavailable');
+  assert.equal(result.outcomeIndex, undefined);
   assert.ok(seen.some(url => url.startsWith('https://www.youtube.com/feeds/videos.xml')));
   assert.ok(!seen.some(url => url.startsWith('https://www.googleapis.com/youtube/v3/search')));
 });
 
-test('prefers timed YouTube captions for evidence when official transcript has no timestamps', async () => {
-  const videoId = 'timedEv42AA';
-  const captionBaseUrl = `https://www.youtube.com/api/timedtext?v=${videoId}&lang=es`;
-  const captionFiller = 'Segmento oficial con contexto suficiente. '.repeat(40);
+test('uses complete labeled official evidence without replacing it with unattributed captions', async () => {
   const seen = [];
-  const fetchImpl = async (url) => {
-    const href = String(url);
-    seen.push(href);
-    if (buildMananeraDirectTranscriptUrlVariants('2026-08-10').includes(href)) {
-      return htmlResponse(transcriptHtml({
-        dateText: '10 de agosto de 2026',
-        mentions: 'seguridad seguridad seguridad',
-      }));
-    }
-    if (href.startsWith('https://www.youtube.com/feeds/videos.xml')) {
-      return htmlResponse(`
-        <feed>
-          <entry>
-            <yt:videoId>${videoId}</yt:videoId>
-            <title>Conferencia de prensa matutina en vivo. Lunes 10 de agosto 2026 | Presidenta Claudia Sheinbaum</title>
-            <author><name>Claudia Sheinbaum Pardo</name></author>
-          </entry>
-        </feed>
-      `);
-    }
-    if (href === `https://www.youtube.com/watch?v=${videoId}`) {
-      return htmlResponse(`
-        <html><body><script>
-          var ytInitialPlayerResponse = {"captions":{"playerCaptionsTracklistRenderer":{"captionTracks":[
-            {"baseUrl":${JSON.stringify(captionBaseUrl)},"languageCode":"es","name":{"simpleText":"Español"}}
-          ]}}};
-        </script></body></html>
-      `);
-    }
-    if (href.startsWith(captionBaseUrl)) {
-      return {
-        ok: true,
-        status: 200,
-        text: async () => JSON.stringify({
-          events: [
-            { tStartMs: 61000, segs: [{ utf8: 'La seguridad fue mencionada. ' }] },
-            { tStartMs: 122000, segs: [{ utf8: 'Seguridad pública y coordinación. ' }] },
-            { tStartMs: 183000, segs: [{ utf8: `Otra vez seguridad. ${captionFiller}` }] },
-          ],
-        }),
-      };
-    }
-    throw new Error(`unexpected fetch ${href}`);
-  };
-
   const result = await readMananeraPhraseResult({
     source: MANANERA_TRANSCRIPT_SOURCE,
-    dateYmd: '2026-08-10',
-    phrase: 'seguridad',
-    op: 'gte',
-    threshold: 2,
-    yesOutcome: 0,
-  }, { fetchImpl, youtubeApiKey: null });
-
+    dateYmd: '2026-08-10', phrase: 'seguridad', threshold: 2, yesOutcome: 0,
+  }, { fetchImpl: async url => {
+    seen.push(String(url));
+    return htmlResponse(transcriptHtml({ mentions: 'seguridad seguridad seguridad' }));
+  } });
   assert.equal(result.ready, true);
-  assert.equal(result.transcriptSource, MANANERA_YOUTUBE_CAPTIONS_SOURCE);
-  assert.deepEqual(result.requiredMatchTimestamps.map(t => t.label), ['1:01', '2:02']);
+  assert.equal(result.count, 3);
+  assert.equal(result.transcriptSource, MANANERA_TRANSCRIPT_SOURCE);
+  assert.equal(result.speakerScope, 'president');
+  assert.equal(result.transcriptComplete, true);
+  assert.deepEqual(result.requiredMatchTimestamps, []);
   assert.equal(result.requiredMatchPositions.length, 2);
-  assert.ok(seen.includes(buildMananeraDirectTranscriptUrl('2026-08-10')));
-  assert.ok(seen.some(url => url.startsWith('https://www.youtube.com/feeds/videos.xml')));
+  assert.deepEqual(seen, [buildMananeraDirectTranscriptUrl('2026-08-10')]);
 });
 
 test('tries the next same-day YouTube video when the first captions are empty', async () => {
@@ -607,7 +550,7 @@ test('accepts official same-day feed video for the Claudia Sheinbaum channel', a
         status: 200,
         text: async () => JSON.stringify({
           events: [
-            { tStartMs: 72000, segs: [{ utf8: `La presidenta mencionó huachicol. ${captionFiller}` }] },
+            { tStartMs: 72000, segs: [{ utf8: `PRESIDENTA DE MÉXICO, CLAUDIA SHEINBAUM PARDO: La presidenta mencionó huachicol. ${captionFiller}` }] },
           ],
         }),
       };
@@ -774,4 +717,60 @@ test('defers when the official transcript for that date is not found', async () 
   assert.equal(result.searchUrl, buildMananeraSearchUrl('2026-08-10'));
   assert.equal(result.fallbackReason, 'official_youtube_video_not_found');
   assert.equal(result.youtubeSearchUrl, buildMananeraYouTubeSearchUrl('2026-08-10'));
+});
+
+for (const mentions of ['Buenos días.', 'IMSS IMSS.']) {
+  test(`leaves a CONTINÚA draft pending even when it says ${mentions}`, async () => {
+    const result = await readMananeraPhraseResult({
+      source: MANANERA_TRANSCRIPT_SOURCE,
+      dateYmd: '2026-08-10', phrase: 'IMSS', threshold: 1, yesOutcome: 0, youtubeFallback: false,
+    }, { fetchImpl: async () => htmlResponse(transcriptHtml({ mentions }).replace('—000—', '**_(CONTINÚA…)_**')) });
+    assert.equal(result.ready, false);
+    assert.equal(result.reason, 'official_transcript_incomplete');
+    assert.equal(result.outcomeIndex, undefined);
+  });
+}
+
+for (const [remarks, count] of [['Buenos días.', 0], ['El IMSS, y el IMSS.', 2]]) {
+  test(`counts only president remarks (${count}), excluding questions and officials`, async () => {
+    const text = `**PRESIDENTA DE MÉXICO, CLAUDIA SHEINBAUM PARDO:** ${remarks}
+**PREGUNTA: IMSS, IMSS, IMSS.**
+**DIRECTOR GENERAL DEL IMSS, ZOÉ ROBLEDO ABURTO:** IMSS IMSS.
+**PRESIDENTA DE MÉXICO, CLAUDIA SHEINBAUM PARDO:** Gracias.
+**—000—**`;
+    const result = await readMananeraPhraseResult({
+      source: MANANERA_TRANSCRIPT_SOURCE,
+      dateYmd: '2026-08-10', phrase: 'IMSS', threshold: 1, yesOutcome: 0,
+    }, { storedTranscript: { dateYmd: '2026-08-10', transcriptText: text },
+      fetchImpl: async () => { throw new Error('No network expected'); } });
+    assert.equal(result.ready, true);
+    assert.equal(result.count, count);
+    assert.equal(result.outcomeIndex, count ? 0 : 1);
+    assert.equal(result.matchPositions.length, count);
+    assert.ok(result.matchPositions.every(m => text.replace(/\*+/g, '').slice(m.charIndex, m.charEnd) === 'IMSS'));
+  });
+}
+
+test('rejects an old complete cache flag for a partial transcript and fetches the final revision', async () => {
+  const result = await readMananeraPhraseResult({
+    source: MANANERA_TRANSCRIPT_SOURCE,
+    dateYmd: '2026-08-10', phrase: 'IMSS', threshold: 1, yesOutcome: 0, youtubeFallback: false,
+  }, {
+    storedTranscript: { dateYmd: '2026-08-10', complete: true,
+      transcriptText: 'PRESIDENTA DE MÉXICO: Buenos días.\n(CONTINÚA…)' },
+    fetchImpl: async () => htmlResponse(transcriptHtml({ mentions: 'IMSS.' })),
+  });
+  assert.equal(result.ready, true);
+  assert.equal(result.count, 1);
+  assert.equal(result.outcomeIndex, 0);
+});
+
+test('does not join phrase fragments across speaker turns', async () => {
+  const result = await readMananeraPhraseResult({
+    source: MANANERA_TRANSCRIPT_SOURCE,
+    dateYmd: '2026-08-10', phrase: 'Estados Unidos', threshold: 1, yesOutcome: 0,
+  }, { storedTranscript: { dateYmd: '2026-08-10', transcriptText:
+    'PRESIDENTA DE MÉXICO: Estados\nPREGUNTA: Algo más.\nPRESIDENTA DE MÉXICO: Unidos.\n—000—' } });
+  assert.equal(result.ready, true);
+  assert.equal(result.count, 0);
 });

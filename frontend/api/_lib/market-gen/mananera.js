@@ -155,7 +155,7 @@ function criteriaFor(topic, dateLabel) {
   const mentions = topic.threshold === 1
     ? `contiene ${topic.label} al menos una vez`
     : `contiene la frase "${topic.phrase}" ${topic.threshold} o más veces`;
-  return `la versión estenográfica oficial de gob.mx de la mañanera del ${dateLabel} ${mentions}; si gob.mx no está disponible, se usará la transcripción/captions del video oficial de YouTube de la conferencia de prensa matutina de ese día`;
+  return `la versión estenográfica oficial completa de gob.mx de la mañanera del ${dateLabel} ${mentions} en las intervenciones de la presidenta; no cuentan preguntas ni intervenciones de otras personas. El respaldo de YouTube oficial solo es válido con transcripción completa e identificación de hablantes; de lo contrario, queda pendiente`;
 }
 
 function buildSpec(topic, end) {
@@ -185,6 +185,8 @@ function buildSpec(topic, end) {
       yesOutcome: 0,
       evidenceUrl: MANANERA_OFFICIAL_BASE_URL,
       youtubeFallback: true,
+      countSpeaker: 'president',
+      requireCompleteTranscript: true,
       sourceUrls: [MANANERA_OFFICIAL_BASE_URL, 'https://www.youtube.com/'],
       criteria: criteriaFor(topic, dateLabel),
     },
@@ -217,7 +219,7 @@ function weeklyCriteriaFor(topic, week) {
   const mentions = topic.threshold === 1
     ? `contienen ${topic.label} al menos una vez en total`
     : `contienen la frase "${topic.phrase}" ${topic.threshold} o más veces en total`;
-  return `las versiones estenográficas oficiales de gob.mx de las mañaneras de la semana del ${week.weekStartLabel} al ${week.weekEndLabel} ${mentions}; si gob.mx no está disponible para algún día, se usará la transcripción/captions del video oficial de YouTube de la conferencia de prensa matutina de ese día`;
+  return `las versiones estenográficas oficiales completas de gob.mx de todas las mañaneras de la semana del ${week.weekStartLabel} al ${week.weekEndLabel} ${mentions} en las intervenciones de la presidenta; no cuentan preguntas ni intervenciones de otras personas. El respaldo de YouTube oficial solo es válido con transcripción completa e identificación de hablantes; de lo contrario, queda pendiente`;
 }
 
 function buildWeeklyTemplateSpec(now = new Date()) {
@@ -249,6 +251,8 @@ function buildWeeklyTemplateSpec(now = new Date()) {
       resolveAt: week.resolveAt.toISOString(),
       evidenceUrl: MANANERA_OFFICIAL_BASE_URL,
       youtubeFallback: true,
+      countSpeaker: 'president',
+      requireCompleteTranscript: true,
       sourceUrls: [MANANERA_OFFICIAL_BASE_URL, 'https://www.youtube.com/'],
       criteria,
     },

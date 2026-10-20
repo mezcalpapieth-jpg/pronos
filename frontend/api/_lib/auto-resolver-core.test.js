@@ -713,8 +713,9 @@ test('auto resolver core settles mañanera transcript phrase markets', async (t)
         <body>
           <article>
             <p>10 de agosto de 2026</p>
-            <p>La seguridad pública y la seguridad nacional fueron mencionadas.</p>
+            <p>PRESIDENTA DE MÉXICO: La seguridad pública y la seguridad nacional fueron mencionadas.</p>
             <p>${'Texto oficial simulado para superar el mínimo de extracción. '.repeat(20)}</p>
+            <p>—000—</p>
           </article>
         </body>
       </html>
@@ -739,6 +740,8 @@ test('auto resolver core settles mañanera transcript phrase markets', async (t)
   assert.equal(decision.resolverInfo.matchCount, 2);
   assert.equal(decision.finalScore, '2 menciones de "seguridad"');
   assert.equal(decision.resolverConfigPatch.transcriptMatchCount, 2);
+  assert.equal(decision.resolverConfigPatch.transcriptSpeakerScope, 'president');
+  assert.equal(decision.resolverConfigPatch.transcriptComplete, true);
   assert.match(decision.resolverConfigPatch.transcriptUrl, /version-estenografica/);
 });
 
@@ -887,4 +890,20 @@ test('auto resolver core settles F1 Dutch GP side markets from race classificati
   });
   assert.equal(cadillacPoints.winningIdx, 0);
   assert.equal(cadillacPoints.finalScore, 'Cadillac: 2 pts');
+});
+
+test('auto resolver leaves a partial mañanera pending instead of settling No', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  globalThis.fetch = async () => htmlResponse(`
+    <p>10 de agosto de 2026</p>
+    <p>PRESIDENTA DE MÉXICO: ${'Buenos días. '.repeat(60)}</p>
+    <p>**_(CONTINÚA…)_**</p>
+  `);
+  await assert.rejects(resolveAutoResolverCandidate({
+    resolver_type: 'api_transcript',
+    resolver_config: { source: MANANERA_TRANSCRIPT_SOURCE, dateYmd: '2026-08-10',
+      phrase: 'IMSS', op: 'gte', threshold: 1, yesOutcome: 0, youtubeFallback: false },
+    outcomes: ['Sí', 'No'],
+  }), error => error.benign === true && error.message === 'official_transcript_incomplete');
 });
