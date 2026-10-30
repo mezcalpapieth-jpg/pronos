@@ -90,7 +90,7 @@ export async function executePointsBuy(client, {
 
   const marketResult = await client.query(
     `SELECT m.id, m.question, m.status, m.reserves, m.outcomes, m.start_time, m.end_time,
-            m.created_at, m.resolver_type, m.resolver_config, m.sport, m.league,
+            m.created_at, m.resolver_type, m.resolver_config, m.leg_label, p.resolver_type AS parent_resolver_type, p.resolver_config AS parent_resolver_config, m.sport, m.league,
             m.seed_liquidity, m.seed_liquidities, m.amm_mode, m.parent_id,
             (
               m.tournament_featured IS TRUE
@@ -217,7 +217,7 @@ export async function executePointsSell(client, {
   const tradeApiKeyId = normalizeApiKeyId(apiKeyId);
 
   const marketResult = await client.query(
-    `SELECT m.id, m.status, m.reserves, m.end_time, m.resolver_config,
+    `SELECT m.id, m.status, m.reserves, m.end_time, m.resolver_config, m.leg_label, p.resolver_type AS parent_resolver_type, p.resolver_config AS parent_resolver_config,
             m.seed_liquidity, m.seed_liquidities,
             (
               m.tournament_featured IS TRUE

@@ -73,6 +73,7 @@ import {
 import { resolveMexicoMajorHurricaneLandfall } from '../_lib/hurricanes.js';
 import { aicmDelayBucketIndexFor, readAicmDelayCount } from '../_lib/aicm-board.js';
 import { aicmAeBucketIndexFor, countAicmAeDaysInclusive } from '../_lib/aicm-aviation-edge.js';
+import { readLmpEvent } from '../_lib/lmp-results.js';
 import { readAicmTimetableDelayCount } from '../_lib/aicm-timetable.js';
 import { readAppleMxTopArtist } from '../_lib/charts.js';
 import { readYouTubeTopMxChannel } from '../_lib/youtube.js';
@@ -1611,7 +1612,7 @@ export async function runAutoResolve({ dry = false, sportsOnly = false } = {}) {
           NOT ${sportsOnly}::boolean
           OR (
             m.resolver_type = 'sports_api'
-            AND m.resolver_config->>'source' IN ('espn', 'football-data')
+            AND m.resolver_config->>'source' IN ('espn', 'football-data', 'mlb-stats')
             AND m.resolver_config->>'shape' IN ('binary', 'draw3', 'total-goals-over')
             -- Check ahead too: a rescheduled game can finish before its saved kickoff.
             AND m.start_time <= NOW() + INTERVAL '12 hours'
@@ -1625,7 +1626,7 @@ export async function runAutoResolve({ dry = false, sportsOnly = false } = {}) {
               m.end_time < NOW()
               OR (
                 m.resolver_type = 'sports_api'
-                AND m.resolver_config->>'source' IN ('espn', 'football-data')
+                AND m.resolver_config->>'source' IN ('espn', 'football-data', 'mlb-stats')
                 AND m.resolver_config->>'shape' IN ('binary', 'draw3', 'total-goals-over')
                 AND m.start_time IS NOT NULL
                 AND m.start_time <= NOW() + INTERVAL '12 hours'
@@ -1815,9 +1816,9 @@ export async function runAutoResolve({ dry = false, sportsOnly = false } = {}) {
               sourceData: market.pending_source_data, sport: market.sport,
               league: market.league, startTime: market.start_time });
           }
-          if (config?.source !== 'espn') return;
+          if (!['espn','mlb-stats'].includes(config?.source)) return;
           try {
-            sportsResults.set(market.id, { result: await readEspnEvent({ ...config, preferSummary: true }) });
+            sportsResults.set(market.id, { result: config.source === 'mlb-stats' ? await readLmpEvent(config) : await readEspnEvent({ ...config, preferSummary: true }) });
           } catch (error) {
             sportsResults.set(market.id, { error });
           }
@@ -2755,9 +2756,14 @@ export async function runAutoResolve({ dry = false, sportsOnly = false } = {}) {
                 dateYmd: cfg.dateYmd,
                 homeName: cfg.homeName,
                 awayName: cfg.awayName,
+                shape: cfg.shape,
                 preferSummary: true,
               });
             }
+          } else if (cfg.source === 'mlb-stats') {
+            const prefetched = sportsResults.get(m.id);
+            if (prefetched?.error) throw prefetched.error;
+            result = prefetched ? prefetched.result : await readLmpEvent(cfg);
           } else if (cfg.source === 'football-data') {
             const footballDataEspnFallback = buildFootballDataEspnFallbackConfig({
               resolverConfig: cfg,
@@ -2782,6 +2788,7 @@ export async function runAutoResolve({ dry = false, sportsOnly = false } = {}) {
                 dateYmd: cfg.dateYmd,
                 homeName: cfg.homeName,
                 awayName: cfg.awayName,
+                shape: cfg.shape,
                 preferSummary: true,
               });
             };
@@ -2790,7 +2797,7 @@ export async function runAutoResolve({ dry = false, sportsOnly = false } = {}) {
               result = await useFootballDataEspnFallback();
             } else {
               try {
-                result = await readFootballDataMatch(cfg.matchId);
+                result = await readFootballDataMatch(cfg.matchId, { shape: cfg.shape });
                 if (!result?.completed && footballDataEspnFallback) {
                   const espnResult = await useFootballDataEspnFallback();
                   if (espnResult?.completed) result = espnResult;

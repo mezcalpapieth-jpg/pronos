@@ -1,3 +1,4 @@
+import { DISPLAYABLE_SHARE_EPSILON } from '../_lib/points-position-visibility.js';
 /**
  * GET /api/points/positions
  * Returns: { positions: [...], summary: {...} }
@@ -19,7 +20,6 @@ import {
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
-const DISPLAYABLE_SHARE_EPSILON = 0.005;
 
 function parseJsonb(value, fallback) {
   if (Array.isArray(value)) return value;

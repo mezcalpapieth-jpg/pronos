@@ -3,6 +3,7 @@
  * Lightweight portfolio alert for resolved winning positions that still
  * have shares to redeem.
  */
+import { DISPLAYABLE_SHARE_EPSILON } from '../_lib/points-position-visibility.js';
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
@@ -38,13 +39,19 @@ export default async function handler(req, res) {
     }
 
     const rows = await sql`
-      SELECT
-        COUNT(*)::int AS count,
-        COALESCE(SUM(p.shares), 0)::text AS payout
+      WITH eligible AS (
+      SELECT LEAST(p.shares, GREATEST(0, (
+        SELECT COALESCE(SUM(CASE WHEN t.side = 'buy' THEN t.shares
+          WHEN t.side IN ('sell', 'redeem') THEN -t.shares ELSE 0 END), 0)
+        FROM points_trades t
+        WHERE LOWER(t.username) = LOWER(p.username)
+          AND t.market_id = p.market_id AND t.outcome_index = p.outcome_index
+          AND t.created_at >= ${scoringStartIso}::timestamptz
+      ))) AS shares
       FROM points_positions p
       JOIN points_markets m ON m.id = p.market_id
       WHERE p.username = ${session.username}
-        AND p.shares > 0
+        AND p.shares >= ${DISPLAYABLE_SHARE_EPSILON}
         AND p.dismissed_at IS NULL
         AND COALESCE(m.mode, 'points') = 'points'
         AND m.status = 'resolved'
@@ -58,6 +65,9 @@ export default async function handler(req, res) {
             AND t.side = 'buy'
             AND t.created_at >= ${scoringStartIso}::timestamptz
         )
+      )
+      SELECT COUNT(*)::int AS count, COALESCE(SUM(shares), 0)::text AS payout
+      FROM eligible WHERE shares >= ${DISPLAYABLE_SHARE_EPSILON}
     `;
     const row = rows[0] || {};
     return res.status(200).json({

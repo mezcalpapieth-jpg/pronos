@@ -67,11 +67,23 @@ export default function RiskPanel({ profileUsername = null }) {
   const loops = Array.isArray(data?.rapidLoops) ? data.rapidLoops : [];
   const linkedSignals = Array.isArray(data?.linkedSignals) ? data.linkedSignals : [];
   const sameMarketLinks = Array.isArray(data?.sameMarketLinks) ? data.sameMarketLinks : [];
+  const coordinated = Array.isArray(data?.coordinatedTrading) ? data.coordinatedTrading : [];
   const flags = Array.isArray(data?.flags) ? data.flags : [];
   const reviewCount = accounts.filter(row => ['watch', 'phone_required', 'under_review', 'ineligible'].includes(row.reviewStatus)).length;
 
   return (
     <div>
+      <section style={adminPanelStyle}>
+        <div style={adminPanelTitle}>Coordinación de cuentas · sin depender de IP</div>
+        <p style={adminEmptyStyle}>Cuentas nuevas que mueven el precio antes de una compra o venta beneficiada. Es evidencia para revisión, no prueba de identidad ni sanción automática.</p>
+        {!coordinated.length && <p style={adminEmptyStyle}>Sin grupos con dos o más cuentas nuevas en la ventana de 30 días.</p>}
+        {coordinated.slice(0,80).map((group,i) => <details key={`${group.username}:${group.marketId}:${i}`} style={{ marginTop: 12 }}>
+          <summary style={{ cursor: 'pointer' }}><a href={`/points/u/${encodeURIComponent(group.username)}`}>@{group.username}</a> · {group.donorCount} cuentas · {group.donorSpend.toFixed(2)} MXNP · {group.side === 'buy' ? 'compra' : 'venta'} · mercado #{group.marketId}</summary>
+          <p><a href={`/points/market?id=${group.marketId}`}>{group.question}</a> · movimiento favorable acumulado: {(group.priceImpact * 100).toFixed(2)} puntos</p>
+          <p>Trades beneficiados: {group.beneficiaryTradeIds.join(', ')}</p>
+          <ul>{group.donors.map(d => <li key={d.tradeId}><a href={`/points/u/${encodeURIComponent(d.username)}`}>@{d.username}</a> · trade #{d.tradeId} · {d.amount.toFixed(2)} MXNP · {d.secondsBefore.toFixed(1)} s antes{d.referrer ? ` · referido por @${d.referrer}` : ''}</li>)}</ul>
+        </details>)}
+      </section>
       <section style={adminPanelStyle}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
           <div>
@@ -100,9 +112,10 @@ export default function RiskPanel({ profileUsername = null }) {
         }}>
           <RiskHelpCard
             title="Cómo se arma el score"
-            body="El score solo ordena la revisión. Suma estado manual, loops rápidos, señales compartidas, actividad reciente y patrones de entrada/salida."
+            body="El score solo ordena la revisión. Suma estado manual, coordinación entre cuentas nuevas y beneficiarios, loops rápidos, señales compartidas y actividad reciente."
             lines={[
               'Estado: limpia +0, watch +35, teléfono requerido +55, en revisión +70, no elegible +100.',
+              'Coordinación: +20 por mercado y +5 por cuenta nueva, hasta +300; no depende de IP.',
               'Loops rápidos: +30 por mercado donde compra y sale varias veces en pocas horas.',
               'Señales: +20 por IP, dispositivo o sesión compartida con otra cuenta.',
               'Trades 30d: hasta +30 por actividad; entrada/salida balanceada suma +10.',
@@ -353,7 +366,7 @@ export default function RiskPanel({ profileUsername = null }) {
         renderRow={(row) => (
           <div key={`${row.marketId}-${row.signalType}-${row.usernameA}-${row.usernameB}`} style={riskEvidenceRowStyle}>
             <span style={riskEvidenceLinkStyle}>@{row.usernameA} / @{row.usernameB}</span>
-            <a href={`/points/market/${row.marketId}`} style={riskEvidenceMainStyle}>{row.question || `Mercado #${row.marketId}`}</a>
+            <a href={`/points/market?id=${row.marketId}`} style={riskEvidenceMainStyle}>{row.question || `Mercado #${row.marketId}`}</a>
             <span style={riskEvidenceMetaStyle}>{riskSignalLabel(row.signalType)} · {row.overlapCount} cruces</span>
             <span style={{ ...riskEvidenceMetaStyle, textAlign: 'right' }}>{adminDateTime(row.lastSeenAt)}</span>
           </div>
@@ -504,7 +517,7 @@ function RiskLoopEvidenceRow({ row }) {
         alignItems: 'center',
       }}>
         <a href={`/points/u/${encodeURIComponent(row.username)}`} style={riskEvidenceLinkStyle}>@{row.username}</a>
-        <a href={`/points/market/${row.marketId}`} style={riskEvidenceMainStyle}>{row.question || `Mercado #${row.marketId}`}</a>
+        <a href={`/points/market?id=${row.marketId}`} style={riskEvidenceMainStyle}>{row.question || `Mercado #${row.marketId}`}</a>
         <span style={riskEvidenceMetaStyle}>{row.buyCount} compras · {row.sellCount} ventas · {formatAdminDuration(row.spanSeconds)}</span>
         <button
           type="button"
@@ -690,6 +703,7 @@ function riskScoreBreakdown(row = {}) {
       points: riskStatusPoints(row.reviewStatus),
       help: 'Peso del estado manual que marcó admin.',
     },
+    { key: 'coordination', label: `${adminNumber(row.coordinatedMarketCount)} mercados coordinados`, points: Math.min(300, Number(row.coordinatedMarketCount || 0) * 20 + Number(row.coordinatedDonorCount || 0) * 5), help: 'Cuentas nuevas que mueven el precio antes de una operación beneficiada.' },
     {
       key: 'loops',
       label: `${adminNumber(loopCount)} loops`,

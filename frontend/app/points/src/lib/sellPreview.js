@@ -20,8 +20,8 @@ export function buildSellPreview(position = {}, quote = {}) {
   const priceImpactPts = round2(quote.priceImpactPts);
 
   return {
-    shares: round2(shares),
-    maxShares: round2(maxShares),
+    shares,
+    maxShares,
     sharePct: maxShares > 0 ? round2((shares / maxShares) * 100) : 100,
     costBasis,
     markValue,

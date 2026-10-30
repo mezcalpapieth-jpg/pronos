@@ -39,6 +39,7 @@ export const ADMIN_SOCCER_LEAGUES = [
   { key: 'la-liga', label: 'La Liga' },
   { key: 'premier-league', label: 'Premier' },
   { key: 'serie-a', label: 'Serie A' },
+  { key: 'ligue-1', label: 'Ligue 1' },
   { key: 'bundesliga', label: 'Bundesliga' },
   { key: 'conmebol', label: 'CONMEBOL' },
   { key: 'concacaf', label: 'CONCACAF' },

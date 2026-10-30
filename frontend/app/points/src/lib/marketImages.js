@@ -223,6 +223,7 @@ const SPORTS_LEAGUE_BADGES = Object.freeze([
   { key: 'league:premier-league', label: 'PL', eyebrow: 'Premier', theme: 'soccer', aliases: ['premier-league', 'epl', 'england-premier-league', 'soccer-eng-1'] },
   { key: 'league:la-liga', label: 'LALIGA', eyebrow: 'Espana', theme: 'soccer', aliases: ['la-liga', 'laliga', 'spain-la-liga', 'soccer-esp-1'] },
   { key: 'league:serie-a', label: 'SERIE A', eyebrow: 'Italia', theme: 'soccer', aliases: ['serie-a', 'italy-serie-a', 'soccer-ita-1'] },
+  { key: 'league:ligue-1', label: 'LIGUE 1', eyebrow: 'Francia', theme: 'soccer', aliases: ['ligue-1', 'ligue1', 'soccer-fra-1'] },
   { key: 'league:bundesliga', label: 'BUND', eyebrow: 'Alemania', theme: 'soccer', aliases: ['bundesliga', 'germany-bundesliga', 'soccer-ger-1'] },
   { key: 'league:uefa-cl', label: 'UCL', eyebrow: 'Champions', theme: 'soccer', aliases: ['uefa-cl', 'uefa-champions-league', 'champions-league', 'soccer-uefa-champions'] },
   { key: 'league:uefa-europa', label: 'UEL', eyebrow: 'Europa', theme: 'soccer', aliases: ['uefa-europa', 'uefa-europa-league', 'europa-league', 'soccer-uefa-europa'] },

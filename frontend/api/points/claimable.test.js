@@ -10,9 +10,9 @@ test('claimable endpoint counts only winning resolved points positions', () => {
   assert.match(source, /JOIN points_markets m/);
   assert.match(source, /m\.status = 'resolved'/);
   assert.match(source, /m\.outcome = p\.outcome_index/);
-  assert.match(source, /p\.shares > 0/);
+  assert.match(source, /p\.shares >= \$\{DISPLAYABLE_SHARE_EPSILON\}/);
   assert.match(source, /COUNT\(\*\)::int AS count/);
-  assert.match(source, /COALESCE\(SUM\(p\.shares\), 0\)::text AS payout/);
+  assert.match(source, /COALESCE\(SUM\(shares\), 0\)::text AS payout/);
 });
 
 test('claimable ignores resolved winners outside the active scoring window', () => {

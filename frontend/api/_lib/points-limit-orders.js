@@ -295,7 +295,7 @@ export function normalizeLimitPrice(value) {
 
 async function lockMarket(client, marketId) {
   const result = await client.query(
-    `SELECT m.id, m.question, m.status, m.reserves, m.outcomes, m.end_time, m.resolver_config,
+    `SELECT m.id, m.question, m.status, m.reserves, m.outcomes, m.end_time, m.resolver_config, m.leg_label, p.resolver_type AS parent_resolver_type, p.resolver_config AS parent_resolver_config,
             m.amm_mode, m.parent_id,
             (
               m.tournament_featured IS TRUE

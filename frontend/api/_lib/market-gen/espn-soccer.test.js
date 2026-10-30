@@ -272,3 +272,12 @@ test('legacy club friendly whitelist remains available for manual inspection', (
     false,
   );
 });
+
+
+test('Ligue 1 uses the verified French feed and resolves the regulation-time draw market',()=>{
+ const config=_internal.ESPN_SOCCER_LEAGUES.find(c=>c.league==='ligue-1');
+ const spec=_internal.eventToSpec(espnEvent({homeName:'Le Havre AC',awayName:'Paris Saint-Germain'}),config);
+ assert.equal(spec.league,'ligue-1');assert.equal(spec.resolver_type,'sports_api');
+ assert.equal(spec.resolver_config.leaguePath,'soccer/fra.1');assert.equal(spec.resolver_config.shape,'draw3');
+ assert.deepEqual(spec.outcomes,['Le Havre AC','Empate','Paris Saint-Germain']);
+});

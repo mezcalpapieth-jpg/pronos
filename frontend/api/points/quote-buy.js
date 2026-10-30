@@ -80,7 +80,7 @@ export default async function handler(req, res) {
     await ensurePointsSchema(schemaSql);
     const rows = await sql`
       SELECT m.id, m.question, m.status, m.reserves, m.outcomes, m.start_time, m.end_time,
-             m.created_at, m.resolver_type, m.resolver_config, m.sport, m.league,
+             m.created_at, m.resolver_type, m.resolver_config, m.leg_label, p.resolver_type AS parent_resolver_type, p.resolver_config AS parent_resolver_config, m.sport, m.league,
              m.seed_liquidity, m.seed_liquidities,
              (
                m.tournament_featured IS TRUE

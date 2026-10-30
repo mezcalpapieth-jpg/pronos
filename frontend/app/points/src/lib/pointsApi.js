@@ -1,3 +1,4 @@
+import { riskDeviceHeaders } from './riskDevice.js';
 import { notifySocialLinksChanged } from './socialTaskAccount.js';
 
 /**
@@ -248,7 +249,7 @@ export function publicErrorMessage(error, lang = 'es', fallback = 'default') {
 }
 
 export async function getJson(url, { signal } = {}) {
-  const res = await fetch(url, { method: 'GET', credentials: 'include', signal });
+  const res = await fetch(url, { method: 'GET', credentials: 'include', headers: riskDeviceHeaders(), signal });
   return handle(res);
 }
 
@@ -256,7 +257,7 @@ export async function postJson(url, body, { signal } = {}) {
   const res = await fetch(url, {
     method: 'POST',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...riskDeviceHeaders() },
     body: JSON.stringify(body || {}),
     signal,
   });
@@ -267,7 +268,7 @@ export async function deleteJson(url, body) {
   const res = await fetch(url, {
     method: 'DELETE',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...riskDeviceHeaders() },
     body: JSON.stringify(body || {}),
   });
   return handle(res);

@@ -129,7 +129,7 @@ async function readParlayMarkets(db, marketIds, { lock = false } = {}) {
   const lockClause = lock ? 'FOR SHARE OF m' : '';
   return queryRows(db, `
     SELECT m.id, m.question, m.status, m.outcome, m.outcomes, m.reserves,
-           m.end_time, m.parent_id, m.resolver_config,
+           m.end_time, m.parent_id, m.resolver_config, m.leg_label, p.resolver_type AS parent_resolver_type, p.resolver_config AS parent_resolver_config,
            COALESCE(m.parent_id, m.id) AS exposure_group_id,
            (
              m.tournament_featured IS TRUE

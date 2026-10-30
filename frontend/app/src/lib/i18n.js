@@ -787,6 +787,7 @@ const STRINGS = {
   'points.league.laLiga':     { es: 'La Liga',                en: 'La Liga' },
   'points.league.premier':    { es: 'Premier League',         en: 'Premier League' },
   'points.league.serieA':     { es: 'Serie A',                en: 'Serie A' },
+  'points.league.ligue1': { es: 'Ligue 1', en: 'Ligue 1' },
   'points.league.bundesliga': { es: 'Bundesliga',             en: 'Bundesliga' },
   'points.league.ligaMx':     { es: 'Liga MX',                en: 'Liga MX' },
   'points.league.mls':        { es: 'MLS',                    en: 'MLS' },

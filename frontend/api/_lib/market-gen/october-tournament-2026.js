@@ -136,13 +136,11 @@ const INPC_FIRST_HALF_OCTOBER_CLOSE_ISO = dateAtMexicoCityTime({
   hour: 5,
   minute: 59,
 }).toISOString();
-const INPC_FIRST_HALF_OCTOBER_RESOLVE_ISO = dateAtMexicoCityTime({
-  year: 2026,
-  month: 10,
-  day: 23,
-  hour: 12,
-  minute: 0,
-}).toISOString();
+// Close one minute before publication, then check the initial release on
+// every resolver pass. If INEGI is late, the reader defers until it is public.
+const INPC_FIRST_HALF_OCTOBER_RESOLVE_ISO = new Date(
+  new Date(INPC_FIRST_HALF_OCTOBER_CLOSE_ISO).getTime() + 60_000,
+).toISOString();
 const AMILCAR_INVESTIGATION_DEADLINE_ISO = dateAtMexicoCityTime({
   year: 2026,
   month: 10,

@@ -31,7 +31,8 @@ test('the minute sports pass finds early finals and rescheduled games without wa
       (9,NOW()-INTERVAL '2 hours'),
       (10,NOW()-INTERVAL '2 hours'),
       (11,NOW()-INTERVAL '2 hours'),
-      (12,NOW()-INTERVAL '2 hours');
+      (12,NOW()-INTERVAL '2 hours'),
+      (13,NOW()-INTERVAL '2 hours');
     UPDATE points_markets SET resolver_type='manual_review',end_time=NOW()-INTERVAL '1 hour' WHERE id=6;
     UPDATE points_markets SET resolver_type='weather_api',end_time=NOW()-INTERVAL '1 hour' WHERE id=7;
     UPDATE points_markets SET status='resolved' WHERE id=8;
@@ -39,6 +40,7 @@ test('the minute sports pass finds early finals and rescheduled games without wa
     UPDATE points_markets SET resolver_config='{"source":"espn","shape":"parallel"}' WHERE id=10;
     UPDATE points_markets SET resolver_config='{"source":"espn","shape":"draw3"}' WHERE id=11;
     UPDATE points_markets SET resolver_config='{"source":"football-data","shape":"total-goals-over"}' WHERE id=12;
+    UPDATE points_markets SET resolver_config='{"source":"mlb-stats","shape":"binary"}' WHERE id=13;
   `);
   const sql = async (strings, ...values) => (await db.query(
     strings.reduce((text, part, i) => text + (i ? `$${i}` : '') + part, ''), values,
@@ -46,7 +48,7 @@ test('the minute sports pass finds early finals and rescheduled games without wa
   const run = new Function('candidateSql', 'sportsOnly', 'NEXT_OPPONENT_RECHECK_INTERVAL_HOURS', `return candidateSql\`${query}\`;`);
   assert.ok(query);
   const fast = await run(sql, true, 6);
-  assert.deepEqual(fast.map(row => row.id).sort((a, b) => a - b), [1, 2, 3, 11, 12]);
+  assert.deepEqual(fast.map(row => row.id).sort((a, b) => a - b), [1, 2, 3, 11, 12, 13]);
   const full = await run(sql, false, 6);
-  assert.deepEqual(full.map(row => row.id).sort((a, b) => a - b), [1, 2, 3, 5, 6, 7, 11, 12]);
+  assert.deepEqual(full.map(row => row.id).sort((a, b) => a - b), [1, 2, 3, 5, 6, 7, 11, 12, 13]);
 });

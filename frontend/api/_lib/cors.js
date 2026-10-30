@@ -58,7 +58,7 @@ function isSameOriginAsRequest(req, origin) {
  */
 export function applyCors(req, res, {
   methods = 'GET, POST, OPTIONS',
-  headers = 'Content-Type, Authorization',
+  headers = 'Content-Type, Authorization, X-Pronos-Device-Id',
   credentials = false,
   enforceSameOriginForStateChanging = true,
 } = {}) {

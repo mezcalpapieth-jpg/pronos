@@ -95,6 +95,7 @@ const CLUB_FRIENDLY_WHITELIST = new Set([
 ]);
 
 const ESPN_SOCCER_LEAGUES = [
+  { leagueCode: 'fra.1', league: 'ligue-1', leagueLabel: 'Ligue 1', outcomeShape: 'draw3' },
   {
     leagueCode: 'mex.1',
     league: 'liga-mx',

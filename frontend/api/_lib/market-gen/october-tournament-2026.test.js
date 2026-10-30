@@ -150,7 +150,8 @@ test('October tournament generator emits bilingual auto and review specs when co
   assert.equal(inpc.resolver_config.kind, 'inegi-inpc-first-release');
   assert.equal(inpc.resolver_config.indicatorId, '910438');
   assert.equal(inpc.resolver_config.targetPeriod, '2026-10-1Q');
-  assert.equal(inpc.resolver_config.resolveAt, '2026-10-23T18:00:00.000Z');
+  assert.equal(inpc.resolver_config.resolveAt, '2026-10-22T12:00:00.000Z');
+  assert.equal(new Date(inpc.resolver_config.resolveAt) - new Date(inpc.end_time), 60_000);
   assert.equal(inpc.resolver_config.shape, 'price-bucket');
   assert.deepEqual(inpc.outcomes, ['Menos de 3.00%', '3.00% a 3.49%', '3.50% a 3.99%', '4.00% o más']);
   assert.deepEqual(inpc.source_data.suggestedPricing.probabilityPct, [25, 25, 25, 25]);

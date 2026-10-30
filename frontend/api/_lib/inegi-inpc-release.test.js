@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { INPC_FIRST_RELEASE_CRITERIA, INPC_RELEASE_OUTCOMES, parseInitialInpcRelease, readInitialInpcRelease } from './inegi-inpc-release.js';
 import { readOfficialResult, upgradeLegacyOfficialResult } from './official-results.js';
 
-const NOW = new Date('2026-10-23T19:00:00Z');
-const CFG = { source: 'official-result', kind: 'inegi-inpc-first-release', targetPeriod: '2026-10-1Q', resolveAt: '2026-10-23T18:00:00Z' };
+const NOW = new Date('2026-10-22T12:05:00Z');
+const CFG = { source: 'official-result', kind: 'inegi-inpc-first-release', targetPeriod: '2026-10-1Q', resolveAt: '2026-10-22T12:00:00Z' };
 
 function release(rate = '3.50') {
   return {
@@ -60,11 +60,12 @@ test('official initial inflation reader maps exact boundaries and retains eviden
     assert.equal(result.winningIdx, expected);
     assert.match(result.resolverInfo.evidenceUrl, /noticia\/12345$/);
     assert.equal(result.resolverInfo.targetPeriod, '2026-10-1Q');
+    assert.equal(result.resolverInfo.finalScore, `${rate}% anual · primera quincena de octubre de 2026`);
   }
 });
 
 test('inflation release missing, conflicting or revised evidence cannot settle', async () => {
-  await assert.rejects(() => readInitialInpcRelease(CFG, INPC_RELEASE_OUTCOMES, { fetchImpl: () => assert.fail('not yet due'), now: new Date('2026-10-23T17:00:00Z') }), /not_due/);
+  await assert.rejects(() => readInitialInpcRelease(CFG, INPC_RELEASE_OUTCOMES, { fetchImpl: () => assert.fail('not yet due'), now: new Date('2026-10-22T11:59:00Z') }), /not_due/);
   await assert.rejects(() => readInitialInpcRelease(CFG, INPC_RELEASE_OUTCOMES, { fetchImpl: fetchNews(release(), []), now: NOW }), error => error.benign && !error.manualReview);
   await assert.rejects(() => readInitialInpcRelease(CFG, INPC_RELEASE_OUTCOMES, { fetchImpl: fetchNews(release(), []), now: new Date('2026-10-28T18:00:00Z') }), error => error.manualReview);
   await assert.rejects(() => readInitialInpcRelease(CFG, INPC_RELEASE_OUTCOMES, { fetchImpl: fetchNews(release(), [listing(), listing(release(), '54321')]), now: NOW }), error => error.manualReview);
@@ -73,11 +74,36 @@ test('inflation release missing, conflicting or revised evidence cannot settle',
 });
 
 test('legacy inflation upgrades preserve the exact published initial-release contract', () => {
-  const market = { resolverType: 'manual_review', cfg: { criteria: INPC_FIRST_RELEASE_CRITERIA, resolveAt: CFG.resolveAt },
-    source: 'october-tournament-2026', sourceEventId: 'october-2026:inpc-first-half-october-annual-inflation', outcomes: INPC_RELEASE_OUTCOMES };
+  const market = { resolverType: 'manual_review', cfg: { criteria: INPC_FIRST_RELEASE_CRITERIA, resolveAt: '2026-10-23T18:00:00Z' },
+    source: 'october-tournament-2026', sourceEventId: 'october-2026:inpc-first-half-october-annual-inflation', outcomes: INPC_RELEASE_OUTCOMES,
+    endTime: '2026-10-22T11:59:00Z' };
   const upgraded = upgradeLegacyOfficialResult(market);
   assert.equal(upgraded.kind, 'inegi-inpc-first-release');
   assert.equal(upgraded.criteria, market.cfg.criteria);
+  assert.equal(upgraded.resolveAt, '2026-10-22T12:00:00.000Z');
+  assert.equal(upgradeLegacyOfficialResult({ ...market, endTime: null }), null);
+  assert.equal(upgradeLegacyOfficialResult({ ...market, endTime: 'invalid' }), null);
   assert.equal(upgradeLegacyOfficialResult({ ...market, cfg: { criteria: market.cfg.criteria + ' Regla personalizada.' } }), null);
   assert.equal(upgradeLegacyOfficialResult({ ...market, outcomes: ['Sí', 'No'] }), null);
+});
+
+
+test('inflation retries a delayed publication and settles on release day through the legacy route', async () => {
+  const cfg = upgradeLegacyOfficialResult({ resolverType: 'manual_review',
+    cfg: { criteria: INPC_FIRST_RELEASE_CRITERIA, resolveAt: '2026-10-23T18:00:00Z' },
+    source: 'october-tournament-2026', sourceEventId: 'october-2026:inpc-first-half-october-annual-inflation',
+    outcomes: INPC_RELEASE_OUTCOMES, endTime: '2026-10-22T11:59:00Z' });
+  await assert.rejects(() => readOfficialResult(cfg, INPC_RELEASE_OUTCOMES, {
+    fetchImpl: () => assert.fail('must not read before publication'), now: new Date('2026-10-22T11:59:59Z'),
+  }), /not_due/);
+  await assert.rejects(() => readOfficialResult(cfg, INPC_RELEASE_OUTCOMES, {
+    fetchImpl: fetchNews(release(), []), now: new Date('2026-10-22T12:00:00Z'),
+  }), error => error.benign && !error.manualReview && error.message === 'inegi_initial_release_not_published');
+  const result = await readOfficialResult(cfg, INPC_RELEASE_OUTCOMES, {
+    fetchImpl: fetchNews(release('3.62')), now: new Date('2026-10-22T12:15:00Z'),
+  });
+  assert.equal(result.winningIdx, 2);
+  assert.equal(result.resolverInfo.annualRate, 3.62);
+  assert.equal(result.resolverInfo.publicationDate, '2026-10-22');
+  assert.equal(result.resolverInfo.finalScore, '3.62% anual · primera quincena de octubre de 2026');
 });
