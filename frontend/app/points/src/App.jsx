@@ -19,6 +19,7 @@ import PointsNav from './components/PointsNav.jsx';
 import PendingTradeNotice from './components/PendingTradeNotice.jsx';
 import PointsTicker from './components/PointsTicker.jsx';
 import PointsCategoryBar from './components/PointsCategoryBar.jsx';
+import TournamentExtensionBanner from './components/TournamentExtensionBanner.jsx';
 import Footer from '@app/components/Footer.jsx';
 import PointsWelcomeModal, { hasBeenWelcomed } from './components/PointsWelcomeModal.jsx';
 import PointsIntroModal, { hasSeenIntro } from './components/PointsIntroModal.jsx';
@@ -404,6 +405,7 @@ function Shell({ onOpenLogin, isAdmin }) {
       <PointsNav onOpenLogin={onOpenLogin} isAdmin={isAdmin} />
       <PendingTradeNotice />
       {showCategoryBar && <PointsCategoryBar />}
+      {execution.mode !== 'onchain' && <TournamentExtensionBanner />}
       {pointsOnly ? <main style={{ maxWidth: 700, margin: '48px auto', padding: 24 }}>
         <p>Esta sección corresponde al torneo Points. El torneo de prueba tiene un saldo y operaciones separados.</p>
         <button className="btn-primary" onClick={() => execution.setMode('points')}>Ver Points</button>

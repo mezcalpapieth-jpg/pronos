@@ -11,7 +11,7 @@ const octoberCycle = {
   started_at: '2026-10-01T06:00:00.000Z',
   ends_at: '2026-11-01T05:59:00.000Z',
 };
-const cutoffAt = '2026-11-01T05:59:59.000Z';
+const cutoffAt = '2026-11-02T05:59:59.000Z';
 
 function snapshotDb() {
   const calls = [];
@@ -29,8 +29,8 @@ function snapshotDb() {
   };
 }
 
-test('October snapshot does not freeze at the old minute-only cutoff', async () => {
-  for (const iso of ['2026-11-01T05:59:00.000Z', '2026-11-01T05:59:58.999Z']) {
+test('October snapshot waits through the old cutoff and the extra tournament day', async () => {
+  for (const iso of ['2026-11-01T05:59:00.000Z', '2026-11-01T05:59:59.000Z', '2026-11-01T06:00:00.000Z', '2026-11-02T05:59:58.999Z']) {
     const db = snapshotDb();
     const result = await snapshotActiveCycleAtCutoff(db, { now: new Date(iso) });
     assert.equal(result.skipped, 'before_cutoff');
@@ -40,9 +40,9 @@ test('October snapshot does not freeze at the old minute-only cutoff', async () 
   }
 });
 
-test('October snapshot status passes the cutoff only at 23:59:59 Mexico City', async () => {
+test('October snapshot status passes the extended cutoff only on November 1 at 23:59:59 Mexico City', async () => {
   const before = await readActiveCycleCutoffSnapshotStatus(snapshotDb(), {
-    now: new Date('2026-11-01T05:59:58.999Z'),
+    now: new Date('2026-11-02T05:59:58.999Z'),
   });
   const atCutoff = await readActiveCycleCutoffSnapshotStatus(snapshotDb(), {
     now: new Date(cutoffAt),
@@ -57,7 +57,7 @@ test('October snapshot status passes the cutoff only at 23:59:59 Mexico City', a
 test('midnight snapshot job uses the exact cutoff and preserves an existing snapshot', async () => {
   const db = snapshotDb();
   const result = await snapshotActiveCycleAtCutoff(db, {
-    now: new Date('2026-11-01T06:00:00.000Z'),
+    now: new Date('2026-11-02T06:00:00.000Z'),
   });
   assert.equal(result.cutoffAt, cutoffAt);
   assert.equal(result.skipped, 'already_snapshotted');

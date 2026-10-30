@@ -452,6 +452,7 @@ function TournamentStartNotice({ cycle, rules, lang = 'es', onClose }) {
   const endsAt = cycle?.endsAt || cycle?.rankingCutoffAt || cycle?.operationCloseAt;
   const endLabel = endsAt
     ? new Date(endsAt).toLocaleDateString(lang === 'en' ? 'en-US' : 'es-MX', {
+      timeZone: MEXICO_CITY_TIME_ZONE,
       day: 'numeric',
       month: 'long',
       year: 'numeric',
@@ -505,8 +506,8 @@ function TournamentStartNotice({ cycle, rules, lang = 'es', onClose }) {
           lineHeight: 1.55,
         }}>
           {lang === 'en'
-            ? `Your MXNP balance was reset to ${startingBalance} MXNP. This tournament runs for one month${endLabel ? `, through ${endLabel}` : ''}.`
-            : `Tu balance MXNP se reinició a ${startingBalance} MXNP. Este torneo dura un mes${endLabel ? `, hasta el ${endLabel}` : ''}.`}
+            ? `Your MXNP balance was reset to ${startingBalance} MXNP.${endLabel ? ` This tournament runs through ${endLabel}.` : ''}`
+            : `Tu balance MXNP se reinició a ${startingBalance} MXNP.${endLabel ? ` Este torneo termina el ${endLabel}.` : ''}`}
         </p>
 
         <div style={{
