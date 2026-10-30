@@ -6,6 +6,7 @@
  * clusters and trading patterns to admins, but it never moves balances,
  * positions, distributions, or rewards automatically.
  */
+import { readCoordinatedTrading, coordinationScore } from '../../_lib/points-risk-coordination.js';
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../../_lib/cors.js';
 import { ensurePointsSchema } from '../../_lib/points-schema.js';
@@ -91,6 +92,8 @@ function formatAccountRow(row) {
     reviewReason: row.reviewReason || '',
     reviewUpdatedAt: row.reviewUpdatedAt || null,
     riskScore: toNumber(row.riskScore),
+    coordinatedMarketCount: toNumber(row.coordinatedMarketCount),
+    coordinatedDonorCount: toNumber(row.coordinatedDonorCount),
     tradeCount: toNumber(row.tradeCount),
     marketCount: toNumber(row.marketCount),
     buyVolume: toNumber(row.buyVolume),
@@ -359,7 +362,7 @@ async function handleList(req, res) {
           AND (${usernameFilter}::text IS NULL OR LOWER(u.username) = LOWER(${usernameFilter}))
           AND (${statusParam}::text IS NULL OR COALESCE(r.status, 'clear') = ${statusParam})
         ORDER BY "riskScore" DESC, COALESCE(t.last_trade_at, u.created_at) DESC
-        LIMIT 120
+        LIMIT 5000
       `,
       sql`
         WITH loops AS (
@@ -556,10 +559,16 @@ async function handleList(req, res) {
       `,
     ]);
 
+    const coordinatedTrading = await readCoordinatedTrading(sql, { username: usernameFilter });
+    const accounts = accountRows.map(row => {
+      const coordination = coordinationScore(coordinatedTrading, row.username);
+      return formatAccountRow({ ...row, ...coordination, riskScore: toNumber(row.riskScore) + coordination.coordinationRiskScore });
+    }).sort((a,b) => b.riskScore-a.riskScore).slice(0,120);
     return res.status(200).json({
       ok: true,
+      coordinatedTrading,
       statuses: RISK_REVIEW_STATUSES,
-      accounts: accountRows.map(formatAccountRow),
+      accounts,
       rapidLoops: rapidLoopRows.map(formatRapidLoopRow),
       linkedSignals: linkedSignalRows.map(formatLinkedSignalRow),
       sameMarketLinks: sameMarketRows.map(formatSameMarketLinkRow),

@@ -131,3 +131,16 @@ test('new and triggered limit orders cannot reserve or execute money after the f
   assert.equal(result.detail, 'market_closed');
   assert.ok(queries.every(sql => sql.trim().startsWith('SELECT')));
 });
+
+
+test('LMP uses its exact official event for trading guards and fails closed if unavailable', async () => {
+  const lmp = { resolver_config: { source: 'mlb-stats', shape: 'binary', eventId: '850504', homeId: 674, awayId: 675 } };
+  const readLmp = async config => {
+    assert.equal(config.eventId, '850504');
+    assert.equal(config.homeId, 674);
+    return { completed: true, state: 'post' };
+  };
+  assert.equal((await sportsTradeLock(lmp, { readLmp })).error, 'market_closed');
+  assert.equal(await sportsTradeLock(lmp, { readLmp: async () => ({ completed: false, state: 'in' }) }), null);
+  assert.equal((await sportsTradeLock(lmp, { readLmp: async () => { throw new Error('feed unavailable'); } })).status, 503);
+});

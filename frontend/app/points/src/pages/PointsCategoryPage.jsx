@@ -86,6 +86,7 @@ const SOCCER_LEAGUES = [
   { key: 'la-liga',        tKey: 'points.league.laLiga'        },
   { key: 'premier-league', tKey: 'points.league.premier'       },
   { key: 'serie-a',        tKey: 'points.league.serieA'        },
+  { key: 'ligue-1', tKey: 'points.league.ligue1', fallback: 'Ligue 1' },
   { key: 'bundesliga',     tKey: 'points.league.bundesliga'    },
   { key: 'conmebol',       tKey: 'points.league.conmebol'      },
   { key: 'concacaf',       tKey: 'points.league.concacaf'      },

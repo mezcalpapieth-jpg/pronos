@@ -61,7 +61,29 @@ function espnScoreboardQueries(dateYmd, adjacentDays = false) {
   return queries;
 }
 
-function normalizeEspnEvent(ev) {
+function soccerScore(value) {
+  if (value && typeof value === 'object') return soccerScore(value.value ?? value.displayValue);
+  if (value == null || String(value).trim() === '') return null;
+  const n = Number(value);
+  return Number.isInteger(n) && n >= 0 ? n : null;
+}
+
+function soccerRegulationShape(shape) {
+  return shape === 'draw3' || shape === 'total-goals-over';
+}
+
+function espnRegulationScore(competitor, extended) {
+  const periods = competitor?.linescores;
+  if (Array.isArray(periods) && periods.length >= 2) {
+    const first = soccerScore(periods[0]);
+    const second = soccerScore(periods[1]);
+    return first != null && second != null ? first + second : null;
+  }
+  // After extra time the total cannot stand in for the 90-minute score.
+  return extended ? null : soccerScore(competitor?.score);
+}
+
+function normalizeEspnEvent(ev, { regulationTime = false } = {}) {
   const comp = Array.isArray(ev?.competitions) ? ev.competitions[0] : null;
   const status = ev?.status || comp?.status || null;
   const { state, completed, interrupted } = espnEventStatus(status);
@@ -69,20 +91,26 @@ function normalizeEspnEvent(ev) {
   const home = ctors.find(c => c.homeAway === 'home');
   const away = ctors.find(c => c.homeAway === 'away');
   const score = value => value == null || value === '' ? NaN : Number(value);
-  const homeScore = score(home?.score);
-  const awayScore = score(away?.score);
+  const extended = /PEN|EXTRA|OVERTIME|_AET\b|_ET\b/.test(String(status?.type?.name || '').toUpperCase())
+    || Number(status?.period) > 2 || Number(comp?.status?.period) > 2
+    || (home?.linescores?.length || 0) > 2 || (away?.linescores?.length || 0) > 2
+    || soccerScore(home?.shootoutScore) > 0 || soccerScore(away?.shootoutScore) > 0;
+  const homeScore = regulationTime ? espnRegulationScore(home, extended) : score(home?.score);
+  const awayScore = regulationTime ? espnRegulationScore(away, extended) : score(away?.score);
 
   if (!completed) return { completed: false, winner: null, state, interrupted };
   if (!home || !away || !Number.isFinite(homeScore) || !Number.isFinite(awayScore)
-    || homeScore < 0 || awayScore < 0 || (home?.winner && away?.winner)
-    || (home?.winner && awayScore > homeScore) || (away?.winner && homeScore > awayScore)) {
+    || homeScore == null || awayScore == null || homeScore < 0 || awayScore < 0
+    || (!regulationTime && ((home?.winner && away?.winner)
+      || (home?.winner && awayScore > homeScore) || (away?.winner && homeScore > awayScore)))) {
     return { completed: false, winner: null, state, invalidResult: true };
   }
 
-  // Winner extraction: prefer the `winner: true` flag ESPN sets on the
-  // victorious competitor. Fall back to score comparison.
+  // Soccer 1X2/goals markets use 90 minutes plus stoppage. ESPN's
+  // winner flag can instead identify the team advancing on penalties/aggregate.
   let winner = null;
-  if (home?.winner) winner = 'home';
+  if (regulationTime) winner = homeScore > awayScore ? 'home' : awayScore > homeScore ? 'away' : 'draw';
+  else if (home?.winner) winner = 'home';
   else if (away?.winner) winner = 'away';
   else if (Number.isFinite(homeScore) && Number.isFinite(awayScore)) {
     if (homeScore > awayScore) winner = 'home';
@@ -217,8 +245,8 @@ function eventMatchesTeams(event, homeName, awayName) {
   return eventTeamOrientation(event, homeName, awayName) !== null;
 }
 
-function normalizeEspnEventForMarket(ev, homeName, awayName) {
-  const normalized = normalizeEspnEvent(ev);
+function normalizeEspnEventForMarket(ev, homeName, awayName, options) {
+  const normalized = normalizeEspnEvent(ev, options);
   const orientation = eventTeamOrientation(ev, homeName, awayName);
   if (orientation !== 'swapped') return normalized;
   const winner = normalized.winner === 'home'
@@ -237,11 +265,12 @@ function normalizeEspnEventForMarket(ev, homeName, awayName) {
   };
 }
 
-export async function readEspnEvent({ leaguePath, eventId, dateYmd, homeName, awayName, preferSummary = false }) {
+export async function readEspnEvent({ leaguePath, eventId, dateYmd, homeName, awayName, shape, preferSummary = false }) {
   if (!leaguePath || (!eventId && !(homeName && awayName))) {
     throw new Error('espn: missing leaguePath/event lookup');
   }
   if (!/^[a-z0-9.-]+\/[a-z0-9.-]+$/i.test(leaguePath)) throw new Error('espn: invalid league path');
+  const options = { regulationTime: leaguePath.startsWith('soccer/') && soccerRegulationShape(shape) };
   const signal = AbortSignal.timeout(4000);
   const fetchOptions = () => ({ headers: { Accept: 'application/json', 'Cache-Control': 'no-cache' },
     cache: 'no-store', signal });
@@ -252,7 +281,7 @@ export async function readEspnEvent({ leaguePath, eventId, dateYmd, homeName, aw
     const summary = await response.json();
     if (String(summary?.header?.id || '') !== String(eventId)) throw new Error('espn-summary: event identity mismatch');
     if (!pickCompetition(summary.header)?.status?.type && !summary.header?.status?.type) throw new Error('espn-summary: missing status');
-    return normalizeEspnEventForMarket(summary.header, homeName, awayName);
+    return normalizeEspnEventForMarket(summary.header, homeName, awayName, options);
   }
   let lastScoreboardError = null;
   let sawScoreboard = false;
@@ -270,8 +299,8 @@ export async function readEspnEvent({ leaguePath, eventId, dateYmd, homeName, aw
       ? events.find(e => String(e.id) === String(eventId))
       : events.find(e => eventMatchesTeams(e, homeName, awayName));
     if (ev) {
-      if (preferSummary && ev.id) return readEspnEvent({ leaguePath, eventId: ev.id, homeName, awayName, preferSummary: true });
-      return normalizeEspnEventForMarket(ev, homeName, awayName);
+      if (preferSummary && ev.id) return readEspnEvent({ leaguePath, eventId: ev.id, homeName, awayName, shape, preferSummary: true });
+      return normalizeEspnEventForMarket(ev, homeName, awayName, options);
     }
   }
 
@@ -291,7 +320,7 @@ export async function readEspnEvent({ leaguePath, eventId, dateYmd, homeName, aw
   }
   const summary = await summaryRes.json();
   if (summary?.header?.id && String(summary.header.id) === String(eventId)) {
-    return { ...normalizeEspnEventForMarket(summary.header, homeName, awayName), dateWindowMiss: true };
+    return { ...normalizeEspnEventForMarket(summary.header, homeName, awayName, options), dateWindowMiss: true };
   }
   // Still not found — either not started yet, removed from ESPN, or
   // the stored eventId is wrong. Treat as "not done", retry next tick.
@@ -300,11 +329,11 @@ export async function readEspnEvent({ leaguePath, eventId, dateYmd, homeName, aw
 
 // ─── football-data.org match ───────────────────────────────────────────
 // Needs FOOTBALL_DATA_API_KEY (already set for the soccer generator).
-// Clean result schema: score.winner ∈ {HOME_TEAM, AWAY_TEAM, DRAW}.
+// score.winner includes extra time / penalties; 1X2 and goal markets use regularTime.
 
 const FD_BASE = 'https://api.football-data.org/v4';
 
-export async function readFootballDataMatch(matchId) {
+export async function readFootballDataMatch(matchId, { shape } = {}) {
   const key = process.env.FOOTBALL_DATA_API_KEY;
   if (!key) throw new Error('football-data: FOOTBALL_DATA_API_KEY not set');
   if (!matchId) throw new Error('football-data: missing matchId');
@@ -320,12 +349,23 @@ export async function readFootballDataMatch(matchId) {
     return { completed: false, winner: null, status };
   }
   const raw = String(match?.score?.winner || '').toUpperCase();
-  const winner =
+  let winner =
     raw === 'HOME_TEAM' ? 'home' :
     raw === 'AWAY_TEAM' ? 'away' :
     raw === 'DRAW'      ? 'draw' : null;
-  const homeScore = Number(match?.score?.fullTime?.home);
-  const awayScore = Number(match?.score?.fullTime?.away);
+  const regulationTime = soccerRegulationShape(shape);
+  const score = match?.score || {};
+  const extended = ['EXTRA_TIME', 'PENALTY_SHOOTOUT'].includes(String(score.duration || '').toUpperCase())
+    || score.extraTime != null || score.penalties != null;
+  const hasRegulation = soccerScore(score.regularTime?.home) != null
+    && soccerScore(score.regularTime?.away) != null;
+  const selected = regulationTime && (hasRegulation || extended) ? score.regularTime : score.fullTime;
+  const homeScore = soccerScore(selected?.home);
+  const awayScore = soccerScore(selected?.away);
+  if (homeScore == null || awayScore == null) {
+    return { completed: false, winner: null, status, invalidResult: true };
+  }
+  if (regulationTime) winner = homeScore > awayScore ? 'home' : awayScore > homeScore ? 'away' : 'draw';
   return {
     completed: true,
     winner,

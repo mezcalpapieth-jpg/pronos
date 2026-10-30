@@ -11,6 +11,7 @@ const ESPN_SOCCER_COMPETITION_PATH = {
   PL: 'soccer/eng.1',
   SA: 'soccer/ita.1',
   BL1: 'soccer/ger.1',
+  FL1: 'soccer/fra.1',
 };
 
 function ymdToDateRange(ymd) {

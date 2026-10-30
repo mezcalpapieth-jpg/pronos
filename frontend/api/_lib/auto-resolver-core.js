@@ -29,6 +29,7 @@ import {
   countAicmAeDaysInclusive,
   readAicmAeDelayCount,
 } from './aicm-aviation-edge.js';
+import { readLmpEvent } from './lmp-results.js';
 import { readAicmTimetableDelayCount } from './aicm-timetable.js';
 import { readAppleMxTopArtist } from './charts.js';
 import { readYouTubeTopMxChannel } from './youtube.js';
@@ -838,7 +839,10 @@ export async function resolveAutoResolverCandidate(candidate = {}, { sql = null 
         dateYmd: cfg.dateYmd,
         homeName: cfg.homeName,
         awayName: cfg.awayName,
+        shape: cfg.shape,
       });
+    } else if (cfg.source === 'mlb-stats') {
+      result = await readLmpEvent(cfg);
     } else if (cfg.source === 'football-data') {
       const footballDataEspnFallback = buildFootballDataEspnFallbackConfig({
         resolverConfig: cfg,
@@ -861,6 +865,7 @@ export async function resolveAutoResolverCandidate(candidate = {}, { sql = null 
           dateYmd: cfg.dateYmd,
           homeName: cfg.homeName,
           awayName: cfg.awayName,
+          shape: cfg.shape,
         });
       };
 
@@ -868,7 +873,7 @@ export async function resolveAutoResolverCandidate(candidate = {}, { sql = null 
         result = await useFootballDataEspnFallback();
       } else {
         try {
-          result = await readFootballDataMatch(cfg.matchId);
+          result = await readFootballDataMatch(cfg.matchId, { shape: cfg.shape });
           if (!result?.completed && footballDataEspnFallback) {
             const espnResult = await useFootballDataEspnFallback();
             if (espnResult?.completed) result = espnResult;

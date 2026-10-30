@@ -228,7 +228,12 @@ export function upgradeLegacyOfficialResult({ resolverType, cfg, source, sourceE
   }
   if (source === 'october-tournament-2026' && sourceEventId === 'october-2026:inpc-first-half-october-annual-inflation'
     && cfg.criteria === INPC_FIRST_RELEASE_CRITERIA && JSON.stringify(outcomes) === JSON.stringify(INPC_RELEASE_OUTCOMES)) {
-    return { ...cfg, source: OFFICIAL_RESULT_SOURCE, kind: 'inegi-inpc-first-release', targetPeriod: '2026-10-1Q' };
+    // Legacy specs delayed checking until the following day even though the
+    // contract uses the initial release. Start just after betting closes.
+    const closesAt = new Date(endTime);
+    if (!endTime || !Number.isFinite(closesAt.getTime())) return null;
+    return { ...cfg, source: OFFICIAL_RESULT_SOURCE, kind: 'inegi-inpc-first-release', targetPeriod: '2026-10-1Q',
+      resolveAt: new Date(closesAt.getTime() + 60_000).toISOString() };
   }
   return null;
 }

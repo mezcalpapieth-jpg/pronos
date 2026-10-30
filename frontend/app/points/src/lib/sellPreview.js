@@ -22,8 +22,8 @@ export function buildSellPreview(position = {}, quote = {}) {
   const priceImpactPts = round2(quote.priceImpactPts);
 
   return {
-    shares: position.mode === 'onchain' ? Math.floor(shares * 1e6 + 1e-7) / 1e6 : round2(shares),
-    maxShares: position.mode === 'onchain' ? maxShares : round2(maxShares),
+    shares: position.mode === 'onchain' ? Math.floor(shares * 1e6 + 1e-7) / 1e6 : shares,
+    maxShares,
     sharePct: maxShares > 0 ? round2((shares / maxShares) * 100) : 100,
     costBasis,
     markValue,

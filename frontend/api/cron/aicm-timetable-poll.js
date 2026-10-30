@@ -12,6 +12,8 @@
  * Manual probes:
  *   /api/cron/aicm-timetable-poll?dry=1
  */
+import { withTransaction } from '../_lib/db-tx.js';
+import { closeImpossibleAicmOutcomes } from '../_lib/aicm-outcome-closure.js';
 import { neon } from '@neondatabase/serverless';
 
 import {
@@ -54,6 +56,7 @@ export default async function handler(req, res) {
     const parsed = await fetchAicmTimetable({ observedAt });
     const operatorRows = parsed.observations.length;
 
+    let closedOutcomes = [];
     if (!dryRun) {
       await recordAicmTimetableRun(sql, {
         status: operatorRows ? 'ok' : 'empty',
@@ -62,6 +65,7 @@ export default async function handler(req, res) {
         operatorRows,
       });
       await persistAicmTimetableObservations(sql, { observations: parsed.observations });
+      closedOutcomes = await withTransaction(client => closeImpossibleAicmOutcomes(client));
     }
 
     const delayed = parsed.observations.filter(o => Number(o.delayMinutes) > 30).length;
@@ -73,6 +77,7 @@ export default async function handler(req, res) {
       codeshares: parsed.codeshares,
       operatorRows,
       delayedOver30: delayed,
+      closedOutcomes,
       elapsedMs: Date.now() - started,
     });
   } catch (e) {

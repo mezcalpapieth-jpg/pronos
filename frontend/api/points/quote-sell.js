@@ -51,7 +51,7 @@ export default async function handler(req, res) {
   try {
     await ensurePointsSchema(schemaSql);
     const rows = await sql`
-      SELECT m.mode, m.status, m.reserves, m.end_time, m.resolver_config,
+      SELECT m.id, m.mode, m.status, m.reserves, m.end_time, m.resolver_config, m.leg_label, p.resolver_type AS parent_resolver_type, p.resolver_config AS parent_resolver_config,
              m.seed_liquidity, m.seed_liquidities,
              (
                m.tournament_featured IS TRUE

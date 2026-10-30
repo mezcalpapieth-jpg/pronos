@@ -103,5 +103,6 @@ export async function readInitialInpcRelease(cfg, outcomes, { fetchImpl = fetch,
   const value = result.annualRate;
   const winningIdx = value < 3 ? 0 : value < 3.5 ? 1 : value < 4 ? 2 : 3;
   return { winningIdx, resolverInfo: { source: 'inegi-inpc-initial-release', ...result,
+    finalScore: `${value.toFixed(2)}% anual · ${period.label}`,
     evidenceUrl: `https://www.inegi.org.mx/app/saladeprensa/noticia/${id}` } };
 }

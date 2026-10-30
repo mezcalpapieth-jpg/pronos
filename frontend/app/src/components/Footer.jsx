@@ -26,8 +26,16 @@ export default function Footer() {
         <FooterLink href="/">{t('footer.home')}</FooterLink>
         <FooterLink href="/privacy">{t('footer.privacy') || 'Privacidad'}</FooterLink>
         <FooterLink href="/terms">{t('footer.terms') || 'Términos'}</FooterLink>
-        <FooterLink href="mailto:hola@pronos.io">{t('footer.contact')}</FooterLink>
       </div>
+      <address style={{ width: '100%', boxSizing: 'border-box', fontStyle: 'normal', border: '1px solid var(--border)', borderRadius: 12, padding: '16px 20px' }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-primary)', marginBottom: 12 }}>{t('footer.contact')}</div>
+        <div style={{ display: 'flex', gap: '12px 24px', flexWrap: 'wrap' }}>
+          <FooterLink href="https://www.instagram.com/pronos.latam/">Instagram · @pronos.latam</FooterLink>
+          <FooterLink href="https://www.tiktok.com/@pronosmarkets">TikTok · @pronosmarkets</FooterLink>
+          <FooterLink href="https://x.com/pronos_io">X · @pronos_io</FooterLink>
+          <FooterLink href="mailto:hola@pronos.io">hola@pronos.io</FooterLink>
+        </div>
+      </address>
     </footer>
   );
 }
@@ -48,7 +56,7 @@ function FooterLink({ href, children }) {
       style={baseStyle}
       onMouseOver={(e) => { e.currentTarget.style.color = 'var(--text-secondary)'; }}
       onMouseOut={(e) => { e.currentTarget.style.color = 'var(--text-muted)'; }}
-      {...(isExternal ? {} : {})}
+      {...(isExternal && !href.startsWith('mailto:') ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
     >
       {children}
     </a>

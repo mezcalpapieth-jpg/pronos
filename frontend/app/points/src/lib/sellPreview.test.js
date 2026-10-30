@@ -99,3 +99,13 @@ test('Points previews keep two-decimal payouts and do not show on-chain fee fiel
   assert.equal('fee' in result, false);
   assert.equal('gross' in result, false);
 });
+
+test('sell all keeps the entire six-decimal holding instead of leaving hidden dust', () => {
+  for (const shares of [367.502158, 367.508999, 0.005001]) {
+    const preview = buildSellPreview({ shares, costBasis: 100, currentValue: 200 }, { shares, collateralOut: 180 });
+    assert.equal(preview.shares, shares);
+    assert.equal(preview.maxShares, shares);
+    assert.equal(shares - preview.shares, 0);
+    assert.equal(preview.sharePct, 100);
+  }
+});
