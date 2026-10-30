@@ -65,7 +65,7 @@ test('October tournament allows DOGGY measurement at 23:59:59 with an earlier tr
   assert.equal(tournamentSettlementLock(market, now), null);
   assert.equal(tournamentSettlementLock({
     ...market,
-    resolver_config: { closesAt: '2026-11-01T05:59:59.001Z' },
+    resolver_config: { closesAt: '2026-11-02T05:59:59.001Z' },
   }, now)?.error, 'tournament_market_after_cutoff');
 });
 
@@ -123,4 +123,14 @@ test('tournament cutoff snapshot lock allows trading before cutoff or after phot
   assert.equal(beforeCutoff, null);
   assert.equal(afterSnapshot, null);
   assert.equal(regularMarket, null);
+});
+
+test('October tournament accepts markets settling on November 1 and rejects after the extended cutoff', () => {
+  for (const now of [new Date('2026-10-30T15:00:00Z'), new Date('2026-11-01T18:00:00Z')]) {
+    const market = { tournament_featured: true, end_time: '2026-11-02T04:00:00Z' };
+    assert.equal(tournamentSettlementLock(market, now), null);
+    assert.equal(tournamentSettlementLock({ ...market, end_time: '2026-11-02T05:59:59Z' }, now), null);
+    assert.equal(tournamentSettlementLock({ ...market, end_time: '2026-11-02T06:00:00Z' }, now)?.error,
+      'tournament_market_after_cutoff');
+  }
 });

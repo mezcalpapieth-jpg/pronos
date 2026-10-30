@@ -18,6 +18,7 @@ import PointsLoginModal from '@app/components/PointsLoginModal.jsx';
 import PointsNav from './components/PointsNav.jsx';
 import PointsTicker from './components/PointsTicker.jsx';
 import PointsCategoryBar from './components/PointsCategoryBar.jsx';
+import TournamentExtensionBanner from './components/TournamentExtensionBanner.jsx';
 import Footer from '@app/components/Footer.jsx';
 import PointsWelcomeModal, { hasBeenWelcomed } from './components/PointsWelcomeModal.jsx';
 import PointsIntroModal, { hasSeenIntro } from './components/PointsIntroModal.jsx';
@@ -397,6 +398,7 @@ function Shell({ onOpenLogin, isAdmin }) {
       {path.startsWith('/stocks') && <Suspense fallback={null}><StockLiveTicker /></Suspense>}
       <PointsNav onOpenLogin={onOpenLogin} isAdmin={isAdmin} />
       {showCategoryBar && <PointsCategoryBar />}
+      <TournamentExtensionBanner />
       <Suspense fallback={<RouteFallback />}>
         <Routes>
           <Route path="/i" element={<PublicityRedirect source="instagram" />} />

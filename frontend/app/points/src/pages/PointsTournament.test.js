@@ -74,7 +74,7 @@ test('tournament page shows current leaderboard, past leaderboards, countdown an
   assert.match(pageSource, /TOURNAMENT_START_NOTICE_PREFIX/);
   assert.match(pageSource, /localStorage\?\.setItem/);
   assert.match(pageSource, /Tu balance MXNP se reinició/);
-  assert.match(pageSource, /Este torneo dura un mes/);
+  assert.match(pageSource, /Este torneo termina el/);
   assert.match(pageSource, /PodiumAvatar/);
   assert.match(pageSource, /profileImageUrl/);
   assert.match(pageSource, /cleanPodiumProfileImageUrl/);

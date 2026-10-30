@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PGlite } from '@electric-sql/pglite';
 import { buildTournamentLeaderboardRows } from './points-tournament-leaderboard.js';
+import { configuredCycleWindowFromRow } from './points-tournament-config.js';
 
 const window = {
   id: 5, startsAt: '2026-10-01T06:00:00.000Z',
@@ -67,4 +68,27 @@ test('grouped child-market metadata preserves parent eligibility and touch exclu
   assert.equal(row.score, 350);
   assert.equal(row.qualifyingMarkets, 1);
   assert.equal(row.activeDays, 2);
+});
+
+test('November 1 market results and trades count before the extended cutoff', async t => {
+  const db = await fixture(t);
+  await db.db.exec(`
+    UPDATE points_markets SET start_time='2026-11-01T15:00:00Z',
+      end_time='2026-11-01T20:00:00Z',resolved_at='2026-11-01T20:05:00Z';
+    UPDATE points_trades SET created_at=CASE id
+      WHEN 1 THEN '2026-11-01T15:00:00Z'::timestamptz
+      WHEN 2 THEN '2026-11-01T16:00:00Z'::timestamptz
+      ELSE '2026-11-01T20:10:00Z'::timestamptz END;
+  `);
+  const extendedWindow = configuredCycleWindowFromRow({
+    id: 5, started_at: window.startsAt, ends_at: window.rankingCutoffAt,
+  });
+  const now = new Date('2026-11-02T06:00:00Z');
+  const [row] = await buildTournamentLeaderboardRows(db, { window: extendedWindow, now });
+  assert.equal(row.marketPnl, 350);
+  assert.equal(row.qualifyingMarkets, 1);
+  assert.equal(row.activeDays, 1);
+  const [beforeExtension] = await buildTournamentLeaderboardRows(db, { window, now });
+  assert.equal(beforeExtension.marketPnl, 0);
+  assert.equal(beforeExtension.qualifyingMarkets, 0);
 });
