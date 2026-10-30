@@ -12,6 +12,7 @@ import {
   persistMananeraTranscript,
   parseMananeraTurns,
   shouldRunMananeraAttempt,
+  retryPendingMananeraTranscripts,
 } from './mananera-ingest.js';
 
 function htmlResponse(body) {
@@ -119,6 +120,35 @@ test('low-level speaker parser ignores text before the first label', () => {
   `);
   assert.equal(turns.length, 2);
   assert.equal(turns[1].hablante, 'INTERVENCIÓN');
+});
+
+test('backfills a late transcript for a closed market on a subsequent day', async () => {
+  const cache = createFakeDb();
+  const db = { async query(text, params) {
+    if (/SELECT DISTINCT d.date_ymd/.test(text)) return { rows: [{ date_ymd: '2026-10-29' }] };
+    return cache.query(text, params);
+  } };
+  const retries = await retryPendingMananeraTranscripts(db, {
+    dateYmd: '2026-10-30', now: new Date('2026-10-30T18:00:00Z'),
+    fetchImpl: async () => htmlResponse(officialHtml({ dateText: '29 de octubre de 2026' })),
+  });
+  assert.deepEqual(retries, [{ dateYmd: '2026-10-29', ready: true, reason: 'ingested' }]);
+  assert.equal(cache.rows.get('2026-10-29').complete, true);
+});
+
+test('a failed backlog date does not prevent retrying the next date', async () => {
+  const cache = createFakeDb();
+  const db = { async query(text, params) {
+    if (/SELECT DISTINCT d.date_ymd/.test(text)) return [{ date_ymd: '2026-10-29' }, { date_ymd: '2026-10-28' }];
+    if (params?.[0] === '2026-10-29') throw new Error('temporary_cache_error');
+    return cache.query(text, params);
+  } };
+  const retries = await retryPendingMananeraTranscripts(db, {
+    dateYmd: '2026-10-30', now: new Date('2026-10-30T18:00:00Z'),
+    fetchImpl: async () => htmlResponse(officialHtml({ dateText: '28 de octubre de 2026' })),
+  });
+  assert.equal(retries[0].ready, false);
+  assert.equal(retries[1].ready, true);
 });
 
 test('ingests direct zero-padded gob.mx slug and second run performs zero network requests', async () => {

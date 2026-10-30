@@ -96,7 +96,9 @@ export async function fetchWithRetry(fetchImpl, url, options = {}, {
     try {
       const response = await fetchImpl(url, {
         ...options,
-        signal: controller ? controller.signal : options.signal,
+        signal: controller && options.signal
+          ? AbortSignal.any([controller.signal, options.signal])
+          : controller ? controller.signal : options.signal,
       });
       if (timer) clearTimeout(timer);
       if (response?.status >= 500 && attempt < retries) {
@@ -107,6 +109,7 @@ export async function fetchWithRetry(fetchImpl, url, options = {}, {
     } catch (err) {
       if (timer) clearTimeout(timer);
       lastError = err;
+      if (options.signal?.aborted) throw err;
       if (attempt >= retries) throw err;
       await sleep(backoffMs * (2 ** (attempt - 1)));
     }
@@ -302,6 +305,45 @@ export async function missingConsecutiveMananeraDates(db, dateYmd, count = 2) {
   );
   const found = new Set(rowsFromResult(result).map(row => String(row.date_ymd).slice(0, 10)));
   return dates.filter(day => !found.has(day));
+}
+
+export async function retryPendingMananeraTranscripts(db, {
+  dateYmd = mexicoCityDateYmd(), now = new Date(), fetchImpl = globalThis.fetch,
+} = {}) {
+  // Ingestion used to visit only today's date. A delayed publication from
+  // yesterday must still be cached once available, including weekly markets.
+  const result = await db.query(
+    `SELECT DISTINCT d.date_ymd
+       FROM points_markets m
+       CROSS JOIN LATERAL jsonb_array_elements_text(
+         CASE WHEN jsonb_typeof(m.resolver_config->'dateYmds') = 'array'
+              THEN m.resolver_config->'dateYmds'
+              ELSE jsonb_build_array(m.resolver_config->>'dateYmd') END
+       ) AS d(date_ymd)
+      WHERE m.status = 'active' AND m.resolver_type = 'api_transcript'
+        AND COALESCE(m.mode, 'points') = 'points'
+        AND m.resolver_config->>'source' = $1
+        AND m.end_time <= $2::timestamptz
+        AND d.date_ymd ~ '^\\d{4}-\\d{2}-\\d{2}$'
+        AND d.date_ymd < $3
+        AND NOT EXISTS (
+          SELECT 1 FROM points_mananera_transcripts t
+           WHERE t.date_ymd::text = d.date_ymd AND t.complete = true
+             AND t.parse_version >= $4
+        )
+      ORDER BY d.date_ymd DESC LIMIT 2`,
+    [MANANERA_TRANSCRIPT_SOURCE, now.toISOString(), dateYmd, MANANERA_PARSE_VERSION],
+  );
+  const retries = [];
+  for (const row of rowsFromResult(result)) {
+    try {
+      const retry = await ingestMananeraForDate(db, { dateYmd: row.date_ymd, now, fetchImpl });
+      retries.push({ dateYmd: row.date_ymd, ready: retry.ready, reason: retry.reason });
+    } catch (error) {
+      retries.push({ dateYmd: row.date_ymd, ready: false, reason: error?.message || 'ingest_failed' });
+    }
+  }
+  return retries;
 }
 
 export async function ingestMananeraForDate(db, {

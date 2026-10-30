@@ -202,7 +202,7 @@ export function buildMananeraDirectTranscriptUrlVariants(dateYmd) {
 }
 
 function buildReaderFallbackUrl(url) {
-  return `https://r.jina.ai/http://${String(url || '').trim()}`;
+  return `https://r.jina.ai/${String(url || '').trim()}`;
 }
 
 export function buildMananeraArchiveUrl() {
@@ -303,6 +303,7 @@ function transcriptMatchesDate({ text, html, dateYmd }) {
 
 async function fetchText(fetchImpl, url, extraHeaders = {}) {
   const response = await fetchImpl(url, {
+    signal: AbortSignal.timeout(15_000),
     headers: {
       ...BROWSER_HTML_HEADERS,
       accept: 'text/html,application/xhtml+xml',
@@ -415,6 +416,7 @@ async function readTranscriptCandidate({
 
 async function fetchJson(fetchImpl, url, extraHeaders = {}) {
   const response = await fetchImpl(url, {
+    signal: AbortSignal.timeout(15_000),
     headers: {
       'user-agent': 'Pronos resolver (+https://pronos.io)',
       accept: 'application/json',
@@ -1160,6 +1162,7 @@ async function fetchYouTubeCaptionText({ fetchImpl, videoId }) {
     return { ready: false, reason: 'youtube_captions_invalid_url' };
   }
   const response = await fetchImpl(captionUrl, {
+    signal: AbortSignal.timeout(15_000),
     headers: youtubeHeaders({
       accept: 'application/json,text/xml,text/plain',
     }),
@@ -1236,7 +1239,14 @@ export async function findMananeraYouTubeTranscript({
     : [videoResult];
   const captionAttempts = [];
   for (const video of videos) {
-    const captions = await fetchYouTubeCaptionText({ fetchImpl, videoId: video.id });
+    let captions;
+    try {
+      captions = await fetchYouTubeCaptionText({ fetchImpl, videoId: video.id });
+    } catch {
+      // A broken recording/caption endpoint must not prevent trying the
+      // same conference on the other official channel.
+      captions = { ready: false, reason: 'youtube_captions_fetch_failed' };
+    }
     if (!captions.ready) {
       captionAttempts.push({
         videoId: video.id,
@@ -1510,11 +1520,18 @@ export async function readMananeraPhraseResult(cfg = {}, options = {}) {
     : null;
 
   if (!transcript) {
-    transcript = await findMananeraTranscript({
-      dateYmd,
-      transcriptUrl: cfg.transcriptUrl || null,
-      fetchImpl,
-    });
+    try {
+      transcript = await findMananeraTranscript({
+        dateYmd,
+        transcriptUrl: cfg.transcriptUrl || null,
+        fetchImpl,
+      });
+    } catch {
+      // Network errors still get a chance to recover through YouTube and
+      // the evening review queue; they must never imply a negative count.
+      transcript = { ready: false, reason: 'official_transcript_fetch_failed',
+        searchUrl: buildMananeraSearchUrl(dateYmd) };
+    }
   }
 
   if (cfg.youtubeFallback !== false && !transcript.ready) {
@@ -1529,8 +1546,21 @@ export async function readMananeraPhraseResult(cfg = {}, options = {}) {
     if (youtubeTranscript.ready) {
       const captionAnalysis = analyzeMananeraTranscript(youtubeTranscript.text);
       if (!captionAnalysis.complete) {
-        return { ...transcript, ready: false, reason: captionAnalysis.reason,
-          fallbackReason: captionAnalysis.reason, youtubeVideoUrl: youtubeTranscript.url };
+        return {
+          ...transcript, ready: false,
+          reason: captionAnalysis.reason,
+          fallbackReason: captionAnalysis.reason,
+          youtubeSearchUrl: youtubeTranscript.searchUrl || buildMananeraYouTubeSearchUrl(dateYmd),
+          youtubeVideoUrl: youtubeTranscript.url,
+          youtubeTranscriptTitle: youtubeTranscript.title || null,
+          youtubeCaptionAttempts: [...(youtubeTranscript.captionAttempts || []), {
+            videoId: youtubeTranscript.videoId,
+            videoUrl: youtubeTranscript.url,
+            reason: captionAnalysis.reason,
+            captionTextLength: youtubeTranscript.text?.length || 0,
+            captionLanguage: youtubeTranscript.captionLanguage || null,
+          }],
+        };
       }
       transcript = youtubeTranscript;
     } else {

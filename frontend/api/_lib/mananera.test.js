@@ -129,7 +129,8 @@ test('falls back to text-reader extraction for the same official gob.mx page', a
   const fetchImpl = async (url, options = {}) => {
     const href = String(url);
     seen.push({ href, headers: options.headers || {} });
-    if (href.startsWith('https://r.jina.ai/http://')) {
+    if (href.startsWith('https://r.jina.ai/https://')) {
+      assert.equal(href, `https://r.jina.ai/${articleUrl}`);
       assert.equal(options.headers?.accept, 'text/plain,*/*');
       assert.equal(options.headers?.['user-agent'], 'Mozilla/5.0');
       return htmlResponse(`
@@ -154,7 +155,7 @@ test('falls back to text-reader extraction for the same official gob.mx page', a
 
   assert.equal(result.ready, true);
   assert.equal(result.url, articleUrl);
-  assert.ok(seen.some(item => item.href.startsWith('https://r.jina.ai/http://')));
+  assert.ok(seen.some(item => item.href === `https://r.jina.ai/${articleUrl}`));
 });
 
 test('resolves no when transcript exists but phrase count misses threshold', async () => {
@@ -221,7 +222,7 @@ test('defers when the only available evidence is unattributed YouTube captions',
     const href = String(url);
     seen.push(href);
     if (buildMananeraDirectTranscriptUrlVariants('2026-08-10').includes(href)
-      || href.startsWith('https://r.jina.ai/http://')) {
+      || href.startsWith('https://r.jina.ai/https://')) {
       return statusResponse(403);
     }
     if (href === 'https://www.gob.mx/presidencia/archivo/articulos') {
