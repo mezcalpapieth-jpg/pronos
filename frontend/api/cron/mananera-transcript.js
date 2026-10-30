@@ -18,6 +18,7 @@ import {
   isMexicoBusinessDay,
   mexicoCityDateYmd,
   missingConsecutiveMananeraDates,
+  retryPendingMananeraTranscripts,
   shouldRunMananeraAttempt,
 } from '../_lib/mananera-ingest.js';
 
@@ -73,6 +74,7 @@ export default async function handler(req, res) {
   try {
     await ensurePointsSchema(sql);
     const result = await ingestMananeraForDate(sql, { dateYmd, force, now });
+    const retriedDates = manualDate ? [] : await retryPendingMananeraTranscripts(sql, { dateYmd, now });
 
     let alert = false;
     let missingBusinessDates = [];
@@ -93,6 +95,7 @@ export default async function handler(req, res) {
       ...result,
       alert,
       missingBusinessDates,
+      retriedDates,
       elapsedMs: Date.now() - started,
     });
   } catch (e) {

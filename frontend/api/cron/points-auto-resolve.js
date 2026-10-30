@@ -61,6 +61,7 @@ import {
   resolveSolanaTokenMcapOutcome,
 } from '../_lib/solana-token-mcap.js';
 import { MANANERA_TRANSCRIPT_SOURCE, readMananeraPhraseResult } from '../_lib/mananera.js';
+import { buildMananeraFallbackReview } from '../_lib/mananera-fallback.js';
 import { readStoredMananeraTranscript } from '../_lib/mananera-ingest.js';
 import { generateMananeraMarkets } from '../_lib/market-gen/mananera.js';
 import {
@@ -1200,7 +1201,8 @@ function buildManualReviewCandidate({ market, cfg, sourceData, outcomes }) {
     sourceData?.sourceUrls,
     sourceData?.url,
   );
-  const suggestedOutcome = Number(cfg?.suggestedOutcomeIndex ?? cfg?.outcomeIndex);
+  const rawSuggestedOutcome = cfg?.suggestedOutcomeIndex ?? cfg?.outcomeIndex;
+  const suggestedOutcome = rawSuggestedOutcome == null ? null : Number(rawSuggestedOutcome);
   const source = cfg?.source || market.source || sourceData?.kind || 'manual-review';
   const sourceEventId = cfg?.sourceEventId
     || market.source_event_id
@@ -2461,6 +2463,8 @@ export async function runAutoResolve({ dry = false, sportsOnly = false } = {}) {
           if (!transcript.ready) {
             const err = new Error(transcript.reason || 'official_transcript_not_ready');
             err.benign = true;
+            const fallbackReview = buildMananeraFallbackReview(cfg, transcript);
+            err.manualReview = Boolean(fallbackReview);
             err.info = {
               source: cfg.source,
               dateYmd: cfg.dateYmd || null,
@@ -2473,6 +2477,7 @@ export async function runAutoResolve({ dry = false, sportsOnly = false } = {}) {
               youtubeVideoUrl: transcript.youtubeVideoUrl || null,
               youtubeTranscriptTitle: transcript.youtubeTranscriptTitle || null,
               youtubeCaptionAttempts: transcript.youtubeCaptionAttempts || [],
+              ...(fallbackReview || {}),
             };
             throw err;
           }
