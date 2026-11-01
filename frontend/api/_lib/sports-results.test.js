@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  readOddsApiBoxingWinner,
   readEspnAtpMatchWinner,
   readEspnAtpTournamentWinner,
   readEspnEvent,
@@ -592,4 +593,19 @@ test('readJolpicaF1Result keeps race classifications for side markets', async ()
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test('legacy boxing resolver queues manual review without requesting unsupported scores', async t => {
+  const original = globalThis.fetch;
+  t.after(() => { globalThis.fetch = original; });
+  let calls = 0;
+  globalThis.fetch = async () => { calls++; throw new Error('must_not_fetch'); };
+  await assert.rejects(readOddsApiBoxingWinner({ eventId: 'fight-1' }), error => {
+    assert.equal(error.benign, true);
+    assert.equal(error.manualReview, true);
+    assert.equal(error.info.reason, 'boxing_scores_not_supported');
+    assert.equal(error.info.eventId, 'fight-1');
+    return true;
+  });
+  assert.equal(calls, 0);
 });

@@ -34,10 +34,51 @@ export function normalizeLmpResult(game, { eventId, homeId, awayId } = {}) {
     homeName: game.teams.home.team.name, awayName: game.teams.away.team.name,
     homeTeam: game.teams.home.team.name, awayTeam: game.teams.away.team.name };
 }
+// Postponements can appear twice with the SAME gamePk in the schedule.
+// Follow only the feed's explicit reschedule links; array order is not chronology.
+export function selectLmpGame(games, config) {
+  const matches = games.filter(game => String(game.gamePk) === String(config.eventId));
+  if (!matches.length) throw new Error('lmp_event_not_found');
+  const identity = { ...config,
+    homeId: config.homeId || matches[0]?.teams?.home?.team?.id,
+    awayId: config.awayId || matches[0]?.teams?.away?.team?.id };
+  const groups = new Map();
+  for (const game of matches) {
+    normalizeLmpResult(game, identity); // Every record must agree on league and participants.
+    const at = Date.parse(game.gameDate);
+    if (!Number.isFinite(at)) throw new Error('lmp_invalid_game_date');
+    const group = groups.get(at) || [];
+    group.push(game);
+    groups.set(at, group);
+  }
+  const dates = [...groups.keys()].sort((a, b) => a - b);
+  for (let i = 1; i < dates.length; i++) {
+    const previous = dates[i - 1], current = dates[i];
+    const linked = groups.get(previous).some(game => Date.parse(game.rescheduleDate) === current)
+      || groups.get(current).some(game => Date.parse(game.rescheduledFrom) === previous);
+    if (!linked) throw new Error('lmp_ambiguous_reschedule');
+    if (groups.get(previous).some(game => normalizeLmpResult(game, config).completed)) {
+      throw new Error('lmp_conflicting_final');
+    }
+  }
+  const current = groups.get(dates.at(-1));
+  const normalized = current.map(game => ({ game, result: normalizeLmpResult(game, config) }));
+  const finals = normalized.filter(row => row.result.completed);
+  if (finals.length) {
+    const first = finals[0].result;
+    if (normalized.some(row => row.result.interrupted)
+      || finals.some(({ result }) => result.homeScore !== first.homeScore || result.awayScore !== first.awayScore)) {
+      throw new Error('lmp_conflicting_final');
+    }
+    return finals[0].game;
+  }
+  // Ambiguous non-final records must not accidentally expose a winner either.
+  return current[0];
+}
 export async function readLmpEvent(config, { fetchImpl = fetch } = {}) {
   if (!/^\d+$/.test(String(config?.eventId || ''))) throw new Error('lmp_missing_event_id');
   const games = await fetchLmpSchedule({ gamePk: config.eventId, fetchImpl });
-  const game = games.find(g => String(g.gamePk) === String(config.eventId));
-  if (!game) throw new Error('lmp_event_not_found');
-  return normalizeLmpResult(game, config);
+  const game = selectLmpGame(games, config);
+  return { ...normalizeLmpResult(game, config), gameDate: game.gameDate,
+    rescheduledFrom: game.rescheduledFrom || null };
 }

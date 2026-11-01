@@ -20,3 +20,33 @@ test('LMP resolver rejects mismatched event/team/league identity and missing off
  await assert.rejects(readLmpEvent({eventId:'123'},{fetchImpl:response([])}),/not_found/);
  await assert.rejects(readLmpEvent({eventId:'123'},{fetchImpl:async()=>({ok:false,status:503})}),/503/);
 });
+
+test('LMP follows a postponed game to its official makeup final in either feed order', async () => {
+ const cfg={eventId:'123',homeId:1,awayId:2};
+ const postponed=game({status:{codedGameState:'D',detailedState:'Postponed'},rescheduleDate:'2026-11-01T00:05:00Z'});
+ const makeup=game({gameDate:'2026-11-01T00:05:00Z',rescheduledFrom:postponed.gameDate,status:{codedGameState:'F',detailedState:'Final'}});
+ for(const games of [[postponed,makeup],[makeup,postponed]]) {
+  const result=await readLmpEvent(cfg,{fetchImpl:response(games)});
+  assert.equal(result.completed,true);assert.equal(result.winner,'home');assert.equal(result.gameDate,makeup.gameDate);
+ }
+ const scheduled={...makeup,status:{abstractGameState:'Preview',codedGameState:'S'}};
+ const pending=await readLmpEvent(cfg,{fetchImpl:response([postponed,scheduled])});
+ assert.equal(pending.completed,false);assert.equal(pending.winner,null);assert.equal(pending.state,'pre');
+});
+test('LMP rejects unrelated dates, participant changes and conflicting finals under one game ID', async () => {
+ const cfg={eventId:'123',homeId:1,awayId:2};
+ const final=game({status:{codedGameState:'F',detailedState:'Final'}});
+ const conflicting=structuredClone(final);conflicting.teams.away.score=7;
+ await assert.rejects(readLmpEvent(cfg,{fetchImpl:response([final,conflicting])}),/conflicting_final/);
+ const otherDate=game({gameDate:'2026-11-01T00:05:00Z',status:{codedGameState:'F'}});
+ await assert.rejects(readLmpEvent(cfg,{fetchImpl:response([game(),otherDate])}),/ambiguous_reschedule/);
+ const wrongTeam=structuredClone(final);wrongTeam.teams.home.team.id=99;
+ await assert.rejects(readLmpEvent(cfg,{fetchImpl:response([game(),wrongTeam])}),/mismatch/);
+ await assert.rejects(readLmpEvent({eventId:'123'},{fetchImpl:response([game(),wrongTeam])}),/mismatch/);
+ const wrongLeague=structuredClone(final);wrongLeague.teams.home.team.league.id=103;
+ await assert.rejects(readLmpEvent(cfg,{fetchImpl:response([final,wrongLeague])}),/mismatch/);
+ const otherId=game({gamePk:456,status:{codedGameState:'F'}});
+ const pending=await readLmpEvent(cfg,{fetchImpl:response([game(),otherId])});assert.equal(pending.completed,false);
+ const linkedFinal={...otherDate,rescheduledFrom:final.gameDate};
+ await assert.rejects(readLmpEvent(cfg,{fetchImpl:response([final,linkedFinal])}),/conflicting_final/);
+});

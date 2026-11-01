@@ -61,6 +61,10 @@ test('boxing generator skips far-future placeholder rows from the odds feed', as
   try {
     const specs = await generateBoxingMarkets();
     assert.deepEqual(specs.map(s => s.source_event_id), ['boxing:mexican-near']);
+    assert.equal(specs[0].resolver_type, 'manual_review');
+    assert.equal(specs[0].resolver_config.manualReviewReason, 'boxing_scores_not_supported');
+    assert.equal(specs[0].resolver_config.shape, 'parallel');
+    assert.deepEqual(specs[0].resolver_config.legs.map(leg => leg.label), specs[0].outcomes);
   } finally {
     globalThis.fetch = originalFetch;
     if (originalKey == null) delete process.env.ODDS_API_KEY;
