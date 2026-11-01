@@ -4,9 +4,9 @@
  *
  * Why the-odds-api: ESPN dropped their public boxing scoreboard
  * (returns 404), BoxRec is Cloudflare-walled, every other free
- * boxing source we probed was either empty or paid. the-odds-api's
- * free tier (500 req/month) gives us ~30 daily polls + ~20 weekly
- * resolution polls — well under cap.
+ * boxing source we probed was either empty or paid. The Odds API
+ * supplies schedules and odds. Boxing scores are NOT supported;
+ * generated markets therefore require manual result review.
  *
  * Env: ODDS_API_KEY (set in Vercel). Generator silently no-ops when
  * the key is missing, mirroring how generateLivMarkets bails when
@@ -184,10 +184,13 @@ function buildBoxingMarket(ev) {
     start_time: startTime,
     end_time: endTime,
     amm_mode: 'parallel',
-    resolver_type: 'sports_api',
+    resolver_type: 'manual_review',
     resolver_config: {
       source: 'odds-api-boxing',
       shape: 'parallel',
+      criteria: 'Gana el boxeador declarado vencedor en el resultado oficial de esta pelea. Verificar el anuncio de la organización sancionadora, promotor o transmisión oficial. Si hay empate, no contest o cancelación, revisar la anulación y reembolso; no inferir un ganador de las cuotas.',
+      criteriaEn: 'The boxer declared the winner in the official result wins. Verify the sanctioning body, promoter or official broadcast announcement. A draw, no contest or cancellation requires void/refund review; never infer a winner from odds.',
+      manualReviewReason: 'boxing_scores_not_supported',
       eventId: ev.id,
       legs,
     },

@@ -9,10 +9,21 @@ import {
 
 const startsAt = Date.parse(NEXT_TOURNAMENT_START_ISO);
 const closesAt = Date.parse(NEXT_TOURNAMENT_RANKING_CUTOFF_ISO);
+// A later announcement gets its own dismissal, even on a shared browser.
+const dismissalKey = `pronos-tournament-extension-dismissed:${NEXT_TOURNAMENT_START_ISO}:${NEXT_TOURNAMENT_RANKING_CUTOFF_ISO}`;
 
 export default function TournamentExtensionBanner() {
   const lang = useLang();
   const [now, setNow] = useState(Date.now);
+  const [dismissed, setDismissed] = useState(() => {
+    try { return window.localStorage.getItem(dismissalKey) === '1'; }
+    catch { return false; }
+  });
+  const dismiss = () => {
+    setDismissed(true);
+    try { window.localStorage.setItem(dismissalKey, '1'); }
+    catch { /* Dismiss for this visit when browser storage is unavailable. */ }
+  };
 
   useEffect(() => {
     const boundary = now < startsAt ? startsAt : closesAt;
@@ -21,7 +32,7 @@ export default function TournamentExtensionBanner() {
     return () => window.clearTimeout(timeout);
   }, [now]);
 
-  if (now < startsAt || now >= closesAt) return null;
+  if (dismissed || now < startsAt || now >= closesAt) return null;
 
   const locale = lang === 'en' ? 'en-US' : 'es-MX';
   const dateLabel = new Intl.DateTimeFormat(locale, {
@@ -38,11 +49,25 @@ export default function TournamentExtensionBanner() {
     >
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        flexWrap: 'wrap', gap: '12px 24px', padding: '16px 20px',
+        flexWrap: 'wrap', gap: '12px 24px', padding: '16px 64px 16px 20px', position: 'relative',
         background: 'rgba(255, 107, 0, 0.09)', border: '1px solid var(--orange)',
         borderRadius: 12, fontFamily: 'var(--font-body)',
       }}>
-        <div style={{ flex: '1 1 250px' }}>
+        <button
+          type="button"
+          onClick={dismiss}
+          aria-label={lang === 'en' ? 'Dismiss tournament announcement' : 'Cerrar aviso del torneo'}
+          title={lang === 'en' ? 'Dismiss tournament announcement' : 'Cerrar aviso del torneo'}
+          style={{
+            position: 'absolute', top: 4, right: 4, width: 44, height: 44,
+            display: 'grid', placeItems: 'center', padding: 0, border: 0,
+            borderRadius: 8, background: 'transparent', color: 'var(--orange)',
+            cursor: 'pointer', fontSize: 28, lineHeight: 1,
+          }}
+        >
+          <span aria-hidden="true">×</span>
+        </button>
+        <div style={{ flex: '1 1 250px', minWidth: 0 }}>
           <strong style={{ display: 'block', color: 'var(--orange)', fontSize: 16 }}>
             {lang === 'en' ? 'One more day of the tournament!' : '¡Un día más de torneo!'}
           </strong>
