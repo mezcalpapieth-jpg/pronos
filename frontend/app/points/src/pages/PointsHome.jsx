@@ -64,7 +64,7 @@ function shouldShowOnHome(market, featuredTeamKeys) {
   return Boolean(market?.featured || market?.trending || marketMatchesFeaturedTeam(market, featuredTeamKeys));
 }
 
-function countdownTargetForCycle(cycle) {
+function countdownTargetForCycle(cycle, nowMs = Date.now()) {
   if (!cycle) return null;
   const status = String(cycle.status || '').toLowerCase();
   const iso = status === 'scheduled'
@@ -73,11 +73,11 @@ function countdownTargetForCycle(cycle) {
       ? cycle.operationCloseAt || cycle.endsAt
       : cycle.endsAt || cycle.rankingCutoffAt;
   const targetMs = new Date(iso || '').getTime();
-  if (!Number.isFinite(targetMs)) return null;
+  if (!Number.isFinite(targetMs) || targetMs <= nowMs) return null;
   return {
     iso,
     mode: status === 'scheduled' ? 'start' : 'close',
-    seconds: Math.max(0, Math.floor((targetMs - Date.now()) / 1000)),
+    seconds: Math.max(0, Math.floor((targetMs - nowMs) / 1000)),
   };
 }
 
