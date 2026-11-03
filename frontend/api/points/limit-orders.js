@@ -12,6 +12,7 @@ import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { requireSession } from '../_lib/session.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 import { withTransaction } from '../_lib/db-tx.js';
+import { capturePointsRiskEvent } from '../_lib/points-risk.js';
 import {
   createLimitOrder,
   estimateMakerReward,
@@ -118,6 +119,12 @@ export default async function handler(req, res) {
       expiresAt: expiresAt || null,
     }));
 
+    await capturePointsRiskEvent(schemaSql, req, {
+      res, username: session.username, accountId: session.sub,
+      eventType: 'trade:limit_order', marketId: mid, tradeSide: side, outcomeIndex: oi,
+      amount: result.order.amount,
+      metadata: { orderId: result.order.id, limitPrice: result.order.limit_price },
+    });
     return res.status(200).json({
       ok: true,
       order: serializeOrder(result.order),

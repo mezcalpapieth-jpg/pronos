@@ -1,6 +1,7 @@
-import { createHmac } from 'node:crypto';
+import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
+import { appendResponseCookie } from './response-cookies.js';
 import { clientIp } from './rate-limit.js';
-import { readSessionCookie } from './session.js';
+import { readSessionCookie, verifySessionToken } from './session.js';
 
 const MAX_METADATA_BYTES = 4096;
 
@@ -52,7 +53,7 @@ export function hashRiskSignal(value) {
   return createHmac('sha256', riskSalt()).update(raw).digest('hex');
 }
 
-function safeDeviceId(req) {
+function legacyClientDeviceId(req) {
   const header = firstHeaderValue(req.headers?.['x-pronos-device-id'])
     || firstHeaderValue(req.headers?.['x-device-id']);
   if (header) return String(header).slice(0, 512);
@@ -60,16 +61,84 @@ function safeDeviceId(req) {
   return cookies.pronos_device_id || cookies.points_device_id || null;
 }
 
+const DEVICE_MAX_AGE_SEC = 365 * 24 * 60 * 60;
+const requestDevices = new WeakMap();
+
+function deviceCookieName() {
+  // __Host- forbids Domain/path overrides by sibling subdomains in production.
+  return process.env.VERCEL_ENV ? '__Host-pronos_risk_device' : 'pronos_risk_device';
+}
+
+function deviceSignature(payload) {
+  return createHmac('sha256', riskSalt()).update(`points-risk-device:${payload}`).digest();
+}
+
+function readSignedRiskDevice(req, now = Date.now()) {
+  const token = parseCookieHeader(req.headers?.cookie)[deviceCookieName()];
+  const empty = { id: null, trust: 'none', cookieState: token ? 'invalid' : 'missing', issued: false };
+  if (typeof token !== 'string' || token.length > 200) return empty;
+  const match = /^(v1\.([a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})\.(\d{10}))\.([A-Za-z0-9_-]{43})$/.exec(token);
+  if (!match) return empty;
+  const issuedAt = Number(match[3]);
+  const seconds = Math.floor(now / 1000);
+  if (issuedAt > seconds + 60 || issuedAt + DEVICE_MAX_AGE_SEC <= seconds) return empty;
+  const actual = Buffer.from(match[4], 'base64url');
+  const expected = deviceSignature(match[1]);
+  if (actual.length !== expected.length || actual.toString('base64url') !== match[4] || !timingSafeEqual(actual, expected)) return empty;
+  return { id: match[2], trust: 'server_verified', cookieState: 'valid', issued: false };
+}
+
+// Advisory only: a signed browser identifier can be cleared, copied, or shared.
+// Neither request headers nor old JS cookies can select its value.
+export function ensurePointsRiskDevice(req, res) {
+  if (requestDevices.has(req)) return requestDevices.get(req);
+  try {
+    const device = readSignedRiskDevice(req);
+    if (device.id || !res || res.headersSent) {
+      requestDevices.set(req, device);
+      return device;
+    }
+    const id = randomUUID();
+    const payload = `v1.${id}.${Math.floor(Date.now() / 1000)}`;
+    const token = `${payload}.${deviceSignature(payload).toString('base64url')}`;
+    appendResponseCookie(res, [
+      `${deviceCookieName()}=${token}`, 'Path=/', `Max-Age=${DEVICE_MAX_AGE_SEC}`,
+      'HttpOnly', 'SameSite=Lax', ...(process.env.VERCEL_ENV ? ['Secure'] : []),
+    ].join('; '));
+    const issued = { id, trust: 'server_issued', cookieState: device.cookieState, issued: true };
+    requestDevices.set(req, issued);
+    return issued;
+  } catch {
+    // Capture failures must not block authentication, trading, or claims.
+    console.warn('[points-risk] browser cookie unavailable');
+    return { id: null, trust: 'none', cookieState: 'unavailable', issued: false };
+  }
+}
+
+export function sharedRiskSignalScore(signals = []) {
+  const weights = { device: 40, session: 40, ip: 10, device_unverified: 5, session_unverified: 5 };
+  return signals.reduce((sum, signal) => sum + (weights[signal.signalType] || 0), 0);
+}
+
 export function pointsRiskSignals(req) {
   const ip = clientIp(req);
   const userAgent = firstHeaderValue(req.headers?.['user-agent']);
-  const device = safeDeviceId(req);
-  const sessionCookie = readSessionCookie(req);
+  const device = requestDevices.get(req) || readSignedRiskDevice(req);
+  let sessionCookie = null;
+  try {
+    const raw = readSessionCookie(req);
+    if (raw && verifySessionToken(raw)) sessionCookie = raw;
+  } catch { /* Invalid/unverifiable session cookies are not identity evidence. */ }
+  const clientDevice = legacyClientDeviceId(req);
   return {
     ipHash: hashRiskSignal(ip),
     userAgentHash: hashRiskSignal(userAgent),
-    deviceHash: hashRiskSignal(device),
+    deviceHash: device.id ? hashRiskSignal(`server-device:v1:${device.id}`) : null,
+    deviceTrust: device.trust,
+    deviceCookieState: device.cookieState,
+    clientDeviceHash: hashRiskSignal(clientDevice),
     sessionHash: hashRiskSignal(sessionCookie),
+    sessionTrust: sessionCookie ? 'server_verified' : 'none',
   };
 }
 
@@ -77,7 +146,7 @@ export function safeRiskMetadata(metadata = {}) {
   const raw = metadata && typeof metadata === 'object' && !Array.isArray(metadata)
     ? { ...metadata }
     : {};
-  for (const key of ['ip', 'ipAddress', 'userAgent', 'cookie', 'session', 'sessionCookie', 'token']) {
+  for (const key of ['ip', 'ipAddress', 'userAgent', 'cookie', 'session', 'sessionCookie', 'token', 'deviceId', 'deviceToken', 'clientDeviceId', 'authorization']) {
     delete raw[key];
   }
   let json = '{}';
@@ -91,6 +160,20 @@ export function safeRiskMetadata(metadata = {}) {
     truncated: true,
     keys: Object.keys(raw).slice(0, 40),
   };
+}
+
+function riskEventMetadata(metadata, signals) {
+  const provenance = {
+    deviceTrust: signals.deviceTrust,
+    deviceCookieState: signals.deviceCookieState,
+    clientDeviceHash: signals.clientDeviceHash,
+    sessionTrust: signals.sessionTrust,
+  };
+  const safe = { ...safeRiskMetadata(metadata), ...provenance };
+  // Oversized action details must not erase the server's trust classification.
+  return Buffer.byteLength(JSON.stringify(safe), 'utf8') <= MAX_METADATA_BYTES
+    ? safe
+    : { truncated: true, ...provenance };
 }
 
 export function normalizeRiskReviewStatus(status) {
@@ -108,24 +191,26 @@ export async function capturePointsRiskEvent(db, req, {
   amount = null,
   shares = null,
   metadata = {},
+  res = null,
 } = {}) {
   if (!db || !eventType) return;
   try {
+    if (res) ensurePointsRiskDevice(req, res);
     const signals = pointsRiskSignals(req);
     const values = {
       username,
       accountHash: hashRiskSignal(accountId),
       eventType,
-      marketId: Number.isInteger(Number(marketId)) ? Number(marketId) : null,
+      marketId: marketId != null && Number.isInteger(Number(marketId)) && Number(marketId) > 0 ? Number(marketId) : null,
       tradeSide,
-      outcomeIndex: Number.isInteger(Number(outcomeIndex)) ? Number(outcomeIndex) : null,
-      amount: Number.isFinite(Number(amount)) ? Number(amount) : null,
-      shares: Number.isFinite(Number(shares)) ? Number(shares) : null,
+      outcomeIndex: outcomeIndex != null && Number.isInteger(Number(outcomeIndex)) && Number(outcomeIndex) >= 0 ? Number(outcomeIndex) : null,
+      amount: amount != null && Number.isFinite(Number(amount)) ? Number(amount) : null,
+      shares: shares != null && Number.isFinite(Number(shares)) ? Number(shares) : null,
       ipHash: signals.ipHash,
       userAgentHash: signals.userAgentHash,
       deviceHash: signals.deviceHash,
       sessionHash: signals.sessionHash,
-      metadataJson: JSON.stringify(safeRiskMetadata(metadata)),
+      metadataJson: JSON.stringify(riskEventMetadata(metadata, signals)),
     };
     if (typeof db === 'function') {
       await db`

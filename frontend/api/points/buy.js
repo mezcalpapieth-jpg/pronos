@@ -57,6 +57,7 @@ export default async function handler(req, res) {
     }));
 
     await capturePointsRiskEvent(schemaSql, req, {
+      res,
       username,
       accountId: session.sub,
       eventType: 'trade:buy',

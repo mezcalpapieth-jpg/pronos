@@ -8,6 +8,7 @@ import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { requireSession } from '../_lib/session.js';
 import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 import { withTransaction } from '../_lib/db-tx.js';
+import { capturePointsRiskEvent } from '../_lib/points-risk.js';
 import { cancelLimitOrder } from '../_lib/points-limit-orders.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -39,6 +40,10 @@ export default async function handler(req, res) {
       orderId,
       username: session.username,
     }));
+    await capturePointsRiskEvent(schemaSql, req, {
+      res, username: session.username, accountId: session.sub,
+      eventType: 'trade:limit_order_cancel', metadata: { orderId },
+    });
     return res.status(200).json(result);
   } catch (e) {
     if (e?.status && typeof e?.message === 'string') {

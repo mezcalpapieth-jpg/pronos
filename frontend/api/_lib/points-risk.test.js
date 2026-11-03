@@ -23,9 +23,11 @@ test('risk signals are hashed and do not expose raw request identifiers', () => 
   const signals = pointsRiskSignals(req);
   assert.equal(signals.ipHash, hashRiskSignal('203.0.113.44'));
   assert.equal(signals.userAgentHash, hashRiskSignal('Risk Test Browser'));
-  assert.equal(signals.deviceHash, hashRiskSignal('device-123'));
-  assert.equal(signals.sessionHash, hashRiskSignal('session-token-123'));
-  for (const value of Object.values(signals)) {
+  assert.equal(signals.deviceHash, null);
+  assert.equal(signals.clientDeviceHash, hashRiskSignal('device-123'));
+  assert.equal(signals.deviceTrust, 'none');
+  assert.equal(signals.sessionHash, null);
+  for (const value of [signals.ipHash, signals.userAgentHash, signals.clientDeviceHash]) {
     assert.equal(typeof value, 'string');
     assert.equal(value.length, 64);
     assert.doesNotMatch(value, /203\.0\.113|Risk Test Browser|device-123|session-token/);
@@ -44,7 +46,7 @@ test('risk device signal ignores generic browser platform hints', () => {
   const signals = pointsRiskSignals(req);
   assert.equal(signals.deviceHash, null);
   assert.equal(signals.ipHash, hashRiskSignal('203.0.113.44'));
-  assert.equal(signals.sessionHash, hashRiskSignal('session-token-123'));
+  assert.equal(signals.sessionHash, null);
 });
 
 test('risk metadata drops direct PII-like keys and accepts only known review statuses', () => {
@@ -96,7 +98,7 @@ test('risk capture supports Neon tagged clients without blocking callers', async
   assert.equal(values[5], 1);
   assert.equal(values[6], 100);
   assert.equal(values[7], 196.08);
-  assert.deepEqual(JSON.parse(values[12]), { priceAfter: 0.51 });
+  assert.deepEqual(JSON.parse(values[12]), { priceAfter: 0.51, deviceTrust: 'none', deviceCookieState: 'missing', clientDeviceHash: null, sessionTrust: 'none' });
 });
 
 test('risk capture also supports transaction clients and swallows write failures', async () => {
