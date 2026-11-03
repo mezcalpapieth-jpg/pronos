@@ -27,16 +27,22 @@ export async function redeemWinningPosition(client, {
   const p = positionResult.rows[0];
   if (!p || Number(p.shares) <= 0) fail('no_shares_to_redeem');
   const shares = Number(p.shares);
+  // Wallet claims remain open until rollover; only snapshot collection uses the cutoff.
+  const cutoffIso = automatic ? activeWindow.rankingCutoffAt : null;
   // Always subtract prior collections, including ones just after the cutoff.
   const cycleSharesResult = await client.query(`
-    SELECT COALESCE(SUM(CASE WHEN side = 'buy' THEN shares ELSE -shares END), 0) AS current_cycle_shares
+    SELECT COALESCE(SUM(CASE
+             WHEN $5::timestamptz IS NULL OR created_at <= $5::timestamptz OR side IN ('sell', 'redeem')
+             THEN CASE WHEN side = 'buy' THEN shares ELSE -shares END ELSE 0
+           END), 0) AS current_cycle_shares,
+           COALESCE(SUM(CASE WHEN side = 'buy' THEN shares ELSE -shares END), 0) AS total_cycle_shares
     FROM points_trades
     WHERE LOWER(username) = LOWER($1) AND market_id = $2 AND outcome_index = $3
       AND created_at >= $4::timestamptz
-      AND (created_at <= $5::timestamptz OR side IN ('sell', 'redeem'))
       AND side IN ('buy', 'sell', 'redeem')
-  `, [username, marketId, outcomeIndex, scoringStartIso, activeWindow.rankingCutoffAt]);
+  `, [username, marketId, outcomeIndex, scoringStartIso, cutoffIso]);
   const currentCycleShares = Math.max(0, Number(cycleSharesResult.rows[0]?.current_cycle_shares || 0));
+  const totalCycleShares = Math.max(0, Number(cycleSharesResult.rows[0]?.total_cycle_shares || 0));
   const redeemShares = Math.min(shares, currentCycleShares);
   if (redeemShares <= SHARE_EPSILON) fail('position_outside_current_cycle', 409);
   const payout = redeemShares;
@@ -50,7 +56,8 @@ export async function redeemWinningPosition(client, {
   const redeemedCostBasis = currentCostBasis * Math.min(1, redeemShares / shares);
   const remainingShares = Math.max(0, shares - redeemShares);
   const remainingCostBasis = Math.max(0, currentCostBasis - redeemedCostBasis);
-  const staleRemainder = remainingShares > SHARE_EPSILON && currentCycleShares + SHARE_EPSILON < shares;
+  const remainingCycleShares = Math.max(0, totalCycleShares - redeemShares);
+  const staleRemainder = remainingShares > SHARE_EPSILON && remainingCycleShares <= SHARE_EPSILON;
   const newRealized = Number(p.realized_pnl || 0) + payout - redeemedCostBasis;
   await client.query(`
     UPDATE points_positions SET shares = $1, cost_basis = $2, realized_pnl = $3,
