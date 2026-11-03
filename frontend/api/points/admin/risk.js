@@ -13,6 +13,7 @@ import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { requirePointsAdmin } from '../../_lib/points-admin.js';
 import {
   hashRiskSignal,
+  sharedRiskSignalScore,
   normalizeRiskReviewStatus,
   RISK_REVIEW_STATUSES,
 } from '../../_lib/points-risk.js';
@@ -83,6 +84,8 @@ function genericDeviceSignalHashes() {
 }
 
 function formatAccountRow(row) {
+  const sharedSignals = asArray(row.sharedSignals).map(formatLinkedSignalRow);
+  const sharedSignalScore = sharedRiskSignalScore(sharedSignals);
   return {
     username: row.username,
     email: row.email || null,
@@ -92,6 +95,7 @@ function formatAccountRow(row) {
     reviewReason: row.reviewReason || '',
     reviewUpdatedAt: row.reviewUpdatedAt || null,
     riskScore: toNumber(row.riskScore),
+    sharedSignalScore,
     coordinatedMarketCount: toNumber(row.coordinatedMarketCount),
     coordinatedDonorCount: toNumber(row.coordinatedDonorCount),
     tradeCount: toNumber(row.tradeCount),
@@ -101,7 +105,7 @@ function formatAccountRow(row) {
     loopCount: toNumber(row.loopCount),
     rapidTradeCount: toNumber(row.rapidTradeCount),
     sharedSignalCount: toNumber(row.sharedSignalCount),
-    sharedSignals: asArray(row.sharedSignals).map(formatLinkedSignalRow),
+    sharedSignals,
     lastTradeAt: row.lastTradeAt || null,
     createdAt: row.createdAt || null,
   };
@@ -215,6 +219,7 @@ async function handleList(req, res) {
       linkedSignalRows,
       sameMarketRows,
       flagRows,
+      deviceActivityRows,
     ] = await Promise.all([
       sql`
         WITH trade_summary AS (
@@ -263,7 +268,8 @@ async function handleList(req, res) {
               AND username <> ${PRONOS_TREASURY_USERNAME}
               AND ip_hash IS NOT NULL
             UNION ALL
-            SELECT username, 'device' AS signal_type, device_hash AS signal_hash, created_at
+            SELECT username, CASE WHEN metadata->>'deviceTrust' IN ('server_verified', 'server_issued')
+              THEN 'device' ELSE 'device_unverified' END AS signal_type, device_hash AS signal_hash, created_at
             FROM points_risk_events
             WHERE created_at > NOW() - INTERVAL '30 days'
               AND username IS NOT NULL
@@ -271,7 +277,8 @@ async function handleList(req, res) {
               AND device_hash IS NOT NULL
               AND NOT (device_hash = ANY(${ignoredDeviceHashes}::text[]))
             UNION ALL
-            SELECT username, 'session' AS signal_type, session_hash AS signal_hash, created_at
+            SELECT username, CASE WHEN metadata->>'sessionTrust' = 'server_verified'
+              THEN 'session' ELSE 'session_unverified' END AS signal_type, session_hash AS signal_hash, created_at
             FROM points_risk_events
             WHERE created_at > NOW() - INTERVAL '30 days'
               AND username IS NOT NULL
@@ -294,6 +301,10 @@ async function handleList(req, res) {
           SELECT
             u.username,
             COUNT(*)::int AS shared_signal_count,
+            SUM(CASE c.signal_type
+              WHEN 'device' THEN 40 WHEN 'session' THEN 40 WHEN 'ip' THEN 10
+              WHEN 'device_unverified' THEN 5 WHEN 'session_unverified' THEN 5
+              ELSE 0 END)::int AS shared_signal_score,
             JSONB_AGG(
               JSONB_BUILD_OBJECT(
                 'signalType', c.signal_type,
@@ -342,7 +353,7 @@ async function handleList(req, res) {
               ELSE 0
             END
             + COALESCE(l.loop_count, 0) * 30
-            + COALESCE(s.shared_signal_count, 0) * 20
+            + COALESCE(s.shared_signal_score, 0)
             + LEAST(COALESCE(t.trade_count, 0), 30)
             + CASE
                 WHEN COALESCE(t.buy_volume, 0) > 0
@@ -440,7 +451,8 @@ async function handleList(req, res) {
             AND username <> ${PRONOS_TREASURY_USERNAME}
             AND ip_hash IS NOT NULL
           UNION ALL
-          SELECT username, 'device' AS signal_type, device_hash AS signal_hash, created_at
+          SELECT username, CASE WHEN metadata->>'deviceTrust' IN ('server_verified', 'server_issued')
+              THEN 'device' ELSE 'device_unverified' END AS signal_type, device_hash AS signal_hash, created_at
           FROM points_risk_events
           WHERE created_at > NOW() - INTERVAL '30 days'
             AND username IS NOT NULL
@@ -448,7 +460,8 @@ async function handleList(req, res) {
             AND device_hash IS NOT NULL
             AND NOT (device_hash = ANY(${ignoredDeviceHashes}::text[]))
           UNION ALL
-          SELECT username, 'session' AS signal_type, session_hash AS signal_hash, created_at
+          SELECT username, CASE WHEN metadata->>'sessionTrust' = 'server_verified'
+              THEN 'session' ELSE 'session_unverified' END AS signal_type, session_hash AS signal_hash, created_at
           FROM points_risk_events
           WHERE created_at > NOW() - INTERVAL '30 days'
             AND username IS NOT NULL
@@ -491,7 +504,8 @@ async function handleList(req, res) {
             AND market_id IS NOT NULL
             AND ip_hash IS NOT NULL
           UNION ALL
-          SELECT username, market_id, created_at, 'device' AS signal_type, device_hash AS signal_hash
+          SELECT username, market_id, created_at, CASE WHEN metadata->>'deviceTrust' IN ('server_verified', 'server_issued')
+              THEN 'device' ELSE 'device_unverified' END AS signal_type, device_hash AS signal_hash
           FROM points_risk_events
           WHERE created_at > NOW() - INTERVAL '30 days'
             AND username IS NOT NULL
@@ -500,7 +514,8 @@ async function handleList(req, res) {
             AND device_hash IS NOT NULL
             AND NOT (device_hash = ANY(${ignoredDeviceHashes}::text[]))
           UNION ALL
-          SELECT username, market_id, created_at, 'session' AS signal_type, session_hash AS signal_hash
+          SELECT username, market_id, created_at, CASE WHEN metadata->>'sessionTrust' = 'server_verified'
+              THEN 'session' ELSE 'session_unverified' END AS signal_type, session_hash AS signal_hash
           FROM points_risk_events
           WHERE created_at > NOW() - INTERVAL '30 days'
             AND username IS NOT NULL
@@ -557,9 +572,36 @@ async function handleList(req, res) {
         ORDER BY severity DESC, created_at DESC
         LIMIT 80
       `,
+      sql`
+        WITH shared_devices AS (
+          SELECT device_hash
+          FROM points_risk_events
+          WHERE created_at > NOW() - INTERVAL '30 days'
+            AND username IS NOT NULL AND username <> ${PRONOS_TREASURY_USERNAME}
+            AND device_hash IS NOT NULL
+            AND metadata->>'deviceTrust' IN ('server_verified', 'server_issued')
+          GROUP BY device_hash
+          HAVING COUNT(DISTINCT username) > 1
+            AND (${usernameFilter}::text IS NULL OR BOOL_OR(LOWER(username) = LOWER(${usernameFilter})))
+        )
+        SELECT e.username, e.event_type AS "eventType", e.market_id AS "marketId",
+          e.trade_side AS "tradeSide", e.created_at AS "createdAt",
+          LEFT(e.device_hash, 12) AS "signalKey", LEFT(e.metadata->>'ticker', 32) AS "ticker"
+        FROM points_risk_events e JOIN shared_devices d ON d.device_hash = e.device_hash
+        WHERE e.created_at > NOW() - INTERVAL '30 days'
+          AND e.username IS NOT NULL AND e.username <> ${PRONOS_TREASURY_USERNAME}
+          AND e.metadata->>'deviceTrust' IN ('server_verified', 'server_issued')
+        ORDER BY e.created_at DESC, e.id DESC LIMIT 80
+      `,
     ]);
 
-    const coordinatedTrading = await readCoordinatedTrading(sql, { username: usernameFilter });
+    const coordinatedTrading = (await readCoordinatedTrading(sql, { username: usernameFilter }))
+      .map(group => ({ ...group, donors: group.donors.map(donor => ({
+        ...donor,
+        verifiedDeviceMatch: accountRows.some(account => account.username === group.username
+          && asArray(account.sharedSignals).some(signal => signal.signalType === 'device'
+            && asArray(signal.usernames).includes(donor.username))),
+      })) }));
     const accounts = accountRows.map(row => {
       const coordination = coordinationScore(coordinatedTrading, row.username);
       return formatAccountRow({ ...row, ...coordination, riskScore: toNumber(row.riskScore) + coordination.coordinationRiskScore });
@@ -567,6 +609,7 @@ async function handleList(req, res) {
     return res.status(200).json({
       ok: true,
       coordinatedTrading,
+      deviceActivity: deviceActivityRows,
       statuses: RISK_REVIEW_STATUSES,
       accounts,
       rapidLoops: rapidLoopRows.map(formatRapidLoopRow),

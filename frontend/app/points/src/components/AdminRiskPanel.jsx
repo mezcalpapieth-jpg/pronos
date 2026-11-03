@@ -69,6 +69,7 @@ export default function RiskPanel({ profileUsername = null }) {
   const sameMarketLinks = Array.isArray(data?.sameMarketLinks) ? data.sameMarketLinks : [];
   const coordinated = Array.isArray(data?.coordinatedTrading) ? data.coordinatedTrading : [];
   const flags = Array.isArray(data?.flags) ? data.flags : [];
+  const deviceActivity = Array.isArray(data?.deviceActivity) ? data.deviceActivity : [];
   const reviewCount = accounts.filter(row => ['watch', 'phone_required', 'under_review', 'ineligible'].includes(row.reviewStatus)).length;
 
   return (
@@ -81,7 +82,7 @@ export default function RiskPanel({ profileUsername = null }) {
           <summary style={{ cursor: 'pointer' }}><a href={`/points/u/${encodeURIComponent(group.username)}`}>@{group.username}</a> · {group.donorCount} cuentas · {group.donorSpend.toFixed(2)} MXNP · {group.side === 'buy' ? 'compra' : 'venta'} · mercado #{group.marketId}</summary>
           <p><a href={`/points/market?id=${group.marketId}`}>{group.question}</a> · movimiento favorable acumulado: {(group.priceImpact * 100).toFixed(2)} puntos</p>
           <p>Trades beneficiados: {group.beneficiaryTradeIds.join(', ')}</p>
-          <ul>{group.donors.map(d => <li key={d.tradeId}><a href={`/points/u/${encodeURIComponent(d.username)}`}>@{d.username}</a> · trade #{d.tradeId} · {d.amount.toFixed(2)} MXNP · {d.secondsBefore.toFixed(1)} s antes{d.referrer ? ` · referido por @${d.referrer}` : ''}</li>)}</ul>
+          <ul>{group.donors.map(d => <li key={d.tradeId}><a href={`/points/u/${encodeURIComponent(d.username)}`}>@{d.username}</a> · trade #{d.tradeId} · {d.amount.toFixed(2)} MXNP · {d.secondsBefore.toFixed(1)} s antes{d.verifiedDeviceMatch ? ' · mismo navegador verificado' : ''}{d.referrer ? ` · referido por @${d.referrer}` : ''}</li>)}</ul>
         </details>)}
       </section>
       <section style={adminPanelStyle}>
@@ -117,7 +118,7 @@ export default function RiskPanel({ profileUsername = null }) {
               'Estado: limpia +0, watch +35, teléfono requerido +55, en revisión +70, no elegible +100.',
               'Coordinación: +20 por mercado y +5 por cuenta nueva, hasta +300; no depende de IP.',
               'Loops rápidos: +30 por mercado donde compra y sale varias veces en pocas horas.',
-              'Señales: +20 por IP, dispositivo o sesión compartida con otra cuenta.',
+              'Señales: +40 por navegador o sesión verificada; +10 por IP; +5 por identificador antiguo sin verificar.',
               'Trades 30d: hasta +30 por actividad; entrada/salida balanceada suma +10.',
             ]}
           />
@@ -360,6 +361,20 @@ export default function RiskPanel({ profileUsername = null }) {
       />
 
       <RiskEvidencePanel
+        title="Actividad de navegadores compartidos"
+        empty="Sin actividad de un navegador verificado compartido entre cuentas."
+        rows={deviceActivity}
+        renderRow={(row, index) => (
+          <div key={`${row.signalKey}:${row.username}:${row.createdAt}:${index}`} style={riskEvidenceRowStyle}>
+            <a href={`/points/u/${encodeURIComponent(row.username)}`} style={riskEvidenceLinkStyle}>@{row.username}</a>
+            <span style={riskEvidenceSignalMainStyle}>{riskEventLabel(row.eventType)}{row.ticker ? ` · ${row.ticker}` : ''}{row.marketId ? ` · mercado #${row.marketId}` : ''}</span>
+            <span style={riskEvidenceMetaStyle}>Navegador verificado · {row.signalKey}</span>
+            <span style={riskEvidenceMetaStyle}>{adminDateTime(row.createdAt)}</span>
+          </div>
+        )}
+      />
+      <p style={adminEmptyStyle}>Un navegador compartido puede ser usado por varias personas. Las coincidencias verificadas y las antiguas se muestran por separado; ninguna aplica sanciones automáticas.</p>
+      <RiskEvidencePanel
         title="Cruces en el mismo mercado"
         empty="Sin cuentas enlazadas operando el mismo mercado en ventana corta."
         rows={sameMarketLinks}
@@ -592,7 +607,7 @@ function RiskSignalEvidenceRow({ row, focusUsername = null }) {
     : uniqueDisplayUsernames.map(username => `@${username}`).join(' · ');
   return (
     <div style={riskEvidenceRowStyle}>
-      <span style={riskEvidenceLinkStyle}>{riskSignalLabel(row.signalType)} · {row.signalKey}</span>
+      <span style={{ ...riskEvidenceLinkStyle, overflow: 'visible', whiteSpace: 'normal', overflowWrap: 'anywhere', lineHeight: 1.5 }}>{riskSignalLabel(row.signalType)} · {row.signalKey}</span>
       <span style={riskEvidenceSignalMainStyle} title={signalText}>
         {signalText}
       </span>
@@ -713,8 +728,8 @@ function riskScoreBreakdown(row = {}) {
     {
       key: 'signals',
       label: `${adminNumber(sharedSignalCount)} señales`,
-      points: sharedSignalCount * 20,
-      help: '+20 por IP, dispositivo o sesión compartida con otra cuenta.',
+      points: row.sharedSignalScore == null ? sharedSignalCount * 20 : Number(row.sharedSignalScore),
+      help: '+40 por navegador/sesión verificada; +10 por IP; +5 por señal antigua sin verificar.',
     },
     {
       key: 'trades',
@@ -731,8 +746,20 @@ function riskScoreBreakdown(row = {}) {
   ];
 }
 
+function riskEventLabel(type) {
+  const labels = {
+    'auth:verify_otp': 'Inicio de sesión', 'auth:username_claim': 'Registro de usuario',
+    'auth:device_seen': 'Navegador registrado', 'trade:buy': 'Compra', 'trade:sell': 'Venta',
+    'trade:redeem': 'Cobro de premio', 'trade:stock_buy': 'Compra de acciones',
+    'trade:stock_sell': 'Venta de acciones', 'trade:limit_order': 'Orden límite',
+    'trade:limit_order_cancel': 'Cancelación de orden', 'trade:parlay': 'Combinada',
+    'trade:parlay_claim': 'Cobro de combinada',
+  };
+  return labels[type] || type;
+}
+
 function riskSignalLabel(type) {
-  const labels = { ip: 'IP', device: 'Dispositivo', session: 'Sesión' };
+  const labels = { ip: 'IP', device: 'Dispositivo · navegador verificado', session: 'Sesión verificada', device_unverified: 'Dispositivo antiguo · sin verificar', session_unverified: 'Sesión antigua · sin verificar' };
   return labels[type] || type || 'Señal';
 }
 

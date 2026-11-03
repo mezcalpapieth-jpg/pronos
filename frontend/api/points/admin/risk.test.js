@@ -34,8 +34,8 @@ test('admin risk endpoint surfaces loops and shared hashed signals without expos
   assert.match(source, /device_hash/);
   assert.match(source, /session_hash/);
   assert.match(source, /SELECT username, 'ip' AS signal_type, ip_hash AS signal_hash, created_at/);
-  assert.match(source, /SELECT username, 'device' AS signal_type, device_hash AS signal_hash, created_at/);
-  assert.match(source, /SELECT username, 'session' AS signal_type, session_hash AS signal_hash, created_at/);
+  assert.match(source, /THEN 'device' ELSE 'device_unverified' END AS signal_type/);
+  assert.match(source, /THEN 'session' ELSE 'session_unverified' END AS signal_type/);
   assert.match(source, /COUNT\(\*\) FILTER \(WHERE side = 'buy'\)/);
   assert.match(source, /COUNT\(\*\) FILTER \(WHERE side = 'sell'\)/);
   assert.match(source, /COALESCE\(tape\.trades, '(\[\]'::jsonb|\\\[\\\]'::jsonb)\)/);

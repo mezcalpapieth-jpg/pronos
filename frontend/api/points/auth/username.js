@@ -102,6 +102,7 @@ export default async function handler(req, res) {
       }
 
       await capturePointsRiskEvent(sql, req, {
+        res,
         username: claimed.username,
         accountId: session.sub,
         eventType: 'auth:username_claim',

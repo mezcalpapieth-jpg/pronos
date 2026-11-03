@@ -183,6 +183,7 @@ export default async function handler(req, res) {
     }
 
     await capturePointsRiskEvent(sql, req, {
+      res,
       username,
       accountId: suborgId,
       eventType: 'auth:verify_otp',

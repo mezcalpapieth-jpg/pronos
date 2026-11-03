@@ -20,6 +20,7 @@ import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../../_lib/cors.js';
 import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { readSession } from '../../_lib/session.js';
+import { ensurePointsRiskDevice, capturePointsRiskEvent } from '../../_lib/points-risk.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -32,6 +33,8 @@ export default async function handler(req, res) {
     if (cors) return cors;
     if (req.method !== 'GET') return res.status(405).json({ error: 'method_not_allowed' });
 
+    res.setHeader('Cache-Control', 'private, no-store');
+    const device = ensurePointsRiskDevice(req, res);
     let session = null;
     try {
       session = readSession(req, res);
@@ -66,6 +69,11 @@ export default async function handler(req, res) {
         return res.status(200).json({ authenticated: false });
       }
       const r = rows[0];
+      if (device.issued) {
+        await capturePointsRiskEvent(schemaSql, req, {
+          res, username: r.username, accountId: session.sub, eventType: 'auth:device_seen',
+        });
+      }
       const reviewStatus = r.review_status || 'clear';
       return res.status(200).json({
         authenticated: true,

@@ -62,6 +62,7 @@ export default async function handler(req, res) {
     }));
 
     await capturePointsRiskEvent(schemaSql, req, {
+      res,
       username: session.username,
       accountId: session.sub,
       eventType: claiming ? 'trade:parlay_claim' : 'trade:parlay',

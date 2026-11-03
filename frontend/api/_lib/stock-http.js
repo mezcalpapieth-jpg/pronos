@@ -8,6 +8,7 @@ import { ensureStockSchema } from './stock-schema.js';
 import { createStockData } from './stock-data.js';
 import { createStockQuote, executeStockTrade, stockOrderRequest } from './stock-trading.js';
 import { readStockPortfolio } from './stock-portfolio.js';
+import { capturePointsRiskEvent } from './points-risk.js';
 
 let sql;
 let data;
@@ -57,6 +58,13 @@ export function stockHandler(action) {
       } else result = await withTransaction(db => executeStockTrade(db, {
         username: session.username, side: action, quoteId: req.body?.quoteId, idempotencyKey: req.body?.idempotencyKey,
       }));
+      if (['buy', 'sell'].includes(action) && !result.replayed) {
+        await capturePointsRiskEvent(sql, req, {
+          res, username: session.username, accountId: session.sub,
+          eventType: `trade:stock_${action}`, tradeSide: action, amount: result.total,
+          metadata: { ticker: result.ticker, stockTradeId: result.tradeId, quantity: result.quantity },
+        });
+      }
       return res.status(200).json(result);
     } catch (error) {
       if (error.status) return res.status(error.status).json({ error: error.code || error.message });

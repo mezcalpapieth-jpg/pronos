@@ -21,6 +21,7 @@
  */
 
 import { createHmac, timingSafeEqual, webcrypto } from 'crypto';
+import { appendResponseCookie } from './response-cookies.js';
 
 const COOKIE_NAME = 'pronos_points_session';
 const MAX_AGE_SEC = 60 * 60 * 24 * 30;        // 30 days
@@ -103,7 +104,7 @@ export function setSessionCookie(res, token) {
     'SameSite=Lax',
   ];
   if (process.env.VERCEL_ENV) parts.push('Secure');
-  res.setHeader('Set-Cookie', parts.join('; '));
+  appendResponseCookie(res, parts.join('; '));
 }
 
 export function clearSessionCookie(res) {
@@ -115,7 +116,7 @@ export function clearSessionCookie(res) {
     'SameSite=Lax',
   ];
   if (process.env.VERCEL_ENV) parts.push('Secure');
-  res.setHeader('Set-Cookie', parts.join('; '));
+  appendResponseCookie(res, parts.join('; '));
 }
 
 function parseCookieHeader(header) {
