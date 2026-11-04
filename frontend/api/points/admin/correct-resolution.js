@@ -1,3 +1,4 @@
+import { assertPointsExecution } from '../../_lib/points-execution-mode.js';
 /**
  * POST /api/points/admin/correct-resolution
  * Body: { marketId, winningOutcomeIndex|winningOutcomeIndexes, finalScore?, reason? }
@@ -179,7 +180,7 @@ export default async function handler(req, res) {
 
     const result = await withTransaction(async (client) => {
       const marketResult = await client.query(
-        `SELECT id, status, amm_mode, parent_id, outcome, outcomes, final_score
+        `SELECT id, mode, status, amm_mode, parent_id, outcome, outcomes, final_score
            FROM points_markets
           WHERE id = $1
           FOR UPDATE`,
@@ -189,6 +190,7 @@ export default async function handler(req, res) {
         const err = new Error('market_not_found'); err.status = 404; throw err;
       }
       const parent = marketResult.rows[0];
+      assertPointsExecution(parent);
       if (parent.parent_id) {
         const err = new Error('leg_not_directly_correctable');
         err.status = 400;
@@ -203,7 +205,7 @@ export default async function handler(req, res) {
       }
 
       const relatedResult = await client.query(
-        `SELECT id, parent_id, status, amm_mode, outcome, outcomes, leg_label
+        `SELECT id, mode, parent_id, status, amm_mode, outcome, outcomes, leg_label
            FROM points_markets
           WHERE id = $1 OR parent_id = $1
           ORDER BY CASE WHEN id = $1 THEN 0 ELSE 1 END, id ASC
@@ -211,6 +213,7 @@ export default async function handler(req, res) {
         [mid],
       );
       const relatedRows = relatedResult.rows || [];
+      relatedRows.forEach(assertPointsExecution);
       const { target, affectedMarketIds, ammMode } = buildTargetOutcomes(parent, relatedRows, winningOutcomeIndexes);
       const oldOutcome = outcomeIndexOrNull(parent.outcome);
       const parentOutcomes = parseJsonb(parent.outcomes, ['Sí', 'No']);

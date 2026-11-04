@@ -1,3 +1,4 @@
+import { assertPointsExecution } from '../../_lib/points-execution-mode.js';
 /**
  * GET /api/points/admin/resolution-candidates?status=pending
  * POST /api/points/admin/resolution-candidates
@@ -64,6 +65,7 @@ async function loadCandidate(candidateId) {
       c.*,
       m.id AS market_id,
       m.status AS market_status,
+      m.mode,
       m.amm_mode AS market_amm_mode,
       m.parent_id AS market_parent_id,
       m.outcomes
@@ -161,6 +163,7 @@ export default async function handler(req, res) {
 
     const candidate = await loadCandidate(candidateId);
     if (!candidate) return res.status(404).json({ error: 'candidate_not_found' });
+    assertPointsExecution(candidate);
     if (candidate.status !== 'pending') {
       return res.status(409).json({ error: 'candidate_already_reviewed' });
     }

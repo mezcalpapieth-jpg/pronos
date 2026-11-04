@@ -1,3 +1,4 @@
+import { pendingApprovalSettings } from '../../_lib/onchain-preview-approval.js';
 /**
  * POST /api/protocol/admin/lifecycle-market
  * Body: { marketId, action, note?, onchain? }
@@ -141,6 +142,7 @@ export default async function handler(req, res) {
 
   const admin = requirePointsAdmin(req, res);
   if (!admin) return;
+  if (pendingApprovalSettings().previewEnabled) return res.status(409).json({error:'use_onchain_admin_settlement'});
 
   const { marketId, action: requestedAction, note } = req.body || {};
   const mid = Number.parseInt(marketId, 10);

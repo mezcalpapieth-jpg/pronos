@@ -1,3 +1,4 @@
+import { pendingApprovalSettings } from '../_lib/onchain-preview-approval.js';
 /**
  * MVP protocol auto-resolver.
  *
@@ -71,6 +72,8 @@ function resolverSignerConfig() {
 }
 
 export async function runProtocolAutoResolve({ dry = false, limit = 50 } = {}) {
+  if (!dry && pendingApprovalSettings().previewEnabled) return {ok:true,checked:0,resolved:[],errors:[],
+    deferred:[{reason:'dedicated_sepolia_resolver_required'}],dryRun:false};
   const started = Date.now();
   await ensureProtocolSchema(schemaSql);
   const cappedLimit = Math.min(Math.max(Number.parseInt(limit, 10) || 50, 1), 100);

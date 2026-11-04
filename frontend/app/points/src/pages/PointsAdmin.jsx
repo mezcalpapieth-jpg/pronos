@@ -1,4 +1,7 @@
 import RiskPanel from '../components/AdminRiskPanel.jsx';
+import AdminOnchainOperations from '../components/AdminOnchainOperations.jsx';
+import AdminOnchainTransactions from '../components/AdminOnchainTransactions.jsx';
+import AdminOnchainSettlement from '../components/AdminOnchainSettlement.jsx';
 /**
  * Admin panel for the points-app.
  *
@@ -576,7 +579,7 @@ export default function PointsAdmin({ isAdmin }) {
       {tab === 'support' && <SupportTicketsQueue onQueueChange={refreshAdminTaskCounts} />}
       {tab === 'deck' && <DeckAdminPanel />}
       {tab === 'cycles' && <CyclesPanel />}
-      {tab === 'launch' && <LaunchReadinessPanel taskCounts={adminTaskCounts} />}
+      {tab === 'launch' && <LaunchReadinessPanel taskCounts={adminTaskCounts} isAdmin={isAdmin} />}
       {tab === 'stats' && <StatsPanel />}
     </main>
   );
@@ -919,7 +922,7 @@ function buildLaunchChecklist(report, taskCounts) {
   ];
 }
 
-function LaunchReadinessPanel({ taskCounts }) {
+function LaunchReadinessPanel({ taskCounts, isAdmin }) {
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(false);
   const [dryRunning, setDryRunning] = useState(false);
@@ -997,6 +1000,9 @@ function LaunchReadinessPanel({ taskCounts }) {
 
   return (
     <div>
+      <AdminOnchainOperations isAdmin={isAdmin} />
+      <AdminOnchainTransactions isAdmin={isAdmin} />
+      <AdminOnchainSettlement isAdmin={isAdmin} />
       <section style={{
         background: 'var(--surface1)',
         border: '1px solid var(--border)',

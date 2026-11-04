@@ -1,0 +1,20 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import {PGlite} from '@electric-sql/pglite';
+import {ethers} from 'ethers';
+const source=await readFile(new URL('./protocol-event-indexer.js',import.meta.url),'utf8');
+const ordered=new Function(source.slice(0,source.indexOf("import { neon }")).replace('export async','async')+';return orderedFactoryLifecycleEvents;')();
+const block=source.slice(source.indexOf('  const lifecycleEvents ='),source.indexOf('  const cancelRefundEvents ='));
+const apply=new Function('sql','factory','factoryConfig','CHAIN_ID','orderedFactoryLifecycleEvents',`return async()=>{const fromBlock=1,toBlock=20,processed={resolutions:0,lifecycle:0};${block};return processed;}`);
+test('a later dispute remains open when its scan also contains resolution, clearing and correction',async t=>{
+  const db=new PGlite();t.after(()=>db.close());
+  await db.exec(`CREATE TABLE protocol_markets(chain_id int,factory_address text,market_id int,status text,outcome int,previous_status text,lifecycle_note text,lifecycle_updated_at timestamptz,resolved_at timestamptz,canceled_at timestamptz,dispute_opened_at timestamptz);
+    INSERT INTO protocol_markets(chain_id,factory_address,market_id,status) VALUES(421614,'factory',0,'active');`);
+  const kinds=['MarketResolved','ResolutionDisputeOpened','ResolutionDisputeCleared','ResolutionDisputeOpened','MarketResolutionCorrected','ResolutionDisputeOpened'];
+  const factory={filters:Object.fromEntries([...kinds,'MarketCanceled'].map(k=>[k,()=>k])),queryFilter:async k=>kinds.flatMap((kind,i)=>kind===k?[{blockNumber:10+Math.floor(i/3),logIndex:i%3,args:{marketId:ethers.BigNumber.from(0),outcome:1,newOutcome:2}}]:[]).reverse()};
+  assert.deepEqual((await ordered(factory,1,20)).map(e=>e.kind),kinds);
+  const sql=async(parts,...v)=>(await db.query(parts.reduce((s,p,i)=>s+(i?`$${i}`:'')+p,''),v)).rows;
+  const counts=await apply(sql,factory,{address:'factory'},421614,ordered)();assert.equal(counts.lifecycle,5);
+  const row=(await db.query('SELECT status,outcome FROM protocol_markets')).rows[0];assert.deepEqual(row,{status:'disputed',outcome:2});
+});

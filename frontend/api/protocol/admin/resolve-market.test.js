@@ -5,12 +5,12 @@ import { readFile } from 'node:fs/promises';
 const source = (await readFile(new URL('./resolve-market.js', import.meta.url), 'utf8'))
   .replace(/^import .+;\n/gm, '').replace('export default async', 'async');
 
-function fixture(marketId, { admin = true } = {}) {
+function fixture(marketId, { admin = true, preview = false } = {}) {
   const calls = [];
   const bindings = {
     neon: () => async () => [{ id: 3, status: 'active', market_id: marketId, factory_address: 'factory', protocol_version: 'v1', outcome_count: 2 }],
     process: { env: { DATABASE_URL: 'unused', ONCHAIN_RESOLVER_SUBORG_ID: 'ops', ONCHAIN_RESOLVER_ADDRESS: 'resolver' } },
-    applyCors: () => null, isOnchainReady: () => true,
+    applyCors: () => null, isOnchainReady: () => true, pendingApprovalSettings: () => ({previewEnabled:preview}),
     requirePointsAdmin: (_req, res) => { if (admin) return { username: 'admin' }; res.status(401).json({ error: 'not_authenticated' }); return null; },
     resolveMarketOnChain: async args => { calls.push(args); return { marketId: String(args.marketId), outcome: 1 }; },
     console: { error() {} },
@@ -36,6 +36,11 @@ test('missing chain metadata and unauthenticated callers cannot resolve', async 
   assert.equal(f.res.code, 401); assert.equal(f.calls.length, 0);
 });
 
+test('preview cannot bypass durable admin settlement through the legacy signer route',async()=>{
+  const f=fixture(0,{preview:true});await f.request();
+  assert.equal(f.res.code,409);assert.equal(f.res.body.error,'use_onchain_admin_settlement');assert.equal(f.calls.length,0);
+});
+
 test('candidate confirmation also permits chain market zero and blocks missing IDs before signing or writes', async () => {
   const candidateSource = (await readFile(new URL('./resolution-candidates.js', import.meta.url), 'utf8'))
     .replace(/^import .+;\n/gm, '').replace('export default async', 'async');
@@ -47,7 +52,7 @@ test('candidate confirmation also permits chain market zero and blocks missing I
     const bindings = {
       neon: () => async parts => { if (parts.join('').includes('UPDATE')) { writes.push(parts); return [candidate]; } return [candidate]; },
       process: { env: { DATABASE_URL: 'unused', ONCHAIN_RESOLVER_SUBORG_ID: 'ops', ONCHAIN_RESOLVER_ADDRESS: 'resolver' } },
-      applyCors: () => null, isOnchainReady: () => true, requirePointsAdmin: () => ({ username: 'admin' }),
+      applyCors: () => null, isOnchainReady: () => true, pendingApprovalSettings: () => ({previewEnabled:false}), requirePointsAdmin: () => ({ username: 'admin' }),
       ensureProtocolSchema: async () => {}, formatResolutionCandidate: c => c,
       resolveMarketOnChain: async args => { calls.push(args); return { marketId: String(args.marketId), outcome: 1 }; },
       console: { error() {} },

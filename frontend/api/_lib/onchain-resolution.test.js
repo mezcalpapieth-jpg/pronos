@@ -65,3 +65,31 @@ test('invalid outcomes, resolver mismatch and failed simulation never sign', asy
     assert.equal(f.signed.length, 0);
   }
 });
+
+const lifecycleSource=source.slice(source.indexOf('const LIFECYCLE_FUNCTIONS'),source.indexOf('function normalizeCancelRefund'))
+  .replace('export async','async');
+const lifecycleAbi=['function owner() view returns(address)','function cancelMarket(uint256)','function openResolutionDispute(uint256)',
+  'function clearResolutionDispute(uint256)','function correctResolution(uint256,uint8)'];
+function lifecycleFixture({revert=false,wrongOwner=false}={}){
+  const calls=[],signed=[],owners=[];
+  const bindings={ethers:{...ethers,Contract:class{async owner(){owners.push(true);return wrongOwner?factoryAddress:resolverAddr;}}},
+    provider:()=>({call:async tx=>{calls.push(tx);if(revert)throw Error('already redeemed');}}),
+    sameAddress:(a,b)=>a===b,requireReady(){},MARKET_FACTORY_V1_ABI:lifecycleAbi,MARKET_FACTORY_V2_ABI:lifecycleAbi,
+    extractRevertDetail:e=>e.message,chainId:()=>421614,signAndBroadcast:async tx=>{signed.push(tx);return {transactionHash:'0xfixture',blockNumber:5};}};
+  const run=new Function(...Object.keys(bindings),`${lifecycleSource};return lifecycleMarketOnChain;`)(...Object.values(bindings));
+  return {calls,signed,owners,run:args=>run({ownerSuborgId:'ops',ownerAddr:resolverAddr,factoryAddress,marketId:0,action:'correct_resolution',...args})};
+}
+test('owner correction converts V1 app outcomes, keeps V2 indices and simulates before signing',async()=>{
+  const iface=new ethers.utils.Interface(lifecycleAbi);
+  for(const factoryVariant of ['v1','v2'])for(const outcome of [0,1]){
+    const f=lifecycleFixture();await f.run({factoryVariant,outcome});
+    assert.equal(iface.decodeFunctionData('correctResolution',f.signed[0].data)[1],outcome+(factoryVariant==='v1'?1:0));
+    assert.equal(f.calls[0].data,f.signed[0].data);
+  }
+  for(const options of [{revert:true},{wrongOwner:true}]){const f=lifecycleFixture(options);await assert.rejects(f.run({factoryVariant:'v1',outcome:0}));assert.equal(f.signed.length,0);}
+});
+test('owner receipt recovery bypasses changed ownership and payout simulation with no new signature',async()=>{
+  const f=lifecycleFixture({wrongOwner:true,revert:true});
+  const result=await f.run({factoryVariant:'v1',outcome:0,execution:{receipt:{transactionHash:'0xoriginal',blockNumber:5}}});
+  assert.equal(result.txHash,'0xoriginal');assert.equal(f.calls.length,0);assert.equal(f.owners.length,0);assert.equal(f.signed.length,0);
+});

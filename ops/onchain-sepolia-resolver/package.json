@@ -1,0 +1,1 @@
+{"name":"pronos-onchain-sepolia-resolver","private":true,"type":"module","scripts":{"build":"node build.mjs","test":"node --test worker.test.js"},"engines":{"node":"22.x"}}

@@ -1,3 +1,4 @@
+import { pendingApprovalSettings } from '../../_lib/onchain-preview-approval.js';
 /**
  * GET /api/protocol/admin/resolution-candidates?status=pending
  * POST /api/protocol/admin/resolution-candidates
@@ -84,6 +85,7 @@ export default async function handler(req, res) {
 
   const admin = requirePointsAdmin(req, res);
   if (!admin) return;
+  if (req.method === 'POST' && pendingApprovalSettings().previewEnabled) return res.status(409).json({error:'use_onchain_admin_settlement'});
 
   try {
     await ensureProtocolSchema(sql);

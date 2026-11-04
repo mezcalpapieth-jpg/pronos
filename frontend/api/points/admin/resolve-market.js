@@ -1,3 +1,4 @@
+import { assertPointsExecution } from '../../_lib/points-execution-mode.js';
 /**
  * POST /api/points/admin/resolve-market
  * Body: { marketId, winningOutcomeIndex|winningOutcomeIndexes, finalScore? }
@@ -93,7 +94,7 @@ export default async function handler(req, res) {
 
     const result = await withTransaction(async (client) => {
       const mr = await client.query(
-        `SELECT id, status, amm_mode, parent_id FROM points_markets
+        `SELECT id, mode, status, amm_mode, parent_id FROM points_markets
          WHERE id = $1 FOR UPDATE`,
         [mid],
       );
@@ -101,6 +102,7 @@ export default async function handler(req, res) {
         const err = new Error('market_not_found'); err.status = 404; throw err;
       }
       const m = mr.rows[0];
+      assertPointsExecution(m);
       if (m.parent_id) {
         const err = new Error('leg_not_directly_resolvable');
         err.status = 400;
@@ -118,12 +120,13 @@ export default async function handler(req, res) {
       }
 
       const relatedIdsResult = await client.query(
-        `SELECT id FROM points_markets
+        `SELECT id, mode FROM points_markets
           WHERE id = $1 OR parent_id = $1
           ORDER BY id ASC
           FOR UPDATE`,
         [mid],
       );
+      relatedIdsResult.rows.forEach(assertPointsExecution);
       const relatedIds = relatedIdsResult.rows.map(row => Number(row.id)).filter(Number.isFinite);
       await bestEffortPersistTopHolderSnapshot(
         client,

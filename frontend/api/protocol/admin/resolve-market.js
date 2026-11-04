@@ -1,3 +1,4 @@
+import { pendingApprovalSettings } from '../../_lib/onchain-preview-approval.js';
 /**
  * POST /api/protocol/admin/resolve-market
  * Body: { marketId, winningOutcomeIndex }
@@ -35,6 +36,7 @@ export default async function handler(req, res) {
 
   const admin = requirePointsAdmin(req, res);
   if (!admin) return;
+  if (pendingApprovalSettings().previewEnabled) return res.status(409).json({error:'use_onchain_admin_settlement'});
 
   if (!isOnchainReady()) {
     return res.status(503).json({

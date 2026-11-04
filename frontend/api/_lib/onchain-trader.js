@@ -1125,7 +1125,7 @@ export async function deployParallelBinaryOnChain({
 export async function resolveMarketOnChain({
   resolverSuborgId, resolverAddr,
   factoryAddress, factoryVariant,
-  marketId, outcome,
+  marketId, outcome, execution,
 }) {
   requireReady();
   if (!resolverSuborgId) throw new Error('resolverSuborgId required');
@@ -1155,7 +1155,7 @@ export async function resolveMarketOnChain({
 
   const prov = provider();
   const factory = new ethers.Contract(factoryAddress, abi, prov);
-  const onChainResolver = await factory.resolver();
+  const onChainResolver = execution?.receipt ? resolverAddr : await factory.resolver();
   if (!sameAddress(onChainResolver, resolverAddr)) {
     const err = new Error('not_resolver');
     err.status = 400;
@@ -1169,7 +1169,7 @@ export async function resolveMarketOnChain({
   // Simulate first so a bad outcome / already-resolved market gives
   // a useful error before we burn a tx.
   try {
-    await prov.call({ from: resolverAddr, to: factoryAddress, data });
+    if (!execution?.receipt) await prov.call({ from: resolverAddr, to: factoryAddress, data });
   } catch (e) {
     const err = new Error('factory_resolve_simulation_failed');
     err.status = 400;
@@ -1177,7 +1177,8 @@ export async function resolveMarketOnChain({
     throw err;
   }
 
-  const receipt = await signAndBroadcast({
+  const receipt = execution?.receipt || await signAndBroadcast({
+    execution,
     suborgId: resolverSuborgId,
     from: resolverAddr,
     to: factoryAddress,
@@ -1251,7 +1252,7 @@ async function requireFactoryOwner({ factoryAddress, abi, ownerAddr }) {
 export async function lifecycleMarketOnChain({
   ownerSuborgId, ownerAddr,
   factoryAddress, factoryVariant,
-  marketId, action, outcome,
+  marketId, action, outcome, execution,
 }) {
   requireReady();
   if (!ownerSuborgId) throw new Error('ownerSuborgId required');
@@ -1269,20 +1270,21 @@ export async function lifecycleMarketOnChain({
   const marketIdBn = parseMarketId(marketId);
   const abi = factoryAbiForVariant(factoryVariant);
   const iface = new ethers.utils.Interface(abi);
-  await requireFactoryOwner({ factoryAddress, abi, ownerAddr });
+  if (!execution?.receipt) await requireFactoryOwner({ factoryAddress, abi, ownerAddr });
 
   let args = [marketIdBn];
   if (fn === 'correctResolution') {
-    const outcomeNum = Number.parseInt(outcome, 10);
-    if (!Number.isInteger(outcomeNum) || outcomeNum < 0 || outcomeNum > 255) {
+    const outcomeNum = typeof outcome === 'number' || (typeof outcome === 'string' && /^\d+$/.test(outcome)) ? Number(outcome) : NaN;
+    const useV2 = factoryVariant === 'v2';
+    if (!Number.isInteger(outcomeNum) || outcomeNum < 0 || outcomeNum > (useV2 ? 255 : 1)) {
       throw new Error('outcome must be an integer in [0, 255]');
     }
-    args = [marketIdBn, outcomeNum];
+    args = [marketIdBn, useV2 ? outcomeNum : outcomeNum + 1];
   }
   const data = iface.encodeFunctionData(fn, args);
 
   try {
-    await provider().call({ from: ownerAddr, to: factoryAddress, data });
+    if (!execution?.receipt) await provider().call({ from: ownerAddr, to: factoryAddress, data });
   } catch (e) {
     const err = new Error('factory_lifecycle_simulation_failed');
     err.status = 400;
@@ -1290,7 +1292,8 @@ export async function lifecycleMarketOnChain({
     throw err;
   }
 
-  const receipt = await signAndBroadcast({
+  const receipt = execution?.receipt || await signAndBroadcast({
+    execution,
     suborgId: ownerSuborgId,
     from: ownerAddr,
     to: factoryAddress,

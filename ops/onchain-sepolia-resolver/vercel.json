@@ -1,0 +1,6 @@
+{
+  "buildCommand": "node build.mjs",
+  "functions": {"api/tick.js": {"maxDuration": 300, "includeFiles": "source.json"}},
+  "regions": ["iad1"],
+  "crons": []
+}

@@ -49,6 +49,10 @@ Its public `/api/points/onchain?action=config` returned HTTP 200 with `enabled=t
 
 The standings project lookup by its recorded name and ID returned 404 through the current connector; a matching project search returned no results. Its current state could not be verified. This does not prove deletion. The last recorded October 20 release had no policy or cron and was disabled; see [worker configuration](./onchain-sepolia-standings-worker-2026-10-20.md).
 
+## November 4 implementation follow-up
+
+Admin settlement and a dedicated resolver schedule are now implemented locally, with default-off flags, durable request/nonce coordination, owner lifecycle actions, manual-review limits and ordered lifecycle indexing. The first two gaps below now require release and live verification rather than their initial implementation. No migration, deployment, activation, transaction or token/cycle change occurred. See the [settlement and resolver runbook](./onchain-sepolia-admin-settlement-and-resolver-2026-11-04.md). The live deployment evidence above remains a prior snapshot.
+
 ## Work required before opening the tournament
 
 ### 1. Make the normal admin lifecycle settle onchain
