@@ -20,6 +20,7 @@ import { binaryPricesWithBookTrade, pricesWithBookTrades } from '../_lib/points-
 import { TOURNAMENT_APPROVED_MARKET_START_ISO } from '../_lib/points-tournament-config.js';
 import { pendingApprovalSettings } from '../_lib/onchain-preview-approval.js';
 import { tradingFactories } from '../_lib/trading-router.js';
+import { buildEspnLiveScoreConfig } from '../_lib/espn-live-score.js';
 
 // Lazy neon client init — defer until the first request so a missing
 // DATABASE_URL at module-load time surfaces as a structured JSON error
@@ -167,7 +168,7 @@ export default async function handler(req, res) {
     const tournamentOnly = !category && featuredParam === 'tournament';
     const featuredOnly = !category && !tournamentOnly && featuredParam !== 'all';
     const cacheKey = [
-      'points:markets:v14',
+      'points:markets:v15',
       status,
       category || 'all',
       modeFilter || 'all-modes',
@@ -368,6 +369,14 @@ export default async function handler(req, res) {
           const seriesMeta = publicSeriesMetaFromRow(r);
           const sourceData = parseJsonb(r.pending_source_data, {});
           const resolverConfig = parseJsonb(r.resolver_config, null);
+          const liveScoreConfig = buildEspnLiveScoreConfig({
+            resolverType: r.resolver_type,
+            resolverConfig,
+            sourceData,
+            sport: r.sport,
+            league: r.league,
+            startTime: r.start_time,
+          });
           const tags = deriveMarketTags({
             ...r,
             source_data: sourceData,
@@ -457,6 +466,7 @@ export default async function handler(req, res) {
               startTime: r.start_time,
               endTime: r.end_time,
               live,
+              liveScoreConfig,
               featured: r.featured === true,
               hiddenFromHome: r.hidden_from_home === true,
               tournamentFeatured: r.effective_tournament_featured === true,
@@ -540,6 +550,7 @@ export default async function handler(req, res) {
             // every consumer (carousel, grid, trending tab) reads the same
             // boolean without re-doing the date math.
             live,
+            liveScoreConfig,
             featured: r.featured === true,
             hiddenFromHome: r.hidden_from_home === true,
             tournamentFeatured: r.effective_tournament_featured === true,

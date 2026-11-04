@@ -4,6 +4,29 @@
    This file only carries deltas unique to the points app.
 ============================================================ */
 
+/* A single compact score replaces the generic live pill on visible cards. */
+.points-card-live-score {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  align-self: flex-start;
+  margin-left: auto;
+  padding: 3px 7px;
+  max-width: 112px;
+  border: 1px solid rgba(248, 113, 113, 0.22);
+  border-radius: 6px;
+  background: rgba(220, 38, 38, 0.07);
+  color: #f87171;
+  font-family: var(--font-mono);
+  line-height: 1.15;
+}
+.points-card-live-score-teams { display: flex; align-items: center; gap: 5px; font-size: 8px; }
+.points-card-live-score-teams strong { color: var(--text-primary); font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.points-card-live-score-clock { max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 8px; }
+.points-card-live-score[data-completed="true"] { color: var(--text-muted); border-color: var(--border); background: var(--surface1); }
+
 /* Top banner for points-app: replaces MVP's USDC banner */
 .points-banner {
   background: rgba(0, 232, 122, 0.08);
