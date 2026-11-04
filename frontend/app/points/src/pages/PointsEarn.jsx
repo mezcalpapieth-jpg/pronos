@@ -1156,6 +1156,7 @@ function ProfileSettingsCard({ user, onSaved }) {
           <button
             type="button"
             onClick={() => setPhoneOpen(open => !open)}
+            aria-describedby="profile-phone-privacy"
             style={socialActionButtonStyle({ primary: user?.phoneRequired && !phoneOpen })}
           >
             {phoneOpen
@@ -1164,11 +1165,17 @@ function ProfileSettingsCard({ user, onSaved }) {
                 ? (lang === 'en' ? 'Edit phone' : 'Editar teléfono')
                 : (lang === 'en' ? 'Add your phone' : 'Añade tu teléfono')}
           </button>
+          <p id="profile-phone-privacy" style={{ ...profileFieldHintStyle, margin: '10px 0 0' }}>
+            {lang === 'en'
+              ? 'Your phone number is private: only admins can see it. It will not appear on your public profile or be shared with other users.'
+              : 'Tu teléfono es privado: solo los administradores pueden verlo. No se mostrará en tu perfil público ni se compartirá con otros usuarios.'}
+          </p>
           {phoneOpen && (
             <label style={{ ...profileFieldLabelStyle, marginTop: 10 }}>
               {lang === 'en' ? 'Private phone' : 'Teléfono privado'}
               <input
                 type="tel"
+                aria-describedby="profile-phone-privacy"
                 autoComplete="tel"
                 inputMode="tel"
                 value={phoneNumber}
