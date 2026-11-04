@@ -29,6 +29,8 @@ import { AICM_HUB_PATH, isAicmDelayMarket } from '../lib/aicmMarkets.js';
 import { marketArtworkHidden, marketImageSrc, marketPlaceholderImageSrc } from '../lib/marketImages.js';
 import { isClosingSoonNonSportsMarket, isLiveSportsMarket } from '../lib/marketStatus.js';
 import PointsBuyModal from './PointsBuyModal.jsx';
+import CardLiveScore from './CardLiveScore.jsx';
+import { useCardLiveScore } from '../lib/useCardLiveScore.js';
 
 const STAKE_PREVIEW = 100; // MXNP reference stake for the card payout preview
 
@@ -144,6 +146,7 @@ export default function PointsMarketCard({ market, userPosition }) {
   const navigate = useNavigate();
   const t = useT();
   const lang = useLang();
+  const { ref: cardRef, score: cardScore } = useCardLiveScore(market);
   const rawOutcomes = Array.isArray(market.outcomes) ? market.outcomes : ['Sí', 'No'];
   const localizedOutcomes = localizedOutcomeLabels({ ...market, outcomes: rawOutcomes }, lang);
   const outcomes = localizedOutcomes.length === rawOutcomes.length ? localizedOutcomes : rawOutcomes;
@@ -215,9 +218,10 @@ export default function PointsMarketCard({ market, userPosition }) {
         && (!market.endTime || new Date(market.endTime) > now)
       );
   const isClosingSoon = isClosingSoonNonSportsMarket(market, now);
-  const showLive = isLive && !isClosingSoon;
+  const showLive = (cardScore ? !cardScore.completed : isLive) && !isClosingSoon;
   const isPending = !isResolved
     && !showLive
+    && !cardScore
     && market.status === 'active'
     && market.endTime
     && new Date(market.endTime) < now;
@@ -302,6 +306,7 @@ export default function PointsMarketCard({ market, userPosition }) {
   return (
     <div
       className="mock-card"
+      ref={cardRef}
       onClick={navigateToCardTarget}
       role="button"
       tabIndex={0}
@@ -341,7 +346,7 @@ export default function PointsMarketCard({ market, userPosition }) {
             {t('points.card.resolved')}
           </span>
         )}
-        {showLive && (
+        {showLive && !cardScore && (
           <span className="mock-card-badge" style={{
             background: 'rgba(220,38,38,0.18)',
             color: 'var(--danger)',
@@ -397,10 +402,10 @@ export default function PointsMarketCard({ market, userPosition }) {
       </div>
 
       <div className="mock-card-body">
-        <div style={{
+        <div className="points-card-title-row" style={{
           display: 'flex',
           alignItems: 'flex-start',
-          gap: 12,
+          gap: cardScore ? 8 : 12,
           marginBottom: 8,
         }}>
           <MarketThumbnail market={market} />
@@ -422,6 +427,7 @@ export default function PointsMarketCard({ market, userPosition }) {
               </div>
             )}
           </div>
+          {cardScore && <CardLiveScore score={cardScore} />}
         </div>
 
         {/* Single-column list of wide rows — logo + label on the left,
