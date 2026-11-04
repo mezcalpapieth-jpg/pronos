@@ -2,7 +2,7 @@
 
 The trading and tournament foundations are largely implemented, but the next onchain season is **not ready to open to users yet**. The remaining work combines specific integration gaps with deployment, season configuration and a complete live rehearsal. Passing the local suite does not establish launch readiness.
 
-This assessment uses the current `onchain-sepolia` source, recorded October release/rehearsal evidence and read-only Vercel checks on November 4. No transaction, deployment, database migration, funding, token issuance or cycle change was performed for this review.
+The initial assessment used `onchain-sepolia` source, recorded October release/rehearsal evidence and read-only Vercel checks on November 4. No mutation was performed for that review. The release follow-up below supersedes its local/deployment snapshot and records the subsequently authorized preview migration, deployment and checks.
 
 ## Pointbreak parity completed locally
 
@@ -49,9 +49,11 @@ Its public `/api/points/onchain?action=config` returned HTTP 200 with `enabled=t
 
 The standings project lookup by its recorded name and ID returned 404 through the current connector; a matching project search returned no results. Its current state could not be verified. This does not prove deletion. The last recorded October 20 release had no policy or cron and was disabled; see [worker configuration](./onchain-sepolia-standings-worker-2026-10-20.md).
 
-## November 4 implementation follow-up
+## November 4 release follow-up
 
-Admin settlement and a dedicated resolver schedule are now implemented locally, with default-off flags, durable request/nonce coordination, owner lifecycle actions, manual-review limits and ordered lifecycle indexing. The first two gaps below now require release and live verification rather than their initial implementation. No migration, deployment, activation, transaction or token/cycle change occurred. See the [settlement and resolver runbook](./onchain-sepolia-admin-settlement-and-resolver-2026-11-04.md). The live deployment evidence above remains a prior snapshot.
+Commit `63f613a6a0b9e07af98700bac122e37d0ba02070` is released to the isolated READY preview, including parity, admin operations/history and the default-off settlement/resolver implementation. The additive preview migration is applied; the updated dedicated indexer has successful cron runs from this source. Authenticated readiness returned `ok=true`, no warnings and zero blockers; operations is `ok`. Admin settlement GET/POST is explicitly disabled, legacy signing is guarded and the resolver trigger is unauthorized without its absent dedicated secret. The private standby resolver package has no cron and is not deployed. Pointbreak/main production, wallet balances/nonces, the 50 million MXNP supply and active cycle 5 are unchanged; no ETH was spent. See the [release evidence](./onchain-sepolia-settlement-preview-verification-2026-11-04.json) and [runbook](./onchain-sepolia-admin-settlement-and-resolver-2026-11-04.md).
+
+The first two gaps below now require activation preparation and live verification rather than their initial implementation/release. The operations wallet is below the settlement reserve requirement; actual settlement selectors and coordination with its existing creator role need review before activation. The earlier deployment/table snapshot is retained as review history, not current release evidence.
 
 ## Work required before opening the tournament
 
@@ -115,15 +117,15 @@ Source: [shared season scoring rules](../frontend/api/_lib/sepolia-tournament-fi
 
 ## Recommended sequence
 
-1. Implement chain-aware Points admin settlement and server-side execution guards, with tests. Define resolver coverage and scheduling in the same pass.
-2. Release parity plus the existing read-only admin views to the isolated preview and verify exact-source readiness without transactions.
+1. Completed in source: chain-aware Points admin settlement, server-side execution guards, resolver coverage and a default-off dedicated schedule, with tests.
+2. Completed in disabled mode: release parity and the read-only admin views, apply the isolated preview migration, update the dedicated indexer and verify exact-source readiness without transactions. Settlement and scheduling remain disabled; see the [release evidence](./onchain-sepolia-settlement-preview-verification-2026-11-04.json).
 3. Review the actual season plan, dynamic market policy and supported launch products before provisioning a new stack or funding anything.
 4. Separately authorize the necessary Sepolia transactions, activate the dedicated workers and rehearse the full lifecycle with explicit budgets.
 5. Open enrollment only after the acceptance run reconciles and the operator/reward process is agreed.
 
 An order book/CLOB, real-money deposits/withdrawals and mainnet treasury/liquidity operations are separate future-product work. They are not prerequisites for this scoped Sepolia AMM tournament.
 
-## Verification performed on November 4
+## Initial parity verification on November 4, before this release
 
 - **576 checks passed, zero failures and zero skips**, across 75 test files. Coverage includes incoming Pointbreak behavior, execution-mode isolation, local PostgreSQL redemption/gas/lease queries, durable trades, router/fee behavior, transfer eligibility, closing, rewards/publication and existing local admin views.
 - The capture suite completed its month-length fixture and a fixture with **600 registered users and 101 binary markets**. These are local functional fixtures, not a live throughput or RPC-capacity benchmark.

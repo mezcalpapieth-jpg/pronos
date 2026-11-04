@@ -1,6 +1,10 @@
 # Onchain admin settlement and resolver scheduling — 2026-11-04
 
-Implemented locally on `onchain-sepolia`. This is code and local test evidence, **not a released or enabled service**. No live database migration, environment change, deployment, chain transaction, funding, token issuance or cycle change was performed. Pointbreak refs remain unchanged.
+Released from `onchain-sepolia` commit `63f613a6a0b9e07af98700bac122e37d0ba02070` to the isolated [preview](https://pronos-jtoe5db79-mezcalpapieth-jpgs-projects.vercel.app). The preview migration is applied and the dedicated read-only indexer is updated. **Admin settlement and resolver scheduling remain disabled.** No chain transaction, funding, ETH expenditure, token issuance or cycle change was performed; Pointbreak and the main production deployment remain unchanged. See the [release verification](./onchain-sepolia-settlement-preview-verification-2026-11-04.json).
+
+Authenticated readiness returned `ok=true`, no warnings and zero launch blockers; operations returned `ok`. The existing router and gas funder passed their read-only probes. Settlement GET/POST returned `403 onchain_settlement_disabled`, legacy signing returned `409 use_onchain_admin_settlement`, and the unauthenticated resolver trigger returned `401`. History pagination/privacy checks and the served admin bundle passed. Real indexer cron runs carry the released source SHA. The resolver has no trigger secret or deployed active worker; its private standby package has an empty cron list.
+
+Activation still needs separate authorization and preparation. The operations wallet holds `0.000403708278758 ETH`, below the new `0.001 ETH` remaining-reserve requirement plus planned gas. Owner, resolver and creator currently share that wallet: verify settlement selectors and serialize legacy creation or separate its wallet before activation. No top-up or live settlement rehearsal was attempted. CRE retains one existing review for its absent webhook secret; this release does not activate CRE or future-season behavior.
 
 ## Admin settlement
 
@@ -59,9 +63,9 @@ The admin panel shows the latest run status/time and request confirmation/indexi
 
 Factory lifecycle events are applied in **block/log order across event types**. This prevents a scan containing resolution, dispute, correction and later dispute-clear events from ending in an incorrect state merely because RPC logs were fetched in separate groups. Both V1 and V2 use the shared ordered path. Cancellation refund events retain their existing separate processing; this feature does not submit refund batches or rewrite immutable trades/redemptions.
 
-## Later release procedure
+## Release and later activation procedure
 
-These are future operator steps; none were executed for this implementation.
+The main preview release, additive migration, updated indexer and disabled-mode checks below are complete. A private standby package was prepared, without deploying a resolver project. Signer-policy preparation, active scheduling and the live rehearsal remain future steps. The checklist is retained for reproducible releases and later activation.
 
 1. Review and commit the integrated source, including the pre-existing operations/history work; push only `onchain-sepolia` when authorized. Rebuild both apps. Record the exact source SHA.
 2. Review the additive preview migration. With the direct pinned preview connection and isolated preview metadata, the explicit command is:
@@ -89,4 +93,4 @@ These are future operator steps; none were executed for this implementation.
 
 The new tests use local PostgreSQL/WASM databases, deterministic public fixture keys, mocked RPC/signing and mounted React fixtures. Worker packaging is tested in a temporary Git repository, and does not deploy. Coverage includes exact zero-ID mapping, V1/V2 resolution, four owner actions, missing/mismatched chain mappings, fees/reserves/budgets, same-key recovery, source changes after a crash, Points mutation guards, HTTP authorization/redaction, source-pinned triggers, scheduler filtering/leases/attempt caps, worker isolation/standby packaging, mounted browser retry/account isolation and canonical lifecycle event indexing.
 
-Release and live rehearsal remain necessary before these capabilities can count as tournament launch evidence. See the [November readiness assessment](./onchain-sepolia-tournament-readiness-2026-11-04.md) for the remaining season provisioning, standings activation, refund execution and full-season rehearsal work.
+The disabled-mode release is verified; live settlement/scheduling rehearsal remains necessary before these capabilities can count as tournament launch evidence. See the [November readiness assessment](./onchain-sepolia-tournament-readiness-2026-11-04.md) for the remaining season provisioning, standings activation, refund execution and full-season rehearsal work.

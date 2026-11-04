@@ -1,0 +1,372 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-11-04T19:52:31.021Z",
+  "branch": "onchain-sepolia",
+  "featureCommit": "63f613a6a0b9e07af98700bac122e37d0ba02070",
+  "preview": {
+    "projectId": "prj_Cq2kBrGtvtU7nVOH3T6yBGJWGRKi",
+    "deploymentId": "dpl_5j7bnQY8vXjjqZxy3kpXhheSe76Y",
+    "url": "https://pronos-jtoe5db79-mezcalpapieth-jpgs-projects.vercel.app",
+    "state": "READY",
+    "target": "preview"
+  },
+  "disabledControls": {
+    "ONCHAIN_ADMIN_SETTLEMENT_ENABLED": false,
+    "ONCHAIN_RESOLVER_SCHEDULE_ENABLED": false,
+    "scope": {
+      "target": [
+        "preview"
+      ],
+      "gitBranch": "onchain-sepolia"
+    },
+    "existingBranchEnvironmentEntriesChanged": 0,
+    "resolverTriggerSecretConfigured": false,
+    "resolverWorker": {
+      "standbyPackagePrepared": true,
+      "activePackage": false,
+      "deployed": false,
+      "cronEntries": 0
+    }
+  },
+  "migration": {
+    "projectId": "tiny-heart-17710833",
+    "branchId": "br-sweet-dream-amb6hlfe",
+    "database": "neondb",
+    "atomicStatements": 6,
+    "result": {
+      "action_check": "CHECK ((action = ANY (ARRAY['buy'::text, 'sell'::text, 'redeem'::text, 'admin_resolve'::text, 'admin_cancel'::text, 'admin_dispute'::text, 'admin_clear_dispute'::text, 'admin_correct_resolution'::text])))",
+      "resolver_runs": "sepolia_resolver_runs",
+      "resolver_lease": "sepolia_resolver_lease",
+      "runs": "0",
+      "leases": "0",
+      "active_cycles": [
+        {
+          "id": 5,
+          "status": "active"
+        }
+      ],
+      "requests": "3",
+      "transactions": "3",
+      "gas_transfers": "1",
+      "tournament_cycles": "0",
+      "privileges": [
+        {
+          "role": "pronos_reader",
+          "insert": false,
+          "select": false,
+          "update": false
+        },
+        {
+          "role": "pronos_writer",
+          "insert": true,
+          "select": true,
+          "update": true
+        },
+        {
+          "role": "sepolia_indexer",
+          "insert": false,
+          "select": false,
+          "update": false
+        },
+        {
+          "role": "sepolia_standings",
+          "insert": false,
+          "select": false,
+          "update": false
+        }
+      ]
+    }
+  },
+  "runtime": {
+    "enabled": true,
+    "chainId": 421614,
+    "symbol": "MXNP",
+    "lateJoining": false,
+    "tournamentSeason": false,
+    "durableTrades": true
+  },
+  "readiness": {
+    "ok": true,
+    "warnings": [],
+    "launch": {
+      "ready": true,
+      "blockerCount": 0,
+      "reviewCount": 1,
+      "blockers": [],
+      "reviews": [
+        {
+          "id": "cre_webhook_dry_run",
+          "title": "CRE sigue en modo revisión",
+          "detail": "Sin secreto, Chainlink CRE no puede enviar resoluciones al webhook.",
+          "fix": "Set CRE_RESOLUTION_WEBHOOK_SECRET before enabling CRE workflows"
+        }
+      ],
+      "nextSteps": [
+        "Set CRE_RESOLUTION_WEBHOOK_SECRET before enabling CRE workflows"
+      ]
+    },
+    "router": {
+      "scope": "router",
+      "routerConfigured": true,
+      "verified": true,
+      "address": "0x25bc3c0f0c41516167f096ac4bf785f60bbbe843",
+      "factories": [
+        "0xb6cf9f65ab82c17c8e9d58d06073ca3af3e5443d",
+        "0x33c1cdd4e22a9732ad808f2ad7efe82211b65c6a"
+      ],
+      "collateral": "0x6ed6c00c2b4cf9f5989866f4c5862d4cded67ef9",
+      "shares": {
+        "v1": "0x0c059fe84d1a733d1d698dd04a2f594df883dfb4",
+        "v2": "0xac7474e5ff1b98d5d6268a76ae409f972717436b"
+      }
+    },
+    "gas": {
+      "enabled": true,
+      "configured": true,
+      "ready": true,
+      "funder": "0x252a1cfa015612efb8c7c2f1643a9f541b866990",
+      "targetEth": "0.0005",
+      "minimumEth": "0.0002",
+      "walletDailyEth": "0.002",
+      "starterTargetEth": "0.00005",
+      "starterLifetimeEth": "0.0002",
+      "globalDailyEth": "0.1",
+      "reserveEth": "0.01",
+      "schemaReady": true,
+      "pendingTransfers": 0,
+      "balanceEth": "0.09949958",
+      "signerVerified": true,
+      "dailyBudgetUsedEth": "0.0"
+    },
+    "operationsStatus": "ok",
+    "operationsIssues": []
+  },
+  "http": {
+    "authenticatedReadiness": 200,
+    "authenticatedOperations": 200,
+    "authenticatedHistory": 200,
+    "settlementGet": {
+      "status": 403,
+      "error": "onchain_settlement_disabled"
+    },
+    "settlementPost": {
+      "status": 403,
+      "error": "onchain_settlement_disabled"
+    },
+    "legacySigningPost": {
+      "status": 409,
+      "error": "use_onchain_admin_settlement"
+    },
+    "unauthenticatedResolverPost": {
+      "status": 401,
+      "error": "unauthorized"
+    },
+    "cacheControl": "private, no-store",
+    "history": {
+      "firstPage": 25,
+      "secondPage": 4,
+      "overlap": 0,
+      "unauthenticatedStatus": 401,
+      "privateFieldsAbsent": true
+    },
+    "servedAssets": [
+      {
+        "name": "points-html",
+        "path": "/points",
+        "sha256": "5785e202d8a589d73dd9f49081381d0870aa8073facc6ade377d968aaaee2448",
+        "bytes": 2699,
+        "checks": {}
+      },
+      {
+        "name": "admin-chunk",
+        "path": "/points/assets/PointsAdmin-1rG0ILwE.js",
+        "sha256": "8ef6e8ed0c52ff4da54f2a1998acb555c0bdf4fc9ee2f2163436c031d181df95",
+        "bytes": 243649,
+        "checks": {
+          "/api/points/admin/onchain-settlement": true,
+          "/api/points/admin/onchain-operations": true,
+          "/api/points/admin/onchain-transactions": true,
+          "onchain_settlement_disabled": true
+        }
+      }
+    ]
+  },
+  "indexer": {
+    "projectId": "prj_2bv4NAl9EBvRdkOVw1RpAIzbDJNA",
+    "deploymentId": "dpl_7FUEo3qBq5SBX9btFfgmaXrHvwcM",
+    "url": "https://pronos-onchain-sepolia-indexer-8qth5huc9.vercel.app",
+    "state": "READY",
+    "sourceCommit": "63f613a6a0b9e07af98700bac122e37d0ba02070",
+    "scheduledRuns": [
+      {
+        "source_sha": "63f613a6a0b9e07af98700bac122e37d0ba02070",
+        "trigger": "cron",
+        "status": "ok",
+        "started_at": "2026-11-04T19:52:37.360Z",
+        "completed_at": "2026-11-04T19:52:41.378Z",
+        "block": "326070918",
+        "processed": {
+          "trades": 0,
+          "markets": 0,
+          "lifecycle": 0,
+          "liquidity": 0,
+          "redemptions": 0,
+          "resolutions": 0
+        }
+      },
+      {
+        "source_sha": "63f613a6a0b9e07af98700bac122e37d0ba02070",
+        "trigger": "cron",
+        "status": "ok",
+        "started_at": "2026-11-04T19:51:37.277Z",
+        "completed_at": "2026-11-04T19:51:40.590Z",
+        "block": "326070688",
+        "processed": {
+          "trades": 0,
+          "markets": 0,
+          "lifecycle": 0,
+          "liquidity": 0,
+          "redemptions": 0,
+          "resolutions": 0
+        }
+      }
+    ],
+    "chainReadsOnly": true
+  },
+  "invariants": {
+    "chainBefore": {
+      "observedAt": "2026-11-04T19:42:22.350Z",
+      "chainId": 421614,
+      "block": 326068644,
+      "token": "0x6ed6c00c2b4cf9f5989866f4c5862d4cded67ef9",
+      "totalSupply": "50000000000000",
+      "symbol": "MXNP",
+      "decimals": 6,
+      "wallets": [
+        {
+          "name": "reserve",
+          "address": "0x0Caa37c077924038e14e9D8dE46B5208788e52CF",
+          "balance": "2802243689456225488",
+          "nonce": 53,
+          "pendingNonce": 53
+        },
+        {
+          "name": "operations",
+          "address": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+          "balance": "403708278758000",
+          "nonce": 25,
+          "pendingNonce": 25
+        },
+        {
+          "name": "gas",
+          "address": "0x252a1cfa015612EFB8C7c2f1643A9F541b866990",
+          "balance": "99499580000000000",
+          "nonce": 1,
+          "pendingNonce": 1
+        }
+      ]
+    },
+    "chainAfter": {
+      "observedAt": "2026-11-04T19:52:31.021Z",
+      "chainId": 421614,
+      "block": 326070892,
+      "token": "0x6ed6c00c2b4cf9f5989866f4c5862d4cded67ef9",
+      "totalSupply": "50000000000000",
+      "symbol": "MXNP",
+      "decimals": 6,
+      "wallets": [
+        {
+          "name": "reserve",
+          "address": "0x0Caa37c077924038e14e9D8dE46B5208788e52CF",
+          "balance": "2802243689456225488",
+          "nonce": 53,
+          "pendingNonce": 53
+        },
+        {
+          "name": "operations",
+          "address": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+          "balance": "403708278758000",
+          "nonce": 25,
+          "pendingNonce": 25
+        },
+        {
+          "name": "gas",
+          "address": "0x252a1cfa015612EFB8C7c2f1643A9F541b866990",
+          "balance": "99499580000000000",
+          "nonce": 1,
+          "pendingNonce": 1
+        }
+      ]
+    },
+    "supplyBalancesAndNoncesUnchanged": true,
+    "databaseAfter": {
+      "resolver_runs": "0",
+      "resolver_leases": "0",
+      "admin_requests": "0",
+      "requests": "3",
+      "transactions": "3",
+      "gas_transfers": "1",
+      "tournament_cycles": "0",
+      "active_cycles": [
+        {
+          "id": 5,
+          "status": "active"
+        }
+      ]
+    },
+    "activeCycleUnchanged": 5,
+    "localPointbreak": "47aa9e19115d64bc36a2684e5eeb685caef117ba",
+    "remotePointbreak": "9312b8c12a275636ef18fb956f9232d6670fecb8",
+    "mainProductionDeployment": "dpl_A9onTGghXiH31J5WxPbxxGGmk7aT",
+    "mainProductionUnchanged": true,
+    "ethSpentWei": "0",
+    "chainTransactionsSubmitted": 0
+  },
+  "factoryRoles": {
+    "observedAt": "2026-11-04T19:49:48.669Z",
+    "chainId": 421614,
+    "factories": [
+      {
+        "address": "0xb6cf9f65ab82c17c8e9d58d06073ca3af3e5443d",
+        "owner": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+        "resolver": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+        "creator": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+        "collateral": "0x6ed6C00C2B4cF9f5989866f4c5862D4cdeD67ef9",
+        "ownerMatches": true,
+        "resolverMatches": true,
+        "creatorMatches": true,
+        "collateralMatches": true
+      },
+      {
+        "address": "0x33c1cdd4e22a9732ad808f2ad7efe82211b65c6a",
+        "owner": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+        "resolver": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+        "creator": "0x6e2f3D41F893C8DD0f638f3fee212ea0457E317c",
+        "collateral": "0x6ed6C00C2B4cF9f5989866f4c5862D4cdeD67ef9",
+        "ownerMatches": true,
+        "resolverMatches": true,
+        "creatorMatches": true,
+        "collateralMatches": true
+      }
+    ],
+    "flags": {
+      "settlement": "false",
+      "scheduling": "false"
+    },
+    "resolverCronSecretConfigured": false
+  },
+  "localValidation": {
+    "checks": 391,
+    "failures": 0,
+    "skips": 0,
+    "pointsBuildPassed": true,
+    "mvpBuildPassed": true
+  },
+  "limitations": [
+    "Settlement and scheduled resolution are deliberately disabled; no live settlement or resolver execution rehearsal was performed.",
+    "Operations wallet holds 0.000403708278758 ETH, below the new 0.001 ETH remaining-reserve requirement plus planned gas. No top-up was made.",
+    "Owner, resolver and creator are the same operations wallet. Verify settlement Turnkey selectors and serialize legacy creation or separate its wallet before activation.",
+    "Future tournament registration/capture/publication flags remain off. Full-season, V2/browser recovery and cancellation refund rehearsals remain follow-up work.",
+    "CRE webhook remains in review mode without a webhook secret; the existing readiness endpoint reports one review and zero blockers."
+  ]
+}
