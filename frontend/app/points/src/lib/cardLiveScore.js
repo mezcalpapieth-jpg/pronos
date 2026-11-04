@@ -1,4 +1,5 @@
 import { findTeamByName } from '../../../src/lib/teamProfiles.js';
+import { normalizeSportsTeamName } from '../../../../shared/sports-team-names.js';
 
 const cache = new Map();
 const CACHE_MS = 20_000;
@@ -48,13 +49,8 @@ export function loadCardLiveScore(url, { fetchImpl = fetch, now = Date.now() } =
   return pending;
 }
 
-function normalized(value) {
-  return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase().replace(/[^a-z0-9]/g, '');
-}
-
 function teamKey(sport, name) {
-  return findTeamByName(sport, name)?.slug || normalized(name);
+  return findTeamByName(sport, name)?.slug || normalizeSportsTeamName(name);
 }
 
 function abbreviation(name) {

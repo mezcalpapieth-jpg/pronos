@@ -1,4 +1,5 @@
 import { espnEventStatus } from './espn-event-status.js';
+import { sportsTeamNamesMatch as namesMatch } from '../../shared/sports-team-names.js';
 
 const ESPN_BASE = 'https://site.api.espn.com/apis/site/v2/sports';
 const ESPN_SOCCER_COMPETITION_PATH = {
@@ -58,22 +59,6 @@ function parseJsonb(value, fallback) {
 function cleanString(value) {
   const text = String(value || '').trim();
   return text.length > 0 ? text : null;
-}
-
-function normalizeTeamName(value) {
-  return String(value || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/\b(fc|sc|cf|afc|ac|cd|club)\b/g, '')
-    .replace(/[^a-z0-9]+/g, '');
-}
-
-function namesMatch(a, b) {
-  const left = normalizeTeamName(a);
-  const right = normalizeTeamName(b);
-  if (!left || !right) return false;
-  return left === right || left.includes(right) || right.includes(left);
 }
 
 function inferSport(leaguePath) {
@@ -309,12 +294,13 @@ export function buildEspnLiveScoreConfig({
   startTime,
 }) {
   const cfg = parseJsonb(resolverConfig, null);
-  if (resolverType === 'sports_api' && cfg?.source === 'espn' && cfg?.leaguePath && cfg?.eventId) {
+  const pinned = cfg?.source === 'football-data' ? cfg.espnFallback : cfg?.source === 'espn' ? cfg : null;
+  if (resolverType === 'sports_api' && pinned?.leaguePath && pinned?.eventId) {
     return {
       source: 'espn',
-      leaguePath: String(cfg.leaguePath),
-      eventId: String(cfg.eventId),
-      dateYmd: cfg.dateYmd ? String(cfg.dateYmd) : null,
+      leaguePath: String(pinned.leaguePath),
+      eventId: String(pinned.eventId),
+      dateYmd: pinned.dateYmd ? String(pinned.dateYmd) : null,
     };
   }
 

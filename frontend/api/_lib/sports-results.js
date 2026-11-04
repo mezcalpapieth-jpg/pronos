@@ -21,6 +21,7 @@
 // URL pattern identical across MLB / NBA / soccer / Liga MX / MLS.
 
 import { espnEventStatus } from './espn-event-status.js';
+import { sportsTeamNamesMatch as namesMatch } from '../../shared/sports-team-names.js';
 
 const ESPN_BASE = 'https://site.api.espn.com/apis/site/v2/sports';
 
@@ -175,22 +176,6 @@ function competitorEntry(c, extra = {}) {
     label,
     ...extra,
   };
-}
-
-function normalizeTeamName(value) {
-  return String(value || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/\b(fc|sc|cf|afc|ac|cd|club)\b/g, '')
-    .replace(/[^a-z0-9]+/g, '');
-}
-
-function namesMatch(a, b) {
-  const left = normalizeTeamName(a);
-  const right = normalizeTeamName(b);
-  if (!left || !right) return false;
-  return left === right || left.includes(right) || right.includes(left);
 }
 
 function pickCompetition(event) {

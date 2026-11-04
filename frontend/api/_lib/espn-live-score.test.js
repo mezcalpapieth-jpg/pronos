@@ -15,6 +15,40 @@ function jsonResponse(body, ok = true, status = 200) {
   };
 }
 
+test('Slavia Praha resolves to the Slavia Prague feed without matching another Prague club', async t => {
+  const original = globalThis.fetch;
+  t.after(() => { globalThis.fetch = original; });
+  const event = (id, home) => ({ id, status: { type: { state: 'in', completed: false } },
+    competitions: [{ competitors: [
+      { homeAway: 'home', score: '0', team: { displayName: home } },
+      { homeAway: 'away', score: '2', team: { displayName: 'Arsenal' } },
+    ] }],
+  });
+  globalThis.fetch = async url => {
+    if (String(url).includes('/summary')) {
+      assert.match(String(url), /event=401915381$/);
+      return jsonResponse({});
+    }
+    return jsonResponse({ events: [event('other', 'Sparta Prague'), event('401915381', 'Slavia Prague')] });
+  };
+  const score = await readEspnLiveScore({ leaguePath: 'soccer/uefa.champions',
+    dateYmd: '2026-11-04', homeName: 'Slavia Praha', awayName: 'Arsenal' });
+  assert.equal(score.eventId, '401915381');
+  assert.equal(score.home.score, 0);
+  assert.equal(score.away.score, 2);
+});
+
+test('live-score config retains a verified football-data fallback event without exposing private fields', () => {
+  const config = buildEspnLiveScoreConfig({ resolverType: 'sports_api', resolverConfig: {
+    source: 'football-data', matchId: 575389, privateToken: 'private', espnFallback: {
+      leaguePath: 'soccer/uefa.champions', eventId: '401915381', dateYmd: '2026-11-04',
+      homeName: 'Slavia Prague', awayName: 'Arsenal', privateToken: 'also-private',
+    },
+  } });
+  assert.deepEqual(config, { source: 'espn', leaguePath: 'soccer/uefa.champions',
+    eventId: '401915381', dateYmd: '2026-11-04' });
+});
+
 test('live-score completion requires an actual final, not just a post-state or suspended game', () => {
   for (const [type, completed] of [
     [{ state: 'post', completed: true, name: 'STATUS_FINAL' }, true],

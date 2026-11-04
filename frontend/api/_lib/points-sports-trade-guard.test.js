@@ -32,6 +32,32 @@ function summary({ state = 'post', completed = true, name = 'STATUS_FINAL', home
       { homeAway: 'away', score: away, team: { name: 'Rays' } }] }] } };
 }
 
+test('Slavia Praha alias permits live quotes and still closes trading on the verified final', async t => {
+  const original = globalThis.fetch;
+  t.after(() => { globalThis.fetch = original; });
+  const row = { resolver_config: { source: 'football-data', matchId: 575389, shape: 'draw3',
+    espnFallback: { leaguePath: 'soccer/uefa.champions', dateYmd: '2026-11-04',
+      homeName: 'Slavia Praha', awayName: 'Arsenal' } } };
+  for (const completed of [false, true]) {
+    const event = { id: '401915381', competitions: [{ status: {
+      type: { state: completed ? 'post' : 'in', completed,
+        name: completed ? 'STATUS_FULL_TIME' : 'STATUS_SECOND_HALF' },
+    }, competitors: [
+      { homeAway: 'home', score: '0', team: { displayName: 'Slavia Prague' } },
+      { homeAway: 'away', score: '2', team: { displayName: 'Arsenal' } },
+    ] }] };
+    globalThis.fetch = async url => ({ ok: true, json: async () => {
+      if (String(url).includes('/summary')) {
+        assert.match(String(url), /event=401915381$/);
+        return { header: event };
+      }
+      return { events: [event] };
+    } });
+    const lock = await sportsTradeLock(row);
+    assert.equal(lock?.error || null, completed ? 'market_closed' : null);
+  }
+});
+
 test('only confirmed final status ends a game, never the inning, lead or post-state alone', () => {
   assert.equal(espnEventStatus({ period: 9, type: { state: 'in', completed: false } }).completed, false);
   assert.equal(espnEventStatus({ type: { state: 'post', completed: false } }).completed, false);
