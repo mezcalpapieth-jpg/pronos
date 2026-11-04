@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { ethers } from 'ethers';
+import { simulateContractCall } from './onchain-simulation.js';
 
 // Exercise the real dispatcher with real ABI encoding and a recording signer.
 const source = await readFile(new URL('./onchain-trader.js', import.meta.url), 'utf8');
@@ -12,12 +13,13 @@ const resolverAddr = `0x${'2'.repeat(40)}`;
 const abi = ['function resolveMarket(uint256 marketId, uint8 outcome)', 'event MarketResolved(uint256 indexed marketId, uint8 outcome)'];
 const iface = new ethers.utils.Interface(abi);
 
-function fixture({ wrongResolver = false, revert = false, event = true } = {}) {
+function fixture({ wrongResolver = false, revert = false, event = true, result = '0x' } = {}) {
   const simulations = [], signed = [];
   const bindings = {
     ethers: { ...ethers, Contract: class { async resolver() { return wrongResolver ? factoryAddress : resolverAddr; } } },
     requireReady() {}, MARKET_FACTORY_V1_ABI: abi, MARKET_FACTORY_V2_ABI: abi,
-    provider: () => ({ async call(tx) { simulations.push(tx); if (revert) throw Error('already resolved'); } }),
+    provider: () => ({ async call(tx) { simulations.push(tx); if (revert) throw Error('already resolved'); return result; } }),
+    simulateContractCall,
     sameAddress: (a, b) => a.toLowerCase() === b.toLowerCase(),
     extractRevertDetail: e => e.message, chainId: () => 421614,
     signAndBroadcast: async tx => {
@@ -70,10 +72,11 @@ const lifecycleSource=source.slice(source.indexOf('const LIFECYCLE_FUNCTIONS'),s
   .replace('export async','async');
 const lifecycleAbi=['function owner() view returns(address)','function cancelMarket(uint256)','function openResolutionDispute(uint256)',
   'function clearResolutionDispute(uint256)','function correctResolution(uint256,uint8)'];
-function lifecycleFixture({revert=false,wrongOwner=false}={}){
+function lifecycleFixture({revert=false,wrongOwner=false,result='0x'}={}){
   const calls=[],signed=[],owners=[];
   const bindings={ethers:{...ethers,Contract:class{async owner(){owners.push(true);return wrongOwner?factoryAddress:resolverAddr;}}},
-    provider:()=>({call:async tx=>{calls.push(tx);if(revert)throw Error('already redeemed');}}),
+    provider:()=>({call:async tx=>{calls.push(tx);if(revert)throw Error('already redeemed');return result;}}),
+    simulateContractCall,
     sameAddress:(a,b)=>a===b,requireReady(){},MARKET_FACTORY_V1_ABI:lifecycleAbi,MARKET_FACTORY_V2_ABI:lifecycleAbi,
     extractRevertDetail:e=>e.message,chainId:()=>421614,signAndBroadcast:async tx=>{signed.push(tx);return {transactionHash:'0xfixture',blockNumber:5};}};
   const run=new Function(...Object.keys(bindings),`${lifecycleSource};return lifecycleMarketOnChain;`)(...Object.values(bindings));
@@ -92,4 +95,18 @@ test('owner receipt recovery bypasses changed ownership and payout simulation wi
   const f=lifecycleFixture({wrongOwner:true,revert:true});
   const result=await f.run({factoryVariant:'v1',outcome:0,execution:{receipt:{transactionHash:'0xoriginal',blockNumber:5}}});
   assert.equal(result.txHash,'0xoriginal');assert.equal(f.calls.length,0);assert.equal(f.owners.length,0);assert.equal(f.signed.length,0);
+});
+
+test('returned revert bytes prevent resolution and every owner action from signing in V1 and V2',async()=>{
+  const result='0x08c379a0'+ethers.utils.defaultAbiCoder.encode(['string'],['redeemed']).slice(2);
+  for(const factoryVariant of ['v1','v2']){
+    const resolver=fixture({result});
+    await assert.rejects(resolver.resolve({factoryVariant,outcome:0}),/factory_resolve_simulation_failed/);
+    assert.equal(resolver.signed.length,0);
+    for(const action of ['cancel','dispute','clear_dispute','correct_resolution']){
+      const owner=lifecycleFixture({result});
+      await assert.rejects(owner.run({factoryVariant,action,outcome:1}),/factory_lifecycle_simulation_failed/);
+      assert.equal(owner.signed.length,0);
+    }
+  }
 });

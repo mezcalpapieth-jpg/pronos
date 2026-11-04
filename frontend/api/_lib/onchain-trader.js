@@ -22,6 +22,7 @@
 
 import { ethers } from 'ethers';
 import { onchainFeeData } from './onchain-fees.js';
+import { simulateContractCall } from './onchain-simulation.js';
 import { readSellQuoteAmounts } from './onchain-sell-quote.js';
 import { poolTradingRoute, TRADING_ROUTER_ABI } from './trading-router.js';
 import { prepareUserTradeGas } from './sepolia-user-gas.js';
@@ -954,7 +955,7 @@ export async function deployMarketOnChain({
   });
 
   try {
-    await prov.call({ from: deployerAddr, to: factoryAddr, data });
+    await simulateContractCall(prov, { from: deployerAddr, to: factoryAddr, data }, iface, 'createMarket');
   } catch (e) {
     const err = new Error('factory_create_simulation_failed');
     err.status = 400;
@@ -1169,7 +1170,7 @@ export async function resolveMarketOnChain({
   // Simulate first so a bad outcome / already-resolved market gives
   // a useful error before we burn a tx.
   try {
-    if (!execution?.receipt) await prov.call({ from: resolverAddr, to: factoryAddress, data });
+    if (!execution?.receipt) await simulateContractCall(prov, { from: resolverAddr, to: factoryAddress, data }, iface, 'resolveMarket');
   } catch (e) {
     const err = new Error('factory_resolve_simulation_failed');
     err.status = 400;
@@ -1284,7 +1285,7 @@ export async function lifecycleMarketOnChain({
   const data = iface.encodeFunctionData(fn, args);
 
   try {
-    if (!execution?.receipt) await provider().call({ from: ownerAddr, to: factoryAddress, data });
+    if (!execution?.receipt) await simulateContractCall(provider(), { from: ownerAddr, to: factoryAddress, data }, iface, fn);
   } catch (e) {
     const err = new Error('factory_lifecycle_simulation_failed');
     err.status = 400;
@@ -1364,7 +1365,7 @@ export async function pushCancelRefundsOnChain({
   ]);
 
   try {
-    await provider().call({ from: ownerAddr, to: factoryAddress, data });
+    await simulateContractCall(provider(), { from: ownerAddr, to: factoryAddress, data }, iface, 'pushCancelRefund');
   } catch (e) {
     const err = new Error('factory_cancel_refund_simulation_failed');
     err.status = 400;
