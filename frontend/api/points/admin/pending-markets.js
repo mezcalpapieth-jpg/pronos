@@ -30,6 +30,8 @@ import { syncApiPriceFromQuestion } from '../../_lib/api-price-market-sync.js';
 import { syncWeatherDateFromMarket } from '../../_lib/weather-market-sync.js';
 import { validateBeforeMonthDeadline } from '../../_lib/manual-deadline-sanity.js';
 import { attachMarketTranslations } from '../../_lib/market-translations.js';
+import { assertPointsAirportApproval } from '../../_lib/points-aicm-policy.js';
+import { pointsResolverReadiness } from '../../_lib/points-resolver-readiness.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 const readSql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
@@ -64,6 +66,7 @@ function parseJsonb(v, fb) {
 
 export function pendingRowWithOpeningLiquidity(row, { mode = 'points' } = {}) {
   return attachPointsOpeningLiquidity({ ...row, mode,
+    ...(mode === 'points' ? { resolutionReadiness: pointsResolverReadiness({ ...row, resolver_config: parseJsonb(row.resolver_config, {}) }) } : {}),
     outcomes: parseJsonb(row.outcomes, []),
     seed_liquidities: parseJsonb(row.seed_liquidities, null),
     source_data: parseJsonb(row.source_data, {}),
@@ -506,6 +509,7 @@ async function list(req, res) {
         ammMode: r.amm_mode,
         resolverType: r.resolver_type,
         resolverConfig: parseJsonb(r.resolver_config, null),
+        resolutionReadiness: r.resolutionReadiness,
         sport: r.sport || null,
         league: r.league || null,
         categoryTags: parseJsonb(r.category_tags, []),
@@ -712,7 +716,10 @@ export async function approveOne(pid, reviewer, note, opts = {}) {
     }
     // Pointbreak approvals re-read Friday's official final lineup, including
     // older provisional drafts that were generated before this guard existed.
-    if (!isOnchain) await assertGranjaVipFinalNominees(resolverConfig, outcomes);
+    if (!isOnchain) {
+      await assertGranjaVipFinalNominees(resolverConfig, outcomes);
+      await assertPointsAirportApproval(client, { ...r, resolver_config: resolverConfig });
+    }
     const marketSourceEventId = marketSourceEventForApproval(r, pid);
     const tagBundle = deriveMarketTags({
       ...r,

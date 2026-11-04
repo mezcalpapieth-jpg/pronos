@@ -4,6 +4,35 @@ import { readFile } from 'node:fs/promises';
 
 const source = await readFile(new URL('./run-generators.js', import.meta.url), 'utf8');
 
+test('disabled Points airport generators make no source calls while unrelated generators still run', async () => {
+  const { runAllGenerators, upsertPending } = await import('./run-generators.js');
+  let otherCalls = 0;
+  const { allSpecs, sourceStats } = await runAllGenerators({
+    disabledGenerators: ['aicm', 'aicm-48h'],
+    generators: [
+      { name: 'aicm', run: () => assert.fail('disabled airport generator called') },
+      { name: 'aicm-48h', run: () => assert.fail('disabled airport generator called') },
+      { name: 'other', run: async () => { otherCalls++; return []; } },
+    ],
+  });
+  assert.equal(otherCalls, 1);
+  assert.deepEqual(allSpecs, []);
+  assert.equal(sourceStats.aicm.skipped, true);
+  const savedFlag = process.env.POINTS_AVIATION_EDGE_ENABLED;
+  delete process.env.POINTS_AVIATION_EDGE_ENABLED;
+  try {
+    const result = await upsertPending(() => assert.fail('disabled airport must not be persisted'), [{ source: 'aviation-edge-timetable' }]);
+    assert.equal(result.skipped, 1);
+  } finally {
+    if (savedFlag === undefined) delete process.env.POINTS_AVIATION_EDGE_ENABLED;
+    else process.env.POINTS_AVIATION_EDGE_ENABLED = savedFlag;
+  }
+  // Shared protocol callers retain the default runner behavior.
+  let defaultCalls = 0;
+  await runAllGenerators({ generators: [{ name: 'aicm', run: async () => { defaultCalls++; return []; } }] });
+  assert.equal(defaultCalls, 1);
+});
+
 test('runAllGenerators attaches suggested pricing to generated specs before upsert', () => {
   assert.match(source, /attachUniformGeneratedPricing/);
   assert.match(source, /attachMarketContextBlocks/);

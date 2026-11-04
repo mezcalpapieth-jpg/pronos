@@ -12,6 +12,7 @@ import { normalizeSeriesMeta, seriesSubtitle } from '../../_lib/series-markets.j
 import { deriveMarketTags, matchesMarketTaxonomy } from '../../_lib/category-tags.js';
 import { formatPointsResolutionCandidate } from '../../_lib/points-resolution-candidates.js';
 import { PRONOS_TREASURY_USERNAME } from '../../_lib/points-limit-orders.js';
+import { pointsResolverReadiness } from '../../_lib/points-resolver-readiness.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -458,6 +459,7 @@ export default async function handler(req, res) {
         tournamentFeatured: r.tournament_featured === true,
         isTestMarket: r.is_test_market === true,
         resolverType: r.resolver_type || null,
+        ...(r.mode === 'points' ? { resolutionReadiness: pointsResolverReadiness({ ...r, resolver_config: parseJsonb(r.resolver_config, {}) }) } : {}),
         mode: r.mode || 'points',
         chainId: r.chain_id || null,
         chainMarketId: r.chain_market_id ? String(r.chain_market_id) : null,

@@ -24,6 +24,7 @@ import { applyCors } from '../../_lib/cors.js';
 import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { requirePointsAdmin } from '../../_lib/points-admin.js';
 import { isNextOpponentCheckDue } from '../../_lib/sports-resolver-policy.js';
+import { pointsResolverReadiness } from '../../_lib/points-resolver-readiness.js';
 
 const sql = neon(process.env.DATABASE_URL);
 const readSql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
@@ -46,7 +47,7 @@ export default async function handler(req, res) {
     await ensurePointsSchema(sql);
 
     const rows = await readSql`
-      SELECT m.id, m.question, m.category, m.status, m.resolver_type, m.resolver_config,
+      SELECT m.id, m.question, m.category, m.source, m.status, m.resolver_type, m.resolver_config,
              m.start_time, m.end_time,
              noc.last_checked_at AS next_opponent_checkpoint_at,
              EXTRACT(EPOCH FROM (NOW() - m.end_time))::int AS seconds_past_end
@@ -54,7 +55,7 @@ export default async function handler(req, res) {
       LEFT JOIN points_resolver_checkpoints noc
         ON noc.market_id = m.id
        AND noc.checkpoint_key = 'next-opponent'
-      WHERE m.status = 'active'
+      WHERE m.status = 'active' AND m.mode = 'points'
         AND m.parent_id IS NULL
       ORDER BY m.end_time ASC NULLS LAST
       LIMIT 500
@@ -67,6 +68,7 @@ export default async function handler(req, res) {
 
     const AUTO_RESOLVER_TYPES = new Set([
       'chainlink_price', 'api_price', 'weather_api', 'api_chart', 'api_transcript', 'sports_api',
+      'api_hurricane', 'aicm_delay_count', 'aicm_delay_minutes', 'aicm_delay_minutes_live',
     ]);
 
     for (const r of rows) {
@@ -79,6 +81,7 @@ export default async function handler(req, res) {
         question: r.question,
         category: r.category,
         resolverType: r.resolver_type,
+        resolutionReadiness: pointsResolverReadiness({ ...r, resolver_config: cfg }),
         resolverSource: cfg?.source || null,
         resolverEventId: cfg?.eventId || null,
         resolverDateYmd: cfg?.dateYmd || null,
@@ -141,7 +144,7 @@ export default async function handler(req, res) {
       // needs to run to set resolver_type.
       missingResolver: missingResolver.slice(0, 50),
       waitingWindow: waitingWindow.slice(0, 20),
-      manual: manual.slice(0, 20),
+      manual,
     });
   } catch (e) {
     console.error('[admin/resolve-diagnostic] error', { message: e?.message, code: e?.code });

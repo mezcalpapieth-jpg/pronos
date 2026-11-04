@@ -1,4 +1,5 @@
 import { releaseOpenLimitOrdersForMarkets } from './points-limit-orders.js';
+import { closeCompletedPointsResolutionCandidates } from './points-resolution-candidates.js';
 
 // Call inside withTransaction. This is the same remaining-cost-basis refund used by Admin.
 export async function cancelPointsMarket(client, marketId, { actor, reason, expectedConfig = null, expectedOutcomes = null } = {}) {
@@ -35,6 +36,7 @@ export async function cancelPointsMarket(client, marketId, { actor, reason, expe
     WHERE market_id = ANY($1::int[]) AND shares > 0`, [ids]);
   await client.query(`UPDATE points_markets SET status = 'canceled', outcome = NULL, resolved_at = NOW(), resolved_by = $2
     WHERE id = ANY($1::int[]) AND status = 'active'`, [ids, actor]);
+  await closeCompletedPointsResolutionCandidates(client, ids);
   return { ok: true, marketId: Number(marketId), canceledMarketIds: ids, refundCount: distributions.rows.length,
     totalRefunded: distributions.rows.reduce((sum, row) => sum + Number(row.amount || 0), 0) };
 }

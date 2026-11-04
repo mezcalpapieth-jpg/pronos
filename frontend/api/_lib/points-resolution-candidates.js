@@ -5,6 +5,49 @@ function parseJsonb(value, fallback = null) {
   try { return JSON.parse(value); } catch { return fallback; }
 }
 
+// Call inside the same transaction that completes the market. Closing an
+// obsolete suggestion is review bookkeeping, never another settlement.
+export async function closeCompletedPointsResolutionCandidates(client, marketIds) {
+  const ids = [...new Set(marketIds.map(Number).filter(id => Number.isSafeInteger(id) && id > 0))];
+  if (!ids.length) return [];
+  const result = await client.query(`
+    UPDATE points_resolution_candidates c
+    SET status = CASE WHEN m.status = 'resolved' AND c.outcome_index = m.outcome
+                      THEN 'confirmed' ELSE 'denied' END,
+        reviewer = 'system:completed-market-review', reviewed_at = NOW(),
+        admin_note = CONCAT('Revisión cerrada: mercado ', m.status, '; resultado final ', COALESCE(m.outcome::text, 'ninguno'), '. No se modificó la liquidación.')
+    FROM points_markets m
+    WHERE c.points_market_id = m.id AND m.id = ANY($1::bigint[])
+      AND m.mode = 'points' AND m.status IN ('resolved', 'canceled') AND c.status = 'pending'
+    RETURNING c.*`, [ids]);
+  return result.rows;
+}
+
+// The market lock serializes a delayed evidence fetch against settlement.
+// Without it, a cron can recreate a pending review after an admin resolves.
+// The caller must use the same transaction for the lock and the upsert.
+export async function upsertPendingPointsResolutionCandidate(client, candidate) {
+  const market = await client.query(`SELECT id FROM points_markets
+    WHERE id = $1 AND mode = 'points' AND status = 'active' FOR UPDATE`, [candidate.points_market_id]);
+  if (!market.rows.length) return [];
+  const result = await client.query(`INSERT INTO points_resolution_candidates
+    (points_market_id, resolver_type, source, source_event_id, outcome_index, outcome_count,
+     confidence_bps, observed_at, final_score, evidence_url, evidence, rationale, raw_report, status)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,COALESCE($8::timestamptz,NOW()),$9,$10,$11::jsonb,$12,$13::jsonb,'pending')
+    ON CONFLICT (points_market_id) WHERE status = 'pending' DO UPDATE SET
+      resolver_type = EXCLUDED.resolver_type, source = EXCLUDED.source,
+      source_event_id = EXCLUDED.source_event_id, outcome_index = EXCLUDED.outcome_index,
+      outcome_count = EXCLUDED.outcome_count, confidence_bps = EXCLUDED.confidence_bps,
+      observed_at = EXCLUDED.observed_at, final_score = EXCLUDED.final_score,
+      evidence_url = EXCLUDED.evidence_url, evidence = EXCLUDED.evidence,
+      rationale = EXCLUDED.rationale, raw_report = EXCLUDED.raw_report
+    RETURNING id`, [candidate.points_market_id, candidate.resolver_type, candidate.source,
+    candidate.source_event_id, candidate.outcome_index, candidate.outcome_count, candidate.confidence_bps,
+    candidate.observed_at, candidate.final_score, candidate.evidence_url, JSON.stringify(candidate.evidence),
+    candidate.rationale, JSON.stringify(candidate.raw_report || {})]);
+  return result.rows;
+}
+
 function intOrNull(value) {
   const n = Number.parseInt(value, 10);
   return Number.isInteger(n) ? n : null;

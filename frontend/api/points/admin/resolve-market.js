@@ -24,6 +24,7 @@ import { withTransaction } from '../../_lib/db-tx.js';
 import { bestEffortPersistResolvedCryptoMarketSnapshot } from '../../_lib/crypto-chart-snapshot.js';
 import { releaseOpenLimitOrdersForMarkets } from '../../_lib/points-limit-orders.js';
 import { bestEffortPersistTopHolderSnapshot } from '../../_lib/points-top-holders.js';
+import { closeCompletedPointsResolutionCandidates } from '../../_lib/points-resolution-candidates.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 
@@ -193,6 +194,7 @@ export default async function handler(req, res) {
         }
       }
 
+      await closeCompletedPointsResolutionCandidates(client, [mid]);
       await bestEffortPersistResolvedCryptoMarketSnapshot(
         client,
         mid,

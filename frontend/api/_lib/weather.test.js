@@ -174,16 +174,33 @@ test('weather archive uses the complete hourly maximum when the daily summary is
   });
 });
 
-test('weather archive defers contradictory daily and hourly maxima', async () => {
+test('weather archive records daily summary differences without changing the hourly contract', async () => {
   const payload = archivePayload();
   payload.daily.temperature_2m_max = [26.1];
   await withWeatherResponse(payload, async () => {
-    await assert.rejects(readArchive(), error =>
-      error.message === 'weather_archive_daily_hourly_mismatch'
-      && error.benign === true
-      && error.info.dailyMaxC === 26.1
-      && error.info.hourlyMaxC === 24.1);
+    const observed = await readArchive();
+    assert.equal(observed.maxC, 24.1);
+    assert.equal(observed.dailyMaxC, 26.1);
+    assert.equal(observed.dailyHourlyDifferenceC, 2);
   });
+});
+
+test('archive-only settlement uses hourly samples even when daily summary crosses a bucket boundary', async () => {
+  for (const [hourly, daily] of [[26.6, 26.7], [26.9, 27.0]]) {
+    const payload = archivePayload({ maxC: hourly });
+    payload.daily.temperature_2m_max = [daily];
+    await withWeatherResponse(payload, async () => {
+      const result = await resolveObservedWeatherMaxTempC({
+        lat: 19.4326, lng: -99.1332, dateYmd: '2026-10-14', buckets: adaptiveBuckets(25.6),
+        modelAuditPolicy: 'archive-only', now: new Date('2026-10-15T15:00:00Z'),
+      });
+      assert.equal(result.winningIdx, 2);
+      assert.equal(result.tempC, hourly);
+      assert.equal(result.requiresManualReview, false);
+      assert.equal(result.resolverInfo.dailyMaxC, daily);
+      assert.equal(result.resolverInfo.hourlyTemperatures.length, 24);
+    });
+  }
 });
 
 test('weather readings accept a genuine zero but do not assign missing values to a bucket', async () => {

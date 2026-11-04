@@ -728,8 +728,8 @@ function buildResolutionWatchlist(diagnostic) {
   const manual = (diagnostic.manual || []).map(item => ({
     ...item,
     kind: 'manual',
-    label: 'Manual review',
-    action: 'Tener owner listo para confirmar resultado.',
+    label: item.resolutionReadiness?.label || 'Revisión manual',
+    action: item.resolutionReadiness?.requirement || 'Un administrador debe verificar la evidencia y confirmar el resultado.',
   }));
   const missing = (diagnostic.missingResolver || []).map(item => ({
     ...item,
@@ -755,8 +755,7 @@ function buildResolutionWatchlist(diagnostic) {
       const severityDiff = (severity[a.kind] ?? 9) - (severity[b.kind] ?? 9);
       if (severityDiff !== 0) return severityDiff;
       return new Date(a.endTime || 8640000000000000).getTime() - new Date(b.endTime || 8640000000000000).getTime();
-    })
-    .slice(0, 8);
+    });
 }
 
 function ResolutionWatchlist({ diagnostic }) {
@@ -4447,6 +4446,11 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
             <div className="points-admin-market-title">
               {m.question}
             </div>
+            {m.status === 'active' && m.resolutionReadiness?.mode !== 'automatic' && m.resolutionReadiness && (
+              <p style={{ margin: '6px 0', color: 'var(--text-muted)', fontSize: 12 }}>
+                {m.resolutionReadiness.label}. {m.resolutionReadiness.requirement}
+              </p>
+            )}
             <ParallelLegEarlyNoControls
               market={m}
               workingLegId={resolvingLegNo}
@@ -8277,6 +8281,11 @@ function PendingMarketsTable({ onQueueChange }) {
                   {r.sourceData?.competitionName && <> · {r.sourceData.competitionName}</>}
                   {r.resolverType && <> · resolver: {r.resolverType}</>}
                 </div>
+                {r.resolutionReadiness?.mode !== 'automatic' && r.resolutionReadiness && (
+                  <div className="points-admin-pending-meta" style={{ color: 'var(--accent)' }}>
+                    {r.resolutionReadiness.label}. {r.resolutionReadiness.requirement}
+                  </div>
+                )}
                 <div className="points-admin-pending-meta points-admin-pending-meta-details">
                   Opciones ({Array.isArray(r.outcomes) ? r.outcomes.length : 0}): {formatOutcomeList(r.outcomes)}
                   {' · Cierra: '}{formatAdminMarketDate(r.endTime)}
