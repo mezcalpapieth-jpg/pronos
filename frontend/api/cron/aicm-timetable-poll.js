@@ -22,6 +22,7 @@ import {
   recordAicmTimetableRun,
 } from '../_lib/aicm-timetable.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
+import { aviationEdgeEnabled } from '../_lib/points-aicm-policy.js';
 
 const sql = neon(process.env.DATABASE_URL);
 
@@ -42,6 +43,9 @@ export default async function handler(req, res) {
   if (!authorized(req)) return res.status(401).json({ error: 'unauthorized' });
   if (req.method !== 'GET' && req.method !== 'POST') {
     return res.status(405).json({ error: 'method_not_allowed' });
+  }
+  if (!aviationEdgeEnabled()) {
+    return res.status(200).json({ ok: true, skipped: true, reason: 'aviation_edge_disabled' });
   }
   if (!process.env.AVIATION_EDGE_KEY) {
     return res.status(503).json({ error: 'aviation_edge_key_missing' });

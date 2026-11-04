@@ -11,6 +11,7 @@ import { applyCors } from '../../_lib/cors.js';
 import { cachedJson, setCacheHeaders } from '../../_lib/api-performance.js';
 import { requirePointsAdmin } from '../../_lib/points-admin.js';
 import { ensurePointsSchema } from '../../_lib/points-schema.js';
+import { aviationEdgeReadiness } from '../../_lib/points-aicm-policy.js';
 
 let readSql;
 let schemaSql;
@@ -110,13 +111,14 @@ export default async function handler(req, res) {
     await ensurePointsSchema(getSchemaSql());
     setCacheHeaders(res, { scope: 'private', maxAge: 15, staleWhileRevalidate: 45 });
 
-    const { value: payload, hit } = await cachedJson('points:admin:aicm-status:v1', 15_000, async () => {
+    const { value: payload, hit } = await cachedJson('points:admin:aicm-status:v2', 15_000, async () => {
       const sql = getReadSql();
       const [
         latestRuns,
         summaryRows,
         dailyRows,
         recentObservations,
+        timetableRuns,
       ] = await Promise.all([
         sql`
           SELECT
@@ -199,10 +201,12 @@ export default async function handler(req, res) {
           ORDER BY observed_at DESC, id DESC
           LIMIT 30
         `,
+        sql`SELECT id, status, observed_at, error FROM points_aicm_timetable_runs WHERE direction = 'departure' ORDER BY observed_at DESC, id DESC LIMIT 1`,
       ]);
 
       return {
         ok: true,
+        aviationEdge: { ...aviationEdgeReadiness({ latestRun: timetableRuns[0] }), latestRun: timetableRuns[0] || null },
         latestRuns: latestRuns.map(formatRun),
         summary: summaryRows.map(formatSummary),
         daily: dailyRows.map(formatDaily),

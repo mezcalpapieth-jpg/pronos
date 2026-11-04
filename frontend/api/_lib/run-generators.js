@@ -63,6 +63,7 @@ import { deriveMarketTags }             from './category-tags.js';
 import { attachGeneratedPointsLiquidity, attachUniformGeneratedPricing } from './market-pricing.js';
 import { attachMarketContextBlocks }      from './market-context-blocks.js';
 import { attachMarketTranslations }       from './market-translations.js';
+import { isAviationEdgeMarket, aviationEdgeEnabled } from './points-aicm-policy.js';
 
 const MARKET_ICON = null;
 const APPROVED_SCHEDULE_SYNC_SOURCES = new Set([
@@ -118,10 +119,14 @@ export async function prepareGeneratedSpecs(specs) {
   return pricedSpecs.map(spec => attachMarketTranslations(attachMarketContextBlocks(spec)));
 }
 
-export async function runAllGenerators() {
+export async function runAllGenerators({ disabledGenerators = [], generators = GENERATORS } = {}) {
   const allSpecs = [];
   const sourceStats = {};
-  for (const gen of GENERATORS) {
+  for (const gen of generators) {
+    if (disabledGenerators.includes(gen.name)) {
+      sourceStats[gen.name] = { count: 0, skipped: true, reason: 'source_disabled' };
+      continue;
+    }
     try {
       const specs = await gen.run();
       const contextualSpecs = await prepareGeneratedSpecs(specs);
@@ -147,6 +152,10 @@ export async function upsertPending(sql, allSpecs) {
   let updated = 0;
   let skipped = 0;
   for (const spec of allSpecs) {
+    if (isAviationEdgeMarket(spec) && !aviationEdgeEnabled()) {
+      skipped++;
+      continue;
+    }
     const s = attachGeneratedPointsLiquidity(spec);
     try {
       const tags = deriveMarketTags(s);

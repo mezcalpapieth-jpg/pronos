@@ -212,7 +212,7 @@ export function parseSniimTortillaNational(html, { targetYear, targetMonth, sour
     normalizeText(cell).includes('precios de tortilla en autoservicios')));
   const searchEnd = sectionEnd >= 0 ? sectionEnd : rows.length;
   const headerIdx = rows.findIndex((row, idx) =>
-    idx > sectionStart && idx < searchEnd && normalizeText(row[0]) === 'ciudad');
+    idx > sectionStart && idx < searchEnd && row.some(cell => normalizeText(cell) === 'ciudad'));
   const valueIdx = rows.findIndex((row, idx) =>
     idx > headerIdx && idx < searchEnd && normalizeText(row[0]).includes('nacional ponderado ppp'));
   if (sectionStart < 0 || headerIdx < 0 || valueIdx < 0) {
@@ -221,8 +221,10 @@ export function parseSniimTortillaNational(html, { targetYear, targetMonth, sour
     throw err;
   }
 
-  const headers = rows[headerIdx].slice(1);
-  const values = rows[valueIdx].slice(1)
+  const cityColumn = rows[headerIdx].findIndex(cell => normalizeText(cell) === 'ciudad');
+  const headers = rows[headerIdx].slice(cityColumn + 1);
+  // National rows can merge Estado and Ciudad into one colspan cell.
+  const values = rows[valueIdx].slice(-headers.length)
     .map((cell, idx) => ({
       label: headers[idx] || null,
       value: parseNumber(cell),
@@ -254,7 +256,7 @@ export async function readSniimAvocadoHassCdmx(cfg = {}) {
   if (!dateStartYmd || !dateEndYmd) {
     throw new Error('sniim avocado: missing dateStartYmd/dateEndYmd');
   }
-  const sourceUrl = buildUrl('/nuevo/consultas/mercadosnacionales/preciosdemercado/agricicolas/ResultadosConsultaFechaFrutasYHortalizas.aspx', {
+  const sourceUrl = buildUrl('/Nuevo/Consultas/MercadosNacionales/PreciosDeMercado/Agricolas/ResultadosConsultaFechaFrutasYHortalizas.aspx', {
     Destino: cfg.destino || 'Todos',
     DestinoId: cfg.destinoId ?? -1,
     Origen: cfg.origen || 'Todos',

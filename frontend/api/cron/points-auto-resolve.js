@@ -85,6 +85,7 @@ import { NEXT_OPPONENT_RECHECK_INTERVAL_HOURS, findParallelWinnerIndex, resolver
 import { buildPointsResolutionCandidateInsert } from '../_lib/points-resolution-candidates.js';
 import { releaseOpenLimitOrdersForMarkets } from '../_lib/points-limit-orders.js';
 import { bestEffortPersistTopHolderSnapshot } from '../_lib/points-top-holders.js';
+import { closeCompletedPointsResolutionCandidates, upsertPendingPointsResolutionCandidate } from '../_lib/points-resolution-candidates.js';
 import {
   buildLcdlfResolutionReview,
   isLcdlfMarket,
@@ -1253,49 +1254,10 @@ async function queueManualReviewCandidate({ market, cfg, sourceData, outcomes, d
     return;
   }
 
-  const result = await schemaSql.query(
-    `INSERT INTO points_resolution_candidates
-       (points_market_id, resolver_type, source, source_event_id,
-        outcome_index, outcome_count, confidence_bps, observed_at,
-        final_score, evidence_url, evidence, rationale, raw_report, status)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8::timestamptz, NOW()),
-             $9, $10, $11::jsonb, $12, $13::jsonb, 'pending')
-     ON CONFLICT (points_market_id) WHERE status = 'pending'
-     DO UPDATE SET
-       resolver_type = EXCLUDED.resolver_type,
-       source = EXCLUDED.source,
-       source_event_id = EXCLUDED.source_event_id,
-       outcome_index = EXCLUDED.outcome_index,
-       outcome_count = EXCLUDED.outcome_count,
-       confidence_bps = EXCLUDED.confidence_bps,
-       observed_at = EXCLUDED.observed_at,
-       final_score = EXCLUDED.final_score,
-       evidence_url = EXCLUDED.evidence_url,
-       evidence = EXCLUDED.evidence,
-       rationale = EXCLUDED.rationale,
-       raw_report = EXCLUDED.raw_report
-     RETURNING id`,
-    [
-      candidate.points_market_id,
-      candidate.resolver_type,
-      candidate.source,
-      candidate.source_event_id,
-      candidate.outcome_index,
-      candidate.outcome_count,
-      candidate.confidence_bps,
-      candidate.observed_at,
-      candidate.final_score,
-      candidate.evidence_url,
-      JSON.stringify(candidate.evidence),
-      candidate.rationale,
-      JSON.stringify(candidate.raw_report || {}),
-    ],
-  );
-
-  const returnedRows = Array.isArray(result) ? result : (result.rows || []);
+  const returnedRows = await withTransaction(client => upsertPendingPointsResolutionCandidate(client, candidate));
   report.deferred.push({
     id: market.id,
-    reason: 'manual_review_queued',
+    reason: returnedRows.length ? 'manual_review_queued' : 'market_already_completed',
     candidateId: returnedRows[0]?.id || null,
     source: candidate.source,
   });
@@ -1525,6 +1487,7 @@ async function autoResolveNetflixManualReviewMarket({ market, cfg, sourceData, o
         }
       }
 
+      await closeCompletedPointsResolutionCandidates(client, [market.id]);
       await bestEffortPersistResolvedCryptoMarketSnapshot(
         client,
         market.id,
@@ -3209,6 +3172,7 @@ export async function runAutoResolve({ dry = false, sportsOnly = false } = {}) {
               );
             }
 
+            await closeCompletedPointsResolutionCandidates(client, [m.id]);
             await bestEffortPersistResolvedCryptoMarketSnapshot(
               client,
               m.id,
@@ -3325,6 +3289,7 @@ export async function runAutoResolve({ dry = false, sportsOnly = false } = {}) {
             }
           }
 
+          await closeCompletedPointsResolutionCandidates(client, [m.id]);
           await bestEffortPersistResolvedCryptoMarketSnapshot(
             client,
             m.id,

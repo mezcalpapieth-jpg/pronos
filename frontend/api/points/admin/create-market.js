@@ -33,6 +33,7 @@ import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { requirePointsAdmin } from '../../_lib/points-admin.js';
 import { initialReserves } from '../../_lib/amm-math.js';
 import { withTransaction } from '../../_lib/db-tx.js';
+import { assertPointsAirportApproval } from '../../_lib/points-aicm-policy.js';
 import { deriveMarketTags } from '../../_lib/category-tags.js';
 import { defaultPointsSeedLiquidity, normalizeSeedLiquidities } from '../../_lib/market-liquidity.js';
 import { buildMarketContextBlocks } from '../../_lib/market-context-blocks.js';
@@ -361,6 +362,7 @@ export default async function handler(req, res) {
     if (mode === 'unified') {
       const reserves = seedValues;
       const result = await withTransaction(async (client) => {
+        await assertPointsAirportApproval(client, { source: sourceVal, resolver_config: resolverConfigVal });
         const r = await client.query(
           `INSERT INTO points_markets
              (source, source_event_id, resolver_type, resolver_config,
@@ -428,6 +430,7 @@ export default async function handler(req, res) {
     // legs; each leg's chain_market_id can be patched in later via
     // edit-market (e.g. when the MarketFactory emits the leg ids).
     const result = await withTransaction(async (client) => {
+      await assertPointsAirportApproval(client, { source: sourceVal, resolver_config: resolverConfigVal });
       const parent = await client.query(
         `INSERT INTO points_markets
            (source, source_event_id, resolver_type, resolver_config,

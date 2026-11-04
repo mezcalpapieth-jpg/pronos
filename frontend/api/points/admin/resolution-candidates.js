@@ -13,6 +13,7 @@ import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { requirePointsAdmin } from '../../_lib/points-admin.js';
 import { withTransaction } from '../../_lib/db-tx.js';
 import { bestEffortPersistResolvedCryptoMarketSnapshot } from '../../_lib/crypto-chart-snapshot.js';
+import { closeCompletedPointsResolutionCandidates } from '../../_lib/points-resolution-candidates.js';
 import { formatPointsResolutionCandidate } from '../../_lib/points-resolution-candidates.js';
 import { releaseOpenLimitOrdersForMarkets } from '../../_lib/points-limit-orders.js';
 
@@ -309,6 +310,7 @@ export default async function handler(req, res) {
         }
       }
 
+      await closeCompletedPointsResolutionCandidates(client, [candidate.points_market_id]);
       await bestEffortPersistResolvedCryptoMarketSnapshot(
         client,
         candidate.points_market_id,

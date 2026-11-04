@@ -61,6 +61,20 @@ test('SNIIM tortilla parser reads latest national tortilleria value', async (t) 
   assert.equal(read.value, 25.10);
 });
 
+test('SNIIM tortilla parser aligns Estado/Ciudad headers with a merged national cell', () => {
+  const html = `<table>
+    <tr><td>Precios de Tortilla en Tortillerías por ciudad 1/</td></tr>
+    <tr><th>Estado</th><th>Ciudad</th><th>28-Oct</th><th>30-Oct</th></tr>
+    <tr><td colspan="2">Nacional Ponderado PPP</td><td>24.751598</td><td>24.746447</td></tr>
+    <tr><td>Precios de Tortilla en Autoservicios por ciudad 1/</td></tr>
+    <tr><th>Estado</th><th>Ciudad</th><th>28-Oct</th><th>30-Oct</th></tr>
+    <tr><td colspan="2">Nacional Ponderado PPP</td><td>14.50</td><td>14.60</td></tr>
+  </table>`;
+  const parsed = parseSniimTortillaNational(html, { targetYear: 2026, targetMonth: 10 });
+  assert.equal(parsed.value, 24.746447);
+  assert.equal(parsed.dateYmd, '2026-10-30');
+});
+
 test('SNIIM avocado parser reads latest CDMX frequent wholesale price', async (t) => {
   const originalFetch = globalThis.fetch;
   t.after(() => {
@@ -81,7 +95,7 @@ test('SNIIM avocado parser reads latest CDMX frequent wholesale price', async (t
   assert.equal(parsed.presentation, 'Caja de 9 kg.');
 
   globalThis.fetch = async (url) => {
-    assert.match(String(url), /ResultadosConsultaFechaFrutasYHortalizas\.aspx/);
+    assert.match(new URL(url).pathname, /\/Agricolas\/ResultadosConsultaFechaFrutasYHortalizas\.aspx$/);
     assert.match(String(url), /ProductoId=133/);
     assert.match(String(url), /fechaInicio=26%2F10%2F2026/);
     assert.match(String(url), /fechaFinal=31%2F10%2F2026/);

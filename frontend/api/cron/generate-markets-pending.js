@@ -28,6 +28,7 @@ import {
   upsertPending,
 } from '../_lib/run-generators.js';
 import { approveTournamentPendingMarkets } from '../points/admin/pending-markets.js';
+import { disabledPointsGenerators } from '../_lib/points-aicm-policy.js';
 
 const sql = neon(process.env.DATABASE_URL);
 const TROPHY_AUTO_APPROVAL_TIMEZONE = 'America/Mexico_City';
@@ -61,7 +62,7 @@ export default async function handler(req, res) {
 
   try {
     await ensurePointsSchema(sql);
-    const { allSpecs, sourceStats } = await runAllGenerators();
+    const { allSpecs, sourceStats } = await runAllGenerators({ disabledGenerators: disabledPointsGenerators() });
 
     if (dryRun) {
       const scheduleSync = await syncApprovedMarketSchedules(sql, allSpecs, { dryRun: true });

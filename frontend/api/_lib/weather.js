@@ -199,15 +199,10 @@ export async function fetchObservedMaxTempC({
 
   const hourlyMaxC = Math.max(...hourly.map(row => row.tempC));
   const dailyMaxC = finiteNumber(data?.daily?.temperature_2m_max?.[0]);
-  if (dailyMaxC != null && Math.abs(dailyMaxC - hourlyMaxC) > 0.0001) {
-    throw weatherDeferredError('weather_archive_daily_hourly_mismatch', {
-      source: 'open-meteo-archive',
-      forecastDateYmd: dateYmd,
-      timezone,
-      dailyMaxC,
-      hourlyMaxC,
-    });
-  }
+  // The contract uses the maximum of the 24 hourly samples. The daily
+  // aggregate need not equal that sampled maximum; it is audit data,
+  // not a second definition of the winning temperature.
+  const dailyHourlyDifferenceC = dailyMaxC == null ? null : dailyMaxC - hourlyMaxC;
   const maxC = hourlyMaxC;
   const peakHours = hourly
     .filter(row => Math.abs(row.tempC - maxC) < 0.0001)
@@ -234,6 +229,7 @@ export async function fetchObservedMaxTempC({
     hourlyMaxC,
     peakHours,
     hourly,
+    dailyHourlyDifferenceC,
   };
 }
 
@@ -340,6 +336,7 @@ export async function resolveObservedWeatherMaxTempC({
       timezone,
       dailyMaxC: observed.dailyMaxC,
       hourlyMaxC: observed.hourlyMaxC,
+      dailyHourlyDifferenceC: observed.dailyHourlyDifferenceC,
       peakHours: observed.peakHours,
       hourlyTemperatures: observed.hourly,
       weatherAudit: audit,

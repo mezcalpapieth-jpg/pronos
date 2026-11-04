@@ -16,6 +16,7 @@ import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../../_lib/cors.js';
 import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { requirePointsAdmin } from '../../_lib/points-admin.js';
+import { disabledPointsGenerators } from '../../_lib/points-aicm-policy.js';
 import {
   runAllGenerators,
   syncApprovedMarketSchedules,
@@ -37,7 +38,7 @@ export default async function handler(req, res) {
     const started = Date.now();
 
     await ensurePointsSchema(sql);
-    const { allSpecs, sourceStats } = await runAllGenerators();
+    const { allSpecs, sourceStats } = await runAllGenerators({ disabledGenerators: disabledPointsGenerators() });
 
     if (dryRun) {
       const scheduleSync = await syncApprovedMarketSchedules(sql, allSpecs, { dryRun: true });
