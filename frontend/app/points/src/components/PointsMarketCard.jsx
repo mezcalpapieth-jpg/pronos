@@ -348,7 +348,7 @@ export default function PointsMarketCard({ market, userPosition }) {
             {t('points.card.resolved')}
           </span>
         )}
-        {showLive && !cardScore && (
+        {showLive && (
           <span className="mock-card-badge" style={{
             background: 'rgba(220,38,38,0.18)',
             color: 'var(--danger)',
