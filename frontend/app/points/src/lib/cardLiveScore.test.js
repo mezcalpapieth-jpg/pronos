@@ -31,6 +31,16 @@ test('binary score labels retain explicit away/home identities and accept a genu
   assert.deepEqual([score.left.abbreviation, score.left.score, score.right.score, score.right.abbreviation], ['LIV', 0, 0, 'FEN']);
 });
 
+test('Slavia Praha card keeps home-first score ordering when ESPN calls it Slavia Prague', () => {
+  const score = compactCardScore({ ...market, outcomes: ['Slavia Praha', 'Empate', 'Arsenal'] }, {
+    ...live, home: { name: 'Slavia Prague', score: 0 }, away: { name: 'Arsenal', score: 2 },
+  }, now);
+  assert.equal(score.left.name, 'Slavia Prague');
+  assert.equal(score.left.score, 0);
+  assert.equal(score.right.name, 'Arsenal');
+  assert.equal(score.right.score, 2);
+});
+
 test('missing or invalid scores never become a fabricated zero', () => {
   for (const value of [null, undefined, '', '3', NaN, Infinity, -1]) {
     assert.equal(compactCardScore(market, { ...live, home: { ...live.home, score: value } }, now), null);
