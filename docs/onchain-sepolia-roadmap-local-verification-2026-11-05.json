@@ -1,0 +1,205 @@
+{
+  "version": 1,
+  "mode": "local_offline",
+  "startedAt": "2026-11-05T12:22:53.225Z",
+  "branch": "onchain-sepolia",
+  "source": {
+    "head": "d2e4f6e0837d8f7331f315eb605c8e5f02d5349e",
+    "pointbreak": "47aa9e19115d64bc36a2684e5eeb685caef117ba",
+    "state": "uncommitted_working_tree",
+    "files": [
+      {
+        "path": "frontend/api/_lib/onchain-admin-settlement.js",
+        "sha256": "89f39b866419de3380e063f513042c919e75502a917ccce265efd058687c13a7"
+      },
+      {
+        "path": "frontend/api/_lib/onchain-cancel-refunds.js",
+        "sha256": "bbca5f206f7ecafcaffac4ba3e63381942a3d5081ce27f96392d774ee638c374"
+      },
+      {
+        "path": "frontend/api/_lib/onchain-cancel-refunds.test.js",
+        "sha256": "bc57a1b8e9d4268bbbd6f3795be9db8fb7273d8917a298fd8ea20492d384afb9"
+      },
+      {
+        "path": "frontend/api/_lib/onchain-trader.js",
+        "sha256": "705a175e04f6e5a80c3e85dd5050c50e1e09b7691204999588a52bbbfea6cfd6"
+      },
+      {
+        "path": "frontend/api/_lib/sepolia-resolver.js",
+        "sha256": "3c45c6913b6bc04e5db21736a59606341638690c306f08c2fd59f9330c47dbac"
+      },
+      {
+        "path": "frontend/api/_lib/sepolia-resolver.test.js",
+        "sha256": "465e034d0d26d7bced2a223645fae886afed845f948598909fe04c007486e47c"
+      },
+      {
+        "path": "frontend/api/_lib/sepolia-season-preparation.js",
+        "sha256": "02b7dc64ba5d41dd935e9fdc4aa2a829cc9dcabe2c933af7266f51653c13d133"
+      },
+      {
+        "path": "frontend/api/_lib/sepolia-season-preparation.test.js",
+        "sha256": "9ded626fc85d813c80cf15c53c698dd5eefeb8d6db8b6b5de519f9eeb422081e"
+      },
+      {
+        "path": "frontend/api/_lib/sepolia-season-rehearsal.test.js",
+        "sha256": "978795860660f0a606c7c88cb6013cf866643f5914d8cebdd79bc4f8b77fdffe"
+      },
+      {
+        "path": "frontend/api/_lib/sepolia-standings-registry.js",
+        "sha256": "039609772570ccec0b06596ded6f6d3fdcbef73172dcd00be5763cd4207a971e"
+      },
+      {
+        "path": "frontend/api/_lib/sepolia-standings-registry.test.js",
+        "sha256": "291378691d88cec23b4360a4dedae8c0848670a01d6bffe591b3c5e1ff7a16ff"
+      },
+      {
+        "path": "frontend/api/_lib/sepolia-tournament-automation.js",
+        "sha256": "7fb8affd182ec423971427e4d0c6d859addf7c71243500df3b42d94b3f1193e3"
+      },
+      {
+        "path": "frontend/api/_lib/sepolia-tournament-automation.test.js",
+        "sha256": "e1773d82a7ca575d204ca9be62d33a3d661ba062fbcf4deb403f415ea657c3e0"
+      },
+      {
+        "path": "frontend/api/points/admin/onchain-refunds.js",
+        "sha256": "8f4e75f55fc3945005b36cbb40eb8d8dc5d3bf4ed894ba5370091f3131b62993"
+      },
+      {
+        "path": "frontend/api/points/admin/onchain-refunds.test.js",
+        "sha256": "9002721d14d3b9aab7784e5a8813391abad3af9bb52d17dd3377862d60cb8e69"
+      },
+      {
+        "path": "frontend/api/points/admin/onchain-resolution-preview.js",
+        "sha256": "cf6a5a735e3ba7a8e92d5d9172f178529370eeebd7a14cd2c5137877b3c140a6"
+      },
+      {
+        "path": "frontend/api/points/admin/onchain-resolution-preview.test.js",
+        "sha256": "4e9037854bac986e3b3a143da7ebdac2e810d6ed8e0fa92007d9289bfa3f4a32"
+      },
+      {
+        "path": "frontend/api/points/admin/onchain-settlement.js",
+        "sha256": "2179535274754901e3aa9c94c7b89517cc843808022804689891173bd9548511"
+      },
+      {
+        "path": "frontend/api/points/admin/onchain-settlement.test.js",
+        "sha256": "2de68217ccfd0bf0c8345694459c8aa71a8276044f858e8502caddbdde149ef8"
+      },
+      {
+        "path": "frontend/api/protocol/admin/push-cancel-refunds.js",
+        "sha256": "f906759cff3cf2df978956299945952b3a58f982a8e513b1663dbcbde999e9bf"
+      },
+      {
+        "path": "frontend/api/scripts/onchain-sepolia-automation.mjs",
+        "sha256": "7d162cb8ed65b3813a3257e52f6da526e78e5cbd7f82a657e8f5408deb06e338"
+      },
+      {
+        "path": "frontend/api/scripts/onchain-sepolia-rehearsal.mjs",
+        "sha256": "73138670f31f40ba6c770f0efcbc742532354c00358fc52d0a288330cefc668c"
+      },
+      {
+        "path": "frontend/api/scripts/onchain-sepolia-tournament.mjs",
+        "sha256": "5f2f4ecd10d36e45a1f0f8602a53b56e98ac39aa48966c1443ac6242d2ef5c84"
+      },
+      {
+        "path": "frontend/app/points/src/components/AdminOnchainSettlement.jsx",
+        "sha256": "bf288603e7cbaeb452bcea53a259f4f1df34a676eab1dbf88ecbdb84bbbee6ce"
+      },
+      {
+        "path": "frontend/app/points/src/components/AdminOnchainSettlement.test.js",
+        "sha256": "1cd3da111b93d3a92b85ed2ed5765f172e181a95f8b20f0c3428701b7207e9c2"
+      },
+      {
+        "path": "ops/onchain-sepolia-resolver/README.md",
+        "sha256": "389b1ddc3c92d00ffe34ee7e536a5f04bd606d3f48023fa84170167559e4dad6"
+      },
+      {
+        "path": "ops/onchain-sepolia-standings/README.md",
+        "sha256": "1e4e87eb5328f1d1117e12420b076359effd1c9e1bdc3bf0b4efd461f6b2a379"
+      }
+    ],
+    "sha256": "916b41d45350b0eacbdf50a4fec985524a2131c98add5635f67d65b418bf40d2"
+  },
+  "groups": [
+    {
+      "name": "refunds_and_durable_nonces",
+      "passed": true,
+      "tests": 60,
+      "failures": 0,
+      "skipped": 0
+    },
+    {
+      "name": "automatic_resolution",
+      "passed": true,
+      "tests": 15,
+      "failures": 0,
+      "skipped": 0
+    },
+    {
+      "name": "season_preparation_and_gas",
+      "passed": true,
+      "tests": 57,
+      "failures": 0,
+      "skipped": 0
+    },
+    {
+      "name": "standings",
+      "passed": true,
+      "tests": 28,
+      "failures": 0,
+      "skipped": 0
+    },
+    {
+      "name": "full_season_accounting",
+      "passed": true,
+      "tests": 122,
+      "failures": 0,
+      "skipped": 0
+    },
+    {
+      "name": "solidity_contracts",
+      "passed": true,
+      "tests": 137,
+      "failures": 0,
+      "skipped": 0
+    }
+  ],
+  "liveChainTransactions": 0,
+  "runtimeTouched": false,
+  "liveLaunchVerified": false,
+  "refsUnchanged": true,
+  "passed": true,
+  "totalTests": 419,
+  "completedAt": "2026-11-05T12:26:57.067Z",
+  "additionalRegression": {
+    "passed": true,
+    "tests": 13,
+    "failures": 0,
+    "skipped": 0,
+    "files": [
+      "frontend/api/protocol/admin/lifecycle-market.test.js",
+      "frontend/api/_lib/protocol-event-indexer.lifecycle.test.js",
+      "frontend/api/_lib/onchain-trader-router.test.js"
+    ]
+  },
+  "allVerifiedTests": 432,
+  "pointsBuild": {
+    "passed": true,
+    "target": "points",
+    "output": "/private/tmp/pronos-onchain-sepolia-points-2026-11-05",
+    "warnings": [
+      "dependency_pure_annotations",
+      "mixed_static_dynamic_import",
+      "existing_large_chunks"
+    ]
+  },
+  "release": {
+    "committed": false,
+    "pushed": false,
+    "deployed": false,
+    "previewMigrationApplied": false,
+    "schedulingActivated": false,
+    "liveRefundVerified": false,
+    "liveSeasonVerified": false,
+    "currentTokenAndCycleChanged": false
+  }
+}

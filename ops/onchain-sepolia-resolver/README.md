@@ -29,3 +29,9 @@ roles and a matching deployment SHA. Enabling resolution submits transactions
 and spends gas. No activation or live test occurred during implementation.
 
 `node --test ops/onchain-sepolia-resolver/worker.test.js` runs only local fixtures.
+
+The admin panel can inspect current source evidence through the read-only
+`/api/points/admin/onchain-resolution-preview` endpoint while scheduling stays
+disabled. Scheduled batches persist a rotating queue cursor so markets beyond
+the first 25 are eventually checked. See the [November implementation report](../../docs/onchain-sepolia-roadmap-implementation-2026-11-05.md)
+for local verification and separate release requirements.

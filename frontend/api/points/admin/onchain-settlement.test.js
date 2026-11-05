@@ -42,3 +42,14 @@ test('raw provider/database/signer errors never escape the admin endpoint',async
     const f=fixture({settle:async()=>{throw Error(message);}});await f.run();assert.equal(f.res.code,503);assert.equal(f.res.body.error,'onchain_settlement_unavailable');
   }
 });
+
+test('refund confirmation remains awaiting indexing until exact recipient payouts are recorded',async()=>{
+  const factory=preview.ONCHAIN_MARKET_FACTORY_ADDRESS,pool=`0x${'4'.repeat(40)}`;
+  const market={points_id:42,mode:'onchain',points_chain_id:421614,chain_id:421614,chain_address:pool,pool_address:pool,chain_market_id:'0',contract_id:'0',protocol_id:99,protocol_version:'v1',factory_address:factory,status:'canceled',indexed_block:'12'};
+  const request={request_key:'refund_request_123',market_id:'42',action:'admin_cancel_refund',status:'confirmed',reason:'Reviewed',block_number:'10',tx_hash:'0xhash',
+    request_payload:{holders:['0x'+'5'.repeat(40)],blockNumber:9,blockHash:'0x'+'ab'.repeat(32),planHash:'a'.repeat(64)},refunds_indexed:false};
+  const sql=async parts=>parts.join('').includes('FROM points_markets')?[market]:parts.join('').includes('FROM sepolia_resolver_runs')?[]:[request];
+  const f=fixture({sqlFor:()=>sql});await f.run({method:'GET'});assert.equal(f.res.body.requests[0].awaitingIndexing,true);assert.equal(f.res.body.requests[0].indexingStatus,'pending_or_superseded');
+  request.refunds_indexed=true;await f.run({method:'GET'});assert.equal(f.res.body.requests[0].awaitingIndexing,false);assert.equal(f.res.body.requests[0].indexingStatus,'indexed');
+  assert.equal(f.res.body.requests[0].input.planHash,request.request_payload.planHash);
+});

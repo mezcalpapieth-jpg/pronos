@@ -23,6 +23,7 @@ export function buildStandingsPolicy({registry,context,fromBlock,confirmations=1
 // Account ages are read from the isolated Points database, including late joins.
 export function validateStandingsPolicy(policy,reviewedHash) {
   if(policy?.version!==1 || policy.policyHash!==reviewedHash)throw Error('reviewed_standings_policy_required');
+  if(policy.previousPolicyHash!==undefined && (!/^[a-f0-9]{64}$/.test(policy.previousPolicyHash)||typeof policy.revisionReason!=='string'||!policy.revisionReason.trim()||policy.revisionReason.length>240))throw Error('invalid_standings_revision');
   const {policyHash,...body}=policy;
   if(policyHash!==planHash(body) || !/^[a-z0-9][a-z0-9-]{2,63}$/.test(policy.cycleId||'')
     || !/^[a-f0-9]{64}$/.test(policy.planHash||'') || !/^[a-f0-9]{64}$/.test(policy.marketsHash||'')
@@ -106,4 +107,31 @@ export async function runStandingsTick({sql,provider,policy,reviewedPolicyHash,s
     await store.finish('error',{complete:reset}).catch(()=>{});
     throw error;
   } finally {await store.release();}
+}
+
+// Mid-season revisions can append verified markets without rewriting prior
+// eligibility/exposure rules or changing the scoring window and chain anchor.
+export function appendStandingsMarkets({previous,reviewedPreviousHash,previousContext,registry,context,
+  reviewedRegistryHash,reviewedContextHash,reason}) {
+  validateStandingsPolicy(previous,reviewedPreviousHash);
+  if(typeof reason!=='string'||!reason.trim()||reason.length>240)throw Error('standings_revision_reason_required');
+  if(planHash(previousContext?.markets)!==previous.marketsHash || previousContext.cycleId!==previous.cycleId
+    || previousContext.planHash!==previous.planHash)throw Error('reviewed_previous_context_required');
+  const next=buildStandingsPolicy({registry,context,reviewedRegistryHash,reviewedContextHash,
+    fromBlock:previous.fromBlock,confirmations:previous.confirmations});
+  if(next.cycleId!==previous.cycleId||next.planHash!==previous.planHash||next.registry.markets.length<=previous.registry.markets.length)throw Error('append_only_standings_revision_required');
+  const identities=new Set(),pools=new Set();
+  for(const m of next.registry.markets) {
+    const key=`${m.factory}:${m.marketId}`;
+    if(identities.has(key)||pools.has(m.pool))throw Error('duplicate_standings_market');identities.add(key);pools.add(m.pool);
+  }
+  for(const old of previous.registry.markets) {
+    const found=next.registry.markets.find(m=>m.factory===old.factory&&m.marketId===old.marketId);
+    if(planHash(found||null)!==planHash(old))throw Error('existing_standings_market_changed');
+  }
+  for(const old of previousContext.markets)if(planHash(context.markets.find(m=>m.pool===old.pool)||null)!==planHash(old))throw Error('existing_standings_rules_changed');
+  if(context.scoringStartsAt!==previousContext.scoringStartsAt||context.operationCloseAt!==previousContext.operationCloseAt)throw Error('existing_standings_window_changed');
+  const {policyHash,...body}=next;
+  const revision={...body,previousPolicyHash:previous.policyHash,revisionReason:reason.trim()};
+  return validateStandingsPolicy({...revision,policyHash:planHash(revision)},planHash(revision));
 }

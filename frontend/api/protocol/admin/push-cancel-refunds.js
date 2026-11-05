@@ -7,6 +7,7 @@
  * to the pool's native cost-basis ledger. If fees made the pool short, fund
  * the pool first, then retry this batch.
  */
+import { pendingApprovalSettings } from '../../_lib/onchain-preview-approval.js';
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../../_lib/cors.js';
 import { requirePointsAdmin } from '../../_lib/points-admin.js';
@@ -44,6 +45,8 @@ export default async function handler(req, res) {
 
   const admin = requirePointsAdmin(req, res);
   if (!admin) return;
+
+  if (pendingApprovalSettings().previewEnabled || process.env.ONCHAIN_CHAIN_ID === '421614' || process.env.VERCEL_GIT_COMMIT_REF === 'onchain-sepolia') return res.status(409).json({error:'use_onchain_admin_refunds'});
 
   if (!isOnchainReady()) {
     return res.status(503).json({

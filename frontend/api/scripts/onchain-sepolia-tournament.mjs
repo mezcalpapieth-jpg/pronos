@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
+import { buildSeasonPreparation, assertPreparedSeasonPlan } from '../_lib/sepolia-season-preparation.js';
 import { execFileSync } from 'node:child_process';
 import { neon } from '@neondatabase/serverless';
 import { ethers } from 'ethers';
@@ -11,7 +12,7 @@ import { fundTournamentBatch } from '../_lib/sepolia-tournament-funding.js';
 async function main() {
   const [command = 'help', ...argv] = process.argv.slice(2);
   const allowed = new Set(['apply', 'expected-host', 'deployment', 'previous-deployment', 'cycle-id',
-    'label', 'starts-at', 'ends-at', 'allocation', 'liquidity-mxnp', 'max-total-mxnp', 'batch-size',
+    'input', 'draft', 'draft-hash', 'label', 'starts-at', 'ends-at', 'allocation', 'liquidity-mxnp', 'max-total-mxnp', 'batch-size',
     'out', 'plan', 'plan-hash', 'retry-reverted', 'late-join-reserve-mxnp']);
   const flags = Object.fromEntries(argv.map(arg => {
     const match = arg.match(/^--([a-z-]+)(?:=(.*))?$/);
@@ -26,6 +27,8 @@ async function main() {
   direct DATABASE_URL/--expected-host. No .env file is loaded automatically.
   Default is read-only. No command deploys contracts or changes runtime settings.
 
+  draft     --input=JSON --out=JSON Offline budget proposal before deployment.
+            No DB, RPC, signer or environment is loaded. Cannot mint or activate.
   schema    Print migration SQL; --apply installs it in the isolated preview DB.
   plan      --deployment=JSON --previous-deployment=JSON --cycle-id=slug --label=...
             --starts-at=ISO --ends-at=ISO --liquidity-mxnp=N --max-total-mxnp=N
@@ -45,6 +48,11 @@ async function main() {
 
   if (command === 'help' || command === '--help') {
     console.log(help);
+  } else if (command === 'draft') {
+    if (flags.apply || !flags.input || !flags.out) throw Error('offline_draft_input_output_required');
+    const draft = buildSeasonPreparation(read(flags.input));
+    fs.writeFileSync(flags.out, JSON.stringify(draft,null,2)+'\n', {mode:0o600,flag:'wx'});
+    output({draftHash:draft.draftHash,totalMxnp:draft.totalMxnp,blockers:draft.blockers,readyToLaunch:false,applied:false});
   } else {
     if (!['schema', 'plan', 'prepare', 'fund', 'status', 'runtime'].includes(command)) throw new Error('unknown_tournament_command');
     const apply = flags.apply === true;
@@ -75,6 +83,10 @@ async function main() {
           allocation: flags.allocation || '500', liquidityMxnp: flags['liquidity-mxnp'], maxTotalMxnp: flags['max-total-mxnp'],
           lateJoinReserveMxnp: flags['late-join-reserve-mxnp'] || '0',
           batchSize: Number(flags['batch-size'] || 50) });
+        if (flags.draft || flags['draft-hash']) {
+          if (!flags.draft || !flags['draft-hash']) throw Error('reviewed_season_draft_required');
+          assertPreparedSeasonPlan(read(flags.draft),flags['draft-hash'],plan);
+        }
         await verifyTournamentDeployment(plan, { provider });
         fs.writeFileSync(flags.out, `${JSON.stringify(plan, null, 2)}\n`, { mode: 0o600, flag: 'wx' });
         output({ ...summarizeTournament(plan), writtenTo: flags.out, applied: false });

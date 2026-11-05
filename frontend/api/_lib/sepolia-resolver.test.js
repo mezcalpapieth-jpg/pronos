@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {PGlite} from '@electric-sql/pglite';
-import {RESOLVER_MIGRATION,runSepoliaResolver,automaticResolutionSupported} from './sepolia-resolver.js';
+import {RESOLVER_MIGRATION,runSepoliaResolver,automaticResolutionSupported,previewSepoliaResolutions,inspectResolutionCandidate} from './sepolia-resolver.js';
 import {preview} from './test-support/sepolia-settlement.mjs';
 const env={...preview,ONCHAIN_RESOLVER_SCHEDULE_ENABLED:'true',VERCEL_GIT_COMMIT_SHA:'a'.repeat(40)};
 const addr=n=>`0x${String(n).repeat(40)}`;
@@ -53,4 +53,26 @@ test('evidence errors defer, while settlement attempts are capped even when all 
   assert.equal(deferred.deferred.length,6);assert.equal(f.calls.length,0);
   const failed=await f.run({settle:async a=>{f.calls.push(a);throw Error('private RPC credentials');}});
   assert.equal(f.calls.length,3);assert.equal(failed.deferred.length,3);assert.doesNotMatch(JSON.stringify(failed),/private RPC/);
+});
+
+test('read-only source inspection works with scheduling off and cannot create runs, leases or requests',async t=>{
+  const f=await fixture(t);await f.seed(1);await f.seed(2,{type:'mananera'});await f.seed(3);
+  const queries=[],sql=async(parts,...values)=>{const query=parts.join('');queries.push(query);assert.match(query,/^\s*SELECT/);return f.sql(parts,...values);};
+  const result=await previewSepoliaResolutions({sql,env:{...env,ONCHAIN_RESOLVER_SCHEDULE_ENABLED:'false'},provider:{getNetwork:async()=>({chainId:421614})},
+    decide:async m=>{if(m.id===3)throw Object.assign(Error('not final'),{benign:true});return {winningIdx:0,finalScore:'2-1'};}});
+  assert.equal(result.transactionsSubmitted,0);assert.equal(result.schedulingEnabled,false);
+  assert.deepEqual(result.candidates.map(m=>m.status),['ready','manual','deferred']);
+  assert.equal((await f.db.query('SELECT count(*) FROM sepolia_resolver_runs')).rows[0].count,0);
+});
+test('unavailable evidence cannot starve later markets across bounded scheduled runs',async t=>{
+  const f=await fixture(t);for(let i=1;i<=27;i++)await f.seed(i,{end:"'2026-01-01T00:00:00Z'::timestamptz"});
+  const decide=async m=>{if(m.id<=25)throw Object.assign(Error('not final'),{benign:true});return {winningIdx:0};};
+  const first=await f.run({decide}),second=await f.run({decide});assert.equal(first.checked,25);assert.equal(first.resolved.length,0);
+  assert.equal(second.checked,2);assert.deepEqual(f.calls.map(c=>c.input.marketId),[26,27]);
+});
+test('inspection handles source timeout and invalid outcomes without signing or exposing provider errors',async()=>{
+  const m={points_id:1,id:1,outcome_count:2,resolver_type:'sports_api',resolver_config:{source:'espn',shape:'binary'}};
+  for(const decide of [async()=>({winningIdx:2}),async()=>{throw Error('private credentials');},()=>new Promise(()=>{})]) {
+    const result=await inspectResolutionCandidate(m,{decide,timeoutMs:5});assert.equal(result.status,'deferred');assert.doesNotMatch(JSON.stringify(result),/private/);
+  }
 });

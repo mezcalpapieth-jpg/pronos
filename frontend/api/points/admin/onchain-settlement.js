@@ -53,8 +53,13 @@ export function createSettlementHandler({ env = process.env, sqlFor = neon,
       const runs = await sql`SELECT status,started_at,completed_at,report FROM sepolia_resolver_runs ORDER BY started_at DESC LIMIT 1`;
       const requests = await sql`SELECT r.request_key, r.action, r.status, r.payload->>'marketId' AS market_id,
           r.payload->>'reason' AS reason, r.payload->'outcome' AS requested_outcome,
-          r.payload->>'origin' AS origin, r.plan->>'actor' AS actor, r.updated_at, r.result,
-          t.tx_hash, t.receipt->>'blockNumber' AS block_number
+          r.payload->>'origin' AS origin, r.payload AS request_payload, r.plan->>'actor' AS actor, r.updated_at, r.result,
+          t.tx_hash, t.receipt->>'blockNumber' AS block_number,
+          (r.action='admin_cancel_refund' AND jsonb_array_length(COALESCE(r.plan->'review'->'refunds','[]'::jsonb))>0
+            AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(r.plan->'review'->'refunds') expected WHERE
+              (SELECT count(*) FROM redemptions d WHERE d.market_id=(r.plan->'review'->>'protocolMarketId')::integer
+                AND d.tx_hash=t.tx_hash AND LOWER(d.user_address)=expected->>'holder'
+                AND d.outcome_index IS NULL AND d.shares=0 AND d.payout*1000000=(expected->>'payout')::numeric)<>1)) AS refunds_indexed
         FROM sepolia_trade_requests r LEFT JOIN sepolia_trade_transactions t ON t.request_id=r.id AND t.step='trade'
         WHERE r.chain_id=421614 AND r.action LIKE 'admin_%'
         ORDER BY (r.status IN ('created','validated','pending','needs_reconciliation')) DESC, r.created_at DESC LIMIT 51`;
@@ -62,15 +67,19 @@ export function createSettlementHandler({ env = process.env, sqlFor = neon,
         latest:runs[0]?{status:runs[0].status,startedAt:runs[0].started_at,completedAt:runs[0].completed_at,report:runs[0].report}:null}, markets, marketsTruncated: rows.length>200,
         requestsTruncated: requests.length>50, requests: requests.slice(0,50).map(r => {
           const m = markets.find(m => m.id === Number(r.market_id)), result = r.result;
-          const expected = { resolve:'resolved',correct_resolution:'resolved',cancel:'canceled',dispute:'disputed',clear_dispute:'resolved' }[r.action.slice(6)];
+          const expected = { resolve:'resolved',correct_resolution:'resolved',cancel:'canceled',dispute:'disputed',clear_dispute:'resolved',cancel_refund:'canceled' }[r.action.slice(6)];
           const indexed = r.status === 'confirmed' && m?.settlementReady && m.status === expected
             && r.block_number != null && Number(m.indexedBlock) >= Number(r.block_number)
-            && (!['resolve','correct_resolution'].includes(r.action.slice(6)) || m.outcome === result?.outcome);
+            && (!['resolve','correct_resolution'].includes(r.action.slice(6)) || m.outcome === result?.outcome)
+            && (r.action!=='admin_cancel_refund' || r.refunds_indexed===true);
           return { requestId:r.request_key, marketId:Number(r.market_id), action:r.action.slice(6), status:r.status,
-            input:{ marketId:Number(r.market_id),action:r.action.slice(6),outcome:r.requested_outcome,reason:r.reason },
+            input:r.action==='admin_cancel_refund'?{marketId:Number(r.market_id),action:'cancel_refund',holders:r.request_payload?.holders,
+              blockNumber:r.request_payload?.blockNumber,blockHash:r.request_payload?.blockHash,planHash:r.request_payload?.planHash,reason:r.reason}
+              :{ marketId:Number(r.market_id),action:r.action.slice(6),outcome:r.requested_outcome,reason:r.reason },
             origin:r.origin, actor:r.actor, updatedAt:r.updated_at, txHash:r.tx_hash, blockNumber:r.block_number,
             awaitingIndexing:r.status==='confirmed' && (!m?.settlementReady || r.block_number==null
-              || m.indexedBlock==null || Number(m.indexedBlock)<Number(r.block_number)),
+              || m.indexedBlock==null || Number(m.indexedBlock)<Number(r.block_number)
+              || (r.action==='admin_cancel_refund' && r.refunds_indexed!==true)),
             indexingStatus:indexed?'indexed':'pending_or_superseded' };
         }) });
     } catch (error) {

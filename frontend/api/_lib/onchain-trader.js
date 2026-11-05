@@ -1330,15 +1330,15 @@ function normalizeCancelRefund(refund) {
       if (!Number.isInteger(n) || n < 0 || n > 255) throw new Error('invalid_refund_outcome');
       return n;
     }),
-    burnAmounts: amounts.map(parseCollateralUnits),
-    payout: parseCollateralUnits(payout),
+    burnAmounts: amounts.map(value => ethers.utils.parseUnits(String(value), COLLATERAL_DECIMALS)),
+    payout: ethers.utils.parseUnits(String(payout), COLLATERAL_DECIMALS),
   };
 }
 
 export async function pushCancelRefundsOnChain({
   ownerSuborgId, ownerAddr,
   factoryAddress, factoryVariant,
-  marketId, refunds,
+  marketId, refunds, execution,
 }) {
   requireReady();
   if (!ownerSuborgId) throw new Error('ownerSuborgId required');
@@ -1348,7 +1348,7 @@ export async function pushCancelRefundsOnChain({
 
   const abi = factoryAbiForVariant(factoryVariant);
   const iface = new ethers.utils.Interface(abi);
-  await requireFactoryOwner({ factoryAddress, abi, ownerAddr });
+  if (!execution?.receipt) await requireFactoryOwner({ factoryAddress, abi, ownerAddr });
 
   const marketIdBn = parseMarketId(marketId);
   const normalized = refunds.map(normalizeCancelRefund);
@@ -1365,7 +1365,7 @@ export async function pushCancelRefundsOnChain({
   ]);
 
   try {
-    await simulateContractCall(provider(), { from: ownerAddr, to: factoryAddress, data }, iface, 'pushCancelRefund');
+    if (!execution?.receipt) await simulateContractCall(provider(), { from: ownerAddr, to: factoryAddress, data }, iface, 'pushCancelRefund');
   } catch (e) {
     const err = new Error('factory_cancel_refund_simulation_failed');
     err.status = 400;
@@ -1373,12 +1373,13 @@ export async function pushCancelRefundsOnChain({
     throw err;
   }
 
-  const receipt = await signAndBroadcast({
+  const receipt = execution?.receipt || await signAndBroadcast({
+    execution,
     suborgId: ownerSuborgId,
     from: ownerAddr,
     to: factoryAddress,
     data,
-    gasLimit: ethers.BigNumber.from(250_000 + (normalized.length * 120_000)),
+    gasLimit: ethers.BigNumber.from(250_000 + (normalized.length * 120_000) + normalized.reduce((sum, r) => sum + r.burnAmounts.length * 35_000, 0)),
   });
 
   return {

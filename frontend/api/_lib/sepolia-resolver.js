@@ -25,6 +25,47 @@ export function automaticResolutionSupported(m) {
   // this initial scheduler. Adding a shared reader does not authorize automation.
   return ['chainlink_price','api_price','weather_api'].includes(m.resolver_type);
 }
+async function resolutionCandidates(sql,env,cursor=null) {
+  return await sql`SELECT p.id AS points_id,p.parent_id,p.amm_mode,
+          m.id,m.question,m.start_time,m.end_time,m.resolver_type,m.resolver_config,m.outcomes,
+          m.outcome_count,m.protocol_version,m.market_id,m.factory_address,m.sport,m.league,
+          pm.source_data AS pending_source_data
+        FROM protocol_markets m JOIN points_markets p ON p.chain_id=m.chain_id AND p.mode='onchain'
+          AND LOWER(p.chain_address)=LOWER(m.pool_address) AND p.chain_market_id::text=m.market_id::text
+        LEFT JOIN LATERAL (SELECT source_data FROM points_pending_markets WHERE approved_market_id=p.id ORDER BY id DESC LIMIT 1) pm ON true
+        WHERE m.chain_id=421614 AND m.status='active' AND p.parent_id IS NULL
+          AND LOWER(m.factory_address)=ANY(${settlementSettings(env).factories}::text[])
+          AND m.end_time IS NOT NULL AND m.end_time<now()
+        AND (${cursor?.endTime || null}::timestamptz IS NULL OR (m.end_time,m.id)>(${cursor?.endTime || null}::timestamptz,${cursor?.marketId || 0}))
+        ORDER BY m.end_time,m.id LIMIT 25`;
+}
+export async function inspectResolutionCandidate(m,{sql,decide=resolveAutoResolverCandidate,now=()=>Date.now(),timeoutMs=15000}={}) {
+  if(!automaticResolutionSupported(m))return {marketId:Number(m.points_id),status:'manual',reason:'manual_resolution_required'};
+  let timer;
+  try {
+    const decision=await Promise.race([decide(m,{sql}),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('source_timeout')),timeoutMs);})]);
+    const outcome=decision.winningIdx;
+    if(!Number.isInteger(outcome)||outcome<0||outcome>=Number(m.outcome_count))throw Error('invalid_source_outcome');
+    return {marketId:Number(m.points_id),status:'ready',input:{marketId:Number(m.points_id),action:'resolve',outcome,reason:'Scheduled verified source resolution'},
+      key:`auto_${tradePayloadHash({marketId:m.id,factory:m.factory_address,contractId:String(m.market_id),outcome})}`,
+      expectedSourceHash:settlementSourceHash(m),evidence:{resolverType:m.resolver_type,observedAt:new Date(now()).toISOString(),
+        finalScore:decision.finalScore||null,resolverInfo:decision.resolverInfo||null}};
+  }catch(error){return {marketId:Number(m.points_id),status:'deferred',reason:error.benign?'evidence_not_ready_or_review_required':'source_or_settlement_unavailable'};}
+  finally{clearTimeout(timer);}
+}
+// Read-only inspection also works while scheduling is disabled. It never takes
+// a signing lease, writes a run/request, or receives signer credentials.
+export async function previewSepoliaResolutions({sql,provider,env,decide,now=()=>Date.now(),timeoutMs=15000}) {
+  if(!resolverSettings(env).configured)throw Error('resolver_isolation_failed');
+  if(Number((await provider.getNetwork()).chainId)!==421614)throw Error('resolver_wrong_chain');
+  const candidates=await resolutionCandidates(sql,env),results=[],deadline=now()+60000;
+  for(const m of candidates.slice(0,5)) {
+    if(now()>=deadline)break;
+    results.push(await inspectResolutionCandidate(m,{sql,decide,now,timeoutMs}));
+  }
+  return {mode:'read_only',schedulingEnabled:resolverSettings(env).enabled,checked:results.length,truncated:candidates.length>results.length,
+    candidates:results,transactionsSubmitted:0};
+}
 export async function runSepoliaResolver({ sql, provider, env, sign, now = () => Date.now(),
   decide = resolveAutoResolverCandidate, settle = settleOnchainMarket }) {
   const settings = resolverSettings(env);
@@ -64,39 +105,22 @@ export async function runSepoliaResolver({ sql, provider, env, sign, now = () =>
       if (report.pending.length) break;
     }
     if (!report.pending.length && attempts<3 && now()<deadline) {
-      const candidates = await sql`SELECT p.id AS points_id,p.parent_id,p.amm_mode,
-          m.id,m.question,m.start_time,m.end_time,m.resolver_type,m.resolver_config,m.outcomes,
-          m.outcome_count,m.protocol_version,m.market_id,m.factory_address,m.sport,m.league,
-          pm.source_data AS pending_source_data
-        FROM protocol_markets m JOIN points_markets p ON p.chain_id=m.chain_id AND p.mode='onchain'
-          AND LOWER(p.chain_address)=LOWER(m.pool_address) AND p.chain_market_id::text=m.market_id::text
-        LEFT JOIN LATERAL (SELECT source_data FROM points_pending_markets WHERE approved_market_id=p.id ORDER BY id DESC LIMIT 1) pm ON true
-        WHERE m.chain_id=421614 AND m.status='active' AND p.parent_id IS NULL
-          AND LOWER(m.factory_address)=ANY(${settlementSettings(env).factories}::text[])
-          AND m.end_time IS NOT NULL AND m.end_time<now()
-        ORDER BY m.end_time,m.id LIMIT 25`;
+      const [last]=await sql`SELECT report->'cursor' AS cursor FROM sepolia_resolver_runs WHERE status='ok' AND report ? 'cursor' ORDER BY completed_at DESC LIMIT 1`;
+      let candidates=await resolutionCandidates(sql,env,last?.cursor);
+      if(!candidates.length && last?.cursor)candidates=await resolutionCandidates(sql,env);
       const seen = new Set();
       for (const m of candidates) {
         if (now()>=deadline || attempts>=3) break;
         if (seen.has(m.id)) continue;
         seen.add(m.id); report.checked++;
-        if (!automaticResolutionSupported(m)) { report.deferred.push({marketId:m.points_id,reason:'manual_resolution_required'}); continue; }
-        let timer;
+        report.cursor={endTime:new Date(m.end_time).toISOString(),marketId:Number(m.id)};
+        const review=await inspectResolutionCandidate(m,{sql,decide,now});
+        if(review.status!=='ready') {report.deferred.push({marketId:review.marketId,reason:review.reason});continue;}
         try {
-          const decision = await Promise.race([decide(m,{sql}),new Promise((_,reject)=>{
-            timer=setTimeout(()=>reject(Error('source_timeout')),15000);
-          })]);
-          const outcome = decision.winningIdx;
-          if (!Number.isInteger(outcome) || outcome<0 || outcome>=Number(m.outcome_count)) throw Error('invalid_source_outcome');
-          const input = { marketId:Number(m.points_id),action:'resolve',outcome,reason:'Scheduled verified source resolution' };
-          const key = `auto_${tradePayloadHash({marketId:m.id,factory:m.factory_address,contractId:String(m.market_id),outcome})}`;
-          await submit(input,key,{expectedSourceHash:settlementSourceHash(m),evidence:{
-            resolverType:m.resolver_type,observedAt:new Date(now()).toISOString(),
-            finalScore:decision.finalScore || null,resolverInfo:decision.resolverInfo || null}});
-          if (report.pending.length) break;
-        } catch (error) {
-          report.deferred.push({marketId:m.points_id,reason:error.benign?'evidence_not_ready_or_review_required':'source_or_settlement_unavailable'});
-        } finally { clearTimeout(timer); }
+          await submit(review.input,review.key,{expectedSourceHash:review.expectedSourceHash,evidence:review.evidence});
+          if(report.pending.length)break;
+        }catch {report.deferred.push({marketId:review.marketId,reason:'source_or_settlement_unavailable'});}
+
       }
     }
     await sql`UPDATE sepolia_resolver_runs SET status='ok',completed_at=now(),report=${JSON.stringify(report)}::jsonb WHERE id=${id}::uuid`;

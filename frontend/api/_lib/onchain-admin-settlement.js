@@ -10,7 +10,7 @@ export const SETTLEMENT_ACTIONS = ['resolve', 'cancel', 'dispute', 'clear_disput
 export const SETTLEMENT_MIGRATION = [
   `ALTER TABLE sepolia_trade_requests DROP CONSTRAINT sepolia_trade_requests_action_check`,
   `ALTER TABLE sepolia_trade_requests ADD CONSTRAINT sepolia_trade_requests_action_check
-    CHECK (action IN ('buy','sell','redeem','admin_resolve','admin_cancel','admin_dispute','admin_clear_dispute','admin_correct_resolution'))`,
+    CHECK (action IN ('buy','sell','redeem','admin_resolve','admin_cancel','admin_dispute','admin_clear_dispute','admin_correct_resolution','admin_cancel_refund'))`,
 ];
 const address = a => ethers.utils.isAddress(a || '') && a.toLowerCase() !== ethers.constants.AddressZero ? a.toLowerCase() : null;
 const events = new ethers.utils.Interface([

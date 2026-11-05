@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { reviewFixture } from './sepolia-tournament-review-test-fixture.js';
 import { planHash } from './sepolia-tournament.js';
 import { addr,hash } from './sepolia-tournament-test-fixture.js';
+import {tournamentMarketRegistry} from './sepolia-tournament-snapshot.js';
 import { buildStandingsPolicy,runStandingsTick,validateStandingsPolicy } from './sepolia-tournament-automation.js';
 import { standingsAutomationStore } from './sepolia-tournament-automation-store.js';
 import { buildTournamentProvisionalScores } from './sepolia-tournament-provisional.js';
@@ -148,5 +149,23 @@ test('deadline pauses resume safely and the reviewed confirmation depth must sti
     assert.equal(await tournamentProvisionalStore(f.sql).read(f.plan.cycleId),null);
     f.options.provider.getBlockNumber=async()=>211;
     assert.equal((await tick(f,{policy,reviewedPolicyHash:policy.policyHash})).status,'published');
+  } finally {await f.db.close();}
+});
+
+test('reviewed mid-season revisions append markets and preserve all prior market rules and creation proofs',async()=>{
+  const {appendStandingsMarkets}=await import('./sepolia-tournament-automation.js');
+  const f=await reviewFixture();
+  try {
+    const previous=policyFor(f),registry=structuredClone(f.input.registry),context=structuredClone(f.context);
+    registry.markets.push({factory:addr(2),pool:addr(42),marketId:'1',creationTxHash:hash(900),creationLogIndex:0});
+    context.markets.push({pool:addr(42),pointsMarketId:12,exposureGroupId:12,startsAt:null,touchMarket:false});
+    const revise=(r=registry,c=context)=>appendStandingsMarkets({previous,reviewedPreviousHash:previous.policyHash,previousContext:f.context,
+      registry:r,context:c,reviewedRegistryHash:planHash(tournamentMarketRegistry(r)),reviewedContextHash:planHash(c),reason:'Approved new mid-season market'});
+    const next=revise();assert.equal(next.previousPolicyHash,previous.policyHash);assert.equal(next.registry.markets.length,3);assert.equal(next.fromBlock,previous.fromBlock);
+    const changedRegistry=structuredClone(registry);changedRegistry.markets[0].creationTxHash=hash(901);assert.throws(()=>revise(changedRegistry),/existing_standings_market_changed/);
+    const changedContext=structuredClone(context);changedContext.markets[0].touchMarket=true;assert.throws(()=>revise(registry,changedContext),/existing_standings_rules_changed/);
+    const dropped=structuredClone(registry);dropped.markets.splice(0,1);assert.throws(()=>revise(dropped),/reviewed|append_only/);
+    const duplicate=structuredClone(registry);duplicate.markets.push({...registry.markets[2]});assert.throws(()=>revise(duplicate),/reviewed|duplicate/);
+    const changedWindow={...context,operationCloseAt:'2090-01-01T00:00:00Z'};assert.throws(()=>revise(registry,changedWindow),/window_changed/);
   } finally {await f.db.close();}
 });

@@ -26,3 +26,10 @@ the environment flag alone cannot activate a standby package: activation needs a
 new release prepared with `--policy` and `--reviewed-policy-hash` after review.
 Keep the database URL restricted to `sepolia_standings` on the isolated preview
 endpoint. Use a fresh worker-only cron secret and no signing credentials.
+
+For a funded future cycle, `onchain-sepolia-automation.mjs --mode=discover`
+can produce a read-only registry proposal from complete indexed mappings and
+canonical creation receipts. Mid-season policies can append reviewed markets
+using the previous policy/context hashes; prior proofs and rules stay fixed.
+Neither operation activates this worker. See the [November implementation report](../../docs/onchain-sepolia-roadmap-implementation-2026-11-05.md)
+for the preparation sequence and local acceptance runner.
