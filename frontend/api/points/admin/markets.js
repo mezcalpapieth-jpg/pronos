@@ -14,9 +14,8 @@ import { formatPointsResolutionCandidate } from '../../_lib/points-resolution-ca
 import { PRONOS_TREASURY_USERNAME } from '../../_lib/points-limit-orders.js';
 import { pointsResolverReadiness } from '../../_lib/points-resolver-readiness.js';
 import { ADMIN_SEARCH_MARKS, parseAdminMarketSearch } from '../../_lib/points-admin-market-search.js';
-
-const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
-const schemaSql = neon(process.env.DATABASE_URL);
+import { pendingApprovalSettings } from '../../_lib/onchain-preview-approval.js';
+import { assertSettlementMarket } from '../../_lib/onchain-admin-settlement.js';
 
 function parseJsonb(v, fb) {
   if (Array.isArray(v)) return v;
@@ -51,12 +50,27 @@ function publicSeriesMetaFromRow(row) {
   };
 }
 
-export default async function handler(req, res) {
+function indexedResolutionStatus(row, env) {
+  if (row.mapping_count == null) return { indexedStatus: null, issue: 'missing_mapping' };
+  if (row.mapping_count > 1) return { indexedStatus: null, issue: 'ambiguous_mapping' };
+  const indexedStatus = row.indexed_status;
+  try {
+    assertSettlementMarket({ ...row, points_chain_id: row.chain_id }, env);
+  } catch (error) {
+    return { indexedStatus, issue: error.message === 'onchain_parallel_settlement_requires_review'
+      ? 'parallel_market' : 'unsupported_mapping' };
+  }
+  return { indexedStatus, issue: indexedStatus === 'active' && row.indexed_end_time ? null : 'indexed_status_unavailable' };
+}
+
+export async function listAdminMarkets(req, res, {
+  env = process.env, sqlFor = neon, ensureSchema = ensurePointsSchema, adminFor = requirePointsAdmin,
+} = {}) {
   const cors = applyCors(req, res, { methods: 'GET, OPTIONS', credentials: true });
   if (cors) return cors;
   if (req.method !== 'GET') return res.status(405).json({ error: 'method_not_allowed' });
 
-  const admin = requirePointsAdmin(req, res);
+  const admin = adminFor(req, res);
   if (!admin) return;
 
   const filter = ['all', 'active', 'pending', 'resolved', 'canceled', 'archived'].includes(req.query.status) ? req.query.status : 'all';
@@ -91,13 +105,16 @@ export default async function handler(req, res) {
   const chainIdFilter = Number.isFinite(Number(chainIdRaw)) && Number(chainIdRaw) > 0
     ? Number(chainIdRaw)
     : null;
+  const sepoliaQueue = filter === 'pending' && modeFilter === 'onchain' && chainIdFilter === 421614
+    && pendingApprovalSettings(env).previewEnabled;
   // By default we hide archived (soft-deleted) rows from the admin
   // lists too — they only surface on the explicit `status=archived`
   // tab or when `show_archived=1`.
   const showArchived = req.query.show_archived === '1' || filter === 'archived';
 
   try {
-    await ensurePointsSchema(schemaSql);
+    const sql = sqlFor(env.DATABASE_READ_URL || env.DATABASE_URL);
+    await ensureSchema(sqlFor(env.DATABASE_URL));
     // Parallel legs (parent_id IS NOT NULL) are implicit children of
     // their parent — hiding them here keeps the admin table uncluttered
     // for markets with many outcomes. Admin resolves the parent; the
@@ -235,6 +252,8 @@ export default async function handler(req, res) {
         LIMIT 2000
       `;
     } else if (filter === 'pending') {
+      // Require the whole Points ↔ pool identity. A contract ID can repeat
+      // across factories, and an ambiguous match must stay visible for review.
       rows = await sql`
         SELECT
           m.id,
@@ -274,11 +293,27 @@ export default async function handler(req, res) {
           pm.id AS pending_id,
           pm.status AS pending_status,
           pm.source_data AS pending_source_data,
+          ${sepoliaQueue ? sql`indexed.mapping_count, indexed.protocol_id, indexed.protocol_version,
+            indexed.pool_address, indexed.factory_address, indexed.contract_id,
+            indexed.status AS indexed_status, indexed.end_time AS indexed_end_time,` : sql``}
           (SELECT COUNT(*)::int FROM points_trades t WHERE t.market_id = m.id AND t.username <> ${PRONOS_TREASURY_USERNAME}) AS trade_count
         FROM points_markets m
         LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
+        ${sepoliaQueue ? sql`LEFT JOIN LATERAL (
+          SELECT p.id AS protocol_id, p.protocol_version, p.pool_address, p.factory_address,
+            p.market_id AS contract_id, p.status, p.end_time, COUNT(*) OVER ()::int AS mapping_count
+          FROM protocol_markets p
+          WHERE p.chain_id = m.chain_id AND p.market_id = m.chain_market_id
+            AND LOWER(p.pool_address) = LOWER(m.chain_address)
+          LIMIT 1
+        ) indexed ON TRUE` : sql``}
         WHERE m.status = 'active'
           AND m.parent_id IS NULL
+          AND ${sepoliaQueue ? sql`(
+            indexed.mapping_count IS DISTINCT FROM 1
+            OR COALESCE(indexed.status NOT IN ('resolved', 'canceled', 'disputed')
+              AND (indexed.status <> 'active' OR indexed.end_time <= NOW()), TRUE)
+          )` : sql`TRUE`}
           AND (
             m.end_time <= NOW()
             OR (${modeFilter}::text = 'points' AND EXISTS (
@@ -421,7 +456,7 @@ export default async function handler(req, res) {
     }
 
     const candidateByMarket = new Map();
-    if (filteredRows.length > 0) {
+    if (!sepoliaQueue && filteredRows.length > 0) {
       const ids = filteredRows.map(r => Number(r.id)).filter(Number.isInteger);
       const candidateRows = await sql.query(
         `SELECT *
@@ -495,8 +530,9 @@ export default async function handler(req, res) {
         ...(r.mode === 'points' ? { resolutionReadiness: pointsResolverReadiness({ ...r, resolver_config: parseJsonb(r.resolver_config, {}) }) } : {}),
         mode: r.mode || 'points',
         chainId: r.chain_id || null,
-        chainMarketId: r.chain_market_id ? String(r.chain_market_id) : null,
+        chainMarketId: r.chain_market_id == null ? null : String(r.chain_market_id),
         chainAddress: r.chain_address || null,
+        ...(sepoliaQueue ? { onchainResolution: indexedResolutionStatus(r, env) } : {}),
         sport: r.sport || null,
         league: r.league || null,
         archivedAt: r.archived_at || null,
@@ -520,4 +556,8 @@ export default async function handler(req, res) {
     console.error('[admin/markets] error', { message: e?.message, code: e?.code });
     return res.status(500).json({ error: 'list_failed' });
   }
+}
+
+export default function handler(req, res) {
+  return listAdminMarkets(req, res);
 }

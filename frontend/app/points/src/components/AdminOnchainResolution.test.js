@@ -13,8 +13,19 @@ const { outputFiles } = buildSync({
 });
 const compiled = { exports: {} };
 new Function('require', 'module', 'exports', outputFiles[0].text)(
-  name => name === 'react' ? React : {}, compiled, compiled.exports,
+  name => name === 'react' ? React : { usePointsAuth: () => ({ user: { username: 'admin' } }) }, compiled, compiled.exports,
 );
+
+test('unlinked Sepolia markets show the review flag without settlement controls', () => {
+  const { renderToStaticMarkup } = require('react-dom/server');
+  const html = renderToStaticMarkup(React.createElement(compiled.exports.default, {
+    market: { id: 42, chainMarketId: '0', onchainResolution: { indexedStatus: null, issue: 'missing_mapping' } },
+  }));
+  assert.match(html, /Revisión onchain requerida/);
+  assert.match(html, /no encontró un pool/);
+  assert.match(html, /ID 0/);
+  assert.doesNotMatch(html, /Consultar evidencia|Confirmar resolución/);
+});
 
 test('Sepolia resolution shows evidence and claims, blocks a shortfall, and reuses the confirmed intent on retry', async t => {
   const { window, document } = parseHTML('<html><body><div id="root"></div></body></html>');

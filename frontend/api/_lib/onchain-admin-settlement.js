@@ -51,12 +51,13 @@ export function settlementInput(body) {
 }
 export function assertSettlementMarket(m, env) {
   const settings = settlementSettings(env), variant = m?.protocol_version;
+  const factory = address(m?.factory_address);
   if (!m || m.mode !== 'onchain' || Number(m.points_chain_id) !== 421614 || Number(m.chain_id) !== 421614
     || !['v1','v2'].includes(variant) || m.protocol_id == null
     || !address(m.pool_address) || address(m.chain_address) !== address(m.pool_address)
     || m.chain_market_id == null || !/^(0|[1-9]\d*)$/.test(String(m.contract_id))
     || String(m.chain_market_id) !== String(m.contract_id)
-    || address(m.factory_address) !== settings.factories[variant === 'v2' ? 1 : 0]) throw tradeError('settlement_market_mapping_unavailable', 409);
+    || !factory || factory !== settings.factories[variant === 'v2' ? 1 : 0]) throw tradeError('settlement_market_mapping_unavailable', 409);
   if (m.parent_id || m.amm_mode === 'parallel') throw tradeError('onchain_parallel_settlement_requires_review', 409);
   return m;
 }

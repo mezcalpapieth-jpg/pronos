@@ -151,6 +151,7 @@ export function adminMarketStatus(row, proposal = false) {
   if (row.archivedAt) return ['Archivado', 'neutral'];
   if (row.status === 'resolved') return ['Resuelto', 'success'];
   if (row.status === 'canceled') return ['Anulado', 'neutral'];
+  if (row.onchainResolution) return [row.onchainResolution.issue ? 'Revisión onchain' : 'Cerrado en Sepolia', 'warning'];
   if (row.resolutionCandidate) return ['Propuesta para revisar', 'success'];
   if (row.endTime && new Date(row.endTime).getTime() <= Date.now()) return ['Cerrado · sin propuesta', 'warning'];
   if (row.startTime && new Date(row.startTime).getTime() > Date.now()) return ['Programado', 'neutral'];

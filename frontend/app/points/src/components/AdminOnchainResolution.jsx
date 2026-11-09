@@ -13,6 +13,14 @@ const errorMessages = {
   resolver_isolation_failed: 'La liquidación está desactivada en este preview.',
 };
 
+const queueIssues = {
+  missing_mapping: 'El indexador no encontró un pool que coincida con la dirección y el ID de este mercado.',
+  ambiguous_mapping: 'Más de un pool indexado coincide con este mercado. Verifica cuál es el correcto.',
+  unsupported_mapping: 'El pool vinculado no coincide con una fábrica o versión configurada para liquidar en Sepolia.',
+  parallel_market: 'Este mercado tiene varios pools y requiere una revisión de liquidación por separado.',
+  indexed_status_unavailable: 'El estado o la fecha de cierre indexados no permiten revisar la resolución.',
+};
+
 export function OnchainResolutionReview({ market, owner, onSettled, api = { getJson, postJson },
   storage = globalThis.localStorage, confirm = message => window.confirm(message) }) {
   const key = settlementStorageKey(owner);
@@ -135,6 +143,18 @@ export function OnchainResolutionReview({ market, owner, onSettled, api = { getJ
 
 export default function AdminOnchainResolution({ market, onSettled }) {
   const { user } = usePointsAuth();
+  const indexed = market.onchainResolution;
+  if (indexed?.indexedStatus !== 'active' || indexed.issue) {
+    return <section aria-label="Revisión del vínculo onchain">
+      <h3>Revisión onchain requerida</h3>
+      <p className="pb-admin-message" role="status">
+        {queueIssues[indexed?.issue] || 'El estado indexado no está disponible. Actualiza la lista antes de continuar.'}
+      </p>
+      {(market.chainAddress || market.chainMarketId != null) && <p>
+        Pool registrado <code>{market.chainAddress || 'sin dirección'}</code> · ID {market.chainMarketId ?? 'sin ID'}
+      </p>}
+    </section>;
+  }
   const owner = `${user?.suborgId || ''}:${user?.username || ''}`;
   return <OnchainResolutionReview key={`${owner}:${market.id}`} market={market} owner={owner} onSettled={onSettled} />;
 }
