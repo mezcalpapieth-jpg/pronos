@@ -403,7 +403,7 @@ function Shell({ onOpenLogin, isAdmin }) {
     <>
       {isHome && execution.mode !== 'onchain' && <PointsTicker />}
       {execution.mode !== 'onchain' && path.startsWith('/stocks') && <Suspense fallback={null}><StockLiveTicker /></Suspense>}
-      {!isAdminWorkspace && <PointsNav onOpenLogin={onOpenLogin} isAdmin={isAdmin} />}
+      <PointsNav onOpenLogin={onOpenLogin} isAdmin={isAdmin} isAdminWorkspace={isAdminWorkspace} />
       <PendingTradeNotice />
       {showCategoryBar && <PointsCategoryBar />}
       {!isAdminWorkspace && execution.mode !== 'onchain' && <TournamentExtensionBanner />}

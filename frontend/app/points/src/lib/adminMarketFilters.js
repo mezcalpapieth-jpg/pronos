@@ -1,6 +1,6 @@
 export const CATEGORIES = [
   { key: 'general',  label: 'General' },
-  { key: 'mexico',   label: 'Mexico & Latam' },
+  { key: 'mexico',   label: 'México y Latam' },
   { key: 'politica', label: 'Política' },
   { key: 'deportes', label: 'Deportes' },
   { key: 'finanzas', label: 'Finanzas' },
@@ -10,15 +10,24 @@ export const CATEGORIES = [
   { key: 'world-cup', label: 'Nuevos mercados' },
 ];
 
+const MARKET_CATEGORIES = [
+  ...CATEGORIES,
+  { key: 'infraestructura', label: 'Infraestructura' },
+];
+
 export const MARKET_CATEGORY_FILTERS = [
   { key: 'all', label: 'Todas' },
-  ...CATEGORIES,
+  ...MARKET_CATEGORIES.filter(({ key }) => key !== 'general' && key !== 'world-cup'),
 ];
+
+export function adminMarketCategoryLabel(key) {
+  return MARKET_CATEGORIES.find(category => category.key === key)?.label;
+}
 
 export const ADMIN_SPORT_FILTERS = [
   { key: 'all', label: 'Todos' },
-  { key: 'soccer', label: 'Futbol' },
-  { key: 'baseball', label: 'Beisbol' },
+  { key: 'soccer', label: 'Fútbol' },
+  { key: 'baseball', label: 'Béisbol' },
   { key: 'nba', label: 'NBA' },
   { key: 'nfl', label: 'NFL' },
   { key: 'ncaaf', label: 'NCAAF' },
@@ -106,6 +115,13 @@ export const ADMIN_ENTERTAINMENT_TOPIC_FILTERS = [
   { key: 'farandula', label: 'Farándula' },
 ];
 
+export const ADMIN_INFRASTRUCTURE_TOPIC_FILTERS = [
+  { key: 'all', label: 'Todas' },
+  { key: 'aeropuertos', label: 'Aeropuertos' },
+  { key: 'trafico', label: 'Tráfico' },
+  { key: 'movilidad', label: 'Movilidad' },
+];
+
 export const MARKET_CREATION_TOPIC_OPTIONS = [
   { key: 'general', label: 'General' },
   { key: 'politica', label: 'Política' },
@@ -140,7 +156,7 @@ export function buildAdminMarketsQuery({
     return q;
   }
 
-  if (categoryFilter === 'musica') {
+  if (categoryFilter === 'musica' || categoryFilter === 'infraestructura') {
     if (topicFilter !== 'all') q.set('topic', topicFilter);
     return q;
   }

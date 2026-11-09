@@ -16,7 +16,7 @@ import { approvalIssueLabels, ProposalApproval, ResolverStatus, SettlementReview
  * Auth: the backend enforces `POINTS_ADMIN_USERNAMES`. The UI hides the
  * nav link for non-admins but the endpoints would 403 anyway.
  */
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import DeckAdminPanel from '../components/DeckAdminPanel.jsx';
 import MarketLiquidityPanel from '../components/MarketLiquidityPanel.jsx';
@@ -54,7 +54,6 @@ import {
   adminEditPendingMarket,
   adminRefreshPendingPricing,
   adminRefreshAllPendingPricing,
-  adminListSupportTickets,
   adminReplySupportTicket,
   adminSetSupportTicketStatus,
   adminApproveAllPendingMarkets,
@@ -73,6 +72,7 @@ import {
   adminBlockApiUser,
   adminUnblockApiUser,
 } from '../lib/pointsApi.js';
+import { normalizeSearchText } from '../lib/marketSearch.js';
 import {
   ADMIN_ENTERTAINMENT_TOPIC_FILTERS,
   CATEGORIES,
@@ -82,7 +82,7 @@ import {
   formatAdminMarketDate,
 } from '../lib/adminMarketFilters.js';
 import {
-  AdminMarketFacts, AdminMarketQueue, AdminOverview, AdminQueueToolbar, AdminWorkspace,
+  AdminFilterGroup, AdminMarketFacts, AdminMarketQueue, AdminOverview, AdminQueueToolbar, AdminWorkspace, QueueBadge,
   adminTab, useAdminQueueData, useAdminQueueFilters,
 } from './PointsAdminWorkspace.jsx';
 
@@ -2487,67 +2487,61 @@ function SupportTicketAttachments({ attachments }) {
 // ─── Support tickets queue ─────────────────────────────────────────────────
 function SupportTicketsQueue({ onQueueChange }) {
   const [params, setParams] = useSearchParams();
-  const status = ['open', 'closed', 'all'].includes(params.get('status')) ? params.get('status') : 'open';
+  const status = ['open', 'closed'].includes(params.get('status')) ? params.get('status') : 'all';
   const selectedId = /^[1-9]\d*$/.test(params.get('ticket') || '') ? params.get('ticket') : null;
   const [query, setQuery] = useState('');
-  const [tickets, setTickets] = useState(null);
-  const [ticket, setTicket] = useState(null);
   const [draft, setDraft] = useState('');
   const [working, setWorking] = useState(false);
-  const [listError, setListError] = useState(false);
-  const [detailError, setDetailError] = useState(false);
   const [actionError, setActionError] = useState(null);
-  const [revision, setRevision] = useState(0);
-  const refresh = () => setRevision(count => count + 1);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    setListError(false);
-    adminListSupportTickets(status, { summary: true, signal: controller.signal })
-      .then(result => { if (!controller.signal.aborted) setTickets(result.tickets || []); })
-      .catch(() => { if (!controller.signal.aborted) setListError(true); });
-    return () => controller.abort();
-  }, [status, revision]);
+  const [notice, setNotice] = useState(null);
+  const detail = useRef(null);
+  const focusTarget = useRef(null);
+  const ticketRows = useRef(new Map());
+  const { rows: tickets, error: listError, reload: reloadList } = useAdminQueueData(
+    `/api/points/admin/support-tickets?status=${status}&summary=1`, 'tickets', { keepPrevious: true },
+  );
+  const { rows: details, loading: detailLoading, error: detailError, reload: reloadDetail } = useAdminQueueData(
+    selectedId ? `/api/points/admin/support-tickets?id=${selectedId}` : null, 'tickets', { keepPrevious: true },
+  );
+  const ticket = details?.[0];
+  function refresh() {
+    reloadList();
+    reloadDetail();
+  }
 
   useEffect(() => {
     setDraft('');
     setActionError(null);
+    setNotice(null);
+    if (focusTarget.current === 'detail' && selectedId) detail.current?.focus();
+    if (focusTarget.current && !selectedId) ticketRows.current.get(focusTarget.current)?.focus();
+    focusTarget.current = null;
   }, [selectedId]);
 
-  useEffect(() => {
-    if (!selectedId) return;
-    const controller = new AbortController();
-    setDetailError(false);
-    getJson(`/api/points/admin/support-tickets?id=${selectedId}`, { signal: controller.signal })
-      .then(result => { if (!controller.signal.aborted) setTicket(result.tickets?.[0] || null); })
-      .catch(() => { if (!controller.signal.aborted) setDetailError(true); });
-    return () => controller.abort();
-  }, [selectedId, revision]);
-
   function updateSelection(nextStatus, nextId) {
-    setTicket(null);
-    setDetailError(false);
-    setDraft('');
-    setActionError(null);
-    setParams(prev => {
-      const next = new URLSearchParams(prev);
-      next.set('status', nextStatus);
-      if (nextId) next.set('ticket', nextId);
-      else next.delete('ticket');
-      return next;
-    });
+    if (nextStatus === status && (nextId == null ? selectedId == null : String(nextId) === selectedId)) return;
+    focusTarget.current = nextStatus !== status ? null : nextId ? 'detail' : selectedId;
+    const next = new URLSearchParams(params);
+    if (nextStatus === 'all') next.delete('status');
+    else next.set('status', nextStatus);
+    if (nextId) next.set('ticket', nextId);
+    else next.delete('ticket');
+    setParams(next, { preventScrollReset: true });
   }
 
   async function act(action) {
-    if (!ticket || working) return;
+    if (!ticket || working || detailLoading) return;
     setWorking(true);
     setActionError(null);
+    setNotice(null);
     try {
       if (action === 'reply') {
         await adminReplySupportTicket({ id: ticket.id, message: draft.trim() });
         setDraft('');
+        setNotice(ticket.status === 'closed' ? 'Ticket reabierto y respuesta enviada.' : 'Respuesta enviada.');
       } else {
         await adminSetSupportTicketStatus({ id: ticket.id, status: action });
+        setNotice(action === 'closed' ? 'Ticket cerrado.' : 'Ticket reabierto.');
       }
       refresh();
       onQueueChange?.();
@@ -2558,41 +2552,54 @@ function SupportTicketsQueue({ onQueueChange }) {
     }
   }
 
-  const rows = tickets?.filter(row => `${row.id} ${row.subject} ${row.username}`.toLowerCase().includes(query.trim().toLowerCase()));
+  const search = normalizeSearchText(query);
+  const rows = tickets?.filter(row => normalizeSearchText(`#${row.id} ${row.subject} ${row.username}`).includes(search));
   return (
     <>
-      <div className="pb-admin-toolbar">
-        <div className="pb-admin-statuses">
-          {[['open', 'Abiertos'], ['closed', 'Cerrados'], ['all', 'Todos']].map(([value, label]) => (
-            <button key={value} type="button" aria-pressed={status === value} disabled={working}
-              onClick={() => { if (value !== status) setTickets(null); updateSelection(value, null); }}>{label}</button>
+      <div className="pb-admin-panel pb-admin-toolbar">
+        <div className="pb-admin-statuses" role="group" aria-label="Estado del ticket">
+          {[['all', 'Todos'], ['open', 'Abiertos', 'info'], ['closed', 'Cerrados']].map(([value, label, tone]) => (
+            <button key={value} type="button" data-tone={tone} aria-pressed={status === value} disabled={working}
+              onClick={() => updateSelection(value, null)}>{label}</button>
           ))}
         </div>
-        <label className="pb-admin-field">Buscar en la lista
-          <input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Usuario, asunto o ID" />
-        </label>
+        <div className="pb-admin-filter-row">
+          <label className="pb-admin-field pb-admin-ticket-search">Buscar tickets
+            <input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Usuario, asunto o #ID" />
+          </label>
+          {query && <button type="button" className="pb-admin-button" onClick={() => setQuery('')}>Limpiar búsqueda</button>}
+        </div>
       </div>
       <div className="pb-admin-queue" data-selected={Boolean(selectedId)}>
         <section className="pb-admin-panel pb-admin-list" aria-label="Tickets">
-          <div className="pb-admin-panel-heading"><h2>Tickets</h2></div>
-          {listError ? <p className="pb-admin-message" role="alert">No se pudo cargar la lista. <button className="pb-admin-button" onClick={refresh}>Reintentar</button></p>
+          <div className="pb-admin-panel-heading"><h2>Tickets</h2>
+            {rows && <small role="status">{rows.length}{search ? ` de ${tickets.length}` : ''} en esta vista</small>}
+          </div>
+          {listError ? <p className="pb-admin-message" role="alert">No se pudo cargar la lista. <button className="pb-admin-button" onClick={reloadList}>Reintentar</button></p>
             : !rows ? <p className="pb-admin-message" role="status">Cargando tickets…</p>
-              : rows.length === 0 ? <p className="pb-admin-message">Sin tickets para mostrar.</p>
-                : <div className="pb-admin-list-rows">{rows.map(row => (
-                  <button type="button" key={row.id} className="pb-admin-row pb-admin-ticket-row"
-                    aria-current={String(row.id) === selectedId} disabled={working}
-                    onClick={() => updateSelection(status, row.id)}>
-                    <span><strong>{row.subject}</strong><small>#{row.id} · @{row.username}</small></span>
-                    <small>{row.assignedTo ? `@${row.assignedTo}` : 'Sin asignar'}</small>
-                  </button>
-                ))}</div>}
+              : rows.length === 0 ? <p className="pb-admin-message">{search ? 'No hay tickets que coincidan con la búsqueda.' : 'No hay tickets en esta vista.'}</p>
+                : <div className="pb-admin-list-rows">{rows.map(row => {
+                  const id = String(row.id);
+                  return (
+                    <button type="button" key={id} className="pb-admin-row" aria-pressed={id === selectedId}
+                      aria-controls="pb-admin-ticket-detail" disabled={working}
+                      ref={node => { if (node) ticketRows.current.set(id, node); else ticketRows.current.delete(id); }}
+                      onClick={() => updateSelection(status, id)}>
+                      <span><strong>{row.subject}</strong><small>#{id} · @{row.username}</small>
+                        <small>{row.assignedTo ? `Asignado a @${row.assignedTo}` : 'Sin asignar'}</small>
+                      </span>
+                      <QueueBadge status={row.status === 'open' ? ['Abierto', 'info'] : ['Cerrado', 'neutral']} />
+                    </button>
+                  );
+                })}</div>}
         </section>
-        <section className="pb-admin-detail" aria-label="Detalle del ticket">
+        <section className="pb-admin-detail" id="pb-admin-ticket-detail" ref={detail} tabIndex={-1} aria-label="Detalle del ticket">
           {selectedId && <button type="button" className="pb-admin-button pb-admin-list-back" disabled={working}
             onClick={() => updateSelection(status, null)}>← Volver a la lista</button>}
+          {notice && <p className="pb-admin-message" role="status">{notice}</p>}
           {!selectedId ? <p className="pb-admin-message">Selecciona un ticket para ver la conversación y el seguimiento.</p>
-            : detailError ? <p className="pb-admin-message" role="alert">No se pudo abrir el ticket. <button className="pb-admin-button" onClick={refresh}>Reintentar</button></p>
-              : String(ticket?.id) !== selectedId ? <p className="pb-admin-message" role="status">Cargando ticket…</p>
+            : detailError ? <p className="pb-admin-message" role="alert">No se pudo abrir el ticket. <button className="pb-admin-button" onClick={reloadDetail}>Reintentar</button></p>
+              : !ticket ? <p className="pb-admin-message" role="status">Cargando ticket…</p>
                 : <article className="pb-admin-operation">
                   <header>
                     <h2>{ticket.subject}</h2>
@@ -2617,13 +2624,13 @@ function SupportTicketsQueue({ onQueueChange }) {
                         onChange={event => setDraft(event.target.value)} />
                     </label>
                     <div className="pb-admin-tools">
-                      <button type="submit" className="pb-admin-button pb-admin-primary" disabled={working || draft.trim().length < 2}>Enviar respuesta</button>
-                      <button type="button" className="pb-admin-button" disabled={working}
+                      <button type="submit" className="pb-admin-button pb-admin-primary" disabled={working || detailLoading || draft.trim().length < 2}>{ticket.status === 'closed' ? 'Reabrir y responder' : 'Enviar respuesta'}</button>
+                      <button type="button" className="pb-admin-button" disabled={working || detailLoading}
                         onClick={() => act(ticket.status === 'closed' ? 'open' : 'closed')}>{ticket.status === 'closed' ? 'Reabrir ticket' : 'Cerrar ticket'}</button>
                     </div>
                   </form>
                   {actionError && <p className="pb-admin-error" role="alert">{actionError}</p>}
-                  <AdminCasePanel key={ticket.id} kind="support" subject={ticket.id} onChange={refresh} />
+                  <AdminCasePanel key={ticket.id} kind="support" subject={ticket.id} onChange={reloadList} />
                 </article>}
         </section>
       </div>
@@ -2809,7 +2816,7 @@ function CreateMarketForm({ prefill }) {
   }
 
   function updateCategory(next) {
-    setForm(f => ({
+    setForm(f => f.category === next ? f : ({
       ...f,
       category: next,
       topic: next === 'musica' ? 'musica' : 'general',
@@ -2876,44 +2883,14 @@ function CreateMarketForm({ prefill }) {
         />
       </Field>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-        <Field label="Categoría">
-          <select
-            value={form.category}
-            onChange={e => updateCategory(e.target.value)}
-            style={inputStyle}
-          >
-            {CATEGORIES.map(c => (
-              <option key={c.key} value={c.key}>{c.label}</option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Región">
-          <select
-            value={form.geo}
-            onChange={e => setForm(f => ({ ...f, geo: e.target.value }))}
-            style={inputStyle}
-          >
-            {[{ key: 'auto', label: 'Auto' }, ...MARKET_CREATION_GEO_OPTIONS].map(g => (
-              <option key={g.key} value={g.key}>{g.label}</option>
-            ))}
-          </select>
-        </Field>
+      <div className="pb-admin-create-taxonomy">
+        <AdminFilterGroup label="Categoría" options={CATEGORIES} value={form.category} categories
+          onChange={updateCategory} />
+        <AdminFilterGroup label="Región" options={[{ key: 'auto', label: 'Automática' }, ...MARKET_CREATION_GEO_OPTIONS]}
+          value={form.geo} onChange={geo => setForm(f => ({ ...f, geo }))} />
+        {showTopicField && <AdminFilterGroup label={form.category === 'musica' ? 'Subcategoría' : 'Tema'}
+          options={topicOptions} value={form.topic} onChange={topic => setForm(f => ({ ...f, topic }))} />}
       </div>
-
-      {showTopicField && (
-        <Field label={form.category === 'musica' ? 'Subcategoría' : 'Tema'}>
-          <select
-            value={form.topic}
-            onChange={e => setForm(f => ({ ...f, topic: e.target.value }))}
-            style={inputStyle}
-          >
-            {topicOptions.map(t => (
-              <option key={t.key} value={t.key}>{t.label}</option>
-            ))}
-          </select>
-        </Field>
-      )}
 
       <MarketImageField
         value={form.imageUrl}
@@ -3754,7 +3731,7 @@ function MarketsTable({ onQueueChange }) {
       </AdminQueueToolbar>
 
       {settlementNotice && <p className="pb-admin-message" role="status">{settlementNotice}</p>}
-      <AdminMarketQueue rows={markets} loading={loading} error={error} onRetry={load}>
+      <AdminMarketQueue rows={markets} loading={loading} error={error} onRetry={load} queue={queue}>
         {m => (
         <div key={m.id} className="points-admin-market-card">
           <div className="points-admin-market-main">
@@ -7322,7 +7299,7 @@ function PendingMarketsTable({ onQueueChange }) {
         </div>
       </section>}
 
-      <AdminMarketQueue rows={rows} proposal loading={loading} error={error} onRetry={load}>
+      <AdminMarketQueue rows={rows} proposal loading={loading} error={error} onRetry={load} queue={queue}>
         {r => {
         const isPending = r.status === 'pending';
         const isRejected = r.status === 'rejected';

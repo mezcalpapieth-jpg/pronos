@@ -62,7 +62,7 @@ function getInitialTheme() {
   return 'light';
 }
 
-export default function PointsNav({ onOpenLogin, isAdmin }) {
+export default function PointsNav({ onOpenLogin, isAdmin, isAdminWorkspace }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -87,7 +87,7 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
   // autocomplete dropdown that navigates straight to a market detail.
   // The dropdown is backed by a local cache of titles fetched once the
   // user focuses the input; we filter client-side for instant results.
-  const searchValue = searchParams.get('q') || '';
+  const searchValue = isAdminWorkspace ? '' : searchParams.get('q') || '';
   const [searchCache, setSearchCache] = useState([]);
   const [searchCacheLoaded, setSearchCacheLoaded] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -167,7 +167,7 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
     let cancelled = false;
 
     async function loadAdminTaskTotal() {
-      if (!authenticated || !isAdmin) {
+      if (!authenticated || !isAdmin || isAdminWorkspace) {
         if (!cancelled) setAdminTaskTotal(0);
         return;
       }
@@ -180,14 +180,14 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
     }
 
     loadAdminTaskTotal();
-    const intervalId = authenticated && isAdmin
+    const intervalId = authenticated && isAdmin && !isAdminWorkspace
       ? window.setInterval(loadAdminTaskTotal, 60000)
       : null;
     return () => {
       cancelled = true;
       if (intervalId) window.clearInterval(intervalId);
     };
-  }, [authenticated, isAdmin, dropdownOpen]);
+  }, [authenticated, isAdmin, isAdminWorkspace, dropdownOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -323,7 +323,7 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
           updates ?q=<text> in the URL (for home-page list filtering)
           AND opens an autocomplete dropdown that jumps straight to a
           market detail when a result is clicked. */}
-      <div
+      {!isAdminWorkspace && <div
         className="points-nav-search"
         ref={searchRef}
         style={{
@@ -454,7 +454,7 @@ export default function PointsNav({ onOpenLogin, isAdmin }) {
             )}
           </div>
         )}
-      </div>
+      </div>}
 
       <div className="points-mobile-menu" ref={mobileMenuRef}>
         <button

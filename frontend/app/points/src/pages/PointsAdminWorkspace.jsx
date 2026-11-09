@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   ADMIN_BASEBALL_LEAGUES, ADMIN_COMBATE_LEAGUES, ADMIN_CRYPTO_FILTERS,
-  ADMIN_ENTERTAINMENT_TOPIC_FILTERS, ADMIN_GEO_FILTERS, ADMIN_MEXICO_TOPIC_FILTERS,
-  ADMIN_SOCCER_LEAGUES, ADMIN_SPORT_FILTERS, MARKET_CATEGORY_FILTERS, formatAdminMarketDate,
+  ADMIN_ENTERTAINMENT_TOPIC_FILTERS, ADMIN_GEO_FILTERS, ADMIN_INFRASTRUCTURE_TOPIC_FILTERS, ADMIN_MEXICO_TOPIC_FILTERS,
+  ADMIN_SOCCER_LEAGUES, ADMIN_SPORT_FILTERS, MARKET_CATEGORY_FILTERS, adminMarketCategoryLabel, formatAdminMarketDate,
 } from '../lib/adminMarketFilters.js';
 import { getJson } from '../lib/pointsApi.js';
 import './PointsAdminWorkspace.css';
@@ -14,7 +14,7 @@ const SECTIONS = [
     ['markets', 'Mercados', 'Revisa mercados activos, pendientes de resolución e históricos.'],
     ['pending', 'Por aprobar', 'Revisa las propuestas antes de publicarlas.'],
     ['resolution', 'Por resolver', 'Revisa resultados propuestos y mercados que ya cerraron.'],
-    ['support', 'Soporte'],
+    ['support', 'Soporte', 'Lee las conversaciones y da seguimiento a tickets abiertos y cerrados.'],
   ]],
   ['Usuarios', [
     ['social', 'Tareas sociales'],
@@ -40,6 +40,7 @@ export function adminTab(params) {
 }
 
 const TAB_TITLES = Object.fromEntries(SECTIONS.flatMap(([, items]) => items.map(([id, title]) => [id, title])));
+const SECTION_TONES = ['brand', 'info', 'violet'];
 const TAB_DESCRIPTIONS = Object.fromEntries(SECTIONS.flatMap(([, items]) => items.map(([id, , description]) => [id, description])));
 
 function adminHref(tab) {
@@ -49,55 +50,61 @@ function adminHref(tab) {
 }
 
 export function AdminWorkspace({ tab, username, children }) {
-  const navigate = useNavigate();
+  const [moreSections, setMoreSections] = useState(() =>
+    SECTIONS.slice(1).some(([, items]) => items.some(([id]) => id === tab)));
+  const title = tab === 'overview' ? 'Panel de administración' : TAB_TITLES[tab] || 'Nuevo mercado';
+
   return (
     <div className="pb-admin">
-      <header className="pb-admin-top">
-        <Link to="/admin" className="pb-admin-brand">
-          <span aria-hidden="true">P</span> Pronos <small>Admin</small>
-        </Link>
-        <div className="pb-admin-top-actions">
-          {username && <span className="pb-admin-user">@{username}</span>}
-          <Link to="/" className="pb-admin-public-link">Ver sitio <span aria-hidden="true">↗</span></Link>
-        </div>
-      </header>
       <div className="pb-admin-shell">
-        <nav className="pb-admin-sidebar" aria-label="Administración">
-          {SECTIONS.map(([group, items]) => (
-            <div className="pb-admin-nav-group" key={group}>
-              <span>{group}</span>
-              {items.map(([id, label]) => (
-                <Link key={id} to={adminHref(id)}
-                  aria-current={id === tab ? 'page' : undefined}>
-                  {label}
-                </Link>
-              ))}
-            </div>
-          ))}
-        </nav>
-        <nav className="pb-admin-mobile-nav" aria-label="Administración">
-          <label className="pb-admin-field">
-            <span>Ir a sección</span>
-            <select value={tab} onChange={event => navigate(adminHref(event.target.value))}>
-              {tab === 'create' && <option value="create">Nuevo mercado</option>}
-              {SECTIONS.map(([group, items]) => (
-                <optgroup key={group} label={group}>
-                  {items.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
-                </optgroup>
-              ))}
-            </select>
-          </label>
+        <header className="pb-admin-context">
+          <nav className="pb-admin-breadcrumbs" aria-label="Ruta de navegación">
+            <Link to="/">Inicio de Pronos</Link>
+            <span aria-hidden="true">/</span>
+            {tab === 'overview'
+              ? <span aria-current="page">Administración</span>
+              : <><Link to="/admin">Administración</Link><span aria-hidden="true">/</span><span aria-current="page">{title}</span></>}
+          </nav>
+          {username && <span className="pb-admin-user">@{username}</span>}
+        </header>
+        <nav className="pb-admin-sidebar" aria-label="Secciones de administración">
+          <AdminNavGroup section={SECTIONS[0]} tone={SECTION_TONES[0]} tab={tab} />
+          <button type="button" className="pb-admin-more" aria-controls="pb-admin-secondary-sections" aria-expanded={moreSections}
+            onClick={() => setMoreSections(value => !value)}>
+            Usuarios y administración <span aria-hidden="true">{moreSections ? '−' : '+'}</span>
+          </button>
+          <div id="pb-admin-secondary-sections" className="pb-admin-secondary" data-expanded={moreSections}>
+            {SECTIONS.slice(1).map((section, index) => (
+              <AdminNavGroup key={section[0]} section={section} tone={SECTION_TONES[index + 1]} tab={tab} />
+            ))}
+          </div>
         </nav>
         <main className="pb-admin-main">
           <div className="pb-admin-heading">
             <div>
-              <h1>{TAB_TITLES[tab] || 'Nuevo mercado'}</h1>
-              <p>{tab === 'overview' ? 'Mercados y solicitudes que requieren atención.' : TAB_DESCRIPTIONS[tab]}</p>
+              <h1>{title}</h1>
+              <p>{tab === 'overview' ? 'Revisa lo que requiere atención y abre el catálogo de mercados.' : TAB_DESCRIPTIONS[tab]}</p>
             </div>
             {tab !== 'create' && <Link className="pb-admin-button pb-admin-primary" to="/admin?tab=create">+ Nuevo mercado</Link>}
           </div>
+          {import.meta.env.VITE_VERCEL_ENV === 'preview' && (
+            <p className="pb-admin-preview"><QueueBadge status={['Vista previa', 'info']} /> El catálogo y los tickets pueden diferir de producción.</p>
+          )}
           {children}
         </main>
+      </div>
+    </div>
+  );
+}
+
+function AdminNavGroup({ section: [group, items], tone, tab }) {
+  return (
+    <div className="pb-admin-nav-group" data-tone={tone}>
+      <span>{group}</span>
+      <div className="pb-admin-nav-links">
+        {items.map(([id, label]) => (
+          <Link key={id} to={adminHref(id)} aria-current={id === tab ? 'page' : undefined}>{label}</Link>
+        ))}
       </div>
     </div>
   );
@@ -125,16 +132,16 @@ export function adminMarketStatus(row, proposal = false) {
   return ['Activo', 'success'];
 }
 
-function QueueBadge({ status }) {
+export function QueueBadge({ status }) {
   return <span className="pb-admin-badge" data-tone={status[1]}>{status[0]}</span>;
 }
 
 export function AdminOverview({ counts, loading, onRefresh }) {
   const cards = [
-    ['pending', 'Por aprobar', 'Propuestas de mercado', '/admin?tab=pending'],
-    ['markets', 'Por resolver', null, '/admin?tab=markets&status=pending'],
-    ['support', 'Soporte', 'Solicitudes abiertas', '/admin?tab=support'],
-    ['social', 'Tareas sociales', 'Enviadas para revisión', '/admin?tab=social'],
+    ['pending', 'Por aprobar', 'Propuestas de mercado', '/admin?tab=pending', 'brand'],
+    ['markets', 'Por resolver', null, '/admin?tab=markets&status=pending', 'warning'],
+    ['support', 'Soporte', 'Tickets abiertos · Ver todos', '/admin?tab=support', 'info'],
+    ['social', 'Tareas sociales', 'Enviadas para revisión', '/admin?tab=social', 'violet'],
   ];
   const resolutions = counts?.marketPreview || [];
   const proposals = counts?.pendingPreview || [];
@@ -142,8 +149,8 @@ export function AdminOverview({ counts, loading, onRefresh }) {
   return (
     <>
       <div className="pb-admin-metrics" aria-label="Resumen de pendientes" aria-busy={loading}>
-        {cards.map(([id, label, caption, href]) => (
-          <Link className="pb-admin-metric" to={href} key={id}>
+        {cards.map(([id, label, caption, href, tone]) => (
+          <Link className="pb-admin-metric" data-tone={tone} to={href} key={id}>
             <span>{label} <span className="pb-admin-chevron" aria-hidden="true">↗</span></span>
             <strong>{counts?.[id] == null ? '—' : `${counts[id]}${counts.capped?.[id] ? '+' : ''}`}</strong>
             {id === 'markets' && counts?.resolutionReady != null && counts?.closedWithoutCandidate != null
@@ -152,6 +159,23 @@ export function AdminOverview({ counts, loading, onRefresh }) {
           </Link>
         ))}
       </div>
+      <section className="pb-admin-panel pb-admin-catalog" aria-labelledby="pb-admin-catalog-heading">
+        <div className="pb-admin-panel-heading">
+          <div>
+            <h2 id="pb-admin-catalog-heading">Catálogo de mercados</h2>
+            <p>Abre los mercados activos por categoría o consulta el historial.</p>
+          </div>
+          <Link className="pb-admin-button" to="/admin?tab=markets">Ver todos los mercados <span aria-hidden="true">→</span></Link>
+        </div>
+        <div className="pb-admin-chips">
+          {MARKET_CATEGORY_FILTERS.map(({ key, label }) => (
+            <Link className="pb-admin-chip" data-category={key} key={key}
+              to={`/admin?tab=markets&status=active${key === 'all' ? '' : `&category=${key}`}`}>
+              {key === 'all' ? 'Todos los activos' : label}
+            </Link>
+          ))}
+        </div>
+      </section>
       <section className="pb-admin-panel" aria-labelledby="pb-admin-work-heading">
         <div className="pb-admin-panel-heading">
           <div>
@@ -187,6 +211,9 @@ const PROPOSAL_STATUSES = [
   ['pending', 'Pendientes'], ['approved', 'Aprobados'], ['rejected', 'Rechazados'], ['all', 'Todos'],
 ];
 const FILTER_KEYS = ['category', 'sport', 'league', 'geo', 'topic', 'crypto_type', 'feature'];
+const STATUS_TONES = {
+  active: 'success', approved: 'success', pending: 'warning', rejected: 'danger', resolved: 'success',
+};
 
 export function useAdminQueueFilters(proposal = false) {
   const [params, setParams] = useSearchParams();
@@ -195,7 +222,11 @@ export function useAdminQueueFilters(proposal = false) {
   const status = statuses.some(([key]) => key === requestedStatus) ? requestedStatus : statuses[0][0];
   const values = Object.fromEntries(FILTER_KEYS.map(key => [key, params.get(key) || 'all']));
   const search = (params.get('q') || '').trim().slice(0, 120);
+  const hasFilters = Boolean(search) || FILTER_KEYS.some(key => values[key] !== 'all');
+
   function update(key, value) {
+    const current = key === 'status' ? status : key === 'q' ? search : values[key];
+    if (value === current) return;
     const next = new URLSearchParams(params);
     if (value && (key === 'status' || key === 'q' || value !== 'all')) next.set(key, value);
     else next.delete(key);
@@ -204,10 +235,16 @@ export function useAdminQueueFilters(proposal = false) {
     if (key === 'sport') next.delete('league');
     setParams(next);
   }
-  return { statuses, status, values, search, update };
+  function reset() {
+    const next = new URLSearchParams(params);
+    for (const key of [...FILTER_KEYS, 'q', 'item']) next.delete(key);
+    setParams(next);
+  }
+
+  return { statuses, status, values, search, update, reset, hasFilters };
 }
 
-export function useAdminQueueData(url, field) {
+export function useAdminQueueData(url, field, { keepPrevious = false } = {}) {
   const [state, setState] = useState(null);
   const [refresh, setRefresh] = useState(0);
 
@@ -227,11 +264,11 @@ export function useAdminQueueData(url, field) {
     return () => controller.abort();
   }, [url, field, refresh]);
 
-  const current = state?.url === url && state?.refresh === refresh ? state : null;
+  const current = state?.url === url && (keepPrevious || state?.refresh === refresh) ? state : null;
   return {
     rows: current?.rows,
     data: current?.data,
-    loading: !current && Boolean(url),
+    loading: Boolean(url) && current?.refresh !== refresh,
     error: current?.error,
     reload: () => setRefresh(value => value + 1),
     setRows: update => setState(prev => prev?.url === url && prev.rows
@@ -240,50 +277,57 @@ export function useAdminQueueData(url, field) {
   };
 }
 
-function FilterSelect({ label, options, value, onChange }) {
+export function AdminFilterGroup({ label, options, value, onChange, categories = false }) {
   return (
-    <label className="pb-admin-field">
-      <span>{label}</span>
-      <select value={value} onChange={e => onChange(e.target.value)}>
-        {options.map(({ key, label }) => <option key={key} value={key}>{label}</option>)}
-      </select>
-    </label>
+    <div className="pb-admin-filter-group" role="group" aria-label={label}>
+      <span className="pb-admin-filter-label">{label}</span>
+      <div className="pb-admin-chips">
+        {options.map(({ key, label: option }) => (
+          <button className="pb-admin-chip" type="button" key={key} aria-pressed={value === key}
+            data-category={categories ? key : undefined} onClick={() => onChange(key)}>{option}</button>
+        ))}
+      </div>
+    </div>
   );
 }
 
 export function AdminQueueToolbar({ queue, proposal = false, children }) {
-  const { statuses, status, values, search, update } = queue;
+  const { statuses, status, values, search, update, reset, hasFilters } = queue;
   const [draft, setDraft] = useState(search);
   useEffect(() => { setDraft(search); }, [search]);
-  const select = (label, key, options) => <FilterSelect label={label} options={options}
-    value={values[key]} onChange={value => update(key, value)} />;
+  const group = (label, key, options) => <AdminFilterGroup label={label} options={options}
+    value={values[key]} onChange={value => update(key, value)} categories={key === 'category'} />;
   const leagues = { soccer: ADMIN_SOCCER_LEAGUES, baseball: ADMIN_BASEBALL_LEAGUES, combate: ADMIN_COMBATE_LEAGUES };
 
   return (
     <div className="pb-admin-panel pb-admin-toolbar">
       <div className="pb-admin-statuses" role="group" aria-label="Estado">
         {statuses.map(([key, label]) => (
-          <button type="button" key={key} aria-pressed={status === key} onClick={() => update('status', key)}>{label}</button>
+          <button type="button" key={key} data-tone={STATUS_TONES[key]} aria-pressed={status === key}
+            onClick={() => update('status', key)}>{label}</button>
         ))}
       </div>
       <div className="pb-admin-filter-row">
-        <form className="pb-admin-search" onSubmit={e => { e.preventDefault(); update('q', draft.trim()); }}>
+        <form className="pb-admin-search" onSubmit={event => { event.preventDefault(); update('q', draft.trim()); }}>
           <label className="pb-admin-field">
-            <span>Buscar</span>
+            <span>Buscar mercados</span>
             <input type="search" placeholder="Título, #ID o ID del evento" value={draft}
-              onChange={e => setDraft(e.target.value)} maxLength={120} />
+              onChange={event => setDraft(event.target.value)} maxLength={120} />
           </label>
           <button type="submit" className="pb-admin-button">Buscar</button>
-          {search && <button type="button" className="pb-admin-button" onClick={() => update('q', '')}>Limpiar</button>}
         </form>
-        {select('Categoría', 'category', MARKET_CATEGORY_FILTERS)}
-        {values.category === 'deportes' && select('Deporte', 'sport', ADMIN_SPORT_FILTERS)}
-        {values.category === 'deportes' && leagues[values.sport] && select('Liga', 'league', leagues[values.sport])}
-        {values.category === 'mexico' && select('Región', 'geo', ADMIN_GEO_FILTERS)}
-        {values.category === 'mexico' && select('Tema', 'topic', ADMIN_MEXICO_TOPIC_FILTERS)}
-        {values.category === 'musica' && select('Tema', 'topic', ADMIN_ENTERTAINMENT_TOPIC_FILTERS)}
-        {values.category === 'crypto' && select('Tipo', 'crypto_type', ADMIN_CRYPTO_FILTERS)}
-        {proposal && select('Visibilidad', 'feature', [
+        {(hasFilters || draft) && <button type="button" className="pb-admin-button" onClick={() => { setDraft(''); reset(); }}>Limpiar filtros</button>}
+      </div>
+      <div className="pb-admin-filters">
+        {group('Categoría', 'category', MARKET_CATEGORY_FILTERS)}
+        {values.category === 'deportes' && group('Deporte', 'sport', ADMIN_SPORT_FILTERS)}
+        {values.category === 'deportes' && leagues[values.sport] && group('Liga', 'league', leagues[values.sport])}
+        {values.category === 'mexico' && group('Región', 'geo', ADMIN_GEO_FILTERS)}
+        {values.category === 'mexico' && group('Tema', 'topic', ADMIN_MEXICO_TOPIC_FILTERS)}
+        {values.category === 'musica' && group('Subcategoría', 'topic', ADMIN_ENTERTAINMENT_TOPIC_FILTERS)}
+        {values.category === 'infraestructura' && group('Subcategoría', 'topic', ADMIN_INFRASTRUCTURE_TOPIC_FILTERS)}
+        {values.category === 'crypto' && group('Tipo', 'crypto_type', ADMIN_CRYPTO_FILTERS)}
+        {proposal && group('Visibilidad', 'feature', [
           { key: 'all', label: 'Todas' }, { key: 'featured', label: 'Trending' }, { key: 'tournament', label: 'Torneo' },
         ])}
       </div>
@@ -292,7 +336,7 @@ export function AdminQueueToolbar({ queue, proposal = false, children }) {
   );
 }
 
-export function AdminMarketQueue({ rows, proposal = false, loading, error, onRetry, children }) {
+export function AdminMarketQueue({ rows, queue, proposal = false, loading, error, onRetry, children }) {
   const [params, setParams] = useSearchParams();
   const detail = useRef(null);
   const activeRow = useRef(null);
@@ -333,7 +377,14 @@ export function AdminMarketQueue({ rows, proposal = false, loading, error, onRet
     No se pudieron cargar los mercados.
     <button className="pb-admin-button" onClick={onRetry} type="button">Reintentar</button>
   </div>;
-  if (!displayed) return <p className="pb-admin-message">No hay mercados que coincidan con estos filtros.</p>;
+  if (!displayed) return (
+    <div className="pb-admin-panel pb-admin-empty" role="status">
+      <strong>{queue.hasFilters ? 'Sin coincidencias' : proposal ? 'Sin propuestas en esta vista' : 'Sin mercados en esta vista'}</strong>
+      {queue.hasFilters
+        ? <button className="pb-admin-button" onClick={queue.reset} type="button">Quitar filtros</button>
+        : !proposal && queue.status !== 'all' && <Link className="pb-admin-button" to="/admin?tab=markets">Ver todos los mercados</Link>}
+    </div>
+  );
   return (
     <div className="pb-admin-queue" data-selected={Boolean(selected)}>
       <section className="pb-admin-panel pb-admin-list" aria-label="Resultados">
@@ -345,7 +396,7 @@ export function AdminMarketQueue({ rows, proposal = false, loading, error, onRet
               aria-controls="pb-admin-queue-detail">
               <span>
                 <strong>{row.question}</strong>
-                <small>#{row.id}{row.league || row.category ? ` · ${row.league || row.category}` : ''}</small>
+                <small>#{row.id}{row.league || row.category ? ` · ${row.league || adminMarketCategoryLabel(row.category) || row.category}` : ''}</small>
               </span>
               <QueueBadge status={adminMarketStatus(row, proposal)} />
             </button>
@@ -367,7 +418,7 @@ export function AdminMarketFacts({ market, proposal = false }) {
   const criteria = cfg?.criteria || market.resolutionCriteria || market.sourceData?.resolutionCriteria;
   const source = cfg?.source || market.source;
   const sourceUrl = cfg?.resolutionSource || cfg?.sourceUrl || market.sourceData?.sourceUrl;
-  const category = MARKET_CATEGORY_FILTERS.find(item => item.key === market.category)?.label;
+  const category = adminMarketCategoryLabel(market.category);
   const eventId = cfg?.eventId || cfg?.gamePk || market.sourceEventId;
   return (
     <div className="pb-admin-market-facts">
