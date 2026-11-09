@@ -15,7 +15,7 @@ test('settlement previews read all legs and cancellation previews leave position
   const db = new PGlite();
   t.after(() => db.close());
   await db.exec(`
-    CREATE TABLE points_markets (id int PRIMARY KEY, parent_id int, status text DEFAULT 'active', resolver_config jsonb);
+    CREATE TABLE points_markets (id int PRIMARY KEY, parent_id int, status text DEFAULT 'active', resolver_config jsonb, mode text DEFAULT 'points');
     CREATE TABLE points_positions (market_id int, username text, outcome_index int, shares numeric, cost_basis numeric);
     CREATE TABLE points_limit_orders (market_id int, status text, reserved_collateral numeric);
     INSERT INTO points_markets (id,parent_id) VALUES (1,NULL),(2,1),(3,1),(4,NULL);
@@ -30,6 +30,9 @@ test('settlement previews read all legs and cancellation previews leave position
   assert.deepEqual(await db.transaction(client => cancelPointsMarket(client, 1, { preview: true })), {
     ok: true, preview: { holderCount: 2, amount: '15', orderCount: 2, reservedAmount: '9' },
   });
+  await db.exec("UPDATE points_markets SET mode = 'onchain' WHERE id = 3");
+  await assert.rejects(db.transaction(client => cancelPointsMarket(client, 1, { preview: true })),
+    { message: 'onchain_market_requires_protocol' });
   assert.deepEqual((await db.query('SELECT status FROM points_markets WHERE id=1')).rows, [{ status: 'active' }]);
   assert.equal((await db.query('SELECT SUM(shares)::text AS total FROM points_positions')).rows[0].total, '98');
   assert.equal((await db.query("SELECT COUNT(*)::int AS count FROM points_limit_orders WHERE status='open'")).rows[0].count, 3);

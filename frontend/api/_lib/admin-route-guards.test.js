@@ -26,7 +26,13 @@ async function collectJsFiles(dir) {
 }
 
 function isGuardedAdminHandler(source) {
-  return /\brequirePointsAdmin\s*\(/.test(source) || /\brequireAdmin\s*\(/.test(source);
+  if (/\b(?:requirePointsAdmin|requireAdmin)\s*\(/.test(source)) return true;
+  // Sepolia handlers inject their guard in tests. The default export uses
+  // the factory's default guard.
+  const factory = source.match(/export default (\w+)\(\);/)?.[1];
+  return Boolean(factory && source.includes(`function ${factory}({`)
+    && /\badminFor\s*=\s*requirePointsAdmin\b/.test(source)
+    && /\badminFor\s*\(req,\s*res\)/.test(source));
 }
 
 function isAllowedGuardedReexport(source) {

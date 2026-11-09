@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import { attachPointsOpeningLiquidity } from '../../_lib/market-pricing.js';
+import { ADMIN_SEARCH_MARKS, parseAdminMarketSearch } from '../../_lib/points-admin-market-search.js';
 import { pointsResolverReadiness } from '../../_lib/points-resolver-readiness.js';
 import { pendingApprovalOptions, pendingApprovalSettings } from '../../_lib/onchain-preview-approval.js';
 
@@ -20,6 +21,8 @@ function harness(env, { approvalError, authenticated = true, rows = [] } = {}) {
     process: { env },
     console: { error() {} },
     neon: () => async strings => { calls.sql++; return strings.join('').includes('FROM points_pending_markets p') ? rows : []; },
+    ADMIN_SEARCH_MARKS,
+    parseAdminMarketSearch,
     attachPointsOpeningLiquidity,
     pointsResolverReadiness,
     applyCors: () => false,
