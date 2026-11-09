@@ -84,6 +84,7 @@ test('Points pending queue persists taxonomy filters and sends only displayed ID
 
 test('Sepolia quick approval confirms the deployment destination and keeps bulk approval off-chain', () => {
   const pending = sourceForFunction('PendingMarketsTable');
+  assert.match(pending, /const approvalSettings = data\?\.approvalSettings \?\? lastApprovalSettings/);
   assert.match(pending, /Destino de aprobación \(preview\)/);
   assert.match(pending, /if \(\(approvingOnchain \|\| checks.length\)[\s\S]*!confirm/);
   assert.match(pending, /adminReviewPendingMarket\(id, action, null, action === 'approve' \? previewApprovalMode : undefined\)/);

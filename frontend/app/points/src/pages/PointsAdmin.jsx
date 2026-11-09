@@ -7027,20 +7027,21 @@ function MarketAutomationTools({ generator }) {
 function PendingMarketsTable({ onQueueChange, generator }) {
   const queue = useAdminQueueFilters(true);
   const filter = queue.status;
-  const [approvalSettings, setApprovalSettings] = useState(null);
+  const [lastApprovalSettings, setLastApprovalSettings] = useState(null);
   const [approvalMode, setApprovalMode] = useState(null);
-  const previewApprovalMode = approvalSettings?.previewEnabled
-    ? (approvalMode || approvalSettings.defaultMode)
-    : undefined;
-  const approvingOnchain = previewApprovalMode === 'onchain';
   const queueParams = marketQueueQuery(queue);
-  if (approvalMode && previewApprovalMode) queueParams.set('previewApprovalMode', previewApprovalMode);
+  if (approvalMode && lastApprovalSettings?.previewEnabled) queueParams.set('previewApprovalMode', approvalMode);
   const query = queueParams.toString();
   const { rows, setRows, loading, error, data, reload: load } = useAdminQueueData(
     `/api/points/admin/pending-markets?${query}`, 'pending', { reloadKey: generator.revision },
   );
+  const approvalSettings = data?.approvalSettings ?? lastApprovalSettings;
+  const previewApprovalMode = approvalSettings?.previewEnabled
+    ? (approvalMode || approvalSettings.defaultMode)
+    : undefined;
+  const approvingOnchain = previewApprovalMode === 'onchain';
   useEffect(() => {
-    if (data) setApprovalSettings(data.approvalSettings || null);
+    if (data) setLastApprovalSettings(data.approvalSettings || null);
   }, [data]);
   const [busyId, setBusyId] = useState(null);
   const [bulkBusy, setBulkBusy] = useState(false);
