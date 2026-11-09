@@ -184,6 +184,7 @@ const AICM_HUB_SEARCH_TEXT = [
   'mexico',
   'salidas',
   'demoras',
+  'cancelaciones',
   'vuelos',
 ].join(' ');
 
@@ -201,7 +202,8 @@ function isPromotedAicmChildMarket(m) {
 
 function aicmHubMatchesSearch(searchQuery) {
   const q = normalizeSearchText(searchQuery);
-  return !q || normalizeSearchText(AICM_HUB_SEARCH_TEXT).includes(q);
+  const hubSearchText = normalizeSearchText(AICM_HUB_SEARCH_TEXT);
+  return !q || q.split(/\s+/).every(word => hubSearchText.includes(word));
 }
 
 function isRecentlyOpenedMarket(m, now = Date.now()) {
@@ -461,8 +463,9 @@ export default function PointsCategoryPage() {
   // Friendly sidebar header. "Disciplinas" feels right for combat
   // sports vs "Ligas" for soccer / baseball.
   const leagueSidebarLabel = sport === 'combate' ? 'Disciplinas' : 'Ligas';
-  const showAicmHubCard = slug === 'infraestructura' && aicmHubMatchesSearch(searchQuery);
-  const visibleCount = filtered.length + (showAicmHubCard ? 1 : 0);
+  const showAicmHubCard = slug === 'infraestructura'
+    && (geo === 'all' || geo === 'mexico')
+    && aicmHubMatchesSearch(searchQuery);
 
   return (
     <section style={{
@@ -487,7 +490,8 @@ export default function PointsCategoryPage() {
         textTransform: 'uppercase',
         margin: '0 0 20px',
       }}>
-        {t('points.catpage.eyebrow', { n: visibleCount })}
+        {t('points.catpage.eyebrow', { n: filtered.length })}
+        {showAicmHubCard && ' · Hub AICM'}
       </p>
 
       {/* Top-level category chips — only on /c/resueltos. Lets users
@@ -744,8 +748,7 @@ function AicmInfrastructureHubCard() {
         }}>
           {[
             ['Tablero oficial', 'salidas'],
-            ['Mercado diario', '24h'],
-            ['Hora y semana', 'cerrados'],
+            ['Historial', '7 días'],
           ].map(([label, value]) => (
             <div key={label} style={{
               display: 'grid',
@@ -776,19 +779,22 @@ function AicmInfrastructureHubCard() {
 
 function MarketsGrid({ loading, error, filtered, positionByMarket, emptyKey, searchQuery, t, before = null }) {
   if (loading) {
-    return <MarketGridSkeleton count={6} />;
+    return <MarketGridSkeleton count={before ? 5 : 6} before={before} />;
   }
   if (error) {
     return (
-      <div style={{
-        textAlign: 'center',
-        padding: 40,
-        fontFamily: 'var(--font-mono)',
-        fontSize: 13,
-        color: 'var(--danger)',
-      }}>
-        {t('points.home.loadError')}
-      </div>
+      <>
+        {before && <div className="markets-grid">{before}</div>}
+        <div style={{
+          textAlign: 'center',
+          padding: 40,
+          fontFamily: 'var(--font-mono)',
+          fontSize: 13,
+          color: 'var(--danger)',
+        }}>
+          {t('points.home.loadError')}
+        </div>
+      </>
     );
   }
   if (filtered.length === 0 && !before) {
