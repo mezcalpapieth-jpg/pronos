@@ -75,6 +75,8 @@ test('reopened canceled pending approvals create a fresh market source event id'
 });
 
 test('pending approval handler preserves intentional HTTP statuses', () => {
+  assert.match(source, /if \(req\.method === 'GET'\)\s+return await list\(req, res\);/);
+  assert.match(source, /if \(req\.method === 'POST'\)\s+return await review\(req, res, admin\);/);
   assert.match(source, /const status = Number\.isInteger\(e\?\.status\)/);
   assert.match(source, /res\.status\(status\)\.json/);
   assert.match(source, /status >= 500 \? 'server_error' : \(e\?\.message \|\| 'request_failed'\)/);

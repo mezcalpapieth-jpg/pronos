@@ -419,9 +419,6 @@ const POINTS_SCHEMA_MIGRATIONS = [
   `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS is_test_market BOOLEAN NOT NULL DEFAULT false`,
   `CREATE INDEX IF NOT EXISTS idx_points_markets_featured_status
     ON points_markets(featured, status) WHERE featured = true`,
-  `CREATE INDEX IF NOT EXISTS idx_points_markets_tournament_featured_active_end
-    ON points_markets(status, end_time ASC, id ASC)
-    WHERE archived_at IS NULL AND parent_id IS NULL AND tournament_featured = true`,
   // auto_featured: tracks whether the cron flipped `featured = true`
   // because the market entered its game window (start_time <= now <
   // end_time). Lets us safely auto-unfeature when the game ends
@@ -445,6 +442,9 @@ const POINTS_SCHEMA_MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS idx_points_markets_featured_active_end
     ON points_markets(status, end_time ASC, id ASC)
     WHERE archived_at IS NULL AND parent_id IS NULL AND featured = true`,
+  `CREATE INDEX IF NOT EXISTS idx_points_markets_tournament_featured_active_end
+    ON points_markets(status, end_time ASC, id ASC)
+    WHERE archived_at IS NULL AND parent_id IS NULL AND tournament_featured = true`,
   `CREATE INDEX IF NOT EXISTS idx_points_markets_category_status_end
     ON points_markets(category, status, end_time ASC, id ASC)
     WHERE archived_at IS NULL AND parent_id IS NULL`,
