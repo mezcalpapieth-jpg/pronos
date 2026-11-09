@@ -991,6 +991,9 @@ export default defineConfig({
   plugins: [pointsRootDeckDevMiddleware(), sharedCssDevMiddleware(), mvpAccessDevGate(), videoAccessDevGate(), demoAccessDevGate(), ris26DevApiMiddleware(), deckDevApiMiddleware(), turnkeyBrowserNodecryptoStub(), react()],
   base: isPoints ? '/points/' : '/mvp/',
   root: isPoints ? path.resolve(__dirname, 'points') : __dirname,
+  define: {
+    'import.meta.env.VITE_VERCEL_ENV': JSON.stringify(process.env.VERCEL_ENV || process.env.VITE_VERCEL_ENV || ''),
+  },
   build: {
     outDir: isPoints
       ? path.resolve(__dirname, '../points')   // → frontend/points/

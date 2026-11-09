@@ -7,6 +7,8 @@ import {
   ADMIN_MEXICO_TOPIC_FILTERS,
   CATEGORIES,
   MARKET_CREATION_GEO_OPTIONS,
+  MARKET_CATEGORY_FILTERS,
+  adminMarketCategoryLabel,
   buildAdminMarketsQuery,
   formatAdminMarketDate,
 } from './adminMarketFilters.js';
@@ -91,4 +93,19 @@ test('builds entertainment admin subfilter queries under the legacy musica key',
     }).toString(),
     'status=all&category=musica&feature=tournament&topic=cine',
   );
+});
+
+test('limits catalog categories while preserving historical market labels', () => {
+  assert.ok(!MARKET_CATEGORY_FILTERS.some(({ key }) => key === 'general' || key === 'world-cup'));
+  assert.equal(adminMarketCategoryLabel('general'), 'General');
+  assert.equal(adminMarketCategoryLabel('world-cup'), 'Nuevos mercados');
+});
+
+test('shows infrastructure in the catalog and forwards its subcategory', () => {
+  assert.ok(MARKET_CATEGORY_FILTERS.some(category => category.key === 'infraestructura'));
+  assert.equal(buildAdminMarketsQuery({
+    status: 'active',
+    categoryFilter: 'infraestructura',
+    topicFilter: 'aeropuertos',
+  }).toString(), 'status=active&category=infraestructura&topic=aeropuertos');
 });

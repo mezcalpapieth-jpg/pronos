@@ -397,7 +397,7 @@ function Shell({ onOpenLogin, isAdmin }) {
     <>
       {isHome && <PointsTicker />}
       {path.startsWith('/stocks') && <Suspense fallback={null}><StockLiveTicker /></Suspense>}
-      {!isAdminWorkspace && <PointsNav onOpenLogin={onOpenLogin} isAdmin={isAdmin} />}
+      <PointsNav onOpenLogin={onOpenLogin} isAdmin={isAdmin} isAdminWorkspace={isAdminWorkspace} />
       {showCategoryBar && <PointsCategoryBar />}
       {!isAdminWorkspace && <TournamentExtensionBanner />}
       <Suspense fallback={<RouteFallback />}>
