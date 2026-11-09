@@ -220,6 +220,12 @@ export function SettlementReview({ action, market, indexes, candidate, initialSc
   );
 }
 
+export async function checkProposalApproval(id, options) {
+  const result = await getJson(`/api/points/admin/pending-markets?check_id=${id}`, options);
+  if (!Array.isArray(result?.checks)) throw new Error('No se pudo verificar la propuesta.');
+  return result.checks;
+}
+
 export function ProposalApproval({ row, revision, disabled, onApprove }) {
   const [state, setState] = useState(null);
   const [attempt, setAttempt] = useState(0);
@@ -229,8 +235,8 @@ export function ProposalApproval({ row, revision, disabled, onApprove }) {
     const controller = new AbortController();
     setState(null);
     setConfirm(false);
-    getJson(`/api/points/admin/pending-markets?check_id=${row.id}`, { signal: controller.signal })
-      .then(result => { if (!controller.signal.aborted) setState(Array.isArray(result.checks) ? result.checks : false); })
+    checkProposalApproval(row.id, { signal: controller.signal })
+      .then(checks => { if (!controller.signal.aborted) setState(checks); })
       .catch(() => { if (!controller.signal.aborted) setState(false); });
     return () => controller.abort();
   }, [row.id, revision, attempt]);

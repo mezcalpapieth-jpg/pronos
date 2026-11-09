@@ -366,7 +366,7 @@ export function focusAdminQueuePanel(element) {
   element?.focus({ preventScroll: !window.matchMedia('(max-width: 820px)').matches });
 }
 
-export function AdminMarketQueue({ rows, queue, proposal = false, loading, error, onRetry, children }) {
+export function AdminMarketQueue({ rows, queue, proposal = false, loading, error, onRetry, renderRowActions, children }) {
   const [params, setParams] = useSearchParams();
   const detail = useRef(null);
   const activeRow = useRef(null);
@@ -417,20 +417,27 @@ export function AdminMarketQueue({ rows, queue, proposal = false, loading, error
   );
   return (
     <div className="pb-admin-queue" data-selected={Boolean(selected)}>
-      <section className="pb-admin-panel pb-admin-list" aria-label="Resultados">
+      <section className="pb-admin-panel pb-admin-list" data-proposal={proposal || undefined} aria-label="Resultados">
         <div className="pb-admin-panel-heading"><h2>{proposal ? 'Propuestas' : 'Mercados'}</h2><small>{rows.length} en esta vista</small></div>
         <div className="pb-admin-list-rows">
-          {rows.map(row => (
-            <button className="pb-admin-row" type="button" key={row.id} onClick={() => select(row.id)}
-              ref={String(row.id) === returnToRow.current ? activeRow : null} aria-pressed={row.id === displayed.id}
-              aria-controls="pb-admin-queue-detail">
-              <span>
-                <strong>{row.question}</strong>
-                <small>#{row.id}{row.league || row.category ? ` · ${row.league || adminMarketCategoryLabel(row.category) || row.category}` : ''}</small>
-              </span>
-              <QueueBadge status={adminMarketStatus(row, proposal)} />
-            </button>
-          ))}
+          {rows.map(row => {
+            const actions = renderRowActions?.(row);
+            const pressed = row.id === displayed.id;
+            return (
+              <div key={row.id} className="pb-admin-queue-row" data-selected={pressed}>
+                <button className="pb-admin-row" type="button" onClick={() => select(row.id)}
+                  ref={String(row.id) === returnToRow.current ? activeRow : null} aria-pressed={pressed}
+                  aria-controls="pb-admin-queue-detail">
+                  <span>
+                    <strong>{row.question}</strong>
+                    <small>#{row.id}{row.league || row.category ? ` · ${row.league || adminMarketCategoryLabel(row.category) || row.category}` : ''}</small>
+                  </span>
+                  {!actions && <QueueBadge status={adminMarketStatus(row, proposal)} />}
+                </button>
+                {actions}
+              </div>
+            );
+          })}
         </div>
       </section>
       <section className="pb-admin-detail" ref={detail} tabIndex={-1} id="pb-admin-queue-detail" aria-label="Detalle del mercado">
