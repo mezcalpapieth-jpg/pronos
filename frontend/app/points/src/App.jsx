@@ -386,6 +386,7 @@ function Shell({ onOpenLogin, isAdmin }) {
   const path = location.pathname;
   const isHome = path === '/';
   const pointsOnly = execution.mode === 'onchain' && (path === '/earn' || (path === '/torneo' && !execution.tournamentSeason) || path === '/stocks' || path.startsWith('/stocks/'));
+  const isAdminWorkspace = isAdmin && path.replace(/\/+$/, '') === '/admin';
 
   // CategoryBar is the universal browsing affordance — show it on home,
   // category pages, AND market detail so users can always jump to
@@ -402,10 +403,10 @@ function Shell({ onOpenLogin, isAdmin }) {
     <>
       {isHome && execution.mode !== 'onchain' && <PointsTicker />}
       {execution.mode !== 'onchain' && path.startsWith('/stocks') && <Suspense fallback={null}><StockLiveTicker /></Suspense>}
-      <PointsNav onOpenLogin={onOpenLogin} isAdmin={isAdmin} />
+      {!isAdminWorkspace && <PointsNav onOpenLogin={onOpenLogin} isAdmin={isAdmin} />}
       <PendingTradeNotice />
       {showCategoryBar && <PointsCategoryBar />}
-      {execution.mode !== 'onchain' && <TournamentExtensionBanner />}
+      {!isAdminWorkspace && execution.mode !== 'onchain' && <TournamentExtensionBanner />}
       {pointsOnly ? <main style={{ maxWidth: 700, margin: '48px auto', padding: 24 }}>
         <p>Esta sección corresponde al torneo Points. El torneo de prueba tiene un saldo y operaciones separados.</p>
         <button className="btn-primary" onClick={() => execution.setMode('points')}>Ver Points</button>
@@ -449,7 +450,7 @@ function Shell({ onOpenLogin, isAdmin }) {
           <Route path="/terms"   element={<TermsOfService />} />
         </Routes>
       </Suspense>}
-      <Footer />
+      {!isAdminWorkspace && <Footer />}
     </>
   );
 }

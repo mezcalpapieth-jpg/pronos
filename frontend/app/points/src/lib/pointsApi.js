@@ -894,8 +894,8 @@ export async function adminDeactivateSocialTaskCampaign(campaignId) {
 }
 
 // ─── Admin — support tickets ────────────────────────────────────────────────
-export async function adminListSupportTickets(status = 'open') {
-  return getJson(`/api/points/admin/support-tickets?status=${encodeURIComponent(status)}`);
+export async function adminListSupportTickets(status = 'open', { summary = false, signal } = {}) {
+  return getJson(`/api/points/admin/support-tickets?status=${encodeURIComponent(status)}${summary ? '&summary=1' : ''}`, { signal });
 }
 
 export async function adminReplySupportTicket({ id, message }) {
@@ -934,12 +934,14 @@ export async function adminListResolutionCandidates() {
   return getJson('/api/points/admin/resolution-candidates?status=pending');
 }
 
-export async function adminReviewResolutionCandidate({ candidateId, action, outcomeIndex, note } = {}) {
+export async function adminReviewResolutionCandidate({ candidateId, action, outcomeIndex, note, finalScore, expectedCandidate } = {}) {
   return postJson('/api/points/admin/resolution-candidates', {
     candidateId,
     action,
     outcomeIndex,
     note,
+    finalScore,
+    expectedCandidate,
   });
 }
 
@@ -980,7 +982,7 @@ export async function adminListTaskCounts() {
     getJson('/api/points/admin/markets?status=pending'),
     adminListResolutionCandidates(),
     adminListSocialTasks('pending'),
-    adminListSupportTickets('open'),
+    adminListSupportTickets('open', { summary: true }),
   ]);
 
   const pendingData = pendingResult.status === 'fulfilled' ? pendingResult.value : null;
@@ -988,21 +990,40 @@ export async function adminListTaskCounts() {
   const resolutionData = resolutionResult.status === 'fulfilled' ? resolutionResult.value : null;
   const socialData = socialResult.status === 'fulfilled' ? socialResult.value : null;
   const supportData = supportResult.status === 'fulfilled' ? supportResult.value : null;
-  const resolutionCount = Number.isFinite(Number(resolutionData?.count))
-    ? Number(resolutionData.count)
-    : null;
+  const pendingRows = Array.isArray(pendingData?.pending) ? pendingData.pending : null;
+  const marketRows = Array.isArray(marketsData?.markets) ? marketsData.markets : null;
+  const candidateTotal = resolutionData?.count;
+  // Current servers count the union of candidates and closed markets. Keep
+  // closed markets visible if a server only reports the candidate count.
+  const markets = Number.isInteger(candidateTotal) && candidateTotal >= 0
+    ? Math.max(candidateTotal, marketRows?.length ?? 0)
+    : marketRows?.length ?? null;
+  const hasBreakdown = candidateTotal === markets
+    && Number.isInteger(resolutionData?.pendingCount)
+    && resolutionData.pendingCount >= 0
+    && resolutionData.pendingCount <= markets;
   const counts = {
-    pending: Array.isArray(pendingData?.pending) ? pendingData.pending.length : 0,
-    markets: resolutionCount != null
-      ? resolutionCount
-      : (Array.isArray(marketsData?.markets) ? marketsData.markets.length : 0),
-    social: Array.isArray(socialData?.tasks) ? socialData.tasks.length : 0,
-    support: Array.isArray(supportData?.tickets) ? supportData.tickets.length : 0,
+    pending: pendingRows?.length ?? null,
+    markets,
+    social: Array.isArray(socialData?.tasks) && !socialData.degraded && !socialData.unavailable ? socialData.tasks.length : null,
+    support: Array.isArray(supportData?.tickets) ? supportData.tickets.length : null,
   };
 
   return {
     ...counts,
-    total: counts.pending + counts.markets + counts.social + counts.support,
+    total: Object.values(counts).reduce((sum, count) => sum + (count ?? 0), 0),
+    resolutionReady: hasBreakdown ? resolutionData.pendingCount : null,
+    closedWithoutCandidate: hasBreakdown ? markets - resolutionData.pendingCount : null,
+    marketPreview: marketRows?.slice(0, 4),
+    pendingPreview: pendingRows?.slice(0, 3),
+    capped: {
+      pending: counts.pending === 2000,
+      markets: !hasBreakdown && markets === 200,
+      support: counts.support === 200,
+      social: counts.social === 100,
+    },
+    partial: Object.values(counts).some(count => count == null) || marketRows == null || resolutionData == null,
+    checkedAt: new Date().toISOString(),
   };
 }
 
@@ -1059,7 +1080,7 @@ export async function adminRunAutoResolve({ dry = false } = {}) {
   return postJson(`/api/points/admin/run-auto-resolve${q}`, {});
 }
 
-export async function adminCorrectResolution({ marketId, winningOutcomeIndex, finalScore, reason } = {}) {
+export async function adminCorrectResolution({ marketId, winningOutcomeIndex, finalScore, reason, expectedResolvedAt, expectedMarket } = {}) {
   const winningOutcomeIndexes = Array.isArray(winningOutcomeIndex)
     ? winningOutcomeIndex
     : undefined;
@@ -1069,6 +1090,8 @@ export async function adminCorrectResolution({ marketId, winningOutcomeIndex, fi
     ...(winningOutcomeIndexes ? { winningOutcomeIndexes } : {}),
     finalScore,
     reason,
+    expectedResolvedAt,
+    expectedMarket,
   });
 }
 

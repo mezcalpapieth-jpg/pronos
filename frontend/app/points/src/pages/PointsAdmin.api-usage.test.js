@@ -3,14 +3,14 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const adminSource = await readFile(new URL('./PointsAdmin.jsx', import.meta.url), 'utf8');
+const workspaceSource = await readFile(new URL('./PointsAdminWorkspace.jsx', import.meta.url), 'utf8');
 const apiSource = await readFile(new URL('../lib/pointsApi.js', import.meta.url), 'utf8');
 
 test('admin has an API usage tab backed by the admin endpoint', () => {
   assert.match(adminSource, /adminListApiUsage/);
   assert.match(adminSource, /adminBlockApiUser/);
   assert.match(adminSource, /adminUnblockApiUser/);
-  assert.match(adminSource, /\['create', 'markets', 'stats', 'pending', 'social', 'support', 'deck', 'cycles', 'risk', 'api', 'launch', 'strategies'\]/);
-  assert.match(adminSource, /\{ id: 'api',\s+label: 'API' \}/);
+  assert.match(workspaceSource, /\['api', 'Uso de API'\]/);
   assert.match(adminSource, /tab === 'api' && <ApiUsagePanel \/>/);
   assert.match(apiSource, /export async function adminListApiUsage\(\)/);
   assert.match(apiSource, /export async function adminBlockApiUser/);

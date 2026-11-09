@@ -7,6 +7,7 @@ const deckSource = await readFile(new URL('./InvestorDeck.jsx', import.meta.url)
 const dashboardSource = await readFile(new URL('./InvestorDashboard.jsx', import.meta.url), 'utf8');
 const manifestSource = await readFile(new URL('../lib/investorDeckManifest.js', import.meta.url), 'utf8');
 const adminSource = await readFile(new URL('./PointsAdmin.jsx', import.meta.url), 'utf8');
+const adminWorkspaceSource = await readFile(new URL('./PointsAdminWorkspace.jsx', import.meta.url), 'utf8');
 const adminPanelSource = await readFile(new URL('../components/DeckAdminPanel.jsx', import.meta.url), 'utf8');
 const apiSource = await readFile(new URL('../lib/pointsApi.js', import.meta.url), 'utf8');
 const viteSource = await readFile(new URL('../../../vite.config.js', import.meta.url), 'utf8');
@@ -88,8 +89,8 @@ test('investor deck manifest contains Spanish and English decks', () => {
 });
 
 test('points admin exposes deck analytics and invite management', () => {
-  assert.match(adminSource, /DeckAdminPanel/);
-  assert.match(adminSource, /id:\s*'deck'/);
+  assert.match(adminSource, /tab === 'deck' && <DeckAdminPanel/);
+  assert.match(adminWorkspaceSource, /\['deck', 'Deck'\]/);
   assert.match(adminPanelSource, /adminDeckDashboard/);
   assert.match(adminPanelSource, /adminCreateDeckInvite/);
   assert.match(adminPanelSource, /adminRevokeDeckInvite/);

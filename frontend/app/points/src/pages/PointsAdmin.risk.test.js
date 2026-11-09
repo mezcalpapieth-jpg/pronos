@@ -4,14 +4,15 @@ import { readFile } from 'node:fs/promises';
 
 const source = await readFile(new URL('./PointsAdmin.jsx', import.meta.url), 'utf8')
   + await readFile(new URL('../components/AdminRiskPanel.jsx', import.meta.url), 'utf8');
+const workspaceSource = await readFile(new URL('./PointsAdminWorkspace.jsx', import.meta.url), 'utf8');
 const apiSource = await readFile(new URL('../lib/pointsApi.js', import.meta.url), 'utf8');
 
 test('Points admin exposes a risk review tab', () => {
   assert.match(source, /adminListRisk/);
   assert.match(source, /adminUpdateRiskReview/);
-  assert.match(source, /\['create', 'markets', 'stats', 'pending', 'social', 'support', 'deck', 'cycles', 'risk', 'api', 'launch', 'strategies'\]/);
-  assert.match(source, /\{ id: 'risk',\s+label: 'Riesgo' \}/);
-  assert.match(source, /\{tab === 'risk' && <RiskPanel \/>\}/);
+  assert.match(workspaceSource, /\['risk', 'Riesgo'\]/);
+  assert.match(source, /\{tab === 'risk' && <RiskPanel .*initialUsername=/);
+  assert.match(source, /<AdminCasePanel .*kind="risk"/);
   assert.match(source, /function RiskPanel\(/);
   assert.match(apiSource, /export async function adminListRisk/);
   assert.match(apiSource, /\/api\/points\/admin\/risk/);

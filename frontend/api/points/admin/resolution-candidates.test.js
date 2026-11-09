@@ -22,7 +22,9 @@ test('points resolution candidate endpoint confirms or denies review suggestions
   assert.match(source, /action === 'deny'/);
   assert.match(source, /status = 'confirmed'/);
   assert.match(source, /status = 'denied'/);
-  assert.match(source, /final_score = COALESCE/);
+  assert.match(source, /final_score = CASE WHEN/);
+  assert.match(source, /readSettlementPreview/);
+  assert.match(source, /candidate_changed/);
   assert.match(source, /bestEffortPersistResolvedCryptoMarketSnapshot/);
   assert.match(source, /parent_id = \$1/);
   assert.match(source, /legWinningOutcome = i === outcome \? 0 : 1/);

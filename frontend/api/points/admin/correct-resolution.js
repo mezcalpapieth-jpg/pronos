@@ -20,6 +20,8 @@ import {
 } from '../../_lib/points-limit-orders.js';
 import { bestEffortPersistTopHolderSnapshot } from '../../_lib/points-top-holders.js';
 
+import { assertExpectedResolution, readSettlementPreview, settlementError, settlementRevision } from '../../_lib/points-admin-settlement-preview.js';
+
 const schemaSql = neon(process.env.DATABASE_URL);
 const EPSILON = 0.000001;
 
@@ -150,6 +152,75 @@ function oldWinningOutcomeIndexes(parent, relatedRows, oldOutcome) {
   return oldIndexes;
 }
 
+async function readReversals(client, affectedMarketIds, target, { lock }) {
+  const redeemResult = await client.query(
+    `SELECT id, market_id, username, outcome_index, shares, collateral, created_at
+       FROM points_trades
+      WHERE market_id = ANY($1::int[])
+        AND side = 'redeem'
+        AND username <> $2
+      ORDER BY created_at ASC, id ASC
+      ${lock ? 'FOR UPDATE' : ''}`,
+    [affectedMarketIds, PRONOS_TREASURY_USERNAME],
+  );
+  const redeemIds = redeemResult.rows.map(row => Number(row.id)).filter(Number.isInteger);
+
+  const alreadyReversed = new Set();
+  if (redeemIds.length > 0) {
+    const reversedRows = await client.query(
+      `SELECT redeem_trade_id
+         FROM points_redemption_reversals
+        WHERE redeem_trade_id = ANY($1::int[])`,
+      [redeemIds],
+    );
+    for (const row of reversedRows.rows) {
+      alreadyReversed.add(Number(row.redeem_trade_id));
+    }
+  }
+
+  const legacyReversedByUserMarket = new Map();
+  if (affectedMarketIds.length > 0) {
+    const legacyRows = await client.query(
+      `SELECT reference_id AS market_id,
+              LOWER(username) AS username_key,
+              ABS(SUM(amount)) AS amount
+         FROM points_distributions
+        WHERE kind = 'redemption_reversal'
+          AND amount < 0
+          AND reference_id = ANY($1::int[])
+        GROUP BY reference_id, LOWER(username)`,
+      [affectedMarketIds],
+    );
+    for (const row of legacyRows.rows) {
+      legacyReversedByUserMarket.set(
+        `${Number(row.market_id)}:${row.username_key}`,
+        Number(row.amount || 0),
+      );
+    }
+  }
+
+  const reversals = [];
+  for (const redeem of redeemResult.rows) {
+    const marketId = Number(redeem.market_id);
+    const targetOutcome = target.get(marketId);
+    const redeemedOutcome = Number(redeem.outcome_index);
+    if (!Number.isInteger(targetOutcome) || redeemedOutcome === targetOutcome) continue;
+    if (alreadyReversed.has(Number(redeem.id))) continue;
+
+    const originalAmount = Number(redeem.collateral || 0);
+    if (!(originalAmount > EPSILON)) continue;
+
+    const key = reversalKey(redeem);
+    const legacyCovered = Math.min(Number(legacyReversedByUserMarket.get(key) || 0), originalAmount);
+    legacyReversedByUserMarket.set(key, Math.max(0, Number(legacyReversedByUserMarket.get(key) || 0) - legacyCovered));
+    const amountToReverse = originalAmount - legacyCovered;
+    if (!(amountToReverse > EPSILON)) continue;
+
+    reversals.push({ redeem, marketId, redeemedOutcome, amountToReverse });
+  }
+  return reversals;
+}
+
 export default async function handler(req, res) {
   const cors = applyCors(req, res, { methods: 'POST, OPTIONS', credentials: true });
   if (cors) return cors;
@@ -180,7 +251,7 @@ export default async function handler(req, res) {
 
     const result = await withTransaction(async (client) => {
       const marketResult = await client.query(
-        `SELECT id, mode, status, amm_mode, parent_id, outcome, outcomes, final_score
+        `SELECT id, mode, question, status, amm_mode, parent_id, outcome, outcomes, final_score, resolved_at
            FROM points_markets
           WHERE id = $1
           FOR UPDATE`,
@@ -204,6 +275,8 @@ export default async function handler(req, res) {
         throw err;
       }
 
+      assertExpectedResolution(parent, body.expectedResolvedAt);
+
       const relatedResult = await client.query(
         `SELECT id, mode, parent_id, status, amm_mode, outcome, outcomes, leg_label
            FROM points_markets
@@ -214,12 +287,32 @@ export default async function handler(req, res) {
       );
       const relatedRows = relatedResult.rows || [];
       relatedRows.forEach(assertPointsExecution);
-      const { target, affectedMarketIds, ammMode } = buildTargetOutcomes(parent, relatedRows, winningOutcomeIndexes);
+      const { target, affectedMarketIds, ammMode, legs } = buildTargetOutcomes(parent, relatedRows, winningOutcomeIndexes);
       const oldOutcome = outcomeIndexOrNull(parent.outcome);
       const parentOutcomes = parseJsonb(parent.outcomes, ['Sí', 'No']);
       const oldOutcomeIndexes = oldWinningOutcomeIndexes(parent, relatedRows, oldOutcome);
       const oldLabel = oldOutcomeIndexes.length > 0 ? labelsFor(parentOutcomes, oldOutcomeIndexes) : labelFor(parentOutcomes, oldOutcome);
       const newLabel = labelsFor(parentOutcomes, winningOutcomeIndexes);
+
+      const preview = body.preview === true;
+      const revision = settlementRevision([parent.question, parentOutcomes, parent.outcome, parent.amm_mode, legs]);
+      if (!preview && body.expectedMarket !== undefined && body.expectedMarket !== revision) {
+        throw settlementError('market_changed', 409);
+      }
+      const reversals = await readReversals(client, affectedMarketIds, target, { lock: !preview });
+      if (preview) {
+        return {
+          ok: true,
+          preview: {
+            ...await readSettlementPreview(client, affectedMarketIds, { winners: target }),
+            question: parent.question, outcomes: parentOutcomes, expectedMarket: revision,
+            selectedLabels: winningOutcomeIndexes.map(index => legs[index]?.leg_label || parentOutcomes[index]),
+            reversedCount: reversals.length,
+            reversedTotal: reversals.reduce((sum, entry) => sum + entry.amountToReverse, 0),
+            expectedResolvedAt: parent.resolved_at == null ? null : new Date(parent.resolved_at).toISOString(),
+          },
+        };
+      }
 
       const correctionResult = await client.query(
         `INSERT INTO points_resolution_corrections (
@@ -242,71 +335,10 @@ export default async function handler(req, res) {
       const correction = correctionResult.rows[0];
       const correctionId = Number(correction.id);
 
-      const redeemResult = await client.query(
-        `SELECT id, market_id, username, outcome_index, shares, collateral, created_at
-           FROM points_trades
-          WHERE market_id = ANY($1::int[])
-            AND side = 'redeem'
-            AND username <> $2
-          ORDER BY created_at ASC, id ASC
-          FOR UPDATE`,
-        [affectedMarketIds, PRONOS_TREASURY_USERNAME],
-      );
-      const redeemIds = redeemResult.rows.map(row => Number(row.id)).filter(Number.isInteger);
-
-      const alreadyReversed = new Set();
-      if (redeemIds.length > 0) {
-        const reversedRows = await client.query(
-          `SELECT redeem_trade_id
-             FROM points_redemption_reversals
-            WHERE redeem_trade_id = ANY($1::int[])`,
-          [redeemIds],
-        );
-        for (const row of reversedRows.rows) {
-          alreadyReversed.add(Number(row.redeem_trade_id));
-        }
-      }
-
-      const legacyReversedByUserMarket = new Map();
-      if (affectedMarketIds.length > 0) {
-        const legacyRows = await client.query(
-          `SELECT reference_id AS market_id,
-                  LOWER(username) AS username_key,
-                  ABS(SUM(amount)) AS amount
-             FROM points_distributions
-            WHERE kind = 'redemption_reversal'
-              AND amount < 0
-              AND reference_id = ANY($1::int[])
-            GROUP BY reference_id, LOWER(username)`,
-          [affectedMarketIds],
-        );
-        for (const row of legacyRows.rows) {
-          legacyReversedByUserMarket.set(
-            `${Number(row.market_id)}:${row.username_key}`,
-            Number(row.amount || 0),
-          );
-        }
-      }
-
       let reversedTotal = 0;
       let reversedCount = 0;
 
-      for (const redeem of redeemResult.rows) {
-        const marketId = Number(redeem.market_id);
-        const targetOutcome = target.get(marketId);
-        const redeemedOutcome = Number(redeem.outcome_index);
-        if (!Number.isInteger(targetOutcome) || redeemedOutcome === targetOutcome) continue;
-        if (alreadyReversed.has(Number(redeem.id))) continue;
-
-        const originalAmount = Number(redeem.collateral || 0);
-        if (!(originalAmount > EPSILON)) continue;
-
-        const key = reversalKey(redeem);
-        const legacyCovered = Math.min(Number(legacyReversedByUserMarket.get(key) || 0), originalAmount);
-        legacyReversedByUserMarket.set(key, Math.max(0, Number(legacyReversedByUserMarket.get(key) || 0) - legacyCovered));
-        const amountToReverse = originalAmount - legacyCovered;
-        if (!(amountToReverse > EPSILON)) continue;
-
+      for (const { redeem, marketId, redeemedOutcome, amountToReverse } of reversals) {
         const inserted = await client.query(
           `INSERT INTO points_redemption_reversals (
              redeem_trade_id, correction_id, market_id, username, outcome_index, amount

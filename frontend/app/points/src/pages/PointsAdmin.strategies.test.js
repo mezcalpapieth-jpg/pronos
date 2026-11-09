@@ -3,13 +3,13 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const adminSource = await readFile(new URL('./PointsAdmin.jsx', import.meta.url), 'utf8');
+const workspaceSource = await readFile(new URL('./PointsAdminWorkspace.jsx', import.meta.url), 'utf8');
 const apiSource = await readFile(new URL('../../../../api/points/admin/strategies.js', import.meta.url), 'utf8');
 const stocksSource = await readFile(new URL('../components/AdminStocksAudit.jsx', import.meta.url), 'utf8');
 
 test('Points admin exposes the strategies audit tab', () => {
   assert.match(adminSource, /useCallback/);
-  assert.match(adminSource, /\['create', 'markets', 'stats', 'pending', 'social', 'support', 'deck', 'cycles', 'risk', 'api', 'launch', 'strategies'\]/);
-  assert.match(adminSource, /\{ id: 'strategies', label: 'Estrategias' \}/);
+  assert.match(workspaceSource, /\['strategies', 'Estrategias'\]/);
   assert.match(adminSource, /\{tab === 'strategies' && <StrategiesPanel \/>\}/);
   assert.match(adminSource, /function StrategiesPanel\(\)/);
 });

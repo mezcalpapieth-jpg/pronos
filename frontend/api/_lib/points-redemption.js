@@ -1,7 +1,7 @@
 import { assertPointsExecution } from './points-execution-mode.js';
 import { readActiveCycleWindow, scoringStartIsoForWindow } from './points-cycle-window.js';
 
-const SHARE_EPSILON = 0.000001;
+export const SHARE_EPSILON = 0.000001;
 
 function fail(message, status = 400) {
   throw Object.assign(new Error(message), { status });

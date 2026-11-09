@@ -8,7 +8,7 @@
  */
 import { readSession } from './session.js';
 
-function allowlist() {
+export function pointsAdminUsernames() {
   // Local dev keeps a "mezcal,frmm,alex" fallback for convenience.
   // Vercel deploys require POINTS_ADMIN_USERNAMES to be set explicitly;
   // an empty list means "no one" — safe default.
@@ -29,7 +29,7 @@ export function requirePointsAdmin(req, res) {
     res.status(403).json({ error: 'username_required' });
     return null;
   }
-  const allowed = allowlist();
+  const allowed = pointsAdminUsernames();
   if (!allowed.includes(session.username.toLowerCase())) {
     res.status(403).json({ error: 'not_admin' });
     return null;
@@ -39,5 +39,5 @@ export function requirePointsAdmin(req, res) {
 
 export function isAdminUsername(username) {
   if (!username) return false;
-  return allowlist().includes(String(username).toLowerCase());
+  return pointsAdminUsernames().includes(String(username).toLowerCase());
 }
