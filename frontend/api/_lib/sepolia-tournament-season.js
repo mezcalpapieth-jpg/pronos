@@ -49,6 +49,7 @@ export async function assertTournamentTradingOpen({now=new Date(),...dependencie
   const {plan}=season.cycle,timestamp=new Date(now).getTime();
   if (!Number.isFinite(timestamp) || timestamp<Date.parse(plan.startsAt)) throw Object.assign(Error('tournament_not_started'),{status:409});
   if (season.closure || timestamp>=Date.parse(plan.endsAt)) throw Object.assign(Error('tournament_closed'),{status:409});
+  return season;
 }
 
 export function publicSeasonRows(result,username) {

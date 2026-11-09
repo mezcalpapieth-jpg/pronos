@@ -13,6 +13,15 @@ test('missing coverage or gas measurements remain explicit launch blockers',()=>
   const d=buildSeasonPreparation({...input,gas:undefined,markets:[{...input.markets[0],resolver_type:'manual'}]});
   assert.ok(d.blockers.includes('manual_resolution_coverage_required'));assert.ok(d.blockers.includes('measured_gas_budget_required'));
 });
+test('on-demand budget reserves grants without funding an opening roster',()=>{
+  const d=buildSeasonPreparation({...input,expectedParticipants:0,lateJoinCapacity:300});
+  assert.equal(d.userUnits,'0');
+  assert.equal(d.lateJoinReserveUnits,'150000000000');
+  assert.equal(d.totalMxnp,'151000.000000');
+  const p={...d,userCount:0,maxTotalUnits:d.capUnits};
+  assert.equal(assertPreparedSeasonPlan(d,d.draftHash,p),p);
+  assert.throws(()=>buildSeasonPreparation({...input,expectedParticipants:0,lateJoinCapacity:0}),/participant_budget/);
+});
 test('invalid caps, dates, duplicate markets and misleading gas assumptions are rejected',()=>{
   for(const change of [{maxTotalMxnp:'300000'},{endsAt:input.startsAt},{startsAt:'2027-01-01'},{markets:[...input.markets,...input.markets]},
     {markets:[{...input.markets[0],closesAt:'2027-03-01T00:00:00Z'}]},{gas:{...input.gas,expectedActiveUsers:701}},{gas:{...input.gas,measuredTradeWei:'0'}}])assert.throws(()=>buildSeasonPreparation({...input,...change}));

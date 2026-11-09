@@ -59,32 +59,46 @@ export function PointsExecutionProvider({ children }) {
 
 // Auth's balance remains the Points balance for both apps. Read the token only
 // when the current view explicitly needs it; no private data is cached globally.
-export function useExecutionBalance(requestedMode) {
+export function useExecutionBalance(requestedMode, { includeTournamentGrant = false } = {}) {
   const execution = usePointsExecution();
   const mode = requestedMode || execution.mode;
-  const { user, authenticated } = usePointsAuth();
+  const { user, authenticated, refresh } = usePointsAuth();
   const [state, setState] = useState({ owner: null, balance: null, loading: true, error: null });
   const owner = user ? `${user.suborgId || ''}:${user.walletAddress || ''}:${user.username || ''}` : null;
   useEffect(() => {
     if (mode !== 'onchain' || !authenticated) return undefined;
     let canceled = false;
     let sequence = 0;
-    const readBalance = pointsExecution.createBalanceReader();
     async function load() {
       const current = ++sequence;
       try {
-        const result = await readBalance();
-        if (!canceled && current === sequence) setState({ owner, balance: Number(result.balance), loading: false, error: null });
+        const result = await pointsExecution.balance({ includeTournamentGrant });
+        if (!canceled && current === sequence) setState({ owner, balance: Number(result.balance),
+          openingGrant: Number(result.openingGrant || 0), loading: false, error: null });
       } catch (error) {
-        if (!canceled && current === sequence) setState({ owner, balance: null, loading: false, error: publicErrorMessage(error) });
+        if (!canceled && current === sequence) {
+          setState({ owner, balance: null, loading: false, error: publicErrorMessage(error) });
+          if (error.status === 401) void refresh();
+        }
       }
     }
     setState({ owner, balance: null, loading: true, error: null });
     load();
     const remove = onPointsRefresh(load);
     const interval = window.setInterval(load, 25000);
-    return () => { canceled = true; remove(); window.clearInterval(interval); };
-  }, [mode, authenticated, owner]);
+    const onVisible = () => { if (!document.hidden) load(); };
+    if (includeTournamentGrant) {
+      document.addEventListener('visibilitychange', onVisible);
+      window.addEventListener('focus', onVisible);
+    }
+    return () => {
+      canceled = true;
+      remove();
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
+  }, [mode, authenticated, owner, includeTournamentGrant, refresh]);
   if (mode !== 'onchain') return { balance: Number(user?.balance || 0), loading: false, error: null };
   if (!authenticated) return { balance: null, loading: false, error: null };
   if (state.owner !== owner) return { balance: null, loading: true, error: null };

@@ -21,7 +21,7 @@ const mapping = { id: 360636, mode: 'onchain', chain_id: 421614, chain_address: 
   contract_market_id: 0, protocol_outcomes: ['Sí', 'No'], protocol_version: 'v1', protocol_status: 'active',
   yes_price: '0.5', no_price: '0.5', snapshot_at: '2026-10-17T10:00:00Z' };
 
-function fixture({ patch = {}, rows = [mapping], trades = [], session = { sub: 'own-suborg' }, limited = false, rpcFails = false, rpcChain = 421614 } = {}) {
+function fixture({ patch = {}, rows = [mapping], trades = [], session = { sub: 'own-suborg' }, limited = false, rpcFails = false, rpcChain = 421614, openingGrant } = {}) {
   const queries = [];
   let authCalls = 0;
   const sql = async (parts, ...values) => {
@@ -41,6 +41,7 @@ function fixture({ patch = {}, rows = [mapping], trades = [], session = { sub: '
     rateLimit: (req, res) => { if (limited) res.status(429).json({ error: 'rate_limited' }); return limited; }, clientIp: () => 'test-ip',
     pendingApprovalSettings, tradingFactories, marketView, portfolioView, jsonArray, console: { error() {} },
     lateJoinSettings:()=>lateJoinSettings({...env,...patch}),seasonSettings:()=>seasonSettings({...env,...patch}),
+    readTournamentOpeningGrant: async suborg => { assert.equal(suborg, 'own-suborg'); return openingGrant; },
     tradeRequestSettings:()=>tradeRequestSettings({...env,...patch}),
     ethers: { providers: { JsonRpcProvider: class { async getNetwork() { if (rpcFails) throw new Error('down'); return { chainId: rpcChain }; } } },
       Contract: class { async balanceOf(owner) { assert.equal(owner, wallet); return '7500000'; } async decimals() { return 6; } },
@@ -143,6 +144,15 @@ test('token balance is read-only, private and explicit about unavailable/wrong-c
     assert.equal(result.code, 503); assert.equal(result.body.error, 'onchain_balance_unavailable');
     assert.equal(result.body.balance, undefined);
   }
+});
+
+test('authenticated balance can show an opening grant without counting it as spendable tokens', async () => {
+  const f = fixture({ openingGrant: '500' });
+  assert.equal((await f.request({ action: 'balance' })).body.openingGrant, undefined);
+  const result = await f.request({ action: 'balance', includeTournamentGrant: '1' });
+  assert.equal(result.body.openingGrant, '500');
+  assert.equal(result.body.balance, '7.5');
+  assert.equal((await fixture({ session: null }).request({ action: 'balance', includeTournamentGrant: '1' })).code, 401);
 });
 
 test('protocol snapshots return percentage history under the Points ID', async () => {

@@ -94,10 +94,10 @@ export default async function handler(req, res) {
     const response = await protocolTradeRequest({
       req, session, action: 'buy', payload: { marketId: mid, outcomeIndex: oi, collateral: amt, minSharesOut: minSharesOut ?? null, maxAvgPrice: maxAvgPrice ?? null, quoteReference: req.body?.quoteReference ?? null },
       prepare: async ({ ownerAddr, chainId: expectedChainId }) => {
-        await assertTournamentTradingOpen();
+        const season = await assertTournamentTradingOpen();
         // Resolve the market — must be active + on-chain (has pool_address).
         const marketRows = await sql`
-          SELECT id, question, status, pool_address, outcomes, outcome_count, start_time,
+          SELECT id, question, status, pool_address, factory_address, outcomes, outcome_count, start_time,
                  end_time, created_at, protocol_version, chain_id, resolver_type,
                  resolver_config, sport, league
           FROM protocol_markets
@@ -135,9 +135,11 @@ export default async function handler(req, res) {
         const txMinSharesOut = optionalFiniteNumber(minSharesOut)
           ?? defaultMinSharesOut(quote);
 
-        const registration = await prepareTournamentJoin(session.sub);
-        if (!['disabled','registered'].includes(registration.status)) {
-          throw tradeError('tournament_join_pending', 409);
+        const registration = await prepareTournamentJoin(session.sub, { market: m, expectedWallet: ownerAddr });
+        if (registration.status === 'pending') throw tradeError('tournament_join_pending', 202);
+        if (registration.status === 'reverted') throw tradeError('tournament_join_unavailable', 409);
+        if (registration.status === 'disabled' && season?.cycle.plan.userCount === 0) {
+          throw tradeError('tournament_join_unavailable', 503);
         }
 
         return { protocolMarketId: mid, chainId: Number(m.chain_id), suborgId: session.sub, ownerAddr, market: { chain_address: m.pool_address, outcomes }, outcomeIndex: oi, collateral: amt, minSharesOut: txMinSharesOut };

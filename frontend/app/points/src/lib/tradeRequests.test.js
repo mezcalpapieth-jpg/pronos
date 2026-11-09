@@ -23,13 +23,14 @@ function fixture() {
   const post = async (url, body) => {
     posts.push({ url, body });
     if (f.onPost) await f.onPost();
-    const state = f.pending ? { status: 'pending', pending: true, ok: false, error: 'trade_request_pending' }
+    const state = f.pending ? { status: 'pending', pending: true, ok: false, error: f.pendingError || 'trade_request_pending' }
       : { status: 'confirmed', requestId: body.requestId, result: { ok: true, sharesOut: 20 }, indexingStatus: 'pending' };
     server.set(`${f.scope}:${body.requestId}`, state);
     if (f.loseReply) throw TypeError('network response lost');
     return f.pending ? state : { ...state.result, requestId: body.requestId };
   };
-  const client = () => createTradeRequestClient({ get, post, storage, uuid: () => `request-000${++sequence}` });
+  const client = () => createTradeRequestClient({ get, post, storage, uuid: () => `request-000${++sequence}`,
+    waitForEnrollment: async () => { await f.onEnrollmentWait?.(); } });
   return Object.assign(f, { data, server, posts, client });
 }
 const body = { marketId: 3, outcomeIndex: 0, collateral: 10, minSharesOut: 18 };
@@ -52,6 +53,19 @@ test('pending retry uses the original key, amount and price protection', async (
   assert.equal(f.posts[1].body.minSharesOut, 18);
   f.pending = false; assert.equal((await f.client().resume()).ok, true);
   assert.equal(f.posts[2].body.requestId, f.posts[0].body.requestId);
+});
+test('a slow opening grant retries the saved buy and can resume later without changing it', async () => {
+  const f = fixture();
+  f.pending = true;
+  f.pendingError = 'tournament_join_pending';
+  const client = f.client();
+  await assert.rejects(client.trade('buy', body, options), { code: 'tournament_join_pending' });
+  assert.equal(f.posts.length, 4);
+  f.onEnrollmentWait = () => { f.pending = false; };
+  assert.equal((await f.client().resume()).ok, true);
+  assert.equal(f.posts.length, 6);
+  for (const post of f.posts) assert.deepEqual(post.body, f.posts[0].body);
+  assert.equal(f.data.size, 0);
 });
 test('a different action or amount cannot hide an unresolved trade', async () => {
   const f = fixture(); f.pending = true; const client = f.client();

@@ -77,7 +77,7 @@ export function buildTournamentPlan({ deployment, previousDeployment, users, cyc
     if (wallet === next.operations || ADDRESS_FIELDS.slice(0, 6).some(k => next[k] === wallet)) fail('recipient_is_system_address');
     recipients.push({ username, wallet, suborg, units: grant.toString(), kind: 'user' });
   }
-  if (!recipients.length) fail('no_eligible_wallets');
+  if (!recipients.length && reserve === 0n) fail('no_eligible_wallets');
   recipients.sort((a, b) => a.username < b.username ? -1 : a.username > b.username ? 1 : 0);
   skipped.sort();
   const userUnits = grant * BigInt(recipients.length);

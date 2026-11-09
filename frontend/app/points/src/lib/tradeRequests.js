@@ -5,7 +5,8 @@ const storagePrefix = 'pronos:sepolia-trade:';
 // Only intent IDs and accepted input are stored in the browser. Signed bytes
 // stay on the server. Storage failure stops submission before any POST.
 export function createTradeRequestClient({ get, post, storage = () => globalThis.localStorage,
-  uuid = () => globalThis.crypto.randomUUID(), changed = () => {} }) {
+  uuid = () => globalThis.crypto.randomUUID(), changed = () => {},
+  waitForEnrollment = () => new Promise(resolve => setTimeout(resolve, 1500)) }) {
   const running = new Map();
   const read = scope => {
     try { return JSON.parse(storage().getItem(storagePrefix + scope) || 'null'); }
@@ -44,9 +45,16 @@ export function createTradeRequestClient({ get, post, storage = () => globalThis
       throw Object.assign(new Error(state.error || 'tx_reverted'), { code: state.error || 'tx_reverted', requestId: state.requestId });
     }
     try {
-      const result = await post(`/api/protocol/${entry.action}`, { ...entry.body, requestScope: scope });
+      const url = `/api/protocol/${entry.action}`;
+      const body = { ...entry.body, requestScope: scope };
+      let result = await post(url, body);
+      for (let retry = 0; retry < 3 && result.error === 'tournament_join_pending'; retry++) {
+        await waitForEnrollment();
+        result = await post(url, body);
+      }
       if (result.ok !== true || result.pending) throw pendingError(entry.body.requestId,
-        result.error === 'trade_nonce_conflict' ? 'trade_needs_reconciliation' : 'trade_request_pending');
+        result.error === 'trade_nonce_conflict' ? 'trade_needs_reconciliation'
+          : result.error === 'tournament_join_pending' ? result.error : 'trade_request_pending');
       write(scope, null);
       return result;
     } catch (error) {

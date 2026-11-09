@@ -7,7 +7,7 @@ const chainMarket = { id: 360636, mode: 'onchain', chainId: 421614, chainMarketI
   executionReady: true, prices: [0.6, 0.4], outcomes: ['Sí', 'No'], status: 'active' };
 const pointsMarket = { id: 3, mode: 'points', outcomes: ['Sí', 'No'], prices: [0.5, 0.5] };
 
-function fixture({ enabled = true, lateJoining = false, join = async () => ({ status: 'registered' }), mapping = [chainMarket, pointsMarket], requestError = null, tradeError = 'delegation_required', beforeTrade } = {}) {
+function fixture({ enabled = true, lateJoining = false, balance = () => ({ balance: '7.5' }), mapping = [chainMarket, pointsMarket], requestError = null, tradeError = 'delegation_required', beforeTrade } = {}) {
   const requests = [];
   let portfolio = { positions: [{ mode: 'onchain', marketId: chainMarket.id }], history: [], summary: {} };
   const client = createExecutionAdapter({
@@ -27,7 +27,7 @@ function fixture({ enabled = true, lateJoining = false, join = async () => ({ st
         }
         if (action === 'portfolio') return portfolio;
         if (action === 'prices') return { history: { [chainMarket.id]: [{ t: 1, p: 60 }] } };
-        if (action === 'balance') return { balance: '7.5' };
+        if (action === 'balance') return balance(parsed.searchParams.get('includeTournamentGrant') === '1');
         throw new Error(`Unexpected action ${action}`);
       }
       if (parsed.pathname === '/api/points/markets') return { markets: parsed.searchParams.get('mode') === 'onchain' ? [chainMarket] : [pointsMarket] };
@@ -40,7 +40,6 @@ function fixture({ enabled = true, lateJoining = false, join = async () => ({ st
     },
     async post(url, body) {
       requests.push({ method: 'POST', url, body });
-      if (url === '/api/points/tournament-join') return join();
       if (body.collateral === 999) throw Object.assign(new Error(tradeError), { code: tradeError });
       return { ok: true };
     },
@@ -61,46 +60,18 @@ test('discovery scopes the preview to Sepolia while preserving Points IDs and ch
   assert.deepEqual(await client.markets(), [pointsMarket]);
 });
 
-test('a new on-chain balance view registers before reading spendable tokens, once per view', async () => {
-  const { client, requests } = fixture({ lateJoining: true });
-  const read = client.createBalanceReader();
-  await Promise.all([read(), read()]);
-  await read();
-  const operations = requests.filter(r => !r.url.includes('action=config'));
-  assert.equal(operations[0].url, '/api/points/tournament-join');
-  assert.deepEqual(operations[0].body, {});
-  assert.equal(operations.filter(r => r.method === 'POST').length, 1);
-  assert.equal(operations.filter(r => r.url.includes('action=balance')).length, 3);
-  await client.createBalanceReader()(); // A different mounted account has no cached registration.
-  assert.equal(requests.filter(r => r.method === 'POST').length, 2);
-});
-
-test('pending or failed registration withholds balance and retries without a Points fallback', async () => {
-  for (const first of ['pending', 'reverted', 'error']) {
-    let attempts = 0;
-    const { client, requests } = fixture({ lateJoining: true, join: async () => {
-      if (++attempts > 1) return { status: 'registered' };
-      if (first === 'error') throw Object.assign(Error('unavailable'), { code: 'tournament_join_unavailable' });
-      return { status: first };
-    } });
-    const read = client.createBalanceReader();
-    await assert.rejects(read(), { code: first === 'pending' ? 'tournament_join_pending' : 'tournament_join_unavailable' });
-    assert.equal(requests.filter(r => r.url.includes('action=balance')).length, 0);
-    assert.equal((await read()).balance, '7.5');
-    assert.deepEqual(requests.filter(r => r.method === 'POST').map(r => r.url),
-      ['/api/points/tournament-join', '/api/points/tournament-join']);
-  }
-});
-
-test('registration remains off in production and unconfigured previews; balance GET stays read-only', async () => {
-  for (const settings of [{ enabled: false, lateJoining: true }, { enabled: true, lateJoining: false }]) {
-    const { client, requests } = fixture(settings);
-    await client.createBalanceReader()();
-    assert.equal(requests.filter(r => r.method === 'POST').length, 0);
-  }
-  const { client, requests } = fixture({ lateJoining: true });
-  await client.balance();
-  assert.equal(requests.filter(r => r.method === 'POST').length, 0);
+test('a tab with pre-season config sees the current grant hint from a read-only balance request', async () => {
+  let seasonOpen = false;
+  const { client, requests } = fixture({ balance: includeGrant => ({
+    balance: '0', ...(includeGrant && seasonOpen ? { openingGrant: '500' } : {}),
+  }) });
+  assert.equal((await client.config()).lateJoining, false);
+  assert.deepEqual(await client.balance({ includeTournamentGrant: true }), { balance: '0' });
+  seasonOpen = true;
+  assert.deepEqual(await client.balance({ includeTournamentGrant: true }), { balance: '0', openingGrant: '500' });
+  assert.deepEqual(await client.balance(), { balance: '0' });
+  assert.equal(requests.filter(r => r.url.includes('action=config')).length, 1);
+  assert.ok(requests.every(r => r.method === 'GET'));
 });
 
 for (const [action, args] of [

@@ -70,6 +70,20 @@ test('lost HTTP response replays one completed trade even after market closure',
   assert.equal(f.prepared, 1); assert.equal(f.sent.length, 1); assert.equal(f.signed.length, 1);
   assert.equal(first.body.indexingStatus, 'pending');
 });
+test('a buy waiting for tournament funding stays resumable and signs only after funding', async t => {
+  const f = await fixture(t);
+  const pending = await f.run({ prepare: async () => {
+    throw Object.assign(Error('tournament_join_pending'), { status: 202 });
+  } });
+  assert.equal(pending.httpStatus, 202);
+  assert.equal(pending.body.error, 'tournament_join_pending');
+  assert.equal(f.signed.length, 0);
+  assert.equal((await f.store.recoverable(wallet, f.base.suborg)).request_key, f.base.key);
+  const completed = await f.run();
+  assert.equal(completed.httpStatus, 200);
+  assert.equal(completed.body.requestId, pending.body.requestId);
+  assert.equal(f.signed.length, 1);
+});
 test('RPC timeout rebroadcasts only persisted bytes and nonce, across a fresh store instance', async t => {
   const f = await fixture(t); f.autoConfirm = false;
   assert.equal((await f.run()).httpStatus, 202);

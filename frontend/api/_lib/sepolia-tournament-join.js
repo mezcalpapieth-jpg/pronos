@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { ethers } from 'ethers';
-import { address, planHash, validateTournamentPlan, TOURNAMENT_CHAIN_ID } from './sepolia-tournament.js';
+import { address, planHash, validateTournamentPlan, verifyTournamentDeployment, TOURNAMENT_CHAIN_ID } from './sepolia-tournament.js';
 
 export const JOIN_ABI = ['function transfer(address,uint256) returns(bool)',
   'event Transfer(address indexed from,address indexed to,uint256 value)'];
@@ -24,7 +24,7 @@ function verifySaved(row, plan) {
     || row.amount_units.toString() !== plan.allocationUnits) fail('saved_join_mismatch');
 }
 
-async function reconcile(row, plan, { provider, store }) {
+async function reconcile(row, plan, { provider, store, allowRebroadcast = true }) {
   verifySaved(row,plan);
   const receipt = await provider.getTransactionReceipt(row.tx_hash);
   if (receipt) {
@@ -36,17 +36,48 @@ async function reconcile(row, plan, { provider, store }) {
       return { status:'reverted', txHash:row.tx_hash };
     }
     verifyJoinReceipt(receipt,plan,{wallet:row.wallet_address});
-    await store.settleJoin(row.tx_hash,'confirmed');
+    if (row.status !== 'confirmed') await store.settleJoin(row.tx_hash,'confirmed');
     return { status:'registered', txHash:row.tx_hash };
   }
+  if (!allowRebroadcast) return null;
   if (await provider.getTransactionCount(plan.deployment.operations,'latest') > Number(row.nonce)) fail('join_nonce_consumed_without_receipt');
   try { await provider.sendTransaction(row.signed_tx); } catch { /* Only retry these persisted bytes. */ }
   return { status:'pending', txHash:row.tx_hash };
 }
 
+// Operators can finish an already-saved grant even after buy requests close.
+// This path has no signer and never creates a new grant.
+export async function reconcileTournamentJoin({ store, provider, cycleId, expectedHash, apply = false,
+  verifyDeployment = verifyTournamentDeployment }) {
+  const cycle = await store.cycle(cycleId);
+  const plan = validateTournamentPlan(cycle.plan);
+  if (cycle.status !== 'funded' || plan.cycleId !== cycleId || planHash(plan) !== expectedHash
+    || cycle.plan_hash !== expectedHash) fail('reviewed_funded_cycle_required');
+  const funder = plan.deployment.operations;
+  async function pending() {
+    const row = await store.pendingJoin(funder);
+    if (row && row.cycle_id !== cycleId) fail('another_cycle_has_pending_join');
+    if (row) verifySaved(row, plan);
+    return row;
+  }
+  if (!apply) {
+    const row = await pending();
+    return row ? { status:'pending', txHash:row.tx_hash } : { status:'idle' };
+  }
+  await verifyDeployment(plan, { provider, expectedSupply:plan.totalUnits, allowMarkets:true });
+  const lease = randomUUID();
+  if (!await store.acquire(funder,lease)) fail('join_funder_busy');
+  try {
+    const row = await pending();
+    return row ? await reconcile(row,plan,{provider,store}) : { status:'idle' };
+  } finally {
+    await store.release(funder,lease);
+  }
+}
+
 // A grant is transferred from a pre-minted, reviewed reserve. No mint authority
 // is hosted, the opening plan stays immutable, and pending work is recoverable.
-export async function joinTournament({ store, provider, cycleId, suborgId, sign, verifyRuntime,
+export async function joinTournament({ store, provider, cycleId, suborgId, expectedWallet, sign, verifyRuntime,
   now = new Date() }) {
   const cycle = await store.cycle(cycleId), plan = validateTournamentPlan(cycle.plan);
   if (cycle.status !== 'funded' || plan.cycleId!==cycleId || cycle.plan_hash !== planHash(plan)) fail('funded_cycle_required');
@@ -54,6 +85,7 @@ export async function joinTournament({ store, provider, cycleId, suborgId, sign,
   await verifyRuntime(plan);
   const user = await store.user(suborgId);
   user.wallet = address(user.wallet);
+  if (expectedWallet && user.wallet !== address(expectedWallet)) fail('join_identity_changed');
   const initial = plan.batches.flatMap(b=>b.recipients).filter(r=>r.kind==='user');
   const opening = initial.find(r=>r.username===user.username || r.wallet===user.wallet || r.suborg===user.suborg);
   if (opening) {
@@ -63,6 +95,11 @@ export async function joinTournament({ store, provider, cycleId, suborgId, sign,
   if (plan.lateJoining !== 'open_during_cycle') fail('late_joining_not_configured');
   if ([...Object.values(plan.deployment)].includes(user.wallet)) fail('recipient_is_system_address');
   const funder = plan.deployment.operations, lease = randomUUID();
+  const recorded = await store.join(cycleId,user);
+  if (recorded?.status === 'confirmed') {
+    const result = await reconcile(recorded,plan,{provider,store,allowRebroadcast:false});
+    if (result) return result;
+  }
   if (!await store.acquire(funder,lease)) fail('join_funder_busy');
   try {
     const pending = await store.pendingJoin(funder);

@@ -50,6 +50,16 @@ test('snapshot/hash is deterministic across SQL JSON key order and user query or
   assert.throws(() => validateTournamentPlan(changed), /modified_tournament_plan/);
 });
 
+test('on-demand season funds only operations and requires a reserve', () => {
+  const p = buildTournamentPlan(input({ users: [], lateJoinReserveMxnp: '1000' }));
+  assert.equal(p.userCount, 0);
+  assert.equal(p.lateJoining, 'open_during_cycle');
+  assert.deepEqual(p.batches[0].recipients, [{ username: null, wallet: p.deployment.operations,
+    suborg: null, units: '2000000000', kind: 'liquidity' }]);
+  assert.equal(validateTournamentPlan(p), p);
+  assert.throws(() => buildTournamentPlan(input({ users: [] })), /no_eligible_wallets/);
+});
+
 test('rejects reused collateral/contracts, duplicate identities, invalid windows and budget overruns', () => {
   for (const options of [
     { previousDeployment: deployment() }, { allocation: '0' }, { allocation: '0.0000001' },

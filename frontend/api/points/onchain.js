@@ -8,7 +8,7 @@ import { rateLimit, clientIp } from '../_lib/rate-limit.js';
 import { pendingApprovalSettings } from '../_lib/onchain-preview-approval.js';
 import { marketView, portfolioView, jsonArray } from '../_lib/points-onchain-view.js';
 import { tradingFactories } from '../_lib/trading-router.js';
-import { lateJoinSettings } from '../_lib/sepolia-tournament-user-join.js';
+import { lateJoinSettings, readTournamentOpeningGrant } from '../_lib/sepolia-tournament-user-join.js';
 import { seasonSettings } from '../_lib/sepolia-tournament-season.js';
 import { tradeRequestSettings } from '../_lib/trade-request-runtime.js';
 
@@ -92,9 +92,13 @@ export default async function handler(req, res) {
           const network = await provider.getNetwork();
           if (Number(network.chainId) !== settings.chainId) throw new Error('wrong_chain');
           const token = new ethers.Contract(settings.collateral, ['function balanceOf(address) view returns (uint256)', 'function decimals() view returns (uint8)'], provider);
-          const [balance, decimals] = await Promise.all([token.balanceOf(wallet), token.decimals()]);
+          const [balance, decimals, openingGrant] = await Promise.all([
+            token.balanceOf(wallet), token.decimals(),
+            req.query.includeTournamentGrant === '1' ? readTournamentOpeningGrant(session.sub) : null,
+          ]);
           return res.status(200).json({ mode: 'onchain', chainId: settings.chainId, symbol: settings.symbol,
-            balance: ethers.utils.formatUnits(balance, decimals) });
+            balance: ethers.utils.formatUnits(balance, decimals),
+            ...(openingGrant ? { openingGrant } : {}) });
         } catch { return res.status(503).json({ error: 'onchain_balance_unavailable' }); }
       }
       const markets = (await mappings(settings)).filter(m => m.protocolMarketId);

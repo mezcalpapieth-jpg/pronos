@@ -8,12 +8,14 @@ import { buildTournamentPlan, normalizeDeployment, planHash, requireTournamentPr
   summarizeTournament, tournamentRuntimeEnv, validateTournamentPlan, verifyTournamentDeployment } from '../_lib/sepolia-tournament.js';
 import { SEPOLIA_TOURNAMENT_SCHEMA, tournamentStore } from '../_lib/sepolia-tournament-store.js';
 import { fundTournamentBatch } from '../_lib/sepolia-tournament-funding.js';
+import { reconcileTournamentJoin } from '../_lib/sepolia-tournament-join.js';
+import { tournamentJoinStore } from '../_lib/sepolia-tournament-join-store.js';
 
 async function main() {
   const [command = 'help', ...argv] = process.argv.slice(2);
   const allowed = new Set(['apply', 'expected-host', 'deployment', 'previous-deployment', 'cycle-id',
     'input', 'draft', 'draft-hash', 'label', 'starts-at', 'ends-at', 'allocation', 'liquidity-mxnp', 'max-total-mxnp', 'batch-size',
-    'out', 'plan', 'plan-hash', 'retry-reverted', 'late-join-reserve-mxnp']);
+    'out', 'plan', 'plan-hash', 'retry-reverted', 'late-join-reserve-mxnp', 'prefund-opening-roster']);
   const flags = Object.fromEntries(argv.map(arg => {
     const match = arg.match(/^--([a-z-]+)(?:=(.*))?$/);
     if (!match || !allowed.has(match[1])) throw new Error('unknown_tournament_argument');
@@ -33,11 +35,17 @@ async function main() {
   plan      --deployment=JSON --previous-deployment=JSON --cycle-id=slug --label=...
             --starts-at=ISO --ends-at=ISO --liquidity-mxnp=N --max-total-mxnp=N
             [--allocation=500] [--late-join-reserve-mxnp=N] [--batch-size=50] --out=/private/tmp/cycle.json
-            Snapshot all users with a wallet and Turnkey suborg. Verify fresh stack.
+            By default fund a shared enrollment reserve (--late-join-reserve-mxnp
+            is required). In the draft use expectedParticipants=0 and budget all
+            participant grants in lateJoinCapacity. Verify the fresh stack.
+            --prefund-opening-roster explicitly selects the legacy opening snapshot.
   prepare   --plan=JSON --plan-hash=HASH [--apply] Record the immutable snapshot.
   fund      --cycle-id=slug --plan-hash=HASH [--apply] Send/reconcile ONE batch.
             Rerun until funded; require two confirmations. --retry-reverted after
             reviewing a reverted receipt. Ambiguous sends reuse the saved bytes.
+  reconcile-join --cycle-id=slug --plan-hash=HASH [--apply]
+            Inspect or reconcile an existing grant, including after season end.
+            --apply may rebroadcast its saved transaction. No new grant is signed.
   status    --cycle-id=slug Show summary/receipts, never signed transaction bytes.
   runtime   --cycle-id=slug Print config handoff ONLY after funding is final.
 
@@ -54,11 +62,13 @@ async function main() {
     fs.writeFileSync(flags.out, JSON.stringify(draft,null,2)+'\n', {mode:0o600,flag:'wx'});
     output({draftHash:draft.draftHash,totalMxnp:draft.totalMxnp,blockers:draft.blockers,readyToLaunch:false,applied:false});
   } else {
-    if (!['schema', 'plan', 'prepare', 'fund', 'status', 'runtime'].includes(command)) throw new Error('unknown_tournament_command');
+    if (!['schema', 'plan', 'prepare', 'fund', 'reconcile-join', 'status', 'runtime'].includes(command)) throw new Error('unknown_tournament_command');
     const apply = flags.apply === true;
     if (flags.apply !== undefined && !apply) throw new Error('use_bare_apply_flag');
     if (flags['retry-reverted'] !== undefined && flags['retry-reverted'] !== true) throw new Error('use_bare_retry_reverted_flag');
-    if (apply && !['schema', 'prepare', 'fund'].includes(command)) throw new Error('command_is_read_only');
+    const prefundRoster = flags['prefund-opening-roster'] === true;
+    if (flags['prefund-opening-roster'] !== undefined && (!prefundRoster || command !== 'plan')) throw new Error('use_bare_prefund_opening_roster_flag_with_plan');
+    if (apply && !['schema', 'prepare', 'fund', 'reconcile-join'].includes(command)) throw new Error('command_is_read_only');
     if (command === 'schema' && !apply) {
       console.log(`${SEPOLIA_TOURNAMENT_SCHEMA.join(';\n\n')};`);
     } else {
@@ -71,13 +81,17 @@ async function main() {
         await sql.transaction(SEPOLIA_TOURNAMENT_SCHEMA.map(ddl => sql.query(ddl)));
         output({ schemaInstalled: true, minted: false });
       } else if (command === 'plan') {
+        if (!prefundRoster && typeof flags['late-join-reserve-mxnp'] !== 'string') {
+          throw new Error('on_demand_reserve_required');
+        }
         const previousDeployment = normalizeDeployment(read(flags['previous-deployment']));
         if (previousDeployment.token !== process.env.ONCHAIN_COLLATERAL_ADDRESS?.toLowerCase()
           || previousDeployment.factoryV1 !== process.env.ONCHAIN_MARKET_FACTORY_ADDRESS?.toLowerCase()
           || previousDeployment.factoryV2 !== process.env.ONCHAIN_MARKET_FACTORY_V2_ADDRESS?.toLowerCase()
           || previousDeployment.router !== process.env.ONCHAIN_TRADING_ROUTER_ADDRESS?.toLowerCase()) throw new Error('previous_deployment_must_match_current_preview');
-        // No LIMIT: silent truncation would omit users from the opening allocation.
-        const users = await sql`SELECT username, wallet_address, turnkey_sub_org_id FROM points_users ORDER BY LOWER(username)`;
+        const users = prefundRoster
+          ? await sql`SELECT username, wallet_address, turnkey_sub_org_id FROM points_users WHERE NULLIF(TRIM(username), '') IS NOT NULL ORDER BY LOWER(username)`
+          : [];
         const plan = buildTournamentPlan({ deployment: read(flags.deployment), previousDeployment, users,
           cycleId: flags['cycle-id'], label: flags.label, startsAt: flags['starts-at'], endsAt: flags['ends-at'],
           allocation: flags.allocation || '500', liquidityMxnp: flags['liquidity-mxnp'], maxTotalMxnp: flags['max-total-mxnp'],
@@ -102,6 +116,10 @@ async function main() {
         if (!existing) await verifyTournamentDeployment(plan, { provider });
         if (apply) await store.register(plan, flags['plan-hash']);
         output({ ...summarizeTournament(plan), applied: apply });
+      } else if (command === 'reconcile-join') {
+        const result = await reconcileTournamentJoin({ store:tournamentJoinStore(sql,store), provider,
+          cycleId:flags['cycle-id'], expectedHash:flags['plan-hash'], apply });
+        output({ ...result, applied:apply });
       } else {
         const cycle = await store.cycle(flags['cycle-id']);
         const plan = validateTournamentPlan(cycle.plan);

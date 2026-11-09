@@ -4,13 +4,18 @@ import { ethers } from 'ethers';
 import { buildTournamentPlan, planHash, validateTournamentPlan } from './sepolia-tournament.js';
 import { SEPOLIA_TOURNAMENT_SCHEMA, tournamentStore } from './sepolia-tournament-store.js';
 import { tournamentJoinStore } from './sepolia-tournament-join-store.js';
-import { joinTournament, JOIN_ABI } from './sepolia-tournament-join.js';
-import { lateJoinSettings, prepareTournamentJoin } from './sepolia-tournament-user-join.js';
+import { joinTournament, reconcileTournamentJoin, JOIN_ABI } from './sepolia-tournament-join.js';
+import { lateJoinSettings, prepareTournamentJoin, readTournamentOpeningGrant } from './sepolia-tournament-user-join.js';
 import { fixture, addr, hash } from './sepolia-tournament-test-fixture.js';
 import { buildTournamentSnapshot } from './sepolia-tournament-snapshot.js';
 
 const modulePath=process.env.SEPOLIA_GAS_TEST_PGLITE;
 const abi=new ethers.utils.Interface(JOIN_ABI);
+const joinEnv={VERCEL_ENV:'preview',VERCEL_GIT_COMMIT_REF:'onchain-sepolia',ONCHAIN_PREVIEW_APPROVALS_ENABLED:'true',
+  ONCHAIN_CHAIN_ID:'421614',ONCHAIN_TOURNAMENT_LATE_JOIN_ENABLED:'true',ONCHAIN_TOURNAMENT_CYCLE_ID:'cycle-two',
+  ONCHAIN_TOURNAMENT_FUNDER_SUBORG_ID:'operations',ONCHAIN_RPC_URL:'https://rpc.invalid',TURNKEY_POLICIES_ENABLED:'true',
+  ONCHAIN_DURABLE_TRADES_ENABLED:'true',ONCHAIN_TOURNAMENT_SEASON_ENABLED:'true',
+  DATABASE_URL:'postgres://local@ep-delicate-glitter-amp7yrkv.c-5.us-east-1.aws.neon.tech/neondb'};
 
 test('reserve is opt-in, pre-minted within the issuance cap and part of the immutable plan',()=>{
   const old=fixture().input.cycle.plan;
@@ -23,15 +28,13 @@ test('reserve is opt-in, pre-minted within the issuance cap and part of the immu
 });
 
 test('normal-user joining stays disabled outside the explicit isolated Sepolia runtime',async()=>{
-  const env={VERCEL_ENV:'preview',VERCEL_GIT_COMMIT_REF:'onchain-sepolia',ONCHAIN_PREVIEW_APPROVALS_ENABLED:'true',
-    ONCHAIN_CHAIN_ID:'421614',ONCHAIN_TOURNAMENT_LATE_JOIN_ENABLED:'true',ONCHAIN_TOURNAMENT_CYCLE_ID:'cycle-two',
-    ONCHAIN_TOURNAMENT_FUNDER_SUBORG_ID:'operations',ONCHAIN_RPC_URL:'https://rpc.invalid',TURNKEY_POLICIES_ENABLED:'true',
-    DATABASE_URL:'postgres://local@ep-delicate-glitter-amp7yrkv.c-5.us-east-1.aws.neon.tech/neondb'};
+  const env=joinEnv;
   assert.equal(lateJoinSettings(env).configured,true);
   for(const change of [{VERCEL_ENV:'production'},{VERCEL_GIT_COMMIT_REF:'pointbreak'},{ONCHAIN_CHAIN_ID:'42161'},
     {ONCHAIN_TOURNAMENT_LATE_JOIN_ENABLED:'false'}]) {
     assert.equal((await prepareTournamentJoin('user',{env:{...env,...change},run:()=>assert.fail('must stay off')})).status,'disabled');
   }
+  await assert.rejects(prepareTournamentJoin('user',{env:{...env,ONCHAIN_DURABLE_TRADES_ENABLED:'false'}}),/unavailable/);
   await assert.rejects(prepareTournamentJoin('user',{env:{...env,DATABASE_URL:'postgres://production/db'}}),/unavailable/);
   assert.deepEqual(await prepareTournamentJoin('user',{env,sqlFor:()=>null,providerFor:()=>null,run:async args=>{
     assert.equal(args.suborgId,'user');return {status:'registered'};
@@ -72,6 +75,15 @@ test('local PostgreSQL: one-time joins reserve grants before broadcast and recov
       }};
     const run=(suborgId='bob',extra={})=>joinTournament({store,provider,cycleId:plan.cycleId,suborgId,
       sign:async tx=>{signs++;return operations.signTransaction(tx);},verifyRuntime:async()=>{},...extra});
+    const readGrant=(suborgId, now=Date.now())=>readTournamentOpeningGrant(suborgId,{env:joinEnv,
+      sqlFor:()=>sql,readSeason:async()=>({cycle:await store.cycle(plan.cycleId)}),now});
+    await t.test('an idle tab can refresh eligibility across the start without funding its wallet',async()=>{
+      assert.equal(await readGrant('bob',Date.parse(plan.startsAt)-1),null);
+      assert.equal(await readGrant('bob'),'500.0');
+      assert.equal(await readGrant('alice'),null);
+      assert.equal(await readGrant('bob',Date.parse(plan.endsAt)),null);
+      assert.equal(signs,0);assert.equal(sends,0);
+    });
     await t.test('opening users receive no second grant',async()=>{
       assert.equal((await run('alice')).opening,true);assert.equal(signs,0);
     });
@@ -80,20 +92,27 @@ test('local PostgreSQL: one-time joins reserve grants before broadcast and recov
       assert.equal(result.filter(r=>r.status==='fulfilled').length,1);assert.equal(signs,1);assert.equal(sends,1);
       assert.equal((await run()).status,'registered');
       assert.equal((await run()).status,'registered');assert.equal(signs,1);assert.equal(sends,1);
+      assert.equal(await readGrant('bob'),null);
     });
     await t.test('reserve exhaustion, expired window and changed wallet identity cannot broadcast',async()=>{
       await assert.rejects(run('carol'),/budget/);assert.equal(sends,1);
       await assert.rejects(run('carol',{now:new Date(Date.parse(plan.endsAt)+1)}),/window/);
+      await assert.rejects(run('carol',{expectedWallet:addr(99)}),/identity_changed/);assert.equal(sends,1);
       await db.query('UPDATE points_users SET wallet_address=$1 WHERE username=$2',[addr(99),'bob']);
       await assert.rejects(run(),/identity_changed/);assert.equal(sends,1);
       await db.query('UPDATE points_users SET wallet_address=$1 WHERE username=$2',[addr(31),'bob']);
     });
-    await t.test('pending transaction is resumed with the same bytes, including after the window closes',async()=>{
+    await t.test('operators can reconcile a saved grant without a user returning or a new signature',async()=>{
       await db.exec('TRUNCATE sepolia_tournament_joins');receipts.clear();mine=false;
       const first=await run();assert.equal(first.status,'pending');const signed=(await store.pendingJoin(plan.deployment.operations)).signed_tx;
-      mine=true;await run('bob',{now:new Date(Date.parse(plan.endsAt)+1)});
+      const options={store,provider,cycleId:plan.cycleId,expectedHash:planHash(plan),verifyDeployment:async()=>{}};
+      const signedBefore=signs,sentBefore=sends;
+      assert.deepEqual(await reconcileTournamentJoin(options),first);
+      assert.equal(sends,sentBefore);
+      mine=true;await reconcileTournamentJoin({...options,apply:true});
       assert.equal((await store.pendingJoin(plan.deployment.operations)).signed_tx,signed);
-      assert.equal((await run()).status,'registered');
+      assert.equal((await reconcileTournamentJoin({...options,apply:true})).status,'registered');
+      assert.equal(signs,signedBefore);assert.equal(sends,sentBefore+1);
     });
     await t.test('lease fencing and SQL window guard reject stale work even with valid signed bytes',async()=>{
       await db.exec('TRUNCATE sepolia_tournament_joins');

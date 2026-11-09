@@ -22,7 +22,7 @@ async function fixture(t) {
   const db = new PGlite(); t.after(() => db.close());
   for (const ddl of TRADE_REQUEST_SCHEMA) await db.exec(ddl);
   await db.exec(`CREATE TABLE points_users (wallet_address text, turnkey_sub_org_id text);
-    CREATE TABLE protocol_markets (id integer PRIMARY KEY, question text, status text, pool_address text,
+    CREATE TABLE protocol_markets (id integer PRIMARY KEY, question text, status text, pool_address text, factory_address text,
       outcomes jsonb, outcome_count integer, start_time timestamptz, end_time timestamptz, created_at timestamptz,
       protocol_version text, chain_id integer, resolver_type text, resolver_config jsonb, sport text, league text);
     CREATE TABLE trades (market_id integer, tx_hash text, trader text, side text);

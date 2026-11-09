@@ -305,8 +305,22 @@ const PUBLIC_ERROR_COPY = {
     en: 'We are preparing your trade. Please try again in a few seconds.',
   },
   tournament_join_pending: {
-    es: 'Estamos preparando tu saldo del torneo. Intenta de nuevo en unos segundos.',
-    en: 'We are preparing your tournament balance. Please try again in a few seconds.',
+    es: 'Estamos preparando tu saldo del torneo. Puedes continuar esta compra desde Operación pendiente.',
+    en: 'We are preparing your tournament balance. You can resume this buy from the pending trade notice.',
+  },
+  tournament_join_outside_window: {
+    es: 'La inscripción solo está disponible durante el torneo.',
+    en: 'Enrollment is available during the tournament.',
+  },
+  tournament_not_started: { es: 'El torneo aún no empieza.', en: 'The tournament has not started yet.' },
+  tournament_closed: { es: 'El torneo ya terminó.', en: 'The tournament has ended.' },
+  trade_market_changed: {
+    es: 'Este mercado cambió. Vuelve a abrirlo para obtener una cotización actual.',
+    en: 'This market changed. Reopen it for a current quote.',
+  },
+  slippage_exceeded: {
+    es: 'El precio cambió. Revisa la nueva cotización.',
+    en: 'The price moved. Review the updated quote.',
   },
   tournament_join_unavailable: {
     es: 'No pudimos preparar tu inscripción al torneo. Intenta más tarde.',

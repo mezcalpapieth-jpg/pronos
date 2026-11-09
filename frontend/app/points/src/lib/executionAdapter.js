@@ -144,26 +144,9 @@ export function createExecutionAdapter({ get, post, beforeTrade, tradeStorage, t
     }
     return null;
   }
-  // Keep registration state inside one mounted account view. A new reader on
-  // an account switch must check that session again, even with cached config.
-  function createBalanceReader() {
-    let registered = false;
-    let joining;
-    return async () => {
-      const settings = await config();
-      if (settings.enabled === true && settings.lateJoining === true && !registered) {
-        if (!joining) joining = post('/api/points/tournament-join', {}).then(result => {
-          if (result.status === 'pending') fail('tournament_join_pending');
-          if (result.status !== 'registered') fail('tournament_join_unavailable');
-          registered = true;
-        }).finally(() => { joining = null; });
-        await joining;
-      }
-      return bridge('balance');
-    };
-  }
   return { config, setMode, getMode: () => mode, markets, market, trade, publicRead, portfolio, remember,
-    balance: () => bridge('balance'), createBalanceReader,
+    balance: ({ includeTournamentGrant = false } = {}) =>
+      bridge('balance', includeTournamentGrant ? { includeTournamentGrant: '1' } : {}),
     pendingTrade: async () => (await config()).durableTrades ? requests.pending() : null,
     resumeTrade: async () => (await config()).durableTrades ? requests.resume() : null,
   };

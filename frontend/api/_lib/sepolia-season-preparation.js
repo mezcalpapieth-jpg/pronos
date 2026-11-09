@@ -13,7 +13,8 @@ export function buildSeasonPreparation(input) {
   if(!/^[a-z0-9][a-z0-9-]{2,63}$/.test(cycleId||'') || typeof label!=='string'||!label.trim())fail('season_identity_required');
   const start=Date.parse(startsAt),end=Date.parse(endsAt);
   if(!Number.isFinite(start)||!Number.isFinite(end)||end<=start || !/Z$/.test(startsAt)||!/Z$/.test(endsAt))fail('invalid_season_window');
-  if(!integer(expectedParticipants,1,100000)||!integer(lateJoinCapacity,0,100000))fail('invalid_season_participant_budget');
+  if(!integer(expectedParticipants,0,100000)||!integer(lateJoinCapacity,0,100000)
+    || expectedParticipants+lateJoinCapacity===0)fail('invalid_season_participant_budget');
   const allocation=BigInt(parseFixedUnits(allocationMxnp)),cap=BigInt(parseFixedUnits(maxTotalMxnp));
   if(allocation<=0n||cap<=0n||!Array.isArray(markets)||!markets.length||markets.length>10000)fail('invalid_season_token_budget');
   const keys=new Set(),reviewedMarkets=[];let liquidity=0n;
@@ -29,7 +30,8 @@ export function buildSeasonPreparation(input) {
   reviewedMarkets.sort((a,b)=>a.key.localeCompare(b.key));
   const user=allocation*BigInt(expectedParticipants),late=allocation*BigInt(lateJoinCapacity),total=user+late+liquidity;
   if(total>cap)fail('season_issuance_cap_exceeded');
-  const blockers=['fresh_token_factories_and_router_required','confirmed_wallet_snapshot_required','reviewed_standings_policy_required',
+  const blockers=['fresh_token_factories_and_router_required',
+    expectedParticipants>0?'confirmed_wallet_snapshot_required':'confirmed_on_demand_reserve_required','reviewed_standings_policy_required',
     'authorized_live_rehearsal_required','prize_terms_and_operator_review_required'];
   if(reviewedMarkets.some(m=>m.resolution==='manual'&&!m.manualOwner))blockers.push('manual_resolution_coverage_required');
   let gasEstimate=null;

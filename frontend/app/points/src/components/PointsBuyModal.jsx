@@ -45,16 +45,19 @@ export default function PointsBuyModal({
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [quoteRevision, setQuoteRevision] = useState(0);
 
-  const executionBalance = useExecutionBalance(market?.mode || 'points');
+  const executionBalance = useExecutionBalance(market?.mode || 'points', { includeTournamentGrant: open });
   const balance = executionBalance.balance;
+  const openingGrant = market?.mode === 'onchain' ? executionBalance.openingGrant || 0 : 0;
+  const purchaseLimit = Math.max(balance ?? 0, openingGrant);
   const numAmount = parseFloat(amount) || 0;
   const requiresMinimumEntry = market?.mode !== 'onchain' && !minimumEntrySatisfied;
   const defaultAmount = requiresMinimumEntry ? TOURNAMENT_MIN_BUY_MXNP : 50;
   const inputMin = requiresMinimumEntry ? TOURNAMENT_MIN_BUY_MXNP : 1;
   const belowMinimum = requiresMinimumEntry && numAmount > 0 && numAmount < TOURNAMENT_MIN_BUY_MXNP;
   const balanceUnavailable = balance == null;
-  const insufficientBalance = !balanceUnavailable && numAmount > balance;
+  const insufficientBalance = !balanceUnavailable && numAmount > purchaseLimit;
   const numberLocale = lang === 'en' ? 'en-US' : 'es-MX';
   const balanceLabel = balanceUnavailable ? '—' : formatMxnp(balance, numberLocale);
 
@@ -96,7 +99,7 @@ export default function PointsBuyModal({
       cancelled = true;
       clearTimeout(handle);
     };
-  }, [open, numAmount, belowMinimum, market?.id, market?.mode, market?.chainAddress, outcomeIndex]);
+  }, [open, numAmount, belowMinimum, market?.id, market?.mode, market?.chainAddress, outcomeIndex, quoteRevision]);
 
   if (!open || !market) return null;
   const marketTitle = localizedTitle(market, lang) || market.question || '';
@@ -125,6 +128,11 @@ export default function PointsBuyModal({
       }, 900);
     } catch (e) {
       setSubmitError(publicErrorMessage(e, lang, e.code || e.message || 'buy_failed'));
+      if (e.status === 401) void refresh();
+      if (e.code === 'price_moved' || e.code === 'slippage_exceeded') {
+        setQuote(null);
+        setQuoteRevision(value => value + 1);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -268,7 +276,11 @@ export default function PointsBuyModal({
           margin: '-2px 0 10px',
         }}>
           {market.mode === 'onchain'
-            ? (lang === 'en' ? 'This trade uses your test balance.' : 'Esta operación usa tu saldo de prueba.')
+            ? openingGrant > 0
+              ? (lang === 'en'
+                ? `Your first buy activates your ${formatMxnp(openingGrant, numberLocale)} MXNP starting grant.`
+                : `Tu primera compra activa tu saldo inicial de ${formatMxnp(openingGrant, numberLocale)} MXNP.`)
+              : (lang === 'en' ? 'This trade uses your test balance.' : 'Esta operación usa tu saldo de prueba.')
             : requiresMinimumEntry
               ? t('points.buy.minimumEntryHint', { amount: TOURNAMENT_MIN_BUY_MXNP })
               : t('points.buy.topUpHint')}
@@ -279,7 +291,7 @@ export default function PointsBuyModal({
             <button
               key={v}
               onClick={() => setAmount(String(v))}
-              disabled={submitting || v > balance}
+              disabled={submitting || v > purchaseLimit}
               style={{
                 flex: 1,
                 padding: '8px 0',
@@ -288,9 +300,9 @@ export default function PointsBuyModal({
                 borderRadius: 8,
                 fontFamily: 'var(--font-mono)',
                 fontSize: 11,
-                color: v > balance ? 'var(--text-muted)' : 'var(--text-secondary)',
-                cursor: v > balance ? 'not-allowed' : 'pointer',
-                opacity: v > balance ? 0.4 : 1,
+                color: v > purchaseLimit ? 'var(--text-muted)' : 'var(--text-secondary)',
+                cursor: v > purchaseLimit ? 'not-allowed' : 'pointer',
+                opacity: v > purchaseLimit ? 0.4 : 1,
               }}
             >
               {v}
