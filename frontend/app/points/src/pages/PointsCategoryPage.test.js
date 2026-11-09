@@ -32,3 +32,11 @@ test('infrastructure page renders AICM as a hub and gates child markets behind p
   assert.match(source, /m\?\.featured === true/);
   assert.match(source, /m\?\.tournamentFeatured === true/);
 });
+
+test('the infrastructure hub respects search and region filters and survives market-list failures', () => {
+  assert.match(source, /normalizeSearchText\(searchQuery\)[\s\S]*?q\.split\(\/\\s\+\/\)\.every/);
+  assert.match(source, /showAicmHubCard = slug === 'infraestructura'\s+&& \(geo === 'all' \|\| geo === 'mexico'\)/);
+  assert.match(source, /'points\.catpage\.eyebrow', \{ n: filtered\.length \}/);
+  assert.match(source, /<MarketGridSkeleton count=\{before \? 5 : 6\} before=\{before\} \/>/);
+  assert.match(source, /if \(error\) \{\s+return \(\s+<>\s+\{before && <div className="markets-grid">\{before\}<\/div>\}/);
+});

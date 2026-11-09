@@ -55,12 +55,9 @@ test('AICM departures board renders the full overview row set', () => {
 });
 
 test('AICM hub places the departures board before the weekly rhythm card', () => {
-  assert.ok(pageSource.indexOf('<Timetable rows={timetable} board={overview?.board} source={source} isAdmin={isAdmin} />') > 0);
-  assert.ok(pageSource.indexOf('<DailyBars rows={dailyRows} />') > 0);
-  assert.ok(
-    pageSource.indexOf('<Timetable rows={timetable} board={overview?.board} source={source} isAdmin={isAdmin} />')
-      < pageSource.indexOf('<DailyBars rows={dailyRows} />')
-  );
+  const timetableIndex = pageSource.indexOf('<Timetable rows={timetable} board={overview?.board} source={source} isAdmin={isAdmin} />');
+  const weeklyIndex = pageSource.indexOf('<DailyBars rows={dailyRows} metricLabel=');
+  assert.ok(timetableIndex > 0 && weeklyIndex > timetableIndex);
 });
 
 test('AICM source diagnostics are admin-only', () => {
@@ -79,11 +76,31 @@ test('AICM source diagnostics are admin-only', () => {
 test('AICM hub uses a navy airport palette with neutral delay counters', () => {
   assert.match(pageSource, /AEROMEXICO_NAVY = '#040C3E'/);
   assert.match(pageSource, /ACCENTS\.neutral/);
-  assert.match(pageSource, /<CounterCard label="Última hora" title="demoras medidas" counter=\{counters\.hour\} footerLabel="vuelos medidos AE" \/>/);
-  assert.match(pageSource, /<CounterCard label="Hoy" title="demoras medidas" counter=\{counters\.day\} footerLabel="vuelos medidos AE" \/>/);
-  assert.match(pageSource, /<CounterCard label="7 días" title="demoras medidas" counter=\{counters\.week\} footerLabel="vuelos medidos AE" \/>/);
+  assert.match(pageSource, /<CounterCard label="Última hora" title=\{counterTitle\} counter=\{counters\.hour\} footerLabel=\{counterFooter\} \/>/);
+  assert.match(pageSource, /<CounterCard label="Hoy" title=\{counterTitle\} counter=\{counters\.day\} footerLabel=\{counterFooter\} \/>/);
+  assert.match(pageSource, /<CounterCard label="7 días" title=\{counterTitle\} counter=\{counters\.week\} footerLabel=\{counterFooter\} \/>/);
   assert.match(pageSource, /gridTemplateColumns: 'repeat\(auto-fit, minmax\(min\(100%, 180px\), 1fr\)\)'/);
   assert.match(pageSource, /valueKey="thresholdFlights"/);
+});
+
+test('AICM hub falls back to board counts, shows missing data, and keeps measured views available', () => {
+  assert.match(pageSource, /showMeasured \? overview\?\.counters : boardMetrics\?\.counters/);
+  assert.match(pageSource, /showMeasured \? overview\?\.daily : boardMetrics\?\.daily/);
+  assert.match(pageSource, /'demoras medidas' : 'demoras reportadas'/);
+  assert.match(pageSource, /boardMetrics\?\.stale \|\| error/);
+  assert.match(pageSource, /boardMetrics\.lastSuccessfulPollAt/);
+  assert.match(pageSource, /aria-label="Sin lecturas"/);
+  assert.match(pageSource, /counter\?\.observedFlights \? formatNumber\(value\) : '—'/);
+  assert.match(pageSource, /row\?\.delayMinutes == null \|\| row\.delayMinutes === ''\) return verdict/);
+  assert.match(pageSource, /\{showMeasured \? \([\s\S]*?title="Ritmo semanal \+30"[\s\S]*?\) : \([\s\S]*?valueKey="cancelledFlights"/);
+  assert.match(pageSource, /showMeasured \? 'Por aprobar' : 'En pausa'/);
+});
+
+test('AICM overview and market windows refresh independently', () => {
+  assert.match(pageSource, /async function loadOverview\(\)[\s\S]*?await fetchAicmOverview\(\)[\s\S]*?setTimeout\(loadOverview, REFRESH_MS\)/);
+  assert.match(pageSource, /async function loadMarkets\(\)[\s\S]*?await fetchMarkets\([\s\S]*?setTimeout\(loadMarkets, REFRESH_MS\)/);
+  assert.match(pageSource, /loadOverview\(\);\s+loadMarkets\(\);/);
+  assert.match(pageSource, /m\.status === 'active' && Date\.parse\(m\.endTime\) > now/);
 });
 
 test('AICM hub renders separate weekly rhythm cards for all delays and 30 minute delays', () => {

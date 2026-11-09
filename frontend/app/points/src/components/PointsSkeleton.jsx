@@ -26,9 +26,10 @@ export function MarketCardSkeleton() {
   );
 }
 
-export function MarketGridSkeleton({ count = 6 }) {
+export function MarketGridSkeleton({ count = 6, before = null }) {
   return (
     <div className="markets-grid" aria-label="Cargando mercados">
+      {before}
       {Array.from({ length: count }, (_, idx) => (
         <MarketCardSkeleton key={idx} />
       ))}

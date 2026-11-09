@@ -6,7 +6,7 @@ const source = await readFile(new URL('./overview.js', import.meta.url), 'utf8')
 
 test('AICM overview endpoint is public, cached, and read-only', () => {
   assert.match(source, /GET \/api\/points\/aicm\/overview/);
-  assert.match(source, /cachedJson\('points:aicm:overview:v10'/);
+  assert.match(source, /cachedJson\('points:aicm:overview:v11'/);
   assert.match(source, /DATABASE_READ_URL \|\| process\.env\.DATABASE_URL/);
   assert.match(source, /points_aicm_poll_runs/);
   assert.match(source, /points_aicm_flight_observations/);
@@ -57,4 +57,18 @@ test('AICM overview endpoint is public, cached, and read-only', () => {
   assert.doesNotMatch(source, /INSERT INTO/);
   assert.doesNotMatch(source, /UPDATE points_/);
   assert.doesNotMatch(source, /DELETE FROM/);
+});
+
+test('AICM board metrics stay separate from measured delays and use departures only', () => {
+  const boardQuery = source.split('sql`').find(query => query.includes('AS "lastSuccessfulPollAt"'));
+  assert.match(boardQuery, /generate_series\(0, 6\)/);
+  assert.match(boardQuery, /COUNT\(DISTINCT o\.flight_key\) FILTER \(WHERE o\.status_norm = 'delayed'\)/);
+  assert.match(boardQuery, /COUNT\(DISTINCT o\.flight_key\) FILTER \(WHERE o\.status_norm = 'cancelled'\)/);
+  assert.match(boardQuery, /ON o\.direction = 'departure'/);
+  assert.match(boardQuery, /o\.observed_at >= p\.since_at/);
+  assert.match(boardQuery, /status = 'ok' AND row_count > 0/);
+  assert.doesNotMatch(boardQuery, /delay_minutes|points_aicm_timetable/);
+  assert.match(source, /measuredAvailable = aviationEdgeReadiness/);
+  assert.match(source, /measuredAvailable \? delayRows : \[\]/);
+  assert.match(source, /if \(!timetableMatch\) \{\s*return \{ statusNorm: fallbackStatus/);
 });

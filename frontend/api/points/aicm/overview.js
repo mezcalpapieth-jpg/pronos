@@ -1,14 +1,14 @@
 /**
  * GET /api/points/aicm/overview
  *
- * Public, read-only AICM hub payload. It reads the stored oracle ledger
- * written by /api/cron/aicm-poll and never creates, updates, or resolves
- * markets.
+ * Public, read-only AICM hub payload with separate board observations and
+ * measured delay data. It never creates, updates, or resolves markets.
  */
 import { neon } from '@neondatabase/serverless';
 
 import { applyCors } from '../../_lib/cors.js';
 import { cachedJson, setCacheHeaders } from '../../_lib/api-performance.js';
+import { aviationEdgeReadiness } from '../../_lib/points-aicm-policy.js';
 import {
   AICM_DEFAULT_FLIGHTS_URL,
   AICM_SOURCE,
@@ -21,6 +21,7 @@ const CLOSED_FLIGHT_GRACE_MINUTES = 10;
 const DEPARTED_FLIGHT_GRACE_MINUTES = 10;
 const STALE_SCHEDULED_GRACE_MINUTES = 30;
 const AICM_LOCAL_OFFSET = '-06:00';
+const BOARD_STALE_AFTER_MS = 15 * 60_000;
 
 let readSql;
 
@@ -71,7 +72,10 @@ function isoFromMs(ms) {
 
 function statusFromTimetable(displayRow, timetableMatch, delayMinutes, { now = new Date() } = {}) {
   const fallbackStatus = displayRow.statusNorm || 'unknown';
-  const apiStatus = String(timetableMatch?.status || '').toLowerCase();
+  if (!timetableMatch) {
+    return { statusNorm: fallbackStatus, statusRaw: displayRow.statusRaw || 'unknown' };
+  }
+  const apiStatus = String(timetableMatch.status || '').toLowerCase();
   const nowMs = now instanceof Date ? now.getTime() : Date.parse(now);
   const flightDate = displayRow.flightDate || timetableMatch?.flightDate;
   const actualMs = parseAicmLocalTimeMs(timetableMatch?.actualLocal, flightDate);
@@ -176,6 +180,8 @@ function emptyOverview(reason = 'no_oracle_data') {
       departedGraceMinutes: DEPARTED_FLIGHT_GRACE_MINUTES,
       staleScheduledGraceMinutes: STALE_SCHEDULED_GRACE_MINUTES,
     },
+    boardMetrics: { counters: {}, daily: [], lastSuccessfulPollAt: null, stale: true },
+    measuredAvailable: false,
     counters: {
       hour: { key: 'hour', label: '1h', delayedFlights: 0, cancelledFlights: 0, observedFlights: 0, lastObservedAt: null },
       day: { key: 'day', label: 'Hoy', delayedFlights: 0, cancelledFlights: 0, observedFlights: 0, lastObservedAt: null },
@@ -324,11 +330,11 @@ export default async function handler(req, res) {
 
   try {
     setCacheHeaders(res, { scope: 'public', maxAge: 10, sMaxage: 30, staleWhileRevalidate: 120 });
-    const { value: payload, hit } = await cachedJson('points:aicm:overview:v10', 15_000, async () => {
+    const { value: payload, hit } = await cachedJson('points:aicm:overview:v11', 15_000, async () => {
       const sql = getReadSql();
 
       try {
-        const [latestRuns, counterRows, resolverCounterRows, dailyRows, timetableRows, delayRows] = await Promise.all([
+        const [latestRuns, boardMetricRows, measuredRuns, counterRows, resolverCounterRows, dailyRows, timetableRows, delayRows] = await Promise.all([
           sql`
             SELECT
               id,
@@ -343,6 +349,47 @@ export default async function handler(req, res) {
             WHERE direction = 'departure'
             ORDER BY observed_at DESC, id DESC
             LIMIT 8
+          `,
+          sql`
+            WITH clock AS (
+              SELECT NOW() AS now_utc, (NOW() AT TIME ZONE 'America/Mexico_City')::date AS today
+            ),
+            periods AS (
+              SELECT 'hour'::text AS window_key, '1h'::text AS label, NULL::date AS flight_date,
+                     today - 1 AS from_date, today AS to_date, now_utc - INTERVAL '1 hour' AS since_at
+              FROM clock
+              UNION ALL
+              SELECT 'week', '7d', NULL, today - 6, today, NULL FROM clock
+              UNION ALL
+              SELECT 'day', 'Hoy', today - day_offset, today - day_offset, today - day_offset, NULL
+              FROM clock CROSS JOIN generate_series(0, 6) AS days(day_offset)
+            )
+            SELECT p.window_key AS "windowKey",
+                   p.label,
+                   p.flight_date::text AS "flightDate",
+                   COUNT(DISTINCT o.flight_key) FILTER (WHERE o.status_norm = 'delayed')::int AS "delayedFlights",
+                   COUNT(DISTINCT o.flight_key) FILTER (WHERE o.status_norm = 'cancelled')::int AS "cancelledFlights",
+                   COUNT(DISTINCT o.flight_key)::int AS "observedFlights",
+                   MAX(o.observed_at) AS "lastObservedAt",
+                   (
+                     SELECT observed_at FROM points_aicm_poll_runs
+                     WHERE direction = 'departure' AND status = 'ok' AND row_count > 0
+                     ORDER BY observed_at DESC, id DESC LIMIT 1
+                   ) AS "lastSuccessfulPollAt"
+            FROM periods p
+            LEFT JOIN points_aicm_flight_observations o
+              ON o.direction = 'departure'
+             AND o.flight_date BETWEEN p.from_date AND p.to_date
+             AND (p.since_at IS NULL OR o.observed_at >= p.since_at)
+            GROUP BY p.window_key, p.label, p.flight_date
+            ORDER BY p.flight_date ASC
+          `,
+          sql`
+            SELECT status, observed_at
+            FROM points_aicm_timetable_runs
+            WHERE direction = 'departure'
+            ORDER BY observed_at DESC, id DESC
+            LIMIT 1
           `,
           sql`
             WITH clock AS (
@@ -520,12 +567,33 @@ export default async function handler(req, res) {
         const resolverCounterEntries = resolverCounterRows.map(formatResolverCounter);
         const resolverCounters = Object.fromEntries(resolverCounterEntries.map(row => [row.key, row]));
         const lastRun = latestRuns[0] ? formatRun(latestRuns[0]) : null;
+        const now = new Date();
+        const lastSuccessfulPollAt = boardMetricRows[0]?.lastSuccessfulPollAt || null;
+        const boardDaily = boardMetricRows.filter(row => row.windowKey === 'day');
+        const boardCounters = Object.fromEntries([
+          ...boardMetricRows.filter(row => row.windowKey !== 'day'),
+          ...boardDaily.slice(-1),
+        ].map(row => [row.windowKey, formatCounter(row)]));
+        const boardMetrics = {
+          counters: boardCounters,
+          daily: boardDaily.map(row => ({
+            flightDate: row.flightDate,
+            delayedFlights: toNumber(row.delayedFlights),
+            cancelledFlights: toNumber(row.cancelledFlights),
+            observedFlights: toNumber(row.observedFlights),
+          })),
+          lastSuccessfulPollAt,
+          stale: lastRun?.status !== 'ok'
+            || Boolean(lastRun.error)
+            || !lastSuccessfulPollAt
+            || now.getTime() - Date.parse(lastSuccessfulPollAt) > BOARD_STALE_AFTER_MS,
+        };
+        const measuredAvailable = aviationEdgeReadiness({ latestRun: measuredRuns[0], now }).ready;
         const timetableByFlight = new Map(
-          delayRows
+          (measuredAvailable ? delayRows : [])
             .map(row => [timetableKeyFor(row), row])
             .filter(([key]) => key)
         );
-        const now = new Date();
         const rawTimetable = timetableRows
           .map(row => formatFlight(row, timetableByFlight, { now }))
           .filter(row => row.flightCode && row.scheduledTimeLocal && row.city);
@@ -571,6 +639,8 @@ export default async function handler(req, res) {
             departedGraceMinutes: DEPARTED_FLIGHT_GRACE_MINUTES,
             staleScheduledGraceMinutes: STALE_SCHEDULED_GRACE_MINUTES,
           },
+          boardMetrics,
+          measuredAvailable,
           counters: {
             hour: counters.hour || emptyOverview().counters.hour,
             day: counters.day || emptyOverview().counters.day,

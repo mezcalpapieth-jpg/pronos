@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { fetchAicmOverview, fetchMarkets } from '../lib/pointsApi.js';
@@ -6,6 +6,7 @@ import { AICM_DELAY_SOURCES } from '../lib/aicmMarkets.js';
 
 const AEROMEXICO_NAVY = '#040C3E';
 const AEROMEXICO_BLUE = '#8fb8ff';
+const REFRESH_MS = 60_000;
 
 const ACCENTS = {
   green: { fg: 'var(--yes)', bg: 'rgba(0, 232, 122, 0.12)', border: 'rgba(0, 232, 122, 0.28)' },
@@ -73,7 +74,7 @@ function delayVerdict(status) {
   const s = String(status || '').toLowerCase();
   if (s === 'delayed') return { label: 'Sí', accent: ACCENTS.amber };
   if (s === 'cancelled') return { label: 'Cancelado', accent: ACCENTS.red };
-  if (['scheduled', 'boarding', 'closed', 'departed'].includes(s)) return { label: 'No', accent: ACCENTS.green };
+  if (s === 'scheduled') return { label: 'No', accent: ACCENTS.green };
   return {
     label: 'N/D',
     accent: { fg: 'var(--text-muted)', bg: 'rgba(255,255,255,0.04)', border: 'rgba(255,255,255,0.12)' },
@@ -81,6 +82,7 @@ function delayVerdict(status) {
 }
 
 function delayMinutesLabel(row, verdict) {
+  if (row?.delayMinutes == null || row.delayMinutes === '') return verdict;
   const minutes = Number(row?.delayMinutes);
   if (Number.isFinite(minutes)) {
     if (String(row?.statusNorm || '').toLowerCase() === 'cancelled') {
@@ -142,7 +144,7 @@ function CounterCard({
           color: accent.fg,
           letterSpacing: 0,
         }}>
-          {formatNumber(value)}
+          {counter?.observedFlights ? formatNumber(value) : '—'}
         </div>
         <div style={{
           marginTop: 8,
@@ -159,7 +161,9 @@ function CounterCard({
         color: 'var(--text-muted)',
         fontSize: 10,
       }}>
-        {formatNumber(counter?.observedFlights)} {footerLabel}
+        {counter?.observedFlights
+          ? `${formatNumber(counter.observedFlights)} ${footerLabel}`
+          : 'Sin observaciones'}
       </div>
     </div>
   );
@@ -203,7 +207,7 @@ function DailyBars({
           {metricLabel}
         </div>
       </div>
-      {visible.length === 0 ? (
+      {visible.every(row => !row.observedFlights) ? (
         <div style={{
           fontFamily: 'var(--font-mono)',
           color: 'var(--text-muted)',
@@ -241,7 +245,7 @@ function DailyBars({
                 borderTop: '1px dashed rgba(255,255,255,0.08)',
               }} />
             ))}
-            <div style={{ display: 'flex', alignItems: 'end', gap: 10, height: chartHeight, position: 'relative' }}>
+            <div style={{ display: 'flex', alignItems: 'end', gap: 'clamp(3px, 1vw, 10px)', height: chartHeight, position: 'relative' }}>
               {visible.map(row => {
                 const delayed = Number(row[valueKey] || 0);
                 const observed = Number(row.observedFlights || 0);
@@ -252,17 +256,17 @@ function DailyBars({
                 return (
                   <div
                     key={row.flightDate}
-                    title={`${formatNumber(delayed)} ${metricLabel} / ${formatNumber(observed)} vuelos vistos`}
+                    title={observed ? `${formatNumber(delayed)} ${metricLabel} / ${formatNumber(observed)} vuelos vistos` : 'Sin lecturas'}
                     style={{
                       flex: 1,
-                      minWidth: 30,
+                      minWidth: 0,
                       height: chartHeight,
                       display: 'flex',
                       flexDirection: 'column',
                       justifyContent: 'flex-end',
                     }}
                   >
-                    <div style={{
+                    {observed ? <div style={{
                       height,
                       position: 'relative',
                       borderRadius: 5,
@@ -287,18 +291,18 @@ function DailyBars({
                       }}>
                         {formatNumber(delayed)}
                       </span>
-                    </div>
+                    </div> : <span aria-label="Sin lecturas" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>—</span>}
                   </div>
                 );
               })}
             </div>
-            <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+            <div style={{ display: 'flex', gap: 'clamp(3px, 1vw, 10px)', marginTop: 8 }}>
               {visible.map(row => (
                 <div key={row.flightDate} style={{
                   flex: 1,
-                  minWidth: 30,
+                  minWidth: 0,
                   fontFamily: 'var(--font-mono)',
-                  fontSize: 10,
+                  fontSize: 'clamp(8px, 2.5vw, 10px)',
                   color: 'var(--text-muted)',
                   textAlign: 'center',
                 }}>
@@ -618,7 +622,9 @@ function MarketWindowCard({ title, cadence, status, market, locked, isAdmin, onO
           }}>
             {locked
               ? 'Reservado para cuando el equipo quiera activar esta ventana.'
-              : 'Esperando aprobación del mercado diario.'}
+              : status === 'En pausa'
+                ? 'Esta ventana volverá cuando se restablezca la fuente de medición.'
+                : 'Esperando aprobación del mercado diario.'}
           </div>
           {isAdmin && (
             <button
@@ -649,7 +655,10 @@ function isAicmDelayWindowMarket(m, acceptedWindows) {
 
 function findDailyAicmMarket(markets) {
   const acceptedWindows = new Set(['day', '48h']);
-  const candidates = markets.filter(m => isAicmDelayWindowMarket(m, acceptedWindows));
+  const now = Date.now();
+  const candidates = markets.filter(m => (
+    m.status === 'active' && Date.parse(m.endTime) > now && isAicmDelayWindowMarket(m, acceptedWindows)
+  ));
   return candidates.find(m => String(m?.resolverConfig?.window || '').toLowerCase() === 'day')
     || candidates.find(m => String(m?.resolverConfig?.window || '').toLowerCase() === '48h')
     || null;
@@ -670,36 +679,57 @@ export default function PointsAicmPage({ isAdmin = false }) {
 
   useEffect(() => {
     let cancelled = false;
-    async function load() {
-      setError(null);
+    let overviewTimer;
+    let marketsTimer;
+
+    async function loadOverview() {
       try {
-        const [nextOverview, nextMarkets] = await Promise.all([
-          fetchAicmOverview(),
-          fetchMarkets({ status: 'active', category: 'infraestructura', limit: 2000, featured: 'all' }),
-        ]);
-        if (cancelled) return;
-        setOverview(nextOverview);
-        setMarkets(nextMarkets);
+        const nextOverview = await fetchAicmOverview();
+        if (!cancelled) {
+          setOverview(nextOverview);
+          setError(null);
+        }
       } catch (err) {
         if (!cancelled) setError(err?.code || 'aicm_load_failed');
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          overviewTimer = window.setTimeout(loadOverview, REFRESH_MS);
+        }
       }
     }
-    load();
-    const id = window.setInterval(load, 60_000);
+
+    async function loadMarkets() {
+      try {
+        const nextMarkets = await fetchMarkets({ status: 'active', category: 'infraestructura', limit: 2000, featured: 'all' });
+        if (!cancelled) setMarkets(nextMarkets);
+      } catch {
+        // The optional market windows can keep their last known data.
+      } finally {
+        if (!cancelled) marketsTimer = window.setTimeout(loadMarkets, REFRESH_MS);
+      }
+    }
+
+    loadOverview();
+    loadMarkets();
     return () => {
       cancelled = true;
-      window.clearInterval(id);
+      window.clearTimeout(overviewTimer);
+      window.clearTimeout(marketsTimer);
     };
   }, []);
 
-  const dailyMarket = useMemo(() => findDailyAicmMarket(markets), [markets]);
+  const dailyMarket = findDailyAicmMarket(markets);
   const dailyMarketWindow = marketWindowCopy(dailyMarket);
-  const counters = overview?.counters || {};
   const resolverCounters = overview?.resolverCounters || {};
   const source = overview?.source || {};
-  const dailyRows = Array.isArray(overview?.daily) ? overview.daily : [];
+  const boardMetrics = overview?.boardMetrics;
+  const showMeasured = overview?.measuredAvailable ?? Boolean(resolverCounters.hour?.observedFlights);
+  const counters = (showMeasured ? overview?.counters : boardMetrics?.counters) || {};
+  const dailyRows = (showMeasured ? overview?.daily : boardMetrics?.daily) || [];
+  const lastBoardRead = boardMetrics ? boardMetrics.lastSuccessfulPollAt : source.lastObservedAt;
+  const counterTitle = showMeasured ? 'demoras medidas' : 'demoras reportadas';
+  const counterFooter = showMeasured ? 'vuelos medidos AE' : 'salidas observadas';
   const timetable = Array.isArray(overview?.timetable) ? overview.timetable : [];
 
   const openAdmin = () => navigate('/admin');
@@ -756,7 +786,9 @@ export default function PointsAicmPage({ isAdmin = false }) {
               lineHeight: 1.45,
               fontWeight: 700,
             }}>
-              Demoras de salida en el aeropuerto de la Ciudad de México, medidas desde el tablero oficial.
+              {showMeasured
+                ? 'Salidas del AICM y demoras medidas por Aviation Edge.'
+                : 'Salidas que el tablero oficial del AICM marcó como demoradas. El conteo se basa en las lecturas disponibles.'}
             </p>
           </div>
           <div style={{
@@ -805,7 +837,7 @@ export default function PointsAicmPage({ isAdmin = false }) {
               lineHeight: 1,
               letterSpacing: 0,
             }}>
-              {loading ? '...' : formatObservedTime(source.lastObservedAt)}
+              {loading ? '...' : formatObservedTime(lastBoardRead)}
             </div>
             <p style={{
               margin: '16px 0 0',
@@ -815,6 +847,11 @@ export default function PointsAicmPage({ isAdmin = false }) {
               lineHeight: 1.55,
             }}>
               Tablero oficial AICM · salidas
+              {!loading && (boardMetrics?.stale || error) && (
+                <span style={{ display: 'block', color: ACCENTS.amber.fg }}>
+                  {lastBoardRead ? 'Mostrando la última lectura disponible' : 'Esperando una lectura del tablero'}
+                </span>
+              )}
             </p>
           </div>
         </div>
@@ -826,30 +863,34 @@ export default function PointsAicmPage({ isAdmin = false }) {
         gap: 10,
         marginTop: 18,
       }}>
-        <CounterCard label="Última hora" title="demoras medidas" counter={counters.hour} footerLabel="vuelos medidos AE" />
-        <CounterCard label="Hoy" title="demoras medidas" counter={counters.day} footerLabel="vuelos medidos AE" />
-        <CounterCard label="7 días" title="demoras medidas" counter={counters.week} footerLabel="vuelos medidos AE" />
-        <CounterCard
-          label="Última hora"
-          title=">30 min demorado"
-          counter={resolverCounters.hour}
-          valueKey="thresholdFlights"
-          footerLabel="vuelos medidos AE"
-        />
-        <CounterCard
-          label="Hoy"
-          title=">30 min demorado"
-          counter={resolverCounters.day}
-          valueKey="thresholdFlights"
-          footerLabel="vuelos medidos AE"
-        />
-        <CounterCard
-          label="7 días"
-          title=">30 min demorado"
-          counter={resolverCounters.week}
-          valueKey="thresholdFlights"
-          footerLabel="vuelos medidos AE"
-        />
+        <CounterCard label="Última hora" title={counterTitle} counter={counters.hour} footerLabel={counterFooter} />
+        <CounterCard label="Hoy" title={counterTitle} counter={counters.day} footerLabel={counterFooter} />
+        <CounterCard label="7 días" title={counterTitle} counter={counters.week} footerLabel={counterFooter} />
+        {showMeasured && (
+          <>
+            <CounterCard
+              label="Última hora"
+              title=">30 min demorado"
+              counter={resolverCounters.hour}
+              valueKey="thresholdFlights"
+              footerLabel="vuelos medidos AE"
+            />
+            <CounterCard
+              label="Hoy"
+              title=">30 min demorado"
+              counter={resolverCounters.day}
+              valueKey="thresholdFlights"
+              footerLabel="vuelos medidos AE"
+            />
+            <CounterCard
+              label="7 días"
+              title=">30 min demorado"
+              counter={resolverCounters.week}
+              valueKey="thresholdFlights"
+              footerLabel="vuelos medidos AE"
+            />
+          </>
+        )}
       </div>
 
       <div style={{ marginTop: 22 }}>
@@ -868,13 +909,22 @@ export default function PointsAicmPage({ isAdmin = false }) {
         gap: 16,
         marginTop: 22,
       }}>
-        <DailyBars rows={dailyRows} />
-        <DailyBars
-          rows={dailyRows}
-          title="Ritmo semanal +30"
-          metricLabel=">30 min"
-          valueKey="thresholdFlights"
-        />
+        <DailyBars rows={dailyRows} metricLabel={showMeasured ? 'demoras' : 'demoras reportadas'} />
+        {showMeasured ? (
+          <DailyBars
+            rows={dailyRows}
+            title="Ritmo semanal +30"
+            metricLabel=">30 min"
+            valueKey="thresholdFlights"
+          />
+        ) : (
+          <DailyBars
+            rows={dailyRows}
+            title="Cancelaciones por día"
+            metricLabel="cancelaciones reportadas"
+            valueKey="cancelledFlights"
+          />
+        )}
       </div>
 
       <div style={{
@@ -925,7 +975,7 @@ export default function PointsAicmPage({ isAdmin = false }) {
         <MarketWindowCard
           title={dailyMarketWindow.title}
           cadence={dailyMarketWindow.cadence}
-          status={dailyMarket ? 'Abierto' : 'Por aprobar'}
+          status={dailyMarket ? 'Abierto' : showMeasured ? 'Por aprobar' : 'En pausa'}
           market={dailyMarket}
           isAdmin={isAdmin}
           onOpenAdmin={openAdmin}
