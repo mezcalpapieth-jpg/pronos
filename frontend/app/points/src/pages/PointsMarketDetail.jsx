@@ -2841,18 +2841,15 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
     const tailPointFor = (outcomeIdx, leg = null) => {
       const p = livePctFor(outcomeIdx, leg);
       if (p == null) return null;
-      const t = Math.floor(chartClock.endMs / 1000);
+      const t = chartClock.endMs / 1000;
       return { t, p };
     };
     const withTail = (series, outcomeIdx, leg = null) => {
       const tail = tailPointFor(outcomeIdx, leg);
       if (!tail) return series;
-      const filtered = series.filter(pt => pt.t <= tail.t);
-      const last = filtered[filtered.length - 1];
-      if (last && last.t === tail.t && Math.abs(last.p - tail.p) < 0.5) {
-        return filtered;
-      }
-      return [...filtered, tail];
+      const last = series.at(-1);
+      if (last && last.t >= tail.t) return series;
+      return [...series, tail];
     };
 
     const load = async () => {
@@ -3366,7 +3363,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
     : prices;
   const displayOutcomeImages = displayOutcomeIndices.map(i => market.outcomeImages?.[i] || null);
   const displayOutcomeCountryLabels = displayOutcomeIndices.map(i => market.outcomeCountryLabels?.[i] || null);
-  const rawHistoryByOutcome = displayOutcomeIndices.map(i => historyByOutcome?.[i] || []);
+  const displayHistoryByOutcome = displayOutcomeIndices.map(i => historyByOutcome?.[i] || []);
   const displayActivityByOutcome = displayOutcomeIndices.map(i => activityByOutcome?.[i] || []);
   // Admin's explicit chart-style pick (only meaningful at N=2) wins over
   // the label-based auto-detect below.
@@ -3378,22 +3375,8 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
     : displayOutcomes.length < 2 || isBinaryYesNoOutcomes(displayOutcomes);
   const activeChartRange = detailChartRangeFor(chartRange);
 
-  // A market opens at even odds and genuinely sits there until someone
-  // trades — but the snapshot table only starts recording at the first
-  // trade, so the line used to appear already at 88% with no sign of
-  // where it came from. When the market was created inside the visible
-  // window we seed that real opening price, so the chart shows the move
-  // off 50/50 instead of starting mid-story. Outside the window the
-  // price really was elsewhere before it opened, so we leave it alone
-  // rather than draw a 50% that was never true.
-  // Parallel markets run each outcome as its own independent binary
-  // (their prices sum well past 100%), so every leg opens at 50%.
-  // Standard multi-outcome markets split one book N ways.
-  const openingPct = market.ammMode === 'parallel'
-    ? 50
-    : 100 / Math.max(2, market.outcomes?.length || displayOutcomes.length || 2);
   const marketOpenedAt = market.createdAt
-    ? Math.floor(new Date(market.createdAt).getTime() / 1000)
+    ? new Date(market.createdAt).getTime() / 1000
     : null;
   // Resolved charts count backward from settlement; pending/canceled
   // charts use the trading cutoff. Neither drifts with the viewing time.
@@ -3401,7 +3384,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
   // Polymarket-style clamp: a market younger than the selected range
   // charts its own life (created 8:22 → axis starts 8:22), so every line
   // is born at the left edge instead of floating in an empty canvas.
-  const chartWindowEnd = Math.floor(chartClock.endMs / 1000);
+  const chartWindowEnd = chartClock.endMs / 1000;
   const chartRangeStart = chartWindowEnd - (
     activeChartRange.hours != null
       ? activeChartRange.hours * 3600
@@ -3410,22 +3393,6 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
   const chartWindowStart = Number.isFinite(marketOpenedAt)
     ? Math.max(chartRangeStart, Math.min(marketOpenedAt, chartWindowEnd - 60))
     : chartRangeStart;
-  const withOpeningBaseline = (series) => {
-    if (market.mode === 'onchain') return series;
-    if (!Array.isArray(series) || series.length === 0) return series;
-    if (!Number.isFinite(marketOpenedAt) || marketOpenedAt > chartWindowEnd) return series;
-    // Anchor at the market's birth when that falls inside the window, and
-    // at the window's start when the market is older. The older case is
-    // still truthful: price-history carries the last pre-window price
-    // forward to the window start, so a first point later than that means
-    // nothing traded before the window and the market was in fact still
-    // resting on its opening price when the window opened.
-    const anchorT = Math.max(marketOpenedAt, chartWindowStart);
-    const firstT = Number(series[0]?.t);
-    if (!Number.isFinite(firstT) || firstT <= anchorT) return series;
-    return [{ t: anchorT, p: openingPct }, ...series];
-  };
-  const displayHistoryByOutcome = rawHistoryByOutcome.map(withOpeningBaseline);
   const liveScoreAnnotations = liveScoreGraphAnnotations({
     score: liveScore,
     market,

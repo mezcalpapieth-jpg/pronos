@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
 import { loadChartWindows } from './points-chart-windows.js';
-import { PRICE_HISTORY_EXECUTION_BUCKET_MS, displayTradePointsFromRows } from './points-price-history-display.js';
+import {
+  PRICE_HISTORY_EXECUTION_BUCKET_MS, displayTradePointsFromRows,
+  missingOpeningTimestamp, openingPricePoint,
+} from './points-price-history-display.js';
 
 const historySource = await readFile(new URL('../points/price-history.js', import.meta.url), 'utf8');
 const activitySource = await readFile(new URL('../points/trade-activity.js', import.meta.url), 'utf8');
@@ -30,7 +33,8 @@ test('closed chart SQL freezes prices/activity and retains the closing history a
     CREATE TABLE points_markets (
       id INT PRIMARY KEY, parent_id INT, status TEXT DEFAULT 'active',
       end_time TIMESTAMPTZ, resolved_at TIMESTAMPTZ, created_at TIMESTAMPTZ DEFAULT NOW() - INTERVAL '200 days',
-      outcome INT DEFAULT 0, outcomes JSONB DEFAULT '["A","B"]', reserves JSONB DEFAULT '[1000,1000]', amm_mode TEXT DEFAULT 'unified'
+      outcome INT DEFAULT 0, outcomes JSONB DEFAULT '["A","B"]', reserves JSONB DEFAULT '[1000,1000]',
+      amm_mode TEXT DEFAULT 'unified', mode TEXT DEFAULT 'points', seed_liquidities JSONB
     );
     CREATE TABLE points_price_snapshots (
       id SERIAL PRIMARY KEY, market_id INT, prices JSONB, reserves JSONB, snapshotted_at TIMESTAMPTZ DEFAULT NOW()
@@ -74,8 +78,8 @@ test('closed chart SQL freezes prices/activity and retains the closing history a
     windows, maxPoints: 20, outcomeIdx: 0, tradeRowCap: 240, PRONOS_TREASURY_USERNAME: 'treasury', bucketSeconds: 1800,
     executionBucketInterval: `${PRICE_HISTORY_EXECUTION_BUCKET_MS} milliseconds`,
   };
-  const [sampleQuery, boundaryQuery, tradeQuery] = queries(historySource);
-  assert.equal(queries(historySource).length, 3);
+  const [sampleQuery, boundaryQuery, tradeQuery, openingTradeQuery] = queries(historySource);
+  assert.equal(queries(historySource).length, 4);
 
   await t.test('sampled rows include settlement history while trade overlays exclude post-close activity', async () => {
     const samples = await run(sql, sampleQuery, bindings);
@@ -144,5 +148,38 @@ test('closed chart SQL freezes prices/activity and retains the closing history a
     assert.deepEqual(inside.map(row => row.id), [104]);
     assert.deepEqual(displayTradePointsFromRows(before, 0).map(({ market_id, p }) => [market_id, p]), [[30, 55], [31, 34]]);
     assert.deepEqual(displayTradePointsFromRows(inside, 0).map(point => point.p), [72]);
+  });
+
+  await t.test('opening odds use saved seeds or pre-trade reserves and respect recorded boundary points', async () => {
+    await db.exec(`
+      INSERT INTO points_markets (id,created_at,status,end_time,resolved_at,seed_liquidities) VALUES
+        (40,'2026-11-01T12:30:00.625Z','resolved','2026-11-01T13:00:00Z','2026-11-01T13:00:00.071Z','[30,70]'),
+        (41,'2026-11-01T11:00:00Z','resolved','2026-11-01T13:00:00Z','2026-11-01T13:00:00.071Z','[50,50]'),
+        (42,'2026-11-01T12:30:00.625Z','resolved','2026-11-01T13:00:00Z','2026-11-01T13:00:00.071Z',NULL);
+      INSERT INTO points_trades (market_id,username,side,reserves_before,created_at) VALUES
+        (40,'buyer','buy','[21.44,78.56]','2026-11-01T12:45:00Z'),
+        (40,'buyer','buy','[10,90]','2026-11-01T12:50:00Z'),
+        (41,'buyer','buy','[40,60]','2026-11-01T11:15:00Z');
+    `);
+    const { windows: openingWindows } = await loadChartWindows(sql, [40, 41, 42], 1);
+    const candidates = openingWindows.map(window => ({ window }));
+    const firstTrades = await run(sql, openingTradeQuery, { candidates });
+    const trade = id => firstTrades.find(row => row.market_id === id);
+    const fresh = openingWindows.find(window => window.id === 40);
+    const freshOpening = new Date(fresh.openedAt).getTime() / 1000;
+    assert.equal(missingOpeningTimestamp(fresh, []), freshOpening);
+    assert.deepEqual(openingPricePoint(fresh, freshOpening, null, 0), { t: freshOpening, p: 70 });
+    assert.deepEqual(openingPricePoint(fresh, freshOpening, trade(40), 0), { t: freshOpening, p: 78.56 });
+    assert.deepEqual(openingPricePoint(fresh, freshOpening, trade(40), 1), { t: freshOpening, p: 21.44 });
+
+    const older = openingWindows.find(window => window.id === 41);
+    const windowStart = Date.parse(older.start) / 1000;
+    assert.equal(missingOpeningTimestamp(older, [{ t: windowStart, p: 78.56 }]), null);
+    assert.equal(openingPricePoint(older, windowStart, trade(41), 0), null);
+    const legacy = openingWindows.find(window => window.id === 42);
+    assert.equal(openingPricePoint(legacy, freshOpening, trade(42), 0), null);
+    assert.deepEqual(openingPricePoint({
+      ...legacy, outcomes: ['A', 'B', 'C'], seedReserves: [100, 200, 400],
+    }, freshOpening, null, 2), { t: freshOpening, p: 14.29 });
   });
 });

@@ -54,7 +54,7 @@ test('the home carousel pins its charts to the window it actually fetched', () =
   // describe that same span rather than the snapshot extents.
   assert.match(
     carousel,
-    /const mChartEnd = Math\.floor\(Date\.now\(\) \/ 1000\);\s*\n\s*const mRangeStart = mChartEnd - CHART_HISTORY_HOURS \* 3600;/,
+    /const mChartEnd = Date\.now\(\) \/ 1000;\s*\n\s*const mRangeStart = mChartEnd - CHART_HISTORY_HOURS \* 3600;/,
   );
   const pinned = carousel.match(/timeMin=\{mChartStart\}\s*\n\s*timeMax=\{mChartEnd\}/g) || [];
   assert.equal(pinned.length, 2, 'both the binary and multi-outcome carousel charts must be pinned');
@@ -62,7 +62,8 @@ test('the home carousel pins its charts to the window it actually fetched', () =
 
 test('the detail range starts relative to the market chart clock', () => {
   assert.match(detail, /const chartClock = marketChartClock\(market\);/);
-  assert.match(detail, /const chartWindowEnd = Math\.floor\(chartClock\.endMs \/ 1000\);\s*\n\s*const chartRangeStart = chartWindowEnd - \(/);
+  assert.match(detail, /const chartWindowEnd = chartClock\.endMs \/ 1000;\s*\n\s*const chartRangeStart = chartWindowEnd - \(/);
+  assert.doesNotMatch(detail, /withOpeningBaseline|openingPct/);
 });
 
 test('a market younger than the range charts its own life (Polymarket clamp)', () => {

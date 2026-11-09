@@ -38,6 +38,8 @@ import {
   PRICE_HISTORY_EXECUTION_BUCKET_MS,
   displayTradePointsFromRows,
   mergeDisplayPricePoints,
+  missingOpeningTimestamp,
+  openingPricePoint,
   priceHistoryExecutionBucket,
 } from '../_lib/points-price-history-display.js';
 
@@ -286,6 +288,34 @@ export default async function handler(req, res) {
         .filter(pt => Number.isFinite(pt.t) && Number.isFinite(pt.p))
         .sort((a, b) => a.t - b.t || a._id - b._id)
         .map(({ t, p }) => ({ t, p }));
+    }
+    const missingOpenings = new Map();
+    for (const window of windows.windows) {
+      const t = missingOpeningTimestamp(window, history[window.id]);
+      if (t != null) missingOpenings.set(window.id, { window, t });
+    }
+    if (missingOpenings.size > 0) {
+      const candidates = [...missingOpenings.values()];
+      const openingTradeRows = await sql`
+        SELECT w.market_id, first_trade.created_at, first_trade.reserves_before
+        FROM UNNEST(
+          ${candidates.map(({ window }) => window.id)}::int[],
+          ${candidates.map(({ window }) => window.tradeEnd)}::timestamptz[]
+        ) AS w(market_id, trade_end)
+        JOIN LATERAL (
+          SELECT t.created_at, t.reserves_before
+          FROM points_trades t
+          WHERE t.market_id = w.market_id AND t.side IN ('buy', 'sell')
+            AND t.created_at <= w.trade_end
+          ORDER BY t.created_at ASC, t.id ASC
+          LIMIT 1
+        ) first_trade ON true
+      `;
+      const firstTrades = new Map(openingTradeRows.map(row => [Number(row.market_id), row]));
+      for (const [id, { window, t }] of missingOpenings) {
+        const point = openingPricePoint(window, t, firstTrades.get(id), outcomeIdx);
+        if (point) history[id].unshift(point);
+      }
     }
     // Derive settlement from the recorded outcome, so older resolutions,
     // early-resolved parallel legs, and corrected results work as well.

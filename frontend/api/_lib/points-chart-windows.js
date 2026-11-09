@@ -14,6 +14,9 @@ export function chartWindowsFromRows(rows, windowHours, now = Date.now()) {
     return {
       id: Number(row.id), frozen: clock.frozen,
       status: row.status, outcome: row.outcome, outcomes: row.outcomes,
+      openedAt: row.created_at,
+      seedReserves: row.seed_liquidities,
+      hasPointsPool: row.mode !== 'onchain' && (row.amm_mode !== 'parallel' || row.parent_id != null),
       start: new Date(clock.endMs - windowHours * 3600000).toISOString(),
       end: new Date(clock.endMs).toISOString(),
       dataEnd: new Date(Math.min(clock.endMs, ownClock.endMs)).toISOString(),
@@ -25,6 +28,7 @@ export function chartWindowsFromRows(rows, windowHours, now = Date.now()) {
 export async function loadChartWindows(sql, ids, windowHours) {
   const rows = await sql`
     SELECT m.id, m.parent_id, m.status, m.outcome, m.outcomes, m.end_time, m.resolved_at, m.created_at,
+           m.seed_liquidities, m.amm_mode, m.mode,
            p.status AS parent_status, p.end_time AS parent_end_time,
            p.resolved_at AS parent_resolved_at, p.created_at AS parent_created_at
       FROM points_markets m
