@@ -359,12 +359,6 @@ function seriesForSlide(m, history) {
   return history?.[marketIdKey(m.id)] || history?.[m.id] || [];
 }
 
-function openingPctForMarket(m) {
-  if (m?.ammMode === 'parallel') return 50;
-  const outcomeCount = Array.isArray(m?.outcomes) ? Math.max(2, m.outcomes.length) : 2;
-  return 100 / outcomeCount;
-}
-
 function isBinaryYesNoOutcomes(outcomes) {
   if (!Array.isArray(outcomes) || outcomes.length !== 2) return false;
   const [a, b] = outcomes.map(o => String(o || '').trim().toLowerCase());
@@ -376,9 +370,9 @@ function chartColorForOutcome(index, totalOutcomes) {
   return OUTCOME_COLORS[index % OUTCOME_COLORS.length];
 }
 
-function chartSeriesForOutcome(m, entry, rawSeries) {
+function chartSeriesForOutcome(entry, rawSeries, now) {
   const targetPct = Math.round((entry?.price || 0) * 100);
-  const series = Array.isArray(rawSeries)
+  const points = Array.isArray(rawSeries)
     ? rawSeries
         .map(pt => ({
           t: Number(pt?.t),
@@ -386,31 +380,6 @@ function chartSeriesForOutcome(m, entry, rawSeries) {
         }))
         .filter(pt => Number.isFinite(pt.t) && pt.t > 0 && Number.isFinite(pt.p))
     : [];
-  const now = Math.floor(Date.now() / 1000);
-  const windowStart = now - CHART_HISTORY_HOURS * 3600;
-  const openedAt = m?.createdAt ? Math.floor(new Date(m.createdAt).getTime() / 1000) : null;
-  const openingPct = openingPctForMarket(m);
-  const points = [...series];
-
-  // The opening price holds until the first trade, so the line starts at
-  // the axis' left edge rather than mid-chart. Which edge that is depends
-  // on when the market was born:
-  //   - inside the window -> anchor at its creation, the market's own start.
-  //   - before the window -> anchor at the window start, but only because
-  //     the price-history API found no pre-window price to carry forward.
-  //     Snapshots are written per trade, so nothing before the window means
-  //     no trade before it either, and the market really was still sitting
-  //     on its opening price when the window opened. When a pre-window
-  //     price does exist the API already returns it at the window start,
-  //     and that real point wins over this seed.
-  if (Number.isFinite(openedAt) && openedAt <= now) {
-    const anchorT = Math.max(openedAt, windowStart);
-    const firstT = Number(points[0]?.t);
-    if (!Number.isFinite(firstT) || firstT > anchorT) {
-      points.unshift({ t: anchorT, p: openingPct });
-    }
-  }
-
   const last = points[points.length - 1];
   if (!last || (now > last.t && Math.abs(Number(last.p) - targetPct) >= 0.25)) {
     points.push({ t: now, p: targetPct });
@@ -1074,10 +1043,10 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
             // stretches the axis and squashes the rest into the edge.
             // Clamped to the market's creation (Polymarket-style): a market
             // born mid-window charts its own life, full width.
-            const mChartEnd = Math.floor(Date.now() / 1000);
+            const mChartEnd = Date.now() / 1000;
             const mRangeStart = mChartEnd - CHART_HISTORY_HOURS * 3600;
             const mOpenedAt = m?.createdAt
-              ? Math.floor(new Date(m.createdAt).getTime() / 1000)
+              ? new Date(m.createdAt).getTime() / 1000
               : null;
             const mChartStart = Number.isFinite(mOpenedAt)
               ? Math.max(mRangeStart, Math.min(mOpenedAt, mChartEnd - 60))
@@ -1221,7 +1190,7 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                           key: `opt-${entry.index}`,
                           label: entry.label,
                           color: chartColorForOutcome(entry.index, mOutcomes.length),
-                          data: chartSeriesForOutcome(m, entry, mOutcomeSeries?.[entry.index]),
+                          data: chartSeriesForOutcome(entry, mOutcomeSeries?.[entry.index], mChartEnd),
                           targetPct: Math.round((entry.price || 0) * 100),
                         }))}
                         activity={[m._buckets || []]}
@@ -1256,7 +1225,7 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                         endLabelWidth={140}
                         timeMin={mChartStart}
                         timeMax={mChartEnd}
-                        data={chartSeriesForOutcome(m, mChartEntries[0] || mOutcomeEntries[0], mSeries)}
+                        data={chartSeriesForOutcome(mChartEntries[0] || mOutcomeEntries[0], mSeries, mChartEnd)}
                         targetPct={mLeadPct}
                         emptyLabel={t('points.activity.noHistory')}
                         emptySubLabel={t('points.activity.noHistorySub')}

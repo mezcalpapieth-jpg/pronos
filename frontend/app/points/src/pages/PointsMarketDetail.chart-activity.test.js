@@ -105,7 +105,8 @@ test('active charts append the live executable price as their tail', () => {
   assert.match(detailSource, /market\.ammMode === 'parallel' && leg\s+\? leg\?\.prices\?\.\[0\]/);
   assert.match(detailSource, /: market\.prices\?\.\[outcomeIdx\]/);
   assert.match(detailSource, /const p = livePctFor\(outcomeIdx, leg\)/);
-  assert.match(detailSource, /Math\.floor\(chartClock\.endMs \/ 1000\)/);
+  assert.match(detailSource, /const t = chartClock\.endMs \/ 1000/);
+  assert.match(detailSource, /if \(last && last\.t >= tail\.t\) return series/);
 });
 
 test('outcome logos fall back to initials when a supplied image fails', () => {

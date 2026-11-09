@@ -101,7 +101,7 @@ test('parallel carousel charts draw leg histories without adopting a child ident
   assert.match(carousel, /function leadingOutcomeForMarket/);
   assert.match(carousel, /<MultiSparkline/);
   assert.match(carousel, /series=\{mChartEntries\.map\(entry =>/);
-  assert.match(carousel, /data: chartSeriesForOutcome\(m, entry, mOutcomeSeries\?\.\[entry\.index\]\)/);
+  assert.match(carousel, /data: chartSeriesForOutcome\(entry, mOutcomeSeries\?\.\[entry\.index\], mChartEnd\)/);
   assert.match(carousel, /activity=\{\[m\._buckets \|\| \[\]\]\}/);
   assert.match(carousel, /points\.activity\.tied/);
   assert.match(carousel, /isMultiChart \? mLeader\.label : mOutcomes\[0\]/);
@@ -145,11 +145,7 @@ test('carousel charts use a 24h time window with the shared hard-step line', () 
   assert.match(carousel, /const CHART_HISTORY_HOURS = 24/);
   assert.match(carousel, /fetchPriceHistory\(group\.ids, \{ hours: CHART_HISTORY_HOURS/);
   assert.match(carousel, /function chartSeriesForOutcome/);
-  // The opening baseline anchors at the axis' left edge — the market's
-  // creation when it was born inside the window, the window start when it
-  // was born earlier — so the line never begins mid-chart.
-  assert.match(carousel, /const anchorT = Math\.max\(openedAt, windowStart\)/);
-  assert.match(carousel, /points\.unshift\(\{ t: anchorT, p: openingPct \}\)/);
+  assert.doesNotMatch(carousel, /openingPct|points\.unshift/);
   assert.match(carousel, /points\.push\(\{ t: now, p: targetPct \}\)/);
   assert.match(carousel, /pp · 24h/);
   // Carousel charts no longer override jumpShape — they fall back to the

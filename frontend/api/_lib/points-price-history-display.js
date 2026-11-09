@@ -1,4 +1,5 @@
 import { binaryPrices } from './amm-math.js';
+import { pricesFromReserves } from './points-price-snapshots.js';
 
 export const PRICE_HISTORY_EXECUTION_BUCKET_MS = 2_000;
 const SNAPSHOT_COALESCE_SECONDS = 2.5;
@@ -18,6 +19,33 @@ function timestampMs(value) {
 
 function roundPct(price) {
   return Math.round(Number(price) * 10000) / 100;
+}
+
+export function missingOpeningTimestamp(window, series) {
+  const openedMs = timestampMs(window.openedAt);
+  const startMs = timestampMs(window.start);
+  const endMs = timestampMs(window.dataEnd);
+  if (!window.hasPointsPool || !openedMs || !startMs || !endMs) return null;
+  const anchorMs = Math.max(openedMs, startMs);
+  const t = anchorMs / 1000;
+  return anchorMs <= endMs && !(series[0]?.t <= t) ? t : null;
+}
+
+export function openingPricePoint(window, t, firstTrade, outcomeIdx) {
+  // An earlier trade with no surviving boundary price leaves this window's
+  // opening unknown. The original seed cannot stand in for that trade.
+  if (firstTrade && timestampMs(firstTrade.created_at) / 1000 < t) return null;
+  const count = parseJsonb(window.outcomes, [])?.length;
+  // Pre-trade reserves preserve the price before the first execution even
+  // if the seed was later edited. With no such record, use the saved seed.
+  for (const raw of [firstTrade?.reserves_before, window.seedReserves]) {
+    const reserves = parseJsonb(raw, null);
+    if (!Array.isArray(reserves) || reserves.length !== count || count < 2
+      || !reserves.every(value => Number.isFinite(Number(value)) && Number(value) > 0)) continue;
+    const price = pricesFromReserves(reserves)[outcomeIdx];
+    if (Number.isFinite(price)) return { t, p: roundPct(price) };
+  }
+  return null;
 }
 
 function cleanTradePrice(value) {
