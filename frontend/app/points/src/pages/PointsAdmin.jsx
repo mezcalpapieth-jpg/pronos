@@ -2,6 +2,7 @@ import RiskPanel from '../components/AdminRiskPanel.jsx';
 import AdminOnchainOperations from '../components/AdminOnchainOperations.jsx';
 import AdminOnchainTransactions from '../components/AdminOnchainTransactions.jsx';
 import AdminOnchainSettlement from '../components/AdminOnchainSettlement.jsx';
+import AdminOnchainResolution from '../components/AdminOnchainResolution.jsx';
 import { AdminResolutionReview } from '../components/ResolutionReview.jsx';
 import AdminCasePanel from '../components/AdminCasePanel.jsx';
 import { approvalIssueLabels, checkProposalApproval, ProposalApproval, ResolverStatus, SettlementReview } from './PointsAdminOperations.jsx';
@@ -23,6 +24,7 @@ import MarketLiquidityPanel from '../components/MarketLiquidityPanel.jsx';
 import AdminInterestPanel from '@app/components/AdminInterestPanel.jsx';
 import AdminStocksAudit from '../components/AdminStocksAudit.jsx';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
+import { usePointsExecution } from '../lib/PointsExecution.jsx';
 import { pointsPublicAssetSrc } from '@app/lib/publicAssets.js';
 import { defaultPointsSeedLiquidity } from '../../../../api/_lib/market-liquidity.js';
 import {
@@ -3395,8 +3397,15 @@ function ParallelLegEarlyNoControls({ market, workingLegId, onResolveNo }) {
 function MarketsTable({ onQueueChange }) {
   const queue = useAdminQueueFilters();
   const filter = queue.status;
+  const execution = usePointsExecution();
+  const sepoliaQueue = filter === 'pending' && execution.mode === 'onchain'
+    && execution.enabled && Number(execution.chainId) === 421614;
   const query = marketQueueQuery(queue);
   if (filter === 'active') query.set('open_only', '1');
+  if (sepoliaQueue) {
+    query.set('mode', 'onchain');
+    query.set('chain_id', '421614');
+  }
   const { rows: markets, setRows: setMarkets, loading, error, reload: load } = useAdminQueueData(
     `/api/points/admin/markets?${query}`, 'markets',
   );
@@ -3749,7 +3758,7 @@ function MarketsTable({ onQueueChange }) {
         <details className="pb-admin-tools-wrap">
           <summary>Herramientas de mercados</summary>
           <div className="pb-admin-tools">
-            {filter === 'pending' && (
+            {filter === 'pending' && !sepoliaQueue && (
               <button className="pb-admin-button" type="button" onClick={runAutoResolveNow} disabled={autoResolving}>
                 {autoResolving ? 'Resolviendo…' : 'Ejecutar el resolver'}
               </button>
@@ -3765,24 +3774,31 @@ function MarketsTable({ onQueueChange }) {
 
       {settlementNotice && <p className="pb-admin-message" role="status">{settlementNotice}</p>}
       <AdminMarketQueue rows={markets} loading={loading} error={error} onRetry={load} queue={queue}>
-        {m => (
+        {m => {
+          const reviewOnchain = filter === 'pending' && m.status === 'active' && m.mode === 'onchain' && Number(m.chainId) === 421614;
+          return (
         <div key={m.id} className="points-admin-market-card">
           <div className="points-admin-market-main">
             <h2 className="points-admin-market-title">{m.question}</h2>
             <AdminMarketFacts market={m} />
-            {m.status === 'active' && (
+            {m.status === 'active' && !reviewOnchain && (
               <ResolverStatus key={m.id} market={m} onChange={() => { load(); onQueueChange?.(); }} />
             )}
             <p className="pb-admin-tools-note">
               {m.tradeCount ?? 0} operaciones · Liquidez inicial {Number(m.seedLiquidity || 0).toLocaleString('es-MX')} MXNP
               {m.seriesMeta?.subtitle && <> · {m.seriesMeta.subtitle}</>}
             </p>
-            <ParallelLegEarlyNoControls
+            {!reviewOnchain && <ParallelLegEarlyNoControls
               market={m}
               workingLegId={resolvingLegNo}
               onResolveNo={resolveParallelLegNo}
-            />
-            {m.resolutionCandidate && (
+            />}
+            {reviewOnchain && <AdminOnchainResolution market={m} onSettled={id => {
+              setSettlementNotice(`Resolución de #${id} confirmada en Arbitrum Sepolia. Esperando al indexador.`);
+              load();
+              onQueueChange?.();
+            }} />}
+            {!reviewOnchain && m.resolutionCandidate && (
               <ResolutionCandidatePanel
                 market={m}
                 candidate={m.resolutionCandidate}
@@ -3940,7 +3956,7 @@ function MarketsTable({ onQueueChange }) {
                   {converting === m.id ? 'Convirtiendo…' : 'A binario'}
                 </button>
               )}
-              {filter === 'pending' && (
+              {filter === 'pending' && !reviewOnchain && (
                 <button
                   onClick={() => reviewSettlement('cancel', m)}
                   title="Anular el mercado y devolver el costo base de las posiciones abiertas"
@@ -3960,7 +3976,7 @@ function MarketsTable({ onQueueChange }) {
                   Anular mercado
                 </button>
               )}
-              {m.resolutionCandidate ? null : (
+              {!reviewOnchain && !m.resolutionCandidate && (
                 <ResolveControls
                   market={m}
                   onResolve={winnerIndex => reviewSettlement('resolve', m, winnerIndex)}
@@ -4040,7 +4056,8 @@ function MarketsTable({ onQueueChange }) {
           )}
           </div>
         </div>
-        )}
+          );
+        }}
       </AdminMarketQueue>
 
       {settlement && <SettlementReview {...settlement} onConfirm={applySettlement} onClose={stale => { setSettlement(null); if (stale) load(); }} />}

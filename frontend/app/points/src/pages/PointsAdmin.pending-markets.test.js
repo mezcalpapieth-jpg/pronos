@@ -24,6 +24,13 @@ function sourceForFunction(name) {
   return source.slice(start, nextFunction === -1 ? source.length : nextFunction);
 }
 
+test('Por resolver requests the Sepolia queue when onchain execution is selected', () => {
+  const markets = sourceForFunction('MarketsTable');
+  assert.match(markets, /filter === 'pending' && execution\.mode === 'onchain'\s*&& execution\.enabled && Number\(execution\.chainId\) === 421614/);
+  assert.match(markets, /if \(sepoliaQueue\) \{\s*query\.set\('mode', 'onchain'\);\s*query\.set\('chain_id', '421614'\);/);
+  assert.match(markets, /filter === 'pending' && !sepoliaQueue[\s\S]*?onClick=\{runAutoResolveNow\}/);
+});
+
 test('Points admin exposes a re-add action for rejected generated markets', () => {
   assert.match(source, /filter === 'rejected'/);
   assert.match(source, /review\(r\.id,\s*'readd'\)/);

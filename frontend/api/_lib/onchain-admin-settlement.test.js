@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PGlite } from '@electric-sql/pglite';
 import { ethers } from 'ethers';
-import { SETTLEMENT_MIGRATION, settlementSettings, settlementInput, assertSettlementMarket, settleOnchainMarket, loadSettlementMarket, settlementSourceHash } from './onchain-admin-settlement.js';
+import { SETTLEMENT_MIGRATION, settlementSettings, settlementInput, assertSettlementMarket, settleOnchainMarket,
+  loadSettlementMarket, loadPublishedResolution, settlementQueueReviewHash, settlementSourceHash } from './onchain-admin-settlement.js';
 import { TRADE_REQUEST_SCHEMA } from './trade-request-store.js';
 import { tradePayloadHash } from './trade-requests.js';
 
@@ -18,9 +19,12 @@ async function fixture(t,{variant='v1',timeout=false,status='active'}={}) {
   const db=new PGlite();t.after(()=>db.close());
   for(const ddl of TRADE_REQUEST_SCHEMA)await db.exec(ddl);
   for(const ddl of SETTLEMENT_MIGRATION)await db.exec(ddl);
-  await db.exec(`CREATE TABLE points_markets(id int,mode text,chain_id int,chain_address text,chain_market_id text,parent_id int,amm_mode text,question text);
+  await db.exec(`CREATE TABLE points_markets(id int,mode text,chain_id int,chain_address text,chain_market_id text,parent_id int,amm_mode text,question text,
+      resolver_type text,resolver_config jsonb,outcomes jsonb,start_time timestamptz,end_time timestamptz,sport text,league text,status text);
+    CREATE TABLE points_pending_markets(id int,approved_market_id int,source_data jsonb);
     CREATE TABLE protocol_markets(id int,chain_id int,factory_address text,pool_address text,market_id bigint,protocol_version text,outcome_count int,status text,outcome int,resolver_config jsonb,resolver_type text,outcomes jsonb);
-    INSERT INTO points_markets VALUES(42,'onchain',421614,'${addr(4)}','0',null,'unified','Fixture');
+    INSERT INTO points_markets VALUES(42,'onchain',421614,'${addr(4)}','0',null,'unified','Fixture',
+      'sports_api','{}','["Yes","No"]',null,now()-interval '1 hour',null,null,'active');
     INSERT INTO protocol_markets VALUES(99,421614,'${addr(variant==='v2'?2:1)}','${addr(4)}',0,'${variant}',${variant==='v2'?3:2},'${status}',null,'{}','sports_api','["Yes","No"]');`);
   const sql=async(parts,...values)=>(await db.query(parts.reduce((s,p,i)=>s+(i?`$${i}`:'')+p,''),values)).rows;
   let nonce=0,receipt=null,receiptReady=!timeout,fee='10000000',balance=ethers.utils.parseEther('1'),chain=421614,binding=addr(4);
@@ -59,7 +63,7 @@ test('settlement gates production, other branches/chains/databases and disabled 
 });
 test('input and exact market identity reject missing/forged fields, parallel legs and malformed IDs',()=>{
   assert.deepEqual(settlementInput({marketId:42,action:'resolve',outcome:0,reason:' Evidence '}),{marketId:42,action:'resolve',outcome:0,reason:'Evidence'});
-  for(const change of [{marketId:0},{outcome:'0'},{outcome:-1},{reason:''},{factoryAddress:addr(1)},{action:'reopen'}])assert.throws(()=>settlementInput({marketId:42,action:'resolve',outcome:0,reason:'Evidence',...change}));
+  for(const change of [{marketId:0},{outcome:'0'},{outcome:-1},{reason:''},{factoryAddress:addr(1)},{action:'reopen'},{reviewHash:'invalid'}])assert.throws(()=>settlementInput({marketId:42,action:'resolve',outcome:0,reason:'Evidence',...change}));
   const m={mode:'onchain',points_chain_id:421614,chain_id:421614,protocol_version:'v1',protocol_id:99,pool_address:addr(4),chain_address:addr(4),chain_market_id:'0',contract_id:'0',factory_address:addr(1)};
   assert.equal(assertSettlementMarket(m,preview),m);
   for(const change of [{mode:'points'},{protocol_version:null},{contract_id:null},{chain_market_id:'99'},{factory_address:addr(2)},{chain_id:42161},{parent_id:1},{amm_mode:'parallel'}])assert.throws(()=>assertSettlementMarket({...m,...change},preview));
@@ -92,6 +96,44 @@ test('same key with changed outcome conflicts; an unresolved wallet rejects anot
   const f=await fixture(t,{timeout:true});await f.run();
   await assert.rejects(f.run({input:{...f.input,outcome:1}}),/idempotency_key_conflict/);
   const second=await f.run({key:'another_request_123'});assert.equal(second.httpStatus,409);assert.equal(f.signed.length,1);
+});
+test('a queue resolution never signs when its published evidence changes after review', async t => {
+  const f = await fixture(t);
+  const market = await loadSettlementMarket(f.sql, 42, preview);
+  const published = await loadPublishedResolution(f.sql, 42);
+  const input = { ...f.input, reviewHash: settlementQueueReviewHash(market, published) };
+  await f.db.exec(`UPDATE points_markets SET resolver_config='{"source":"changed"}'`);
+  const result = await f.run({ input });
+  assert.equal(result.httpStatus, 409);
+  assert.equal(result.body.error, 'settlement_source_changed');
+  assert.equal(f.signed.length, 0);
+});
+test('queue settlement rechecks current payout backing and only signs a funded outcome once', async t => {
+  const f = await fixture(t);
+  const market = await loadSettlementMarket(f.sql, 42, preview);
+  const input = { ...f.input, reviewHash: settlementQueueReviewHash(market, await loadPublishedResolution(f.sql, 42)) };
+  const block = { number: 10, timestamp: 100, hash: '0x' + 'ab'.repeat(32) };
+  f.provider.getBlock = async () => block;
+  let collateral = 5n;
+  const read = value => async () => value;
+  const contractAt = address => ({
+    [addr(1)]: { getMarket: read([addr(4), 'Fixture', 'general', 99, '', true]), collateral: read(addr(3)) },
+    [addr(3)]: { balanceOf: async () => collateral },
+    [addr(4)]: { resolved: read(false), disputed: read(false), canceled: read(false), token: read(addr(5)), collateral: read(addr(3)) },
+    [addr(5)]: { yesTokenId: read(0), totalSupply: read(10n), balanceOf: read(2n) },
+  })[address];
+
+  const rejected = await f.run({ input, contractAt });
+  assert.equal(rejected.httpStatus, 409);
+  assert.equal(rejected.body.error, 'settlement_resolution_pool_shortfall');
+  assert.equal(f.signed.length, 0);
+  collateral = 8n;
+  const args = { input, contractAt, key: 'funded_review_123' };
+  const settled = await f.run(args);
+  assert.equal(settled.httpStatus, 200);
+  await f.db.exec("UPDATE protocol_markets SET status='resolved'");
+  assert.equal((await f.run(args)).body.txHash, settled.body.txHash);
+  assert.equal(f.signed.length, 1);
 });
 for(const [action,status] of [['cancel','active'],['dispute','resolved'],['clear_dispute','disputed'],['correct_resolution','disputed']])test(`${action} is an owner action and does not pay refunds or mutate Points`,async t=>{
   const f=await fixture(t,{status});const input={...f.input,action,outcome:action==='correct_resolution'?1:null};

@@ -75,7 +75,8 @@ export function createSettlementHandler({ env = process.env, sqlFor = neon,
           return { requestId:r.request_key, marketId:Number(r.market_id), action:r.action.slice(6), status:r.status,
             input:r.action==='admin_cancel_refund'?{marketId:Number(r.market_id),action:'cancel_refund',holders:r.request_payload?.holders,
               blockNumber:r.request_payload?.blockNumber,blockHash:r.request_payload?.blockHash,planHash:r.request_payload?.planHash,reason:r.reason}
-              :{ marketId:Number(r.market_id),action:r.action.slice(6),outcome:r.requested_outcome,reason:r.reason },
+              :{ marketId:Number(r.market_id),action:r.action.slice(6),outcome:r.requested_outcome,reason:r.reason,
+                ...(r.request_payload?.reviewHash ? { reviewHash:r.request_payload.reviewHash } : {}) },
             origin:r.origin, actor:r.actor, updatedAt:r.updated_at, txHash:r.tx_hash, blockNumber:r.block_number,
             awaitingIndexing:r.status==='confirmed' && (!m?.settlementReady || r.block_number==null
               || m.indexedBlock==null || Number(m.indexedBlock)<Number(r.block_number)

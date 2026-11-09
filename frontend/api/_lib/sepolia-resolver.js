@@ -1,7 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { parseAutoResolverJsonb, resolveAutoResolverCandidate } from './auto-resolver-core.js';
-import { settlementSettings, settlementSigner, settleOnchainMarket, settlementSourceHash } from './onchain-admin-settlement.js';
-import { tradePayloadHash } from './trade-requests.js';
+import { loadPublishedResolution, loadSettlementMarket, settlementSettings, settlementSigner, settleOnchainMarket,
+  settlementQueueReviewHash, settlementSourceHash } from './onchain-admin-settlement.js';
+import { previewResolutionPayouts } from './onchain-resolution-payouts.js';
+import { pendingResolutionCriteria } from './points-pending-resolution-rules.js';
+import { tradeError, tradePayloadHash } from './trade-requests.js';
 
 export const RESOLVER_MIGRATION = [
   `CREATE TABLE IF NOT EXISTS sepolia_resolver_lease (name text PRIMARY KEY CHECK(name='preview'), owner uuid NOT NULL, expires_at timestamptz NOT NULL)`,
@@ -38,6 +41,56 @@ async function resolutionCandidates(sql,env,cursor=null) {
           AND m.end_time IS NOT NULL AND m.end_time<now()
         AND (${cursor?.endTime || null}::timestamptz IS NULL OR (m.end_time,m.id)>(${cursor?.endTime || null}::timestamptz,${cursor?.marketId || 0}))
         ORDER BY m.end_time,m.id LIMIT 25`;
+}
+function resolutionEvidenceUrl(cfg) {
+  if (cfg.source === 'espn' && /^\d+$/.test(String(cfg.eventId))
+    && /^[a-z-]+\/[a-z0-9.-]+$/i.test(cfg.leaguePath || '')) {
+    return `https://site.api.espn.com/apis/site/v2/sports/${cfg.leaguePath}/summary?event=${cfg.eventId}`;
+  }
+  // Resolver request URLs can contain private provider tokens. Only surface
+  // URLs explicitly identified in the market config as public evidence.
+  try {
+    const url = new URL(cfg.evidenceUrl || cfg.publicSourceUrl);
+    if (url.protocol === 'https:' && !url.username && !url.password) return url.href;
+  } catch { /* No public source link. */ }
+  return null;
+}
+
+export async function reviewSepoliaResolution({ sql, provider, env, marketId, decide, payoutPreview = previewResolutionPayouts }) {
+  if (!resolverSettings(env).configured) throw tradeError('resolver_isolation_failed', 403);
+  if (Number((await provider.getNetwork()).chainId) !== 421614) throw tradeError('resolver_wrong_chain', 503);
+  const market = await loadSettlementMarket(sql, marketId, env);
+  const published = await loadPublishedResolution(sql, marketId);
+  const outcomes = parseAutoResolverJsonb(published.outcomes, []);
+  if (!Array.isArray(outcomes) || outcomes.length !== Number(market.outcome_count)
+    || outcomes.some(label => typeof label !== 'string' || !label.trim())) throw tradeError('settlement_invalid_outcomes', 409);
+  if (market.protocol_version === 'v2' && tradePayloadHash(outcomes) !== tradePayloadHash(parseAutoResolverJsonb(market.outcomes, []))) {
+    throw tradeError('settlement_invalid_outcomes', 409);
+  }
+  const candidate = {
+    ...market, ...published, outcomes, id: market.protocol_id, market_id: market.contract_id,
+    resolver_type: published.resolver_type || market.resolver_type,
+    resolver_config: published.resolver_type ? published.resolver_config : market.resolver_config,
+  };
+
+  const [decision, estimate] = await Promise.all([
+    inspectResolutionCandidate(candidate, { sql, decide }),
+    payoutPreview({ market, provider, env }),
+  ]);
+  const cfg = parseAutoResolverJsonb(candidate.resolver_config, {}) || {};
+  return {
+    marketId, chainId: 421614, status: decision.status, outcomes,
+    criteria: pendingResolutionCriteria(cfg, parseAutoResolverJsonb(published.pending_source_data, {})),
+    suggestedOutcome: decision.input?.outcome ?? null,
+    evidence: {
+      provider: cfg.source || cfg.resolutionSource || candidate.resolver_type || null,
+      url: resolutionEvidenceUrl(cfg),
+      score: decision.evidence?.finalScore ?? null,
+      observedAt: decision.evidence?.observedAt ?? null,
+    },
+    reviewHash: settlementQueueReviewHash(market, published),
+    estimate,
+  };
 }
 export async function inspectResolutionCandidate(m,{sql,decide=resolveAutoResolverCandidate,now=()=>Date.now(),timeoutMs=15000}={}) {
   if(!automaticResolutionSupported(m))return {marketId:Number(m.points_id),status:'manual',reason:'manual_resolution_required'};

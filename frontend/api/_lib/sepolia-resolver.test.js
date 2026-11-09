@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {PGlite} from '@electric-sql/pglite';
-import {RESOLVER_MIGRATION,runSepoliaResolver,automaticResolutionSupported,previewSepoliaResolutions,inspectResolutionCandidate} from './sepolia-resolver.js';
+import {RESOLVER_MIGRATION,runSepoliaResolver,automaticResolutionSupported,previewSepoliaResolutions,inspectResolutionCandidate,reviewSepoliaResolution} from './sepolia-resolver.js';
 import {preview} from './test-support/sepolia-settlement.mjs';
 const env={...preview,ONCHAIN_RESOLVER_SCHEDULE_ENABLED:'true',VERCEL_GIT_COMMIT_SHA:'a'.repeat(40)};
 const addr=n=>`0x${String(n).repeat(40)}`;
@@ -9,8 +9,9 @@ async function fixture(t){
   const db=new PGlite();t.after(()=>db.close());
   await db.exec(`CREATE ROLE pronos_reader;CREATE ROLE pronos_writer;CREATE ROLE sepolia_indexer;CREATE ROLE sepolia_standings;
     CREATE TABLE sepolia_trade_requests(request_key text,chain_id int,wallet_address text,suborg_id text,action text,payload jsonb,status text,created_at timestamptz DEFAULT now());
-    CREATE TABLE points_markets(id int,chain_id int,mode text,chain_address text,chain_market_id text,parent_id int,amm_mode text);
-    CREATE TABLE protocol_markets(id int,chain_id int,status text,pool_address text,market_id int,factory_address text,question text,start_time timestamptz,end_time timestamptz,resolver_type text,resolver_config jsonb,outcomes jsonb,outcome_count int,protocol_version text,sport text,league text);
+    CREATE TABLE points_markets(id int,chain_id int,mode text,chain_address text,chain_market_id text,parent_id int,amm_mode text,question text,
+      resolver_type text,resolver_config jsonb,outcomes jsonb,start_time timestamptz,end_time timestamptz,sport text,league text,status text);
+    CREATE TABLE protocol_markets(id int,chain_id int,status text,pool_address text,market_id int,factory_address text,question text,start_time timestamptz,end_time timestamptz,resolver_type text,resolver_config jsonb,outcomes jsonb,outcome_count int,protocol_version text,sport text,league text,outcome int);
     CREATE TABLE points_pending_markets(id int,approved_market_id int,source_data jsonb);`);
   for(const ddl of RESOLVER_MIGRATION)await db.exec(ddl);
   const sql=async(parts,...v)=>(await db.query(parts.reduce((s,p,i)=>s+(i?`$${i}`:'')+p,''),v)).rows;
@@ -18,8 +19,9 @@ async function fixture(t){
   const settle=async args=>{calls.push(args);return {httpStatus:200,body:{txHash:'0xtest'}};};
   const decide=async m=>{decisions.push(m);return {winningIdx:0,finalScore:'2-1',resolverInfo:{source:'fixture'}};};
   return {db,sql,calls,decisions,async seed(id,{mode='onchain',chain=421614,factory=addr(1),type='sports_api',cfg={source:'espn',shape:'binary'},end="now()-interval '1 hour'"}={}){
-    await db.query(`INSERT INTO protocol_markets VALUES($1,$2,'active',$3,$1,$4,'Fixture',null,${end},$5,$6,'["Yes","No"]',2,'v1',null,null)`,[id,chain,addr(4),factory,type,JSON.stringify(cfg)]);
-    await db.query(`INSERT INTO points_markets VALUES($1,$2,$3,$4,($1::int)::text,null,'unified')`,[id,chain,mode,addr(4)]);
+    await db.query(`INSERT INTO protocol_markets VALUES($1,$2,'active',$3,$1,$4,'Fixture',null,${end},$5,$6,'["Yes","No"]',2,'v1',null,null,null)`,[id,chain,addr(4),factory,type,JSON.stringify(cfg)]);
+    await db.query(`INSERT INTO points_markets VALUES($1,$2,$3,$4,($1::int)::text,null,'unified','Fixture',
+      $5,$6,'["Published A","Published B"]',null,${end},null,null,'active')`,[id,chain,mode,addr(4),type,JSON.stringify(cfg)]);
   },run:extra=>runSepoliaResolver({sql,provider:{getNetwork:async()=>({chainId:421614})},env,decide,settle,...extra})};
 }
 test('automatic source allowlist leaves parallel and review-heavy markets manual',()=>{
@@ -75,4 +77,36 @@ test('inspection handles source timeout and invalid outcomes without signing or 
   for(const decide of [async()=>({winningIdx:2}),async()=>{throw Error('private credentials');},()=>new Promise(()=>{})]) {
     const result=await inspectResolutionCandidate(m,{decide,timeoutMs:5});assert.equal(result.status,'deferred');assert.doesNotMatch(JSON.stringify(result),/private/);
   }
+});
+
+test('queue review checks only the chosen closed market, exposes official evidence and rejects wrong chain/mapping', async t => {
+  const f = await fixture(t);
+  for (let i = 1; i < 28; i++) await f.seed(i);
+  await f.seed(28,{cfg:{source:'espn',shape:'binary',leaguePath:'football/college-football',eventId:'401866475'}});
+  await f.db.exec('UPDATE protocol_markets SET resolver_type=NULL,resolver_config=NULL WHERE id=28');
+  await f.seed(29,{end:"now()+interval '1 hour'"});
+  const read = marketId => reviewSepoliaResolution({
+    marketId, env, provider: {getNetwork:async()=>({chainId:421614})},
+    sql: (parts,...values) => { assert.match(parts.join(''), /^\s*SELECT/); return f.sql(parts,...values); },
+    decide: async market => {
+      assert.equal(market.points_id,28);
+      assert.equal(market.resolver_type,'sports_api');
+      assert.deepEqual(market.outcomes,['Published A','Published B']);
+      return {winningIdx:1,finalScore:'3–1',resolverInfo:{privateUrl:'secret token'}};
+    },
+    payoutPreview: async ({market}) => {
+      assert.equal(market.points_id,28);
+      return {blockNumber:100,payouts:[{outcome:1,payoutUnits:'12000000',shortfallUnits:'0'}]};
+    },
+  });
+  const review = await read(28);
+  assert.equal(review.suggestedOutcome,1);
+  assert.equal(review.evidence.score,'3–1');
+  assert.match(review.evidence.url,/espn\.com\/.*event=401866475$/);
+  assert.match(review.reviewHash,/^[a-f0-9]{64}$/);
+  assert.equal(review.estimate.payouts[0].payoutUnits,'12000000');
+  assert.doesNotMatch(JSON.stringify(review),/secret token/);
+  await assert.rejects(read(29),/settlement_market_state_changed/);
+  await f.db.exec("UPDATE points_markets SET chain_id=42161 WHERE id=28");
+  await assert.rejects(read(28),/settlement_market_mapping_unavailable/);
 });

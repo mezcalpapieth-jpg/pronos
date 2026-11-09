@@ -8,6 +8,30 @@ const labels={resolve:'Resolver',cancel:'Anular',dispute:'Abrir disputa',clear_d
 const actions={active:['resolve','cancel'],resolved:['dispute'],disputed:['clear_dispute','correct_resolution','cancel']};
 const pending=r=>['created','validated','pending','needs_reconciliation'].includes(r.status);
 const box={border:'1px solid var(--border)',borderRadius:12,padding:20,marginBottom:18,overflowWrap:'anywhere'};
+export const settlementStorageKey = owner => `pronos:admin-settlement:${owner}`;
+export const savedSettlement = (storage, key) => JSON.parse(storage.getItem(key) || 'null');
+export const settlementConfirmed = result => result.status === 'confirmed' || result.ok === true;
+export const mxnp = units => (BigInt(units) / 1000000n).toString() + '.' + (BigInt(units) % 1000000n).toString().padStart(6, '0');
+
+export function saveSettlement(storage, key, input, requestId) {
+  const existing = savedSettlement(storage, key);
+  if (existing && existing.requestId !== requestId) {
+    throw Object.assign(new Error('settlement_already_saved'), { code: 'settlement_already_saved' });
+  }
+  const record = existing || { ...input, requestId: requestId || crypto.randomUUID() };
+  storage.setItem(key, JSON.stringify(record));
+  return record;
+}
+
+export function postSettlement(api, record) {
+  if (record.action !== 'cancel_refund') return api.postJson(endpoint, record);
+  const { action, ...refund } = record;
+  return api.postJson('/api/points/admin/onchain-refunds', { ...refund, operation: 'execute' });
+}
+
+export function clearSettlement(storage, key, requestId) {
+  if (savedSettlement(storage, key)?.requestId === requestId) storage.removeItem(key);
+}
 
 function MarketAction({market,busy,onSubmit}) {
   const options=actions[market.status]||[];
@@ -41,7 +65,6 @@ export function RefundReview({market,api,busy,onSubmit}) {
     try {setReview(await api.postJson('/api/points/admin/onchain-refunds',{operation:'preview',marketId:market.id,
       holders:holders.split(/[\s,]+/).filter(Boolean)}));}catch(e){setError(e.code||'unavailable');}finally{setLoading(false);}
   }
-  const mxnp=units=>(BigInt(units)/1000000n).toString()+'.'+(BigInt(units)%1000000n).toString().padStart(6,'0');
   return <div aria-label={`Reembolsos ${market.id}`}>
     <p>Revisar hasta 5 titulares por lote. Los importes provienen del contrato; no se pueden editar. La búsqueda recorre los traders indexados.</p>
     <button type="button" disabled={busy||loading||finished} onClick={discover}>Cargar siguientes titulares</button>
@@ -60,7 +83,7 @@ export function RefundReview({market,api,busy,onSubmit}) {
   </div>;
 }
 export function SettlementPanel({owner,api={getJson,postJson},storage=globalThis.localStorage,confirm=message=>window.confirm(message)}) {
-  const storageKey=`pronos:admin-settlement:${owner}`;
+  const storageKey=settlementStorageKey(owner);
   const [report,setReport]=useState(null),[error,setError]=useState(null),[busy,setBusy]=useState(false),[saved,setSaved]=useState(null);
   const [message,setMessage]=useState(''),[resolutionPreview,setResolutionPreview]=useState(null);
   const mounted=useRef(true),sequence=useRef(0);
@@ -71,21 +94,20 @@ export function SettlementPanel({owner,api={getJson,postJson},storage=globalThis
   }
   useEffect(()=>{
     mounted.current=true;
-    try {const value=storage.getItem(storageKey);if(value)setSaved(JSON.parse(value));}catch{setError('storage_unavailable');}
+    try {setSaved(savedSettlement(storage,storageKey));}catch{setError('storage_unavailable');}
     refresh();return()=>{mounted.current=false;sequence.current++;};
   },[]);
   async function submit(input,requestId) {
     if(busy)return;
     if(!requestId&&!confirm(`${labels[input.action]} · mercado #${input.marketId}${input.outcome!=null?` · resultado ${input.outcome+1}`:''}\n\n${input.reason}\n\n${input.action==='cancel_refund'?'Se pagarán los importes revisados y se quemarán las posiciones correspondientes.':'La anulación pausa el mercado; los reembolsos se procesan por separado. Las correcciones requieren una disputa y ningún cobro previo.'}`))return;
-    const record={...input,requestId:requestId||crypto.randomUUID()};
+    let record;
     // Persist before POST: an ambiguous HTTP response never creates a new key.
-    try {storage.setItem(storageKey,JSON.stringify(record));setSaved(record);}catch{setError('storage_unavailable');return;}
+    try {record=saveSettlement(storage,storageKey,input,requestId);setSaved(record);}catch(e){setError(e.code||'storage_unavailable');return;}
     setBusy(true);setError(null);setMessage('');
     try {
-      const r=await api.postJson(input.action==='cancel_refund'?'/api/points/admin/onchain-refunds':endpoint,
-        input.action==='cancel_refund'?(({action,...r})=>({...r,operation:'execute'}))(record):record);
+      const r=await postSettlement(api,record);
       if(!mounted.current)return;
-      if(r.status==='confirmed'||r.ok===true){storage.removeItem(storageKey);setSaved(null);setMessage('Transacción confirmada. Esperando la actualización del indexador.');}
+      if(settlementConfirmed(r)){clearSettlement(storage,storageKey,record.requestId);setSaved(null);setMessage('Transacción confirmada. Esperando la actualización del indexador.');}
       else setMessage('Solicitud pendiente. Continúa con la misma solicitud; no se crea otra transacción.');
       await refresh();
     } catch(e) {
@@ -117,8 +139,8 @@ export function SettlementPanel({owner,api={getJson,postJson},storage=globalThis
       {report.requests.map(r=><div key={r.requestId}>
         <p>#{r.marketId} · {labels[r.action]} · {r.status} · índice: {r.indexingStatus}</p>
         {r.txHash&&<a href={`https://sepolia.arbiscan.io/tx/${r.txHash}`} target="_blank" rel="noreferrer">Ver transacción</a>}
-        {pending(r)&&<button type="button" disabled={busy} onClick={()=>submit(r.input,r.requestId)}>Continuar {r.requestId}</button>}
-        {saved?.requestId===r.requestId&&['confirmed','rejected','reverted'].includes(r.status)&&<button type="button" disabled={busy} onClick={()=>{storage.removeItem(storageKey);setSaved(null);}}>Reconocer resultado guardado</button>}
+        {pending(r)&&<button type="button" disabled={busy||Boolean(saved&&saved.requestId!==r.requestId)} onClick={()=>submit(r.input,r.requestId)}>Continuar {r.requestId}</button>}
+        {saved?.requestId===r.requestId&&['confirmed','rejected','reverted'].includes(r.status)&&<button type="button" disabled={busy} onClick={()=>{clearSettlement(storage,storageKey,r.requestId);setSaved(null);}}>Reconocer resultado guardado</button>}
       </div>)}
       {(report.marketsTruncated||report.requestsTruncated)&&<p>Lista parcial; las solicitudes pendientes tienen prioridad.</p>}
       {report.markets.map(m=><article key={m.id} style={{borderTop:'1px solid var(--border)',paddingTop:12,marginTop:12}}>

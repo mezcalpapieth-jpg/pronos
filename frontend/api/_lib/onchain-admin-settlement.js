@@ -5,6 +5,7 @@ import { runDurableTrade, tradeError, tradePayloadHash } from './trade-requests.
 import { tradeRequestStore } from './trade-request-store.js';
 import { onchainFeeData } from './onchain-fees.js';
 import { resolveMarketOnChain, lifecycleMarketOnChain } from './onchain-trader.js';
+import { previewResolutionPayouts } from './onchain-resolution-payouts.js';
 
 export const SETTLEMENT_ACTIONS = ['resolve', 'cancel', 'dispute', 'clear_dispute', 'correct_resolution'];
 export const SETTLEMENT_MIGRATION = [
@@ -34,7 +35,7 @@ export function settlementSettings(env = process.env) {
     && env.ONCHAIN_DURABLE_TRADES_ENABLED === 'true' && env.TURNKEY_POLICIES_ENABLED === 'true') };
 }
 export function settlementInput(body) {
-  const allowed = ['marketId','action','outcome','reason','requestId'];
+  const allowed = ['marketId','action','outcome','reason','requestId','reviewHash'];
   if (Object.keys(body || {}).some(k => !allowed.includes(k))) throw tradeError('invalid_settlement_input', 400);
   const marketId = Number(body?.marketId), action = body?.action;
   if (!Number.isSafeInteger(marketId) || marketId < 1 || !SETTLEMENT_ACTIONS.includes(action)) throw tradeError('invalid_settlement_input', 400);
@@ -42,7 +43,11 @@ export function settlementInput(body) {
   if (needsOutcome && (typeof body.outcome !== 'number' || !Number.isInteger(body.outcome) || body.outcome < 0 || body.outcome > 7)) throw tradeError('invalid_outcome', 400);
   if (!needsOutcome && body.outcome != null) throw tradeError('invalid_outcome', 400);
   if (typeof body.reason !== 'string' || !body.reason.trim() || body.reason.length > 240) throw tradeError('settlement_reason_required', 400);
-  return { marketId, action, outcome: needsOutcome ? body.outcome : null, reason: body.reason.trim() };
+  if (Object.hasOwn(body,'reviewHash') && (action !== 'resolve' || typeof body.reviewHash !== 'string' || !/^[a-f0-9]{64}$/.test(body.reviewHash))) {
+    throw tradeError('invalid_settlement_review', 400);
+  }
+  return { marketId, action, outcome: needsOutcome ? body.outcome : null, reason: body.reason.trim(),
+    ...(body.reviewHash ? { reviewHash: body.reviewHash } : {}) };
 }
 export function assertSettlementMarket(m, env) {
   const settings = settlementSettings(env), variant = m?.protocol_version;
@@ -96,6 +101,32 @@ export function assertSettlementReceipt(m, input, receipt) {
   if (!match) throw tradeError('settlement_receipt_requires_review', 202);
 }
 export const settlementSourceHash = m => tradePayloadHash([m.resolver_type, m.resolver_config, m.outcomes]);
+export function settlementQueueReviewHash(m, published) {
+  return tradePayloadHash([
+    Number(m.points_id), String(m.protocol_id), m.factory_address, m.pool_address, String(m.contract_id),
+    m.protocol_version, Number(m.outcome_count), settlementSourceHash(m),
+    { ...published, start_time: published.start_time == null ? null : new Date(published.start_time).toISOString(),
+      end_time: new Date(published.end_time).toISOString() },
+  ]);
+}
+
+export async function loadPublishedResolution(sql, marketId) {
+  // Approval writes the proposal's resolver and labels to Points; the chain
+  // indexer may know only the pool and its token IDs, especially for V1.
+  const [published] = await sql`SELECT p.resolver_type, p.resolver_config, p.outcomes, p.start_time, p.end_time,
+      p.sport, p.league, pm.source_data AS pending_source_data
+    FROM points_markets p
+    LEFT JOIN LATERAL (SELECT source_data FROM points_pending_markets WHERE approved_market_id=p.id ORDER BY id DESC LIMIT 1) pm ON true
+    WHERE p.id=${marketId} AND p.status='active' AND p.end_time<=now()`;
+  if (!published) throw tradeError('settlement_market_state_changed', 409);
+  return published;
+}
+
+async function assertQueueReview(sql, market, input) {
+  if (input.reviewHash && settlementQueueReviewHash(market, await loadPublishedResolution(sql, input.marketId)) !== input.reviewHash) {
+    throw tradeError('settlement_source_changed', 409);
+  }
+}
 export async function settleOnchainMarket({ sql, provider, env, input, key, actor, origin = 'admin', sign, expectedSourceHash, evidence,
   dispatch = { resolveMarketOnChain, lifecycleMarketOnChain }, contractAt = (a, abi) => new ethers.Contract(a, abi, provider),
   runner = runDurableTrade }) {
@@ -112,6 +143,7 @@ export async function settleOnchainMarket({ sql, provider, env, input, key, acto
     prepare: async () => {
       const market = await loadSettlementMarket(sql, input.marketId, env);
       validateAction(market, input);
+      await assertQueueReview(sql, market, input);
       if (review && settlementSourceHash(market) !== review.expectedSourceHash) throw tradeError('settlement_source_changed', 409);
       const gasLimit = input.action === 'cancel' ? 350000 : 250000;
       const maxCostWei = BigInt(gasLimit) * BigInt(SETTLEMENT_LIMITS.maxFeePerGas);
@@ -128,8 +160,13 @@ export async function settleOnchainMarket({ sql, provider, env, input, key, acto
       if (tradePayloadHash([current.factory_address, current.pool_address, current.contract_id, current.protocol_version, current.outcome_count])
         !== tradePayloadHash([plan.market.factory_address, plan.market.pool_address, plan.market.contract_id, plan.market.protocol_version, plan.market.outcome_count])) throw tradeError('settlement_market_mapping_changed', 409);
       validateAction(current, input);
+      await assertQueueReview(sql, current, input);
       if (plan.expectedSourceHash && settlementSourceHash(current) !== plan.expectedSourceHash) throw tradeError('settlement_source_changed', 409);
       if (Number((await provider.getNetwork()).chainId) !== 421614) throw tradeError('settlement_wrong_chain', 503);
+      if (input.reviewHash) {
+        const { payouts } = await previewResolutionPayouts({ market: current, provider, env, outcome: input.outcome, contractAt });
+        if (BigInt(payouts[0].shortfallUnits) > 0n) throw tradeError('settlement_resolution_pool_shortfall', 409);
+      }
       const m = plan.market;
       const factory = contractAt(m.factory_address, ['function collateral() view returns(address)',
         `function getMarket(uint256) view returns(address,string,string,uint256,string,${m.protocol_version === 'v2' ? 'uint8,' : ''}bool)`]);
