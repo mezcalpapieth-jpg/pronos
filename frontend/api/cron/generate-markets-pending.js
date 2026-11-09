@@ -73,6 +73,7 @@ export default async function handler(req, res) {
         count: stat.count,
         expiredCount: stat.expiredCount || 0,
         status: stat.skipped ? 'skipped' : stat.error ? 'error' : stat.feedErrors?.length ? 'feed_error' : 'ok',
+        reason: stat.reason,
         feedErrors: stat.feedErrors,
       }])),
     }));

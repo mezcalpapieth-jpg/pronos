@@ -118,6 +118,40 @@ test('generator runner includes the AICM infrastructure pipeline', () => {
   assert.match(source, /\{ name:\s*'aicm',\s*run:\s*generateAicmMarkets/);
 });
 
+test('reality show feeds are skipped outside their dated Mexico City seasons', async () => {
+  const { GENERATORS, runAllGenerators } = await import('./run-generators.js');
+  const windows = [
+    { name: 'lcdlf', start: '2026-07-26', dayAfter: '2026-10-05' },
+    { name: 'granja-vip', start: '2026-09-06', dayAfter: '2026-12-21' },
+  ];
+
+  for (const { name, start, dayAfter } of windows) {
+    const { run } = GENERATORS.find(generator => generator.name === name);
+    for (const [instant, inSeason] of [
+      [`${start}T05:59:59Z`, false],
+      [`${start}T06:00:00Z`, true],
+      [`${dayAfter}T05:59:59Z`, true],
+      [`${dayAfter}T06:00:00Z`, false],
+      [`2027${start.slice(4)}T12:00:00Z`, false],
+    ]) {
+      let requests = 0;
+      const fetchImpl = async () => {
+        requests++;
+        return { ok: true, status: 200, text: async () => '<html></html>' };
+      };
+      const { sourceStats } = await runAllGenerators({ generators: [{
+        name,
+        run: options => run({ ...options, now: new Date(instant), fetchImpl }),
+      }] });
+      const context = `${name} at ${instant}`;
+      assert.equal(requests > 0, inSeason, context);
+      assert.equal(sourceStats[name].reason, inSeason ? undefined : 'outside_season', context);
+      assert.equal(sourceStats[name].skipped, inSeason ? undefined : true, context);
+      assert.equal(sourceStats[name].feedErrors, undefined, context);
+    }
+  }
+});
+
 test('generator runner includes the MLB World Series winner pipeline', () => {
   assert.match(source, /generateMlbWorldSeries2026Markets/);
   assert.match(source, /\{ name:\s*'mlb-world-series-2026',\s*run:\s*generateMlbWorldSeries2026Markets/);

@@ -144,7 +144,11 @@ async function runGenerator(gen, disabledGenerators) {
   };
   const diagnostics = () => feedErrors.size ? { feedErrors: [...feedErrors.values()] } : {};
   try {
-    const specs = await gen.run({ reportFeedError });
+    let skipReason;
+    const specs = await gen.run({ reportFeedError, reportSkip: reason => { skipReason = reason; } });
+    if (skipReason) {
+      return { specs: [], stats: { count: 0, skipped: true, reason: skipReason, elapsedMs: elapsedMs() } };
+    }
     const contextualSpecs = await prepareGeneratedSpecs(specs);
     return { specs: contextualSpecs, stats: { count: contextualSpecs.length, elapsedMs: elapsedMs(), ...diagnostics() } };
   } catch (e) {

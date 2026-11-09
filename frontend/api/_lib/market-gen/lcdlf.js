@@ -6,6 +6,7 @@ import {
   readLcdlfOfficialSnapshot,
 } from '../lcdlf-official.js';
 import { attachSuggestedPricing } from '../market-pricing.js';
+import { isRealityShowInSeason } from './reality-show-seasons.js';
 
 function uniformProbabilities(count) {
   if (!Number.isInteger(count) || count < 2) return [];
@@ -16,8 +17,13 @@ export async function generateLcdlfMarkets({
   now = new Date(),
   fetchImpl = fetch,
   reportFeedError = () => {},
+  reportSkip = () => {},
 } = {}) {
   if (process.env.LCDLF_OFFICIAL_ENABLED === 'false') return [];
+  if (!isRealityShowInSeason('lcdlf', now)) {
+    reportSkip('outside_season');
+    return [];
+  }
 
   const snapshot = await readLcdlfOfficialSnapshot({ fetchImpl, now });
   for (const row of snapshot.rows) {
@@ -55,9 +61,7 @@ export async function generateLcdlfMarkets({
       evidence: finalWinnerSpec.resolver_config?.evidence || [],
     })] : []),
   ];
-  if (!specs.length) return [];
-
-  return specs;
+  return specs.filter(spec => isRealityShowInSeason('lcdlf', new Date(spec.end_time)));
 }
 
 export const _internal = {
