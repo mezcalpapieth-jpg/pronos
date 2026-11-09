@@ -12,7 +12,7 @@ import { readFile } from 'node:fs/promises';
 const source = await readFile(new URL('./pending-markets.js', import.meta.url), 'utf8');
 
 test('all approval paths and the pending display share opening defaults independently of trophies', () => {
-  assert.match(source, /const r = pendingRowWithOpeningLiquidity\(row, \{ mode: approvalOptions\.mode \}\)/);
+  assert.match(source, /\.map\(row => pendingRowWithOpeningLiquidity\(row, approvalOptions\)\)/);
   assert.match(source, /const r = pendingRowWithOpeningLiquidity\(rowRes\.rows\[0\], \{ mode: marketMode \}\)/);
   assert.match(source, /attachPointsOpeningLiquidity\(\{ \.\.\.row, mode,/);
   assert.match(source, /seed_liquidity = \$7, seed_liquidities = \$8::jsonb/);
@@ -137,7 +137,7 @@ test('pending api-price approval syncs edited threshold and operator from questi
   assert.match(source, /resolverConfig: syncedMananera\.resolverConfig/);
   assert.match(source, /sourceData: syncedMananera\.sourceData \|\| \{\}/);
   assert.match(source, /const sourceDataBase = syncedWeather\.sourceData \|\| syncedApiPrice\.sourceData \|\| syncedMananera\.sourceData \|\| \{\}/);
-  assert.match(source, /const resolverConfig = syncedWeather\.resolverConfig \|\| null/);
+  assert.match(source, /resolverConfig = syncedWeather\.resolverConfig \|\| null/);
 });
 
 test('pending weather approval syncs edited forecast date before insertion', () => {

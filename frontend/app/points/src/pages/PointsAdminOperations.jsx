@@ -220,13 +220,15 @@ export function SettlementReview({ action, market, indexes, candidate, initialSc
   );
 }
 
-export async function checkProposalApproval(id, options) {
-  const result = await getJson(`/api/points/admin/pending-markets?check_id=${id}`, options);
+export async function checkProposalApproval(id, { previewApprovalMode, signal } = {}) {
+  const query = new URLSearchParams({ check_id: id });
+  if (previewApprovalMode) query.set('previewApprovalMode', previewApprovalMode);
+  const result = await getJson(`/api/points/admin/pending-markets?${query}`, { signal });
   if (!Array.isArray(result?.checks)) throw new Error('No se pudo verificar la propuesta.');
-  return result.checks;
+  return result;
 }
 
-export function ProposalApproval({ row, revision, disabled, onApprove }) {
+export function ProposalApproval({ row, revision, disabled, onApprove, previewApprovalMode }) {
   const [state, setState] = useState(null);
   const [attempt, setAttempt] = useState(0);
   const [confirm, setConfirm] = useState(false);
@@ -235,30 +237,41 @@ export function ProposalApproval({ row, revision, disabled, onApprove }) {
     const controller = new AbortController();
     setState(null);
     setConfirm(false);
-    checkProposalApproval(row.id, { signal: controller.signal })
-      .then(checks => { if (!controller.signal.aborted) setState(checks); })
+    checkProposalApproval(row.id, { signal: controller.signal, previewApprovalMode })
+      .then(result => { if (!controller.signal.aborted) setState(result); })
       .catch(() => { if (!controller.signal.aborted) setState(false); });
     return () => controller.abort();
-  }, [row.id, revision, attempt]);
+  }, [row.id, revision, attempt, previewApprovalMode]);
 
-  const blocked = Array.isArray(state) && state.some(issue => issue.severity === 'block');
+  const checks = state?.checks;
+  const rules = state?.resolutionRules;
+  const approvalKey = previewApprovalMode === 'onchain' ? state?.oneClickApprovalKey : null;
+  const blocked = checks?.some(issue => issue.severity === 'block');
   return (
     <section className="pb-admin-operation pb-admin-approval" aria-label="Verificación de la propuesta">
       <h3>Verificación antes de publicar</h3>
       {state === null && <p role="status">Revisando la propuesta…</p>}
       {state === false && <p role="alert">No se pudo verificar la propuesta. <button className="pb-admin-button" type="button" onClick={() => setAttempt(value => value + 1)}>Reintentar</button></p>}
-      {state?.length > 0 && <ul className="pb-admin-checks">
-        {state.map(issue => (
+      {checks?.length > 0 && <ul className="pb-admin-checks">
+        {checks.map(issue => (
           <li key={`${issue.code}-${issue.marketId || ''}`}><strong>{issue.severity === 'block' ? 'Bloquea' : 'Revisar'}</strong> {approvalIssueLabels[issue.code] || issue.code}
             {issue.marketId && <> · <Link to={`/admin?tab=markets&status=all&q=%23${issue.marketId}&item=${issue.marketId}`}>#{issue.marketId}</Link></>}
           </li>
         ))}
       </ul>}
-      {state?.length === 0 && <p>La verificación no encontró incidencias.</p>}
-      {confirm && <p role="status">Se publicará la propuesta #{row.id} “{row.question}”.</p>}
+      {checks?.length === 0 && <p>La verificación no encontró incidencias.</p>}
+      {rules && <>
+        <h4>{rules.generated ? 'Criterios de resolución generados' : 'Criterios de resolución'}</h4>
+        <p>{rules.criteria}</p>
+        {rules.sourceUrl && <a href={rules.sourceUrl} target="_blank" rel="noreferrer">Fuente en ESPN</a>}
+      </>}
+      {confirm && <p role="status">Se publicará la propuesta #{row.id} “{row.question}”
+        {previewApprovalMode === 'onchain' ? ' en Arbitrum Sepolia' : ''}.</p>}
       <div className="pb-admin-tools">
-        <button className="pb-admin-button pb-admin-primary" type="button" disabled={!Array.isArray(state) || blocked || disabled}
-          onClick={confirm ? onApprove : () => setConfirm(true)}>{confirm ? 'Confirmar publicación' : 'Aprobar propuesta'}</button>
+        <button className="pb-admin-button pb-admin-primary" type="button" disabled={!checks || blocked || disabled}
+          onClick={() => (approvalKey || confirm) ? onApprove(approvalKey || undefined) : setConfirm(true)}>
+          {approvalKey ? 'Publicar en Arbitrum Sepolia' : confirm ? 'Confirmar publicación' : 'Aprobar propuesta'}
+        </button>
         {confirm && <button type="button" className="pb-admin-button" disabled={disabled} onClick={() => setConfirm(false)}>Volver</button>}
       </div>
     </section>

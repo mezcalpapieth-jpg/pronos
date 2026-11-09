@@ -7050,12 +7050,12 @@ function PendingMarketsTable({ onQueueChange, generator }) {
   const [bulkResult, setBulkResult] = useState(null);
   useEffect(() => { setBulkReview(null); setBulkResult(null); }, [query]);
 
-  async function review(id, action, quickApproval) {
+  async function review(id, action, { quickApproval, oneClickApprovalKey } = {}) {
     if (bulkBusy || busyId != null) return;
     setBusyId(id);
     try {
       if (quickApproval) {
-        const checks = await checkProposalApproval(id);
+        const { checks, resolutionRules } = await checkProposalApproval(id, { previewApprovalMode });
         const blocking = checks.filter(issue => issue.severity === 'block');
         const describe = issues => issues.map(issue => {
           const label = approvalIssueLabels[issue.code] || issue.code;
@@ -7066,11 +7066,13 @@ function PendingMarketsTable({ onQueueChange, generator }) {
           return;
         }
         const destination = approvingOnchain ? ' en Arbitrum Sepolia' : '';
+        const rules = resolutionRules ? `\n\nCriterios de resolución:\n${resolutionRules.criteria}` : '';
         const warnings = checks.length ? `\n\n${describe(checks)}` : '';
         if ((approvingOnchain || checks.length)
-          && !confirm(`¿Publicar la propuesta #${id}${destination}?\n${quickApproval.question}${warnings}`)) return;
+          && !confirm(`¿Publicar la propuesta #${id}${destination}?\n${quickApproval.question}${rules}${warnings}`)) return;
       }
-      await adminReviewPendingMarket(id, action, null, action === 'approve' ? previewApprovalMode : undefined);
+      await adminReviewPendingMarket(id, action, null,
+        action === 'approve' ? previewApprovalMode : undefined, oneClickApprovalKey);
       // Update the reviewed row locally after the server confirms the change.
       setRows(prev => {
         if (!Array.isArray(prev)) return prev;
@@ -7095,6 +7097,7 @@ function PendingMarketsTable({ onQueueChange, generator }) {
       onQueueChange?.();
     } catch (e) {
       alert(`${action} falló: ${e.code || e.message}${e.detail ? `\n${e.detail}` : ''}`);
+      if (oneClickApprovalKey) load();
     } finally {
       setBusyId(null);
     }
@@ -7104,6 +7107,7 @@ function PendingMarketsTable({ onQueueChange, generator }) {
     setBusyId(id);
     try {
       const r = await adminRefreshPendingPricing(id);
+      if (approvingOnchain) load();
       setRows(prev => (Array.isArray(prev)
         ? prev.map(row => row.id === id
           ? {
@@ -7217,6 +7221,7 @@ function PendingMarketsTable({ onQueueChange, generator }) {
     ));
     try {
       const updated = await adminToggleFeatured({ pendingId: row.id, tournamentFeatured: next });
+      if (approvingOnchain && updated.seedLiquidity != null) load();
       if (updated.seedLiquidity != null) setRows(prev => (prev || []).map(r => r.id === row.id ? {
         ...r, seedLiquidity: updated.seedLiquidity, seedLiquidities: updated.seedLiquidities,
         suggestedPricing: updated.suggestedPricing || r.suggestedPricing,
@@ -7305,14 +7310,28 @@ function PendingMarketsTable({ onQueueChange, generator }) {
       </section>}
 
       <AdminMarketQueue rows={rows} proposal loading={loading} error={error} onRetry={load} queue={queue}
+        renderRowDetails={row => approvingOnchain && row.status === 'pending' && row.generatedResolutionRules && (
+          <div className="pb-admin-row-rules">
+            <strong>Criterios de resolución generados</strong>
+            <p>{row.generatedResolutionRules.criteria}</p>
+            <a href={row.generatedResolutionRules.sourceUrl} target="_blank" rel="noreferrer">Fuente en ESPN</a>
+            {row.oneClickApprovalKey && (
+              <button type="button" className="pb-admin-button pb-admin-primary"
+                disabled={bulkBusy || busyId != null || generator.busy}
+                onClick={() => review(row.id, 'approve', { oneClickApprovalKey: row.oneClickApprovalKey })}>
+                Publicar en Arbitrum Sepolia
+              </button>
+            )}
+          </div>
+        )}
         renderRowActions={row => row.status === 'pending' && (
           <div className="pb-admin-row-actions">
-            <button type="button" className="pb-admin-button" data-tone="success"
+            {!(approvingOnchain && row.oneClickApprovalKey) && <button type="button" className="pb-admin-button" data-tone="success"
               title="Aprobar propuesta" aria-label={`Aprobar propuesta #${row.id}`}
               disabled={bulkBusy || busyId != null || generator.busy}
-              onClick={() => review(row.id, 'approve', row)}>
+              onClick={() => review(row.id, 'approve', { quickApproval: row })}>
               <span aria-hidden="true">✓</span>
-            </button>
+            </button>}
             <button type="button" className="pb-admin-button" data-tone="danger"
               title="Rechazar propuesta" aria-label={`Rechazar propuesta #${row.id}`}
               disabled={bulkBusy || busyId != null || generator.busy}
@@ -7405,8 +7424,9 @@ function PendingMarketsTable({ onQueueChange, generator }) {
                   )}
                   {isPending ? (
                     <div className="points-admin-pending-actions">
-                      <ProposalApproval row={r} revision={r.sourceData} disabled={bulkBusy || busyId != null || generator.busy}
-                        onApprove={() => review(r.id, 'approve')} />
+                      <ProposalApproval row={r} revision={r.sourceData} previewApprovalMode={previewApprovalMode}
+                        disabled={bulkBusy || busyId != null || generator.busy}
+                        onApprove={oneClickApprovalKey => review(r.id, 'approve', { oneClickApprovalKey })} />
                       <button className="pb-admin-button" type="button"
                         onClick={() => setEditingPending(r)} disabled={bulkBusy || busyId != null}>
                         Editar
@@ -7466,6 +7486,7 @@ function PendingMarketsTable({ onQueueChange, generator }) {
       {editingPending && (
         <PendingMarketEditModal
           row={editingPending}
+          showResolutionCriteria={approvalSettings?.previewEnabled}
           onClose={() => setEditingPending(null)}
           onSaved={async () => {
             setEditingPending(null);
@@ -7478,7 +7499,7 @@ function PendingMarketsTable({ onQueueChange, generator }) {
   );
 }
 
-function PendingMarketEditModal({ row, onClose, onSaved }) {
+function PendingMarketEditModal({ row, onClose, onSaved, showResolutionCriteria }) {
   const initialOutcomes = Array.isArray(row.outcomes) && row.outcomes.length >= 2
     ? row.outcomes
     : ['Sí', 'No'];
@@ -7492,6 +7513,7 @@ function PendingMarketEditModal({ row, onClose, onSaved }) {
     : initialOutcomes.map(() => '');
 
   const [question, setQuestion] = useState(row.question || '');
+  const [resolutionCriteria, setResolutionCriteria] = useState('');
   const [category, setCategory] = useState(row.category || 'general');
   const [ammMode, setAmmMode] = useState(row.ammMode === 'parallel' ? 'parallel' : 'unified');
   const [outcomes, setOutcomes] = useState(initialOutcomes);
@@ -7602,6 +7624,7 @@ function PendingMarketEditModal({ row, onClose, onSaved }) {
         seedLiquidities: cleanedLiquidities,
         startTime: startIso,
         endTime: endIso,
+        ...(showResolutionCriteria && resolutionCriteria.trim() ? { resolutionCriteria: resolutionCriteria.trim() } : {}),
       });
       await onSaved?.();
     } catch (e) {
@@ -7676,6 +7699,18 @@ function PendingMarketEditModal({ row, onClose, onSaved }) {
             style={{ ...inputStyle, resize: 'vertical' }}
           />
         </Field>
+
+        {showResolutionCriteria && !row.resolutionCriteria && <Field label="Criterios de resolución">
+          <textarea
+            aria-label="Criterios de resolución"
+            value={resolutionCriteria}
+            onChange={event => setResolutionCriteria(event.target.value)}
+            placeholder="Indica la fuente, cómo gana cada opción y qué hacer si no hay un resultado verificable."
+            rows={4}
+            maxLength={1500}
+            style={{ ...inputStyle, resize: 'vertical' }}
+          />
+        </Field>}
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 150px', gap: 12 }}>
           <Field label="Categoría">

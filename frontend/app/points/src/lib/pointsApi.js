@@ -1020,8 +1020,8 @@ export async function adminListTaskCounts() {
   };
 }
 
-export async function adminReviewPendingMarket(id, action, note, previewApprovalMode) {
-  return postJson('/api/points/admin/pending-markets', { id, action, note, previewApprovalMode });
+export async function adminReviewPendingMarket(id, action, note, previewApprovalMode, oneClickApprovalKey) {
+  return postJson('/api/points/admin/pending-markets', { id, action, note, previewApprovalMode, oneClickApprovalKey });
 }
 
 export async function adminRefreshPendingPricing(id) {

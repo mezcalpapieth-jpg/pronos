@@ -13,6 +13,7 @@
  * market and forget to mark the queue row.
  */
 
+import { createHash } from 'node:crypto';
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../../_lib/cors.js';
 import { ensurePointsSchema } from '../../_lib/points-schema.js';
@@ -31,6 +32,7 @@ import { syncApiPriceFromQuestion } from '../../_lib/api-price-market-sync.js';
 import { syncWeatherDateFromMarket } from '../../_lib/weather-market-sync.js';
 import { validateBeforeMonthDeadline } from '../../_lib/manual-deadline-sanity.js';
 import { checkPendingProposal, checkPendingProposals } from '../../_lib/points-admin-approval-checks.js';
+import { pendingApprovalResolutionRules, pendingResolutionCriteria } from '../../_lib/points-pending-resolution-rules.js';
 import { attachMarketTranslations } from '../../_lib/market-translations.js';
 import { pendingApprovalOptions, pendingApprovalSettings } from '../../_lib/onchain-preview-approval.js';
 import { assertPointsAirportApproval } from '../../_lib/points-aicm-policy.js';
@@ -75,6 +77,25 @@ export function pendingRowWithOpeningLiquidity(row, { mode = 'points' } = {}) {
     seed_liquidities: parseJsonb(row.seed_liquidities, null),
     source_data: parseJsonb(row.source_data, {}),
   });
+}
+
+function draftPendingResolutionRules(row) {
+  return pendingApprovalResolutionRules({
+    ...row,
+    outcomes: parseJsonb(row.outcomes, []),
+    resolver_config: parseJsonb(row.resolver_config, null),
+    source_data: parseJsonb(row.source_data, {}),
+  });
+}
+
+function oneClickApprovalKey(row, rules, checks) {
+  if (!rules?.generated || checks.some(check => check.code !== 'missing_criteria')) return null;
+  // Bind the shortcut to the reviewed proposal, rules and deployment inputs.
+  const reviewed = [row.id, row.source, row.source_event_id, row.question, row.outcomes,
+    new Date(row.start_time).getTime(), new Date(row.end_time).getTime(),
+    parseJsonb(row.resolver_config, null), Number(row.seed_liquidity), row.seed_liquidities,
+    rules.criteria, rules.sourceUrl];
+  return createHash('sha256').update(JSON.stringify(reviewed)).digest('hex');
 }
 
 function normalizeLabelKey(value) {
@@ -267,6 +288,8 @@ async function list(req, res) {
     : 'pending';
   const search = parseAdminMarketSearch(req.query.q);
   await ensurePointsSchema(schemaSql);
+  const requireRules = approvalSettings.previewEnabled && approvalOptions.mode === 'onchain';
+  const approvalReader = { query: async (query, params) => ({ rows: await schemaSql.query(query, params) }) };
 
   if (req.query.check_id != null) {
     const id = Number(req.query.check_id);
@@ -276,9 +299,16 @@ async function list(req, res) {
     const [row] = await schemaSql`SELECT * FROM points_pending_markets WHERE id = ${id}`;
     if (!row) return res.status(404).json({ error: 'pending_not_found' });
     if (row.status !== 'pending') return res.status(409).json({ error: 'already_reviewed' });
-    const checks = await checkPendingProposal({ query: async (query, params) => ({ rows: await schemaSql.query(query, params) }) }, row, {
+    const resolutionRules = requireRules ? draftPendingResolutionRules(row) : undefined;
+    const checks = await checkPendingProposal(approvalReader, row, {
       approvalEventId: marketSourceEventForApproval(row, id),
     });
+    if (requireRules) {
+      const otherChecks = checks.filter(check => check.code !== 'missing_criteria');
+      if (!resolutionRules) otherChecks.push({ severity: 'block', code: 'missing_criteria' });
+      const approvalKey = oneClickApprovalKey(pendingRowWithOpeningLiquidity(row, approvalOptions), resolutionRules, checks);
+      return res.status(200).json({ checks: otherChecks, resolutionRules, oneClickApprovalKey: approvalKey });
+    }
     return res.status(200).json({ checks });
   }
 
@@ -516,13 +546,31 @@ async function list(req, res) {
         LIMIT 2000
       `;
 
-  const filteredRows = filteredPendingRows(rows, req.query || {});
+  const filteredRows = filteredPendingRows(rows, req.query || {})
+    .map(row => pendingRowWithOpeningLiquidity(row, approvalOptions));
+  const generatedRules = new Map();
+  const approvalKeys = new Map();
+  if (requireRules) {
+    const candidates = [];
+    for (const row of filteredRows) {
+      if (row.status !== 'pending') continue;
+      const rules = draftPendingResolutionRules(row);
+      if (!rules?.generated) continue;
+      generatedRules.set(row.id, rules);
+      candidates.push({ row, event: marketSourceEventForApproval(row, row.id) });
+    }
+    const checked = await checkPendingProposals(approvalReader, candidates);
+    const checksById = new Map(checked.map(({ id, checks }) => [id, checks]));
+    for (const { row } of candidates) {
+      approvalKeys.set(row.id, oneClickApprovalKey(row, generatedRules.get(row.id), checksById.get(row.id)));
+    }
+  }
 
   return res.status(200).json({
     approvalSettings,
-    pending: filteredRows.map(row => {
-      const r = pendingRowWithOpeningLiquidity(row, { mode: approvalOptions.mode });
+    pending: filteredRows.map(r => {
       const sourceData = parseJsonb(r.source_data, {});
+      const resolverConfig = parseJsonb(r.resolver_config, null);
       return {
         id: r.id,
         source: r.source,
@@ -541,7 +589,14 @@ async function list(req, res) {
         endTime: r.end_time,
         ammMode: r.amm_mode,
         resolverType: r.resolver_type,
-        resolverConfig: parseJsonb(r.resolver_config, null),
+        resolverConfig,
+        ...(approvalSettings.previewEnabled ? {
+          resolutionCriteria: pendingResolutionCriteria(resolverConfig, sourceData),
+        } : {}),
+        ...(generatedRules.has(r.id) ? {
+          generatedResolutionRules: generatedRules.get(r.id),
+          oneClickApprovalKey: approvalKeys.get(r.id),
+        } : {}),
         resolutionReadiness: r.resolutionReadiness,
         sport: r.sport || null,
         league: r.league || null,
@@ -596,6 +651,7 @@ async function list(req, res) {
 export async function approveOne(pid, reviewer, note, opts = {}) {
   const marketMode = opts.mode === 'onchain' ? 'onchain' : 'points';
   const isOnchain = marketMode === 'onchain';
+  const requireRules = isOnchain && pendingApprovalSettings().previewEnabled;
   let chainIdNum = null;
   let chainAddressStr = null;
   let chainMarketIdStr = null;
@@ -688,9 +744,11 @@ export async function approveOne(pid, reviewer, note, opts = {}) {
     }
 
     const marketSourceEventId = marketSourceEventForApproval(r, pid);
-    if (!isOnchain) {
-      const checks = await checkPendingProposal(client, r, { lock: true, approvalEventId: marketSourceEventId });
-      const blocking = checks.find(check => check.severity === 'block');
+    const approvalChecks = !isOnchain || requireRules
+      ? await checkPendingProposal(client, r, { lock: true, approvalEventId: marketSourceEventId })
+      : [];
+    if (!opts.oneClickApprovalKey) {
+      const blocking = approvalChecks.find(check => check.severity === 'block');
       if (blocking) {
         const error = new Error(blocking.code);
         error.status = 409;
@@ -738,14 +796,34 @@ export async function approveOne(pid, reviewer, note, opts = {}) {
           reopenedFromSourceEventId: sourceDataBase.reopenedFromSourceEventId || r.source_event_id || null,
         }
       : sourceDataBase;
-    const sourceData = withFreshMarketTranslations({
+    let sourceData = withFreshMarketTranslations({
       question: r.question,
       outcomes,
       sourceData: sourceDataForApproval,
       sport: r.sport,
       league: r.league,
     });
-    const resolverConfig = syncedWeather.resolverConfig || null;
+    let resolverConfig = syncedWeather.resolverConfig || null;
+    let resolutionSource = r.resolution_source || 'Pronos auto-resolver';
+    if (requireRules) {
+      const rules = pendingApprovalResolutionRules({ ...r, outcomes, resolver_config: resolverConfig, source_data: sourceData });
+      if (opts.oneClickApprovalKey && opts.oneClickApprovalKey !== oneClickApprovalKey(r, rules, approvalChecks)) {
+        throw Object.assign(new Error('proposal_approval_changed'), {
+          status: 409,
+          detail: 'La propuesta cambió. Revisa la versión actual antes de publicarla.',
+        });
+      }
+      if (!rules) throw Object.assign(new Error('missing_criteria'), {
+        status: 409,
+        detail: 'Agrega criterios escritos de resolución antes de publicar en Arbitrum Sepolia.',
+      });
+      resolverConfig = { ...resolverConfig, criteria: rules.criteria };
+      if (rules.generated) {
+        resolverConfig.evidenceUrl ||= rules.sourceUrl;
+        sourceData = { ...sourceData, resolutionCriteria: rules.criteria };
+        resolutionSource = r.resolution_source || rules.sourceUrl;
+      }
+    }
     const deadlineCheck = validateBeforeMonthDeadline({
       question: r.question,
       endTime: endDate.toISOString(),
@@ -794,7 +872,7 @@ export async function approveOne(pid, reviewer, note, opts = {}) {
           outcomeCount: outcomes.length,
           outcomeLabels: outcomes,
           endTime: endDate.toISOString(),
-          resolutionSource: r.resolution_source || 'Pronos auto-resolver',
+          resolutionSource,
           seedAmount: seed,
         });
         chainAddressStr = String(deployResult.marketAddress || '').toLowerCase();
@@ -821,7 +899,7 @@ export async function approveOne(pid, reviewer, note, opts = {}) {
           category: String(r.category || 'general').trim(),
           outcomeLabels: outcomes,
           endTime: endDate.toISOString(),
-          resolutionSource: r.resolution_source || 'Pronos auto-resolver',
+          resolutionSource,
           seedAmountPerLeg: seed,
         });
         parallelLegDeploys = parallelResult.legs;
@@ -1066,6 +1144,13 @@ async function editPending(pid, reviewer, patch = {}, note = null) {
   }
 
   const has = (key) => Object.prototype.hasOwnProperty.call(patch, key);
+  let criteria = null;
+  if (has('resolutionCriteria') && pendingApprovalSettings().previewEnabled) {
+    criteria = typeof patch.resolutionCriteria === 'string' ? patch.resolutionCriteria.trim() : '';
+    if (!criteria || criteria.length > 1500) {
+      throw Object.assign(new Error('invalid_resolution_criteria'), { status: 400 });
+    }
+  }
   const cleanIso = (value, field, { nullable = true } = {}) => {
     if (nullable && (value === null || value === '')) return null;
     const d = value ? new Date(value) : null;
@@ -1183,7 +1268,9 @@ async function editPending(pid, reviewer, patch = {}, note = null) {
       resolverConfig: syncedApiPrice.resolverConfig,
       sourceData: syncedApiPrice.sourceData || syncedMananera.sourceData || previousSourceData,
     });
-    const resolverConfig = syncedWeather.resolverConfig || null;
+    const resolverConfig = criteria
+      ? { ...syncedWeather.resolverConfig, criteria }
+      : syncedWeather.resolverConfig || null;
     const syncedSourceData = syncedWeather.sourceData || syncedApiPrice.sourceData || syncedMananera.sourceData || previousSourceData;
     const sourceData = withFreshMarketTranslations({
       question,
@@ -1374,7 +1461,7 @@ async function listPendingRowsForBulk(filters = {}, db = readSql) {
 }
 
 async function review(req, res, admin) {
-  const { id, action, note, patch, filters, preview } = req.body || {};
+  const { id, action, note, patch, filters, preview, oneClickApprovalKey: approvalKey } = req.body || {};
   if ((action === 'approve_all' || action === 'refresh_pricing_all') && filters && 'ids' in Object(filters)) {
     if (!Array.isArray(filters.ids) || filters.ids.length < 1 || filters.ids.length > 2000
         || filters.ids.some(value => !Number.isInteger(value) || value <= 0 || value > 2147483647)) {
@@ -1386,6 +1473,13 @@ async function review(req, res, admin) {
   const approveOpts = action === 'approve' || action === 'approve_all'
     ? pendingApprovalOptions(req.body)
     : {};
+  if (approvalKey !== undefined) {
+    if (action !== 'approve' || req.body.previewApprovalMode !== 'onchain'
+      || typeof approvalKey !== 'string' || !/^[a-f0-9]{64}$/.test(approvalKey)) {
+      return res.status(400).json({ error: 'invalid_one_click_approval' });
+    }
+    approveOpts.oneClickApprovalKey = approvalKey;
+  }
 
   await ensurePointsSchema(schemaSql);
 

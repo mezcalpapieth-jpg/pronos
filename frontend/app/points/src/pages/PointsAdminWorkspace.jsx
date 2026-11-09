@@ -367,7 +367,7 @@ export function focusAdminQueuePanel(element) {
   element?.focus({ preventScroll: !window.matchMedia('(max-width: 820px)').matches });
 }
 
-export function AdminMarketQueue({ rows, queue, proposal = false, loading, error, onRetry, renderRowActions, children }) {
+export function AdminMarketQueue({ rows, queue, proposal = false, loading, error, onRetry, renderRowActions, renderRowDetails, children }) {
   const [params, setParams] = useSearchParams();
   const detail = useRef(null);
   const activeRow = useRef(null);
@@ -423,9 +423,10 @@ export function AdminMarketQueue({ rows, queue, proposal = false, loading, error
         <div className="pb-admin-list-rows">
           {rows.map(row => {
             const actions = renderRowActions?.(row);
+            const details = renderRowDetails?.(row);
             const pressed = row.id === displayed.id;
             return (
-              <div key={row.id} className="pb-admin-queue-row" data-selected={pressed}>
+              <div key={row.id} className="pb-admin-queue-row" data-selected={pressed} data-has-details={details ? true : undefined}>
                 <button className="pb-admin-row" type="button" onClick={() => select(row.id)}
                   ref={String(row.id) === returnToRow.current ? activeRow : null} aria-pressed={pressed}
                   aria-controls="pb-admin-queue-detail">
@@ -436,6 +437,7 @@ export function AdminMarketQueue({ rows, queue, proposal = false, loading, error
                   {!actions && <QueueBadge status={adminMarketStatus(row, proposal)} />}
                 </button>
                 {actions}
+                {details}
               </div>
             );
           })}

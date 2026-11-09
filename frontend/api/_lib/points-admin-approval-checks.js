@@ -1,4 +1,5 @@
 import { buildMarketTranslations, translateOutcomeLabel } from './market-translations.js';
+import { pendingResolutionCriteria } from './points-pending-resolution-rules.js';
 import { pointsResolverReadiness } from './points-resolver-readiness.js';
 
 function json(value, fallback) {
@@ -31,8 +32,7 @@ export function proposalChecks(row, duplicates = [], now = Date.now()) {
   if (!en.question || (sameQuestion && !likelyLanguageNeutral) || en.outcomes?.length !== outcomes.length || untranslatedOptions) {
     add('warning', 'english_review');
   }
-  if (![config.criteria, config.resolutionCriteria, sourceData.criteria, sourceData.resolutionCriteria]
-    .some(text => typeof text === 'string' && text.trim().length > 0)) add('warning', 'missing_criteria');
+  if (!pendingResolutionCriteria(config, sourceData)) add('warning', 'missing_criteria');
   const readiness = pointsResolverReadiness({ ...row, resolver_config: config });
   if (readiness.mode === 'missing') add('warning', 'manual_review');
   if (readiness.mode === 'blocked') add('block', 'source_disabled');

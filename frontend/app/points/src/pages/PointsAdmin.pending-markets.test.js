@@ -28,7 +28,7 @@ test('Points admin exposes a re-add action for rejected generated markets', () =
   assert.match(source, /filter === 'rejected'/);
   assert.match(source, /review\(r\.id,\s*'readd'\)/);
   assert.match(source, /Reagregar/);
-  assert.match(apiSource, /adminReviewPendingMarket\(id,\s*action,\s*note,\s*previewApprovalMode\)/);
+  assert.match(apiSource, /adminReviewPendingMarket\(id,\s*action,\s*note,\s*previewApprovalMode,\s*oneClickApprovalKey\)/);
 });
 
 test('Points pending approval alerts include backend details', () => {
@@ -87,7 +87,7 @@ test('Sepolia quick approval confirms the deployment destination and keeps bulk 
   assert.match(pending, /const approvalSettings = data\?\.approvalSettings \?\? lastApprovalSettings/);
   assert.match(pending, /Destino de aprobación \(preview\)/);
   assert.match(pending, /if \(\(approvingOnchain \|\| checks.length\)[\s\S]*!confirm/);
-  assert.match(pending, /adminReviewPendingMarket\(id, action, null, action === 'approve' \? previewApprovalMode : undefined\)/);
+  assert.match(pending, /adminReviewPendingMarket\(id, action, null,\s*action === 'approve' \? previewApprovalMode : undefined, oneClickApprovalKey\)/);
   assert.match(pending, /async function approveAll\(\) \{\s*if \(approvingOnchain\) return/);
 });
 
