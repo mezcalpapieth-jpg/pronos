@@ -35,6 +35,7 @@ import { appendResolutionPoint } from '../_lib/points-resolution-display.js';
 import { setCacheHeaders } from '../_lib/api-performance.js';
 import { PRONOS_TREASURY_USERNAME } from '../_lib/points-limit-orders.js';
 import {
+  PRICE_HISTORY_EXECUTION_BUCKET_MS,
   displayTradePointsFromRows,
   mergeDisplayPricePoints,
   priceHistoryExecutionBucket,
@@ -138,10 +139,8 @@ export default async function handler(req, res) {
         snapshotted_at ASC
     `;
 
-    // Polymarket-style carry-forward: the price at the window's start is
-    // the last AMM snapshot BEFORE it, not the first one inside it. Book
-    // fills can still move displayed probability, but only as collapsed
-    // execution-burst averages; AMM reserve movement remains canonical.
+    // Find the last AMM snapshot before each window. A more recent
+    // execution burst can supply the opening price for a binary market.
     const boundarySnapshotRows = await sql`
       SELECT DISTINCT ON (s.market_id)
         s.market_id, s.prices, s.snapshotted_at
@@ -160,8 +159,14 @@ export default async function handler(req, res) {
     // execution bucket, and replace nearby snapshots only when reserves
     // actually moved.
     const tradeRowCap = Math.min(Math.max(maxPoints * 12, 240), 2400);
+    const executionBucketInterval = `${PRICE_HISTORY_EXECUTION_BUCKET_MS} milliseconds`;
     const displayTradeRows = outcomeIdx <= 1 ? await sql`
-      WITH ranked_trades AS (
+      WITH chart_windows AS (
+        SELECT *
+        FROM UNNEST(${windows.ids}::int[], ${windows.starts}::timestamptz[], ${windows.tradeEnds}::timestamptz[])
+          AS w(market_id, window_start, window_end)
+      ),
+      eligible_trades AS NOT MATERIALIZED (
         SELECT
           t.id,
           t.market_id,
@@ -171,15 +176,9 @@ export default async function handler(req, res) {
           t.price_at_trade,
           t.reserves_before,
           t.reserves_after,
-          t.created_at,
-          ROW_NUMBER() OVER (
-            PARTITION BY t.market_id
-            ORDER BY t.created_at DESC, t.id DESC
-          ) AS rn
+          t.created_at
         FROM points_trades t
         JOIN points_markets m ON m.id = t.market_id
-        JOIN UNNEST(${windows.ids}::int[], ${windows.starts}::timestamptz[], ${windows.tradeEnds}::timestamptz[])
-          AS w(market_id, window_start, window_end) ON w.market_id = t.market_id
         WHERE t.username <> ${PRONOS_TREASURY_USERNAME}
           AND t.side IN ('buy', 'sell')
           AND t.price_at_trade IS NOT NULL
@@ -188,7 +187,15 @@ export default async function handler(req, res) {
           AND t.reserves_after IS NOT NULL
           AND jsonb_typeof(m.outcomes) = 'array'
           AND jsonb_array_length(m.outcomes) = 2
-          AND t.created_at >= w.window_start
+      ),
+      ranked_trades AS (
+        SELECT t.*, ROW_NUMBER() OVER (
+          PARTITION BY t.market_id
+          ORDER BY t.created_at DESC, t.id DESC
+        ) AS rn
+        FROM chart_windows w
+        JOIN eligible_trades t ON t.market_id = w.market_id
+        WHERE t.created_at >= w.window_start
           AND t.created_at <= w.window_end
       )
       SELECT
@@ -200,12 +207,29 @@ export default async function handler(req, res) {
         price_at_trade,
         reserves_before,
         reserves_after,
-        created_at
+        created_at,
+        false AS is_boundary
       FROM ranked_trades
       WHERE rn <= ${tradeRowCap}
+      UNION ALL
+      SELECT t.*, true AS is_boundary
+      FROM chart_windows w
+      JOIN LATERAL (
+        SELECT t.created_at
+        FROM eligible_trades t
+        WHERE t.market_id = w.market_id
+          AND t.created_at < w.window_start
+          AND t.created_at <= w.window_end
+          AND t.price_at_trade > 0 AND t.price_at_trade < 1
+        ORDER BY t.created_at DESC, t.id DESC
+        LIMIT 1
+      ) latest ON true
+      JOIN eligible_trades t ON t.market_id = w.market_id
+        AND t.created_at >= date_bin(${executionBucketInterval}::interval, latest.created_at, TIMESTAMPTZ 'epoch')
+        AND t.created_at <= latest.created_at
       ORDER BY market_id ASC, created_at ASC, id ASC
     ` : [];
-    const displayTradePoints = displayTradePointsFromRows(displayTradeRows, outcomeIdx);
+    const displayTradePoints = displayTradePointsFromRows(displayTradeRows.filter(row => !row.is_boundary), outcomeIdx);
     const tradePointsByMarket = new Map();
     for (const pt of displayTradePoints) {
       const key = Number(pt.market_id);
@@ -223,12 +247,22 @@ export default async function handler(req, res) {
       const prices = parseJsonb(r.prices, []);
       const price = Number(prices[outcomeIdx]);
       if (!Number.isFinite(price)) continue;
-      boundary.set(r.market_id, { at: new Date(r.snapshotted_at).getTime(), p: price });
+      boundary.set(Number(r.market_id), {
+        t: new Date(r.snapshotted_at).getTime() / 1000,
+        p: Math.round(price * 10000) / 100,
+      });
+    }
+    // Keep the opening burst separate from in-window executions, even if
+    // the window starts partway through the same execution bucket.
+    const boundaryTradePoints = displayTradePointsFromRows(displayTradeRows.filter(row => row.is_boundary), outcomeIdx);
+    for (const { market_id: marketId, t, p } of boundaryTradePoints) {
+      const previous = boundary.get(marketId);
+      if (!previous || t >= previous.t) boundary.set(marketId, { t, p });
     }
     for (const [marketId, b] of boundary) {
       history[marketId].push({
-        t: windowStarts.get(Number(marketId)),
-        p: Math.round(b.p * 10000) / 100,
+        t: windowStarts.get(marketId),
+        p: b.p,
         // Sorts ahead of any in-window point sharing the same timestamp.
         _id: -1,
       });

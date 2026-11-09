@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
 import { loadChartWindows } from './points-chart-windows.js';
+import { PRICE_HISTORY_EXECUTION_BUCKET_MS, displayTradePointsFromRows } from './points-price-history-display.js';
 
 const historySource = await readFile(new URL('../points/price-history.js', import.meta.url), 'utf8');
 const activitySource = await readFile(new URL('../points/trade-activity.js', import.meta.url), 'utf8');
@@ -69,7 +70,10 @@ test('closed chart SQL freezes prices/activity and retains the closing history a
       (1,'treasury','buy',0,0.5,'[1000,1000]','[1000,1000]',NOW()-INTERVAL '90 days 1 hour',2000);
   `);
   const windows = await loadChartWindows(sql, [1, 2, 3, 4, 11, 12, 999], 48);
-  const bindings = { windows, maxPoints: 20, outcomeIdx: 0, tradeRowCap: 240, PRONOS_TREASURY_USERNAME: 'treasury', bucketSeconds: 1800 };
+  const bindings = {
+    windows, maxPoints: 20, outcomeIdx: 0, tradeRowCap: 240, PRONOS_TREASURY_USERNAME: 'treasury', bucketSeconds: 1800,
+    executionBucketInterval: `${PRICE_HISTORY_EXECUTION_BUCKET_MS} milliseconds`,
+  };
   const [sampleQuery, boundaryQuery, tradeQuery] = queries(historySource);
   assert.equal(queries(historySource).length, 3);
 
@@ -114,5 +118,31 @@ test('closed chart SQL freezes prices/activity and retains the closing history a
     assert.deepEqual(remaining, [102,103,104,105,202,301,401,1101,1201]);
     assert.deepEqual((await run(sql, sampleQuery, bindings)).filter(row => row.market_id === 1).map(row => row.id), [103,104,105]);
     assert.deepEqual((await run(sql, boundaryQuery, bindings)).find(row => row.market_id === 1).prices, [0.4,0.6]);
+  });
+
+  await t.test('the opening burst respects each trading cutoff and excludes in-window executions', async () => {
+    await db.exec(`
+      INSERT INTO points_markets (id,status,end_time,resolved_at,outcomes) VALUES
+        (30,'resolved','2026-11-01T12:55:00Z','2026-11-01T13:00:00.500Z','["A","B"]'),
+        (31,'resolved','2026-11-01T11:59:00Z','2026-11-01T13:00:00.500Z','["A","B"]'),
+        (32,'resolved','2026-11-01T12:55:00Z','2026-11-01T13:00:00.500Z','["A","B","C"]');
+      INSERT INTO points_trades (id,market_id,username,side,outcome_index,price_at_trade,reserves_before,reserves_after,created_at) VALUES
+        (101,30,'buyer','buy',0,0.40,'[50,50]','[50,50]','2026-11-01T11:59:58.000Z'),
+        (102,30,'buyer','buy',0,0.63,'[50,50]','[50,50]','2026-11-01T12:00:00.100Z'),
+        (103,30,'buyer','buy',0,0.60,'[50,50]','[45,55]','2026-11-01T12:00:00.200Z'),
+        (104,30,'buyer','buy',0,0.72,'[45,55]','[45,55]','2026-11-01T12:00:00.500Z'),
+        (105,31,'buyer','buy',0,0.34,'[50,50]','[50,50]','2026-11-01T11:59:00.000Z'),
+        (106,31,'buyer','buy',0,0.80,'[50,50]','[50,50]','2026-11-01T11:59:00.100Z'),
+        (107,30,'treasury','buy',0,0.90,'[50,50]','[50,50]','2026-11-01T12:00:00.300Z'),
+        (108,32,'buyer','buy',0,0.93,'[50,50]','[50,50]','2026-11-01T12:00:00.300Z');
+    `);
+    const chartWindows = await loadChartWindows(sql, [30, 31, 32], 1);
+    const rows = await run(sql, tradeQuery, { ...bindings, windows: chartWindows });
+    const before = rows.filter(row => row.is_boundary);
+    const inside = rows.filter(row => !row.is_boundary);
+    assert.deepEqual(before.map(row => row.id), [102, 103, 105]);
+    assert.deepEqual(inside.map(row => row.id), [104]);
+    assert.deepEqual(displayTradePointsFromRows(before, 0).map(({ market_id, p }) => [market_id, p]), [[30, 55], [31, 34]]);
+    assert.deepEqual(displayTradePointsFromRows(inside, 0).map(point => point.p), [72]);
   });
 });

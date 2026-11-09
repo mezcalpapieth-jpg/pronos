@@ -22,8 +22,6 @@ test('points price history adds averaged book-only execution bursts to probabili
   assert.match(source, /t\.side IN \('buy', 'sell'\)/);
   assert.match(source, /jsonb_array_length\(m\.outcomes\) = 2/);
   assert.match(source, /tradeRowCap/);
-  assert.match(source, /execution-burst averages/);
-  assert.doesNotMatch(source, /boundaryTradeRows/);
   assert.doesNotMatch(source, /t\.reserves_before = t\.reserves_after/);
   assert.match(source, /priceHistoryExecutionBucket\(r\.snapshotted_at\)/);
   assert.match(source, /sort\(\(a, b\) => a\.t - b\.t \|\| a\._id - b\._id\)/);

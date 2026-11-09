@@ -10,9 +10,6 @@ const detail = await readFile(
 const carousel = await readFile(
   new URL('../../points/src/components/PointsActivityCarousel.jsx', import.meta.url), 'utf8',
 );
-const api = await readFile(
-  new URL('../../../api/points/price-history.js', import.meta.url), 'utf8',
-);
 
 // Regression: on a 7-leg parallel market only the legs that traded get
 // snapshots, so one leg's single 12h-old point stretched the axis back that
@@ -63,9 +60,9 @@ test('the home carousel pins its charts to the window it actually fetched', () =
   assert.equal(pinned.length, 2, 'both the binary and multi-outcome carousel charts must be pinned');
 });
 
-test('the window start and end derive from a single now', () => {
-  // Two separate Date.now() reads would let the span drift off the range.
-  assert.match(detail, /const chartWindowEnd = Math\.floor\(Date\.now\(\) \/ 1000\);\s*\n\s*const chartRangeStart = chartWindowEnd - \(/);
+test('the detail range starts relative to the market chart clock', () => {
+  assert.match(detail, /const chartClock = marketChartClock\(market\);/);
+  assert.match(detail, /const chartWindowEnd = Math\.floor\(chartClock\.endMs \/ 1000\);\s*\n\s*const chartRangeStart = chartWindowEnd - \(/);
 });
 
 test('a market younger than the range charts its own life (Polymarket clamp)', () => {
@@ -80,20 +77,4 @@ test('a market younger than the range charts its own life (Polymarket clamp)', (
     carousel,
     /const mChartStart = Number\.isFinite\(mOpenedAt\)\s*\n\s*\? Math\.max\(mRangeStart, Math\.min\(mOpenedAt, mChartEnd - 60\)\)\s*\n\s*: mRangeStart;/,
   );
-});
-
-test('the API carries the pre-window price forward to the window start', () => {
-  // Older markets: the value at the window's left edge is the last price
-  // BEFORE the window, clamped to the window start so it cannot stretch
-  // any chart's axis into the past. Both price sources must contribute —
-  // some markets' entire history lives in order-book fills, with zero
-  // AMM snapshot rows (seen live on the Casa de los Famosos legs).
-  assert.match(api, /AND snapshotted_at < NOW\(\) - \(\$\{windowHours\} \|\| ' hours'\)::interval/);
-  assert.match(api, /ORDER BY market_id ASC, snapshotted_at DESC/);
-  assert.match(api, /AND t\.created_at < NOW\(\) - \(\$\{windowHours\} \|\| ' hours'\)::interval/);
-  assert.match(api, /ORDER BY t\.market_id ASC, t\.created_at DESC, t\.id DESC/);
-  // The merge keeps whichever source is most recent, then pins it to the
-  // window start.
-  assert.match(api, /if \(!prev \|\| at > prev\.at\) boundary\.set\(r\.market_id, \{ at, p: projected \}\);/);
-  assert.match(api, /t: windowStartSec,/);
 });
