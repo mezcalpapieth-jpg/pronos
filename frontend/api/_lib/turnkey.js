@@ -67,7 +67,10 @@ export function authenticationCredentials(env = process.env, { requireSeparate =
   const pubKey = env.TURNKEY_AUTH_API_PUBLIC_KEY?.trim();
   const privKey = env.TURNKEY_AUTH_API_PRIVATE_KEY?.trim();
   if ((pubKey || privKey) && (!pubKey || !privKey)) throw new Error('incomplete_turnkey_auth_credentials');
-  if (pubKey && pubKey === env.TURNKEY_API_PUBLIC_KEY?.trim()) throw new Error('turnkey_auth_signer_must_be_separate');
+  if (pubKey && (pubKey.toLowerCase() === env.TURNKEY_API_PUBLIC_KEY?.trim().toLowerCase()
+    || privKey.toLowerCase() === env.TURNKEY_API_PRIVATE_KEY?.trim().toLowerCase())) {
+    throw new Error('turnkey_auth_signer_must_be_separate');
+  }
   if (requireSeparate && !pubKey) throw new Error('separate_turnkey_auth_credentials_required');
   return { pubKey: pubKey || env.TURNKEY_API_PUBLIC_KEY, privKey: privKey || env.TURNKEY_API_PRIVATE_KEY };
 }
