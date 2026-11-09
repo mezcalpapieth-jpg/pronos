@@ -236,8 +236,8 @@ export default async function handler(req, res) {
     const admin = requirePointsAdmin(req, res);
     if (!admin) return;
 
-    if (req.method === 'GET')  return list(req, res);
-    if (req.method === 'POST') return review(req, res, admin);
+    if (req.method === 'GET')  return await list(req, res);
+    if (req.method === 'POST') return await review(req, res, admin);
     return res.status(405).json({ error: 'method_not_allowed' });
   } catch (e) {
     const status = Number.isInteger(e?.status) && e.status >= 400 && e.status < 600

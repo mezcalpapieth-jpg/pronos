@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { PGlite } from '@electric-sql/pglite';
+import { ensurePointsSchema } from './points-schema.js';
 
 const source = await readFile(new URL('./points-schema.js', import.meta.url), 'utf8');
 const migrateSource = await readFile(new URL('../migrate.js', import.meta.url), 'utf8');
@@ -13,6 +15,19 @@ test('Points funding audit has unique retry keys and parity in both migration pa
     assert.match(migration, /collateral\s+NUMERIC\(20,6\) NOT NULL CHECK \(collateral > 0\)/);
     assert.match(migration, /idx_points_market_funding_market/);
   }
+});
+
+test('points schema initializes the tournament market index on an empty database', async t => {
+  const db = new PGlite();
+  t.after(() => db.close());
+  await ensurePointsSchema({
+    query: async (statement) => (await db.query(statement)).rows,
+  });
+
+  const { rows } = await db.query(`
+    SELECT to_regclass('public.idx_points_markets_tournament_featured_active_end') IS NOT NULL AS ready
+  `);
+  assert.equal(rows[0].ready, true);
 });
 
 test('points schema self-healing avoids hot-route migration lock pileups', () => {
