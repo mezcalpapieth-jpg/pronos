@@ -82,6 +82,14 @@ test('Points pending queue persists taxonomy filters and sends only displayed ID
   assert.match(pendingApiSource, /invalid_pending_market_ids/);
 });
 
+test('Sepolia quick approval confirms the deployment destination and keeps bulk approval off-chain', () => {
+  const pending = sourceForFunction('PendingMarketsTable');
+  assert.match(pending, /Destino de aprobación \(preview\)/);
+  assert.match(pending, /if \(\(approvingOnchain \|\| checks.length\)[\s\S]*!confirm/);
+  assert.match(pending, /adminReviewPendingMarket\(id, action, null, action === 'approve' \? previewApprovalMode : undefined\)/);
+  assert.match(pending, /async function approveAll\(\) \{\s*if \(approvingOnchain\) return/);
+});
+
 test('Points admin shares the generator between Sistema and Por aprobar and reloads proposals after it runs', () => {
   const tools = sourceForFunction('MarketAutomationTools');
   const pending = sourceForFunction('PendingMarketsTable');

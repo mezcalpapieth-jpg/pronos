@@ -4,7 +4,7 @@ import AdminOnchainTransactions from '../components/AdminOnchainTransactions.jsx
 import AdminOnchainSettlement from '../components/AdminOnchainSettlement.jsx';
 import { AdminResolutionReview } from '../components/ResolutionReview.jsx';
 import AdminCasePanel from '../components/AdminCasePanel.jsx';
-import { approvalIssueLabels, ProposalApproval, ResolverStatus, SettlementReview } from './PointsAdminOperations.jsx';
+import { approvalIssueLabels, checkProposalApproval, ProposalApproval, ResolverStatus, SettlementReview } from './PointsAdminOperations.jsx';
 /**
  * Admin panel for the points-app.
  *
@@ -7049,9 +7049,26 @@ function PendingMarketsTable({ onQueueChange, generator }) {
   const [bulkResult, setBulkResult] = useState(null);
   useEffect(() => { setBulkReview(null); setBulkResult(null); }, [query]);
 
-  async function review(id, action) {
+  async function review(id, action, quickApproval) {
+    if (bulkBusy || busyId != null) return;
     setBusyId(id);
     try {
+      if (quickApproval) {
+        const checks = await checkProposalApproval(id);
+        const blocking = checks.filter(issue => issue.severity === 'block');
+        const describe = issues => issues.map(issue => {
+          const label = approvalIssueLabels[issue.code] || issue.code;
+          return issue.marketId ? `${label} · #${issue.marketId}` : label;
+        }).join('\n');
+        if (blocking.length) {
+          alert(`No se puede publicar la propuesta #${id}.\n\n${describe(blocking)}`);
+          return;
+        }
+        const destination = approvingOnchain ? ' en Arbitrum Sepolia' : '';
+        const warnings = checks.length ? `\n\n${describe(checks)}` : '';
+        if ((approvingOnchain || checks.length)
+          && !confirm(`¿Publicar la propuesta #${id}${destination}?\n${quickApproval.question}${warnings}`)) return;
+      }
       await adminReviewPendingMarket(id, action, null, action === 'approve' ? previewApprovalMode : undefined);
       // Update the reviewed row locally after the server confirms the change.
       setRows(prev => {
@@ -7223,7 +7240,7 @@ function PendingMarketsTable({ onQueueChange, generator }) {
             <select
               value={previewApprovalMode}
               onChange={event => setApprovalMode(event.target.value)}
-              disabled={loading || bulkBusy || busyId !== null}
+              disabled={loading || bulkBusy || busyId !== null || generator.busy}
               style={{ background: 'var(--surface2)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 6, padding: 8 }}
             >
               <option value="onchain">Arbitrum Sepolia</option>
@@ -7286,7 +7303,23 @@ function PendingMarketsTable({ onQueueChange, generator }) {
         </div>
       </section>}
 
-      <AdminMarketQueue rows={rows} proposal loading={loading} error={error} onRetry={load} queue={queue}>
+      <AdminMarketQueue rows={rows} proposal loading={loading} error={error} onRetry={load} queue={queue}
+        renderRowActions={row => row.status === 'pending' && (
+          <div className="pb-admin-row-actions">
+            <button type="button" className="pb-admin-button" data-tone="success"
+              title="Aprobar propuesta" aria-label={`Aprobar propuesta #${row.id}`}
+              disabled={bulkBusy || busyId != null || generator.busy}
+              onClick={() => review(row.id, 'approve', row)}>
+              <span aria-hidden="true">✓</span>
+            </button>
+            <button type="button" className="pb-admin-button" data-tone="danger"
+              title="Rechazar propuesta" aria-label={`Rechazar propuesta #${row.id}`}
+              disabled={bulkBusy || busyId != null || generator.busy}
+              onClick={() => review(row.id, 'reject')}>
+              <span aria-hidden="true">×</span>
+            </button>
+          </div>
+        )}>
         {r => {
         const isPending = r.status === 'pending';
         const isRejected = r.status === 'rejected';
@@ -7371,7 +7404,7 @@ function PendingMarketsTable({ onQueueChange, generator }) {
                   )}
                   {isPending ? (
                     <div className="points-admin-pending-actions">
-                      <ProposalApproval row={r} revision={r.sourceData} disabled={bulkBusy || busyId != null}
+                      <ProposalApproval row={r} revision={r.sourceData} disabled={bulkBusy || busyId != null || generator.busy}
                         onApprove={() => review(r.id, 'approve')} />
                       <button className="pb-admin-button" type="button"
                         onClick={() => setEditingPending(r)} disabled={bulkBusy || busyId != null}>
