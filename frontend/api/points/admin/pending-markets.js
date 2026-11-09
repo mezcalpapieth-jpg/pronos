@@ -33,6 +33,7 @@ import { syncWeatherDateFromMarket } from '../../_lib/weather-market-sync.js';
 import { validateBeforeMonthDeadline } from '../../_lib/manual-deadline-sanity.js';
 import { checkPendingProposal, checkPendingProposals } from '../../_lib/points-admin-approval-checks.js';
 import { pendingApprovalResolutionRules, pendingResolutionCriteria } from '../../_lib/points-pending-resolution-rules.js';
+import { generateProposalCriteria } from '../../_lib/points-proposal-criteria.js';
 import { attachMarketTranslations } from '../../_lib/market-translations.js';
 import { pendingApprovalOptions, pendingApprovalSettings } from '../../_lib/onchain-preview-approval.js';
 import { assertPointsAirportApproval } from '../../_lib/points-aicm-policy.js';
@@ -319,6 +320,7 @@ async function list(req, res) {
     const resolutionRules = requireRules ? draftPendingResolutionRules(row) : undefined;
     const checks = await checkPendingProposal(approvalReader, row, {
       approvalEventId: marketSourceEventForApproval(row, id),
+      allowGeneratedCriteria: !requireRules,
     });
     if (requireRules) {
       const otherChecks = checks.filter(check => check.code !== 'missing_criteria');
@@ -581,7 +583,7 @@ async function list(req, res) {
       if (reviewedSepolia && !supportsSepoliaReviewedShape(row.amm_mode, row.outcomes)) continue;
       candidates.push({ row, event: marketSourceEventForApproval(row, row.id) });
     }
-    const checked = await checkPendingProposals(approvalReader, candidates);
+    const checked = await checkPendingProposals(approvalReader, candidates, { allowGeneratedCriteria: false });
     const checksById = new Map(checked.map(({ id, checks }) => [id, checks]));
     for (const { row } of candidates) {
       approvalKeys.set(row.id, oneClickApprovalKey(row, generatedRules.get(row.id), checksById.get(row.id)));
@@ -689,7 +691,7 @@ async function preparePendingApproval(client, r, pid, opts) {
 
   const marketSourceEventId = marketSourceEventForApproval(r, pid);
   const approvalChecks = !isOnchain || requireRules
-    ? await checkPendingProposal(client, r, { lock: true, approvalEventId: marketSourceEventId })
+    ? await checkPendingProposal(client, r, { lock: true, approvalEventId: marketSourceEventId, allowGeneratedCriteria: !requireRules })
     : [];
   if (!opts.oneClickApprovalKey) {
     const blocking = approvalChecks.find(check => check.severity === 'block');
@@ -767,6 +769,10 @@ async function preparePendingApproval(client, r, pid, opts) {
       sourceData = { ...sourceData, resolutionCriteria: rules.criteria };
       resolutionSource = r.resolution_source || rules.sourceUrl;
     }
+  }
+  if (!isOnchain && resolverConfig) {
+    const criteria = generateProposalCriteria(r.resolver_type, resolverConfig, sourceData, outcomes);
+    if (criteria) resolverConfig = { ...resolverConfig, criteria };
   }
   const deadlineCheck = validateBeforeMonthDeadline({
     question: r.question,

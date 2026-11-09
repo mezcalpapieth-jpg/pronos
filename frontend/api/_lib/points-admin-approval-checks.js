@@ -1,13 +1,14 @@
 import { buildMarketTranslations, translateOutcomeLabel } from './market-translations.js';
 import { pendingResolutionCriteria } from './points-pending-resolution-rules.js';
 import { pointsResolverReadiness } from './points-resolver-readiness.js';
+import { generateProposalCriteria } from './points-proposal-criteria.js';
 
 function json(value, fallback) {
   if (typeof value !== 'string') return value ?? fallback;
   try { return JSON.parse(value) ?? fallback; } catch { return fallback; }
 }
 
-export function proposalChecks(row, duplicates = [], now = Date.now()) {
+export function proposalChecks(row, duplicates = [], now = Date.now(), { allowGeneratedCriteria = true } = {}) {
   const config = json(row.resolver_config, {});
   const sourceData = json(row.source_data, {});
   const outcomes = json(row.outcomes, []);
@@ -32,7 +33,10 @@ export function proposalChecks(row, duplicates = [], now = Date.now()) {
   if (!en.question || (sameQuestion && !likelyLanguageNeutral) || en.outcomes?.length !== outcomes.length || untranslatedOptions) {
     add('warning', 'english_review');
   }
-  if (!pendingResolutionCriteria(config, sourceData)) add('warning', 'missing_criteria');
+  if (!pendingResolutionCriteria(config, sourceData)
+    && !(allowGeneratedCriteria && generateProposalCriteria(row.resolver_type, config, sourceData, outcomes))) {
+    add('warning', 'missing_criteria');
+  }
   const readiness = pointsResolverReadiness({ ...row, resolver_config: config });
   if (readiness.mode === 'missing') add('warning', 'manual_review');
   if (readiness.mode === 'blocked') add('block', 'source_disabled');
@@ -51,9 +55,9 @@ function proposalIdentity(row, event) {
   };
 }
 
-export async function checkPendingProposals(client, entries) {
+export async function checkPendingProposals(client, entries, options) {
   const local = entries.map(({ row, event }) => {
-    const checks = proposalChecks(row);
+    const checks = proposalChecks(row, undefined, undefined, options);
     const identity = checks.some(check => check.severity === 'block') ? null : proposalIdentity(row, event);
     return { row, identity, checks };
   });
@@ -85,13 +89,14 @@ export async function checkPendingProposals(client, entries) {
     duplicatesById.set(match.pending_id, group);
   }
   return local.map(({ row, identity, checks }) => ({
-    id: row.id, checks: identity ? proposalChecks(row, duplicatesById.get(identity.id)) : checks,
+    id: row.id, checks: identity ? proposalChecks(row, duplicatesById.get(identity.id), undefined, options) : checks,
   }));
 }
 
-export async function checkPendingProposal(client, row, { lock = false, approvalEventId = row.source_event_id } = {}) {
+export async function checkPendingProposal(client, row, { lock = false, approvalEventId = row.source_event_id, allowGeneratedCriteria } = {}) {
+  const options = { allowGeneratedCriteria };
   if (lock) {
-    const checks = proposalChecks(row);
+    const checks = proposalChecks(row, undefined, undefined, options);
     if (checks.some(check => check.severity === 'block')) return checks;
     const { question, source, event } = proposalIdentity(row, approvalEventId);
     // Serialize duplicate checks for approvals of the same event or title.
@@ -99,6 +104,6 @@ export async function checkPendingProposal(client, row, { lock = false, approval
     if (source && event) keys.push('event:' + source + ':' + event);
     for (const key of keys.sort()) await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [key]);
   }
-  const [result] = await checkPendingProposals(client, [{ row, event: approvalEventId }]);
+  const [result] = await checkPendingProposals(client, [{ row, event: approvalEventId }], options);
   return result.checks;
 }
