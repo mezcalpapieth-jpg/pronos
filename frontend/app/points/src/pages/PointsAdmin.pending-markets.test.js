@@ -10,6 +10,8 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const source = await readFile(new URL('./PointsAdmin.jsx', import.meta.url), 'utf8');
+const workspaceSource = await readFile(new URL('./PointsAdminWorkspace.jsx', import.meta.url), 'utf8');
+const pendingApiSource = await readFile(new URL('../../../../api/points/admin/pending-markets.js', import.meta.url), 'utf8');
 const navSource = await readFile(new URL('../components/PointsNav.jsx', import.meta.url), 'utf8');
 const apiSource = await readFile(new URL('../lib/pointsApi.js', import.meta.url), 'utf8');
 const statsApiSource = await readFile(new URL('../../../../api/points/admin/stats.js', import.meta.url), 'utf8');
@@ -63,47 +65,36 @@ test('Points admin can edit generated markets and per-option liquidity before ap
   assert.match(apiSource, /action:\s*'edit'/);
 });
 
-test('Points pending queue has taxonomy filters and filtered bulk actions', () => {
+test('Points pending queue persists taxonomy filters and sends only displayed IDs for bulk actions', () => {
   const pendingTableSource = sourceForFunction('PendingMarketsTable');
-  assert.match(pendingTableSource, /function PendingMarketsTable\(\{ onQueueChange \}\)/);
-  assert.match(pendingTableSource, /const \[categoryFilter,\s*setCategoryFilter\]/);
-  assert.match(pendingTableSource, /const \[sportFilter,\s*setSportFilter\]/);
-  assert.match(pendingTableSource, /const \[leagueFilter,\s*setLeagueFilter\]/);
-  assert.match(pendingTableSource, /const \[cryptoTypeFilter,\s*setCryptoTypeFilter\]/);
-  assert.match(pendingTableSource, /const \[geoFilter,\s*setGeoFilter\]/);
-  assert.match(pendingTableSource, /const \[topicFilter,\s*setTopicFilter\]/);
-  assert.match(pendingTableSource, /const \[curationFilter,\s*setCurationFilter\]/);
-  assert.match(pendingTableSource, /pendingCurationFilters/);
-  assert.match(pendingTableSource, /key:\s*'featured',\s*label:\s*'🔥'/);
-  assert.match(pendingTableSource, /key:\s*'tournament',\s*label:\s*'🏆'/);
-  assert.match(pendingTableSource, /buildAdminMarketsQuery\(\{\s*status:\s*filter,/);
-  assert.match(pendingTableSource, /featureFilter:\s*curationFilter/);
-  assert.match(pendingTableSource, /adminListPendingMarkets\(q\)/);
-  assert.match(pendingTableSource, /pendingFiltersPayload\(\)/);
-  assert.match(pendingTableSource, /filters\.feature = curationFilter/);
-  assert.match(pendingTableSource, /adminRefreshAllPendingPricing\(pendingFiltersPayload\(\)\)/);
-  assert.match(pendingTableSource, /adminApproveAllPendingMarkets\(null,\s*pendingFiltersPayload\(\)\)/);
-  assert.match(pendingTableSource, /renderFilterGroup\(MARKET_CATEGORY_FILTERS,\s*categoryFilter,\s*selectCategoryFilter\)/);
-  assert.match(pendingTableSource, /renderFilterGroup\(ADMIN_SPORT_FILTERS,\s*sportFilter,\s*selectSportFilter/);
-  assert.match(pendingTableSource, /renderFilterGroup\(ADMIN_CRYPTO_FILTERS,\s*cryptoTypeFilter,\s*setCryptoTypeFilter/);
-  assert.match(apiSource, /status instanceof URLSearchParams/);
-  assert.match(apiSource, /action:\s*'refresh_pricing_all',\s*filters/);
-  assert.match(apiSource, /action:\s*'approve_all',\s*note,\s*filters/);
+  assert.match(pendingTableSource, /useAdminQueueFilters\(true\)/);
+  assert.match(pendingTableSource, /<AdminQueueToolbar queue=\{queue\} proposal>/);
+  assert.match(pendingTableSource, /const ids = proposals\.map\(row => row\.id\)/);
+  assert.match(pendingTableSource, /action: 'approve_all', filters: \{ ids \}, preview: true/);
+  assert.match(pendingTableSource, /bulkReview\.checks\.filter/);
+  assert.match(pendingTableSource, /adminApproveAllPendingMarkets\(null, \{ ids \}\)/);
+  assert.match(pendingTableSource, /adminRefreshAllPendingPricing\(\{ ids \}\)/);
+  assert.match(workspaceSource, /useSearchParams\(\)/);
+  for (const filter of ['category', 'sport', 'league', 'geo', 'topic', 'crypto_type', 'feature']) {
+    assert.ok(workspaceSource.includes(`'${filter}'`));
+  }
+  assert.match(pendingApiSource, /id = ANY\(\$\{ids\}::int\[\]\)/);
+  assert.match(pendingApiSource, /invalid_pending_market_ids/);
 });
 
-test('Points pending generator button shows an in-progress state', () => {
-  const pendingTableSource = sourceForFunction('PendingMarketsTable');
-  assert.match(pendingTableSource, /const \[generatingNow,\s*setGeneratingNow\]/);
-  assert.match(pendingTableSource, /setGeneratingNow\(true\)[\s\S]*adminRunGenerators/);
-  assert.match(pendingTableSource, /setGeneratingNow\(false\)[\s\S]*setBulkBusy\(false\)/);
-  assert.match(pendingTableSource, /generatingNow \? 'Generando\.\.\.' : '🔄 Generar ahora'/);
+test('Points market automation shows a generation in-progress state under Sistema', () => {
+  const tools = sourceForFunction('MarketAutomationTools');
+  assert.match(source, /tab === 'launch'[\s\S]*?<MarketAutomationTools \/>/);
+  assert.match(tools, /setGeneratingNow\(true\)[\s\S]*adminRunGenerators/);
+  assert.match(tools, /setGeneratingNow\(false\)[\s\S]*setBulkBusy\(false\)/);
+  assert.match(tools, /generatingNow \? 'Generando\.\.\.' : 'Generar propuestas'/);
 });
 
 test('Points pending queue keeps large generated fields readable', () => {
   assert.match(source, /function formatOutcomeList\(outcomes,\s*limit = 14\)/);
   assert.match(source, /Opciones \(\{Array\.isArray\(r\.outcomes\) \? r\.outcomes\.length : 0\}\): \{formatOutcomeList\(r\.outcomes\)\}/);
-  assert.match(source, /r\.sport && <> · \{r\.sport\}<\/>/);
-  assert.match(source, /r\.league && <>\/\{r\.league\}<\/>/);
+  assert.match(source, /<AdminMarketFacts market=\{r\} proposal \/>/);
+  assert.match(workspaceSource, /market\.league/);
 });
 
 test('Points pending queue has a mobile-first review card layout', () => {
@@ -112,7 +103,7 @@ test('Points pending queue has a mobile-first review card layout', () => {
   assert.match(pendingTableSource, /points-admin-pending-title/);
   assert.match(pendingTableSource, /points-admin-pending-controls/);
   assert.match(pendingTableSource, /points-admin-pending-actions/);
-  assert.match(pendingTableSource, /points-admin-pending-meta/);
+  assert.match(pendingTableSource, /pb-admin-proposal-pricing/);
   assert.match(source, /points-admin-edit-meta/);
   assert.match(pointsCss, /\.points-admin-pending-title/);
   assert.match(pointsCss, /\.points-admin-pending-actions/);
@@ -126,7 +117,7 @@ test('Points markets table has a mobile-first admin card layout', () => {
   assert.match(marketsTableSource, /points-admin-market-title/);
   assert.match(marketsTableSource, /points-admin-market-toggles/);
   assert.match(marketsTableSource, /points-admin-market-actions/);
-  assert.match(marketsTableSource, /points-admin-market-meta/);
+  assert.match(marketsTableSource, /<AdminMarketFacts market=\{m\} \/>/);
   assert.match(source, /function MarketAdminMeta/);
   assert.match(source, /<MarketAdminMeta market=\{market\} \/>/);
   assert.match(pointsCss, /\.points-admin-market-card/);
@@ -136,18 +127,15 @@ test('Points markets table has a mobile-first admin card layout', () => {
   assert.match(pointsCss, /@media \(max-width: 720px\)[\s\S]*\.points-admin-market-actions\s*\{[\s\S]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
 });
 
-test('Points admin tabs show pending-work badges outside the active tab', () => {
-  assert.match(source, /adminTaskCounts/);
+test('Points admin overview opens actionable queues and explains unavailable counts', () => {
+  assert.match(source, /tab !== 'overview'/);
   assert.match(source, /adminListTaskCounts\(\)/);
-  assert.match(apiSource, /export async function adminListTaskCounts/);
-  assert.match(apiSource, /adminListPendingMarkets\('pending'\)/);
-  assert.match(apiSource, /\/api\/points\/admin\/markets\?status=pending/);
-  assert.match(apiSource, /adminListResolutionCandidates\(\)/);
-  assert.match(apiSource, /\/api\/points\/admin\/resolution-candidates\?status=pending/);
-  assert.match(apiSource, /adminListSocialTasks\('pending'\)/);
-  assert.match(apiSource, /total:/);
-  assert.match(source, /tab !== t\.id/);
-  assert.match(source, /taskCount > 0/);
+  assert.match(workspaceSource, /Conteo no disponible/);
+  assert.match(workspaceSource, /admin\?tab=markets&status=pending/);
+  assert.match(workspaceSource, /admin\?tab=support/);
+  assert.match(workspaceSource, /admin\?tab=social/);
+  assert.match(workspaceSource, /counts\.resolutionReady/);
+  assert.match(workspaceSource, /counts\.closedWithoutCandidate/);
 });
 
 test('Points nav surfaces admin work count outside admin', () => {
@@ -228,11 +216,12 @@ test('Points admin launch tab includes a proactive resolution watchlist', () => 
   assert.match(source, /Correr Retrofit o editar resolver antes del cierre/);
 });
 
-test('Points markets filter surfaces por resolver count while inside Mercados', () => {
-  assert.match(source, /pendingResolveCount=\{adminTaskCounts\.markets\}/);
-  assert.match(source, /function MarketsTable\(\{ onQueueChange, pendingResolveCount = 0 \}\)/);
-  assert.match(source, /s\.key === 'pending' \? pendingResolveCount : 0/);
-  assert.match(source, /taskCount > 0/);
+test('Points markets expose a direct resolution queue with a linked detail panel', () => {
+  assert.match(workspaceSource, /tab === 'markets' && params\.get\('status'\) === 'pending'/);
+  assert.match(workspaceSource, /next\.set\('item', id\)/);
+  assert.match(workspaceSource, /row\.resolutionCandidate/);
+  assert.match(workspaceSource, /Cerrado · sin propuesta/);
+  assert.match(source, /<AdminMarketQueue rows=\{markets\} loading=\{loading\} error=\{error\}/);
 });
 
 test('Points admin can append players to active parallel markets', () => {
@@ -309,7 +298,7 @@ test('Points admin can review scheduler resolution candidates', () => {
   assert.match(source, /candidate\.needsOutcome/);
   assert.match(source, /Elegir resultado/);
   assert.match(source, /reviewing \|\| !canConfirm/);
-  assert.match(source, /Elige un resultado antes de confirmar/);
+  assert.match(source, /reviewSettlement\('candidate', market, selectedOutcome, candidate\)/);
   assert.match(source, /Confirmar resolución/);
   assert.match(source, /Negar/);
   assert.match(source, /En revisión/);
@@ -318,8 +307,9 @@ test('Points admin can review scheduler resolution candidates', () => {
 
 test('Points admin can bulk-hide or show public markets and mark tournament overrides', () => {
   assert.match(source, /toggleHomeMarketsVisibility/);
-  assert.match(source, /Ocultar mercados/);
-  assert.match(source, /Mostrar mercados/);
+  assert.match(source, /Revisar visibilidad pública/);
+  assert.match(source, /wouldShowCount/);
+  assert.match(source, /wouldHideCount/);
   assert.match(source, /listas públicas/);
   assert.match(source, /suggestedAction/);
   assert.match(source, /adminBulkHideMarkets/);
@@ -352,10 +342,10 @@ test('Points admin can cancel active and por resolver markets', () => {
   assert.match(source, /pendingStatus === 'pending'/);
   assert.match(source, /El mercado anulado seguirá anulado y reembolsado/);
   assert.match(source, /filter === 'pending'/);
-  assert.match(source, /cancelMarket\(m\)/);
-  assert.match(source, /onCancel=\{cancelMarket\}/);
+  assert.match(source, /reviewSettlement\('cancel', m\)/);
+  assert.match(source, /onCancel=\{market => reviewSettlement\('cancel', market\)\}/);
   assert.match(source, /actionMode === 'cancel'/);
-  assert.match(source, /Se devolverá el costo base/);
+  assert.match(source, /adminCancelMarket\(\{ marketId: market.id, reason \}\)/);
   assert.match(apiSource, /export async function adminReopenCanceledMarket/);
   assert.match(apiSource, /\/api\/points\/admin\/reopen-canceled-market/);
 });

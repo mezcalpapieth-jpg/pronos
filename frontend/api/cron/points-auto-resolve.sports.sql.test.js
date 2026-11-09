@@ -15,7 +15,7 @@ test('the minute sports pass finds early finals and rescheduled games without wa
       end_time TIMESTAMPTZ DEFAULT NOW() + INTERVAL '5 hours', resolver_type TEXT DEFAULT 'sports_api',
       resolver_config JSONB DEFAULT '{"source":"espn","shape":"binary"}',
       outcomes JSONB, amm_mode TEXT, sport TEXT, league TEXT, source TEXT, source_event_id TEXT,
-      status TEXT DEFAULT 'active', parent_id INT
+      status TEXT DEFAULT 'active', parent_id INT, mode TEXT DEFAULT 'points', archived_at TIMESTAMPTZ
     );
     CREATE TABLE points_pending_markets (id INT, approved_market_id INT, source_data JSONB);
     CREATE TABLE points_resolver_checkpoints (market_id INT, checkpoint_key TEXT, last_checked_at TIMESTAMPTZ);
@@ -45,10 +45,13 @@ test('the minute sports pass finds early finals and rescheduled games without wa
   const sql = async (strings, ...values) => (await db.query(
     strings.reduce((text, part, i) => text + (i ? `$${i}` : '') + part, ''), values,
   )).rows;
-  const run = new Function('candidateSql', 'sportsOnly', 'NEXT_OPPONENT_RECHECK_INTERVAL_HOURS', `return candidateSql\`${query}\`;`);
+  const run = new Function('candidateSql', 'sportsOnly', 'NEXT_OPPONENT_RECHECK_INTERVAL_HOURS', 'marketId', `return candidateSql\`${query}\`;`);
   assert.ok(query);
-  const fast = await run(sql, true, 6);
+  const scoped = await run(sql, false, 6, 11);
+  assert.deepEqual(scoped.map(row => row.id), [11]);
+  assert.deepEqual(await run(sql, false, 6, 8), []);
+  const fast = await run(sql, true, 6, null);
   assert.deepEqual(fast.map(row => row.id).sort((a, b) => a - b), [1, 2, 3, 11, 12, 13]);
-  const full = await run(sql, false, 6);
+  const full = await run(sql, false, 6, null);
   assert.deepEqual(full.map(row => row.id).sort((a, b) => a - b), [1, 2, 3, 5, 6, 7, 11, 12, 13]);
 });

@@ -3,15 +3,15 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const adminSource = await readFile(new URL('./PointsAdmin.jsx', import.meta.url), 'utf8');
+const operationsSource = await readFile(new URL('./PointsAdminOperations.jsx', import.meta.url), 'utf8');
 const apiSource = await readFile(new URL('../lib/pointsApi.js', import.meta.url), 'utf8');
 
 test('admin markets table can correct a resolved market outcome', () => {
   assert.match(adminSource, /adminCorrectResolution/);
-  assert.match(adminSource, /const \[correcting, setCorrecting\]/);
-  assert.match(adminSource, /async function correctResolution/);
-  assert.match(adminSource, /Cambiar resolución/);
-  assert.match(adminSource, /Se revertirán cobros que ahora sean perdedores/);
-  assert.match(adminSource, /buttonLabel="Corregir"/);
+  assert.match(adminSource, /reviewSettlement\('correct', m, winnerIndex\)/);
+  assert.match(adminSource, /<SettlementReview/);
+  assert.match(operationsSource, /Cobros a revertir/);
+  assert.match(operationsSource, /expectedResolvedAt/);
   assert.match(adminSource, /actionLabel="Cambiar a"/);
   assert.match(adminSource, /multiple=\{m\.ammMode === 'parallel'\}/);
   assert.match(adminSource, /normalizeOutcomeSelection/);

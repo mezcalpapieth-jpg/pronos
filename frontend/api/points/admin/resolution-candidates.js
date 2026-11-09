@@ -17,6 +17,8 @@ import { formatPointsResolutionCandidate } from '../../_lib/points-resolution-ca
 import { releaseOpenLimitOrdersForMarkets } from '../../_lib/points-limit-orders.js';
 
 const sql = neon(process.env.DATABASE_URL || process.env.DATABASE_READ_URL);
+import { readSettlementPreview, settlementError, settlementRevision } from '../../_lib/points-admin-settlement-preview.js';
+
 const schemaSql = neon(process.env.DATABASE_URL);
 
 function parseJsonb(value, fallback = null) {
@@ -160,7 +162,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'invalid_action' });
     }
 
-    const candidate = await loadCandidate(candidateId);
+    let candidate = await loadCandidate(candidateId);
     if (!candidate) return res.status(404).json({ error: 'candidate_not_found' });
     if (candidate.status !== 'pending') {
       return res.status(409).json({ error: 'candidate_already_reviewed' });
@@ -168,6 +170,7 @@ export default async function handler(req, res) {
 
     const outcomes = parseJsonb(candidate.outcomes, []);
 
+    if (action === 'deny' && req.body?.preview === true) return res.status(400).json({ error: 'invalid_action' });
     if (action === 'deny') {
       const denied = await withTransaction(async (client) => {
         const r = await client.query(
@@ -202,6 +205,10 @@ export default async function handler(req, res) {
       });
     }
 
+    const scoreInput = req.body?.finalScore;
+    if (scoreInput !== undefined && (typeof scoreInput !== 'string' || scoreInput.trim().length > 240)) {
+      return res.status(400).json({ error: 'invalid_final_score' });
+    }
     const bodyOutcome = parseOutcomeIndex(req.body?.outcomeIndex);
     const storedOutcome = parseOutcomeIndex(candidate.outcome_index);
     const outcome = bodyOutcome ?? storedOutcome;
@@ -217,7 +224,7 @@ export default async function handler(req, res) {
 
     const result = await withTransaction(async (client) => {
       const mr = await client.query(
-        `SELECT id, status, amm_mode, parent_id
+        `SELECT id, question, status, amm_mode, parent_id, outcomes
            FROM points_markets
           WHERE id = $1
           FOR UPDATE`,
@@ -229,6 +236,48 @@ export default async function handler(req, res) {
       const market = mr.rows[0];
       if (market.parent_id || market.status !== 'active') {
         const err = new Error('market_not_active'); err.status = 400; throw err;
+      }
+      let revision;
+      if (req.body?.preview === true || req.body?.expectedCandidate !== undefined) {
+        const latest = await client.query(
+          `SELECT * FROM points_resolution_candidates WHERE id = $1 AND status = 'pending' FOR UPDATE`,
+          [candidateId],
+        );
+        const row = latest.rows[0];
+        if (!row) throw settlementError('candidate_already_reviewed', 409);
+        candidate = { ...candidate, ...row };
+        const currentOutcomes = parseJsonb(market.outcomes, []);
+        if (outcome >= currentOutcomes.length) throw settlementError('invalid_outcome');
+        const legs = await client.query(
+          `SELECT id, status, outcome, leg_label FROM points_markets WHERE parent_id = $1 ORDER BY id FOR UPDATE`, [market.id],
+        );
+        revision = settlementRevision([row, market.question, currentOutcomes, market.amm_mode, legs.rows]);
+        if (req.body?.preview !== true && req.body.expectedCandidate !== revision) {
+          throw settlementError('candidate_changed', 409);
+        }
+        if (req.body?.preview === true) {
+          const winners = new Map([[market.id, outcome]]);
+          if (market.amm_mode === 'parallel') {
+            const validLegs = legs.rows.filter(leg => leg.status !== 'canceled');
+            if (outcome >= validLegs.length) throw settlementError('invalid_outcome');
+            for (const [index, leg] of validLegs.entries()) {
+              winners.set(leg.id, leg.status === 'active' ? (index === outcome ? 0 : 1) : leg.outcome);
+            }
+          }
+          const preview = await readSettlementPreview(client, [market.id, ...legs.rows.map(leg => leg.id)], { winners });
+          return { ok: true, preview: {
+            ...preview,
+            question: market.question, outcomes: currentOutcomes,
+            selectedLabels: [market.amm_mode === 'parallel'
+              ? legs.rows.filter(leg => leg.status !== 'canceled')[outcome]?.leg_label || currentOutcomes[outcome]
+              : currentOutcomes[outcome]],
+            expectedCandidate: revision,
+            observedAt: row.observed_at,
+            suggestedScore: row.final_score,
+            suggestedOutcome: row.outcome_index,
+            evidenceUrl: row.evidence_url,
+          } };
+        }
       }
       const relatedIdsResult = await client.query(
         `SELECT id FROM points_markets
@@ -264,16 +313,17 @@ export default async function handler(req, res) {
                outcome = $1,
                resolved_at = NOW(),
                resolved_by = $2,
-               final_score = COALESCE($3, final_score),
+               final_score = CASE WHEN $6::boolean THEN $3 ELSE COALESCE($3, final_score) END,
                resolver_config = COALESCE(resolver_config, '{}'::jsonb) || $4::jsonb
          WHERE id = $5
            AND status = 'active'`,
         [
           outcome,
           admin.username,
-          candidate.final_score || null,
+          scoreInput === undefined ? candidate.final_score || null : scoreInput.trim() || null,
           JSON.stringify(candidateAuditPatch(candidate, admin, 'confirm', outcome)),
           candidate.points_market_id,
+          scoreInput !== undefined,
         ],
       );
 
@@ -320,6 +370,7 @@ export default async function handler(req, res) {
       };
     });
 
+    if (result.preview) return res.status(200).json(result);
     return res.status(200).json({
       ok: true,
       action,

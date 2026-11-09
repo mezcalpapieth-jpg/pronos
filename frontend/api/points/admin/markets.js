@@ -13,6 +13,7 @@ import { deriveMarketTags, matchesMarketTaxonomy } from '../../_lib/category-tag
 import { formatPointsResolutionCandidate } from '../../_lib/points-resolution-candidates.js';
 import { PRONOS_TREASURY_USERNAME } from '../../_lib/points-limit-orders.js';
 import { pointsResolverReadiness } from '../../_lib/points-resolver-readiness.js';
+import { ADMIN_SEARCH_MARKS, parseAdminMarketSearch } from '../../_lib/points-admin-market-search.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -59,6 +60,8 @@ export default async function handler(req, res) {
   if (!admin) return;
 
   const filter = ['all', 'active', 'pending', 'resolved', 'canceled', 'archived'].includes(req.query.status) ? req.query.status : 'all';
+  const search = parseAdminMarketSearch(req.query.q);
+  const openOnly = filter === 'active' && req.query.open_only === '1';
   const categoryParam = typeof req.query.category === 'string' ? req.query.category.trim().toLowerCase() : '';
   const categoryFilter = categoryParam && categoryParam !== 'all' ? categoryParam : null;
   const sportParam = typeof req.query.sport === 'string' ? req.query.sport.trim().toLowerCase() : '';
@@ -128,6 +131,7 @@ export default async function handler(req, res) {
           m.featured,
           m.hidden_from_home,
           m.tournament_featured,
+          m.is_test_market,
           m.resolver_type,
           m.mode,
           m.chain_id,
@@ -153,6 +157,11 @@ export default async function handler(req, res) {
           AND (${chainIdFilter}::integer IS NULL OR m.chain_id = ${chainIdFilter}::integer)
           AND (${categoryFilter}::text IS NULL OR m.category = ${categoryFilter}::text OR COALESCE(m.category_tags, '[]'::jsonb) ? ${categoryFilter}::text)
           AND (${sportFilter}::text IS NULL OR m.sport = ${sportFilter}::text)
+          AND (${search.id}::int IS NULL OR m.id = ${search.id}::int)
+          AND (${search.text}::text IS NULL OR m.id::text = ${search.text}::text
+            OR strpos(regexp_replace(lower(normalize(concat_ws(' ', m.question, m.source_event_id,
+              m.resolver_config->>'eventId', m.resolver_config->>'gamePk'), NFD)),
+              ${ADMIN_SEARCH_MARKS}, '', 'g'), ${search.text}::text) > 0)
           AND (${leagueFilter}::text IS NULL OR m.league = ${leagueFilter}::text)
           AND (
             ${cryptoTypeFilter}::text IS NULL
@@ -185,6 +194,7 @@ export default async function handler(req, res) {
           m.featured,
           m.hidden_from_home,
           m.tournament_featured,
+          m.is_test_market,
           m.resolver_type,
           m.mode,
           m.chain_id,
@@ -210,6 +220,11 @@ export default async function handler(req, res) {
           AND (${showArchived} OR m.archived_at IS NULL)
           AND (${categoryFilter}::text IS NULL OR m.category = ${categoryFilter}::text OR COALESCE(m.category_tags, '[]'::jsonb) ? ${categoryFilter}::text)
           AND (${sportFilter}::text IS NULL OR m.sport = ${sportFilter}::text)
+          AND (${search.id}::int IS NULL OR m.id = ${search.id}::int)
+          AND (${search.text}::text IS NULL OR m.id::text = ${search.text}::text
+            OR strpos(regexp_replace(lower(normalize(concat_ws(' ', m.question, m.source_event_id,
+              m.resolver_config->>'eventId', m.resolver_config->>'gamePk'), NFD)),
+              ${ADMIN_SEARCH_MARKS}, '', 'g'), ${search.text}::text) > 0)
           AND (${leagueFilter}::text IS NULL OR m.league = ${leagueFilter}::text)
           AND (
             ${cryptoTypeFilter}::text IS NULL
@@ -242,6 +257,7 @@ export default async function handler(req, res) {
           m.featured,
           m.hidden_from_home,
           m.tournament_featured,
+          m.is_test_market,
           m.resolver_type,
           m.mode,
           m.chain_id,
@@ -263,13 +279,23 @@ export default async function handler(req, res) {
         LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
         WHERE m.status = 'active'
           AND m.parent_id IS NULL
-          AND m.end_time IS NOT NULL
-          AND m.end_time < NOW()
+          AND (
+            m.end_time <= NOW()
+            OR (${modeFilter}::text = 'points' AND EXISTS (
+              SELECT 1 FROM points_resolution_candidates c
+              WHERE c.points_market_id = m.id AND c.status = 'pending'
+            ))
+          )
           AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
           AND (${chainIdFilter}::integer IS NULL OR m.chain_id = ${chainIdFilter}::integer)
           AND (${showArchived} OR m.archived_at IS NULL)
           AND (${categoryFilter}::text IS NULL OR m.category = ${categoryFilter}::text OR COALESCE(m.category_tags, '[]'::jsonb) ? ${categoryFilter}::text)
           AND (${sportFilter}::text IS NULL OR m.sport = ${sportFilter}::text)
+          AND (${search.id}::int IS NULL OR m.id = ${search.id}::int)
+          AND (${search.text}::text IS NULL OR m.id::text = ${search.text}::text
+            OR strpos(regexp_replace(lower(normalize(concat_ws(' ', m.question, m.source_event_id,
+              m.resolver_config->>'eventId', m.resolver_config->>'gamePk'), NFD)),
+              ${ADMIN_SEARCH_MARKS}, '', 'g'), ${search.text}::text) > 0)
           AND (${leagueFilter}::text IS NULL OR m.league = ${leagueFilter}::text)
           AND (
             ${cryptoTypeFilter}::text IS NULL
@@ -302,6 +328,7 @@ export default async function handler(req, res) {
           m.featured,
           m.hidden_from_home,
           m.tournament_featured,
+          m.is_test_market,
           m.resolver_type,
           m.mode,
           m.chain_id,
@@ -322,11 +349,17 @@ export default async function handler(req, res) {
         FROM points_markets m
         LEFT JOIN points_pending_markets pm ON pm.approved_market_id = m.id
         WHERE m.status = ${filter} AND m.parent_id IS NULL
+          AND (NOT ${openOnly}::boolean OR m.end_time IS NULL OR m.end_time > NOW())
           AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
           AND (${chainIdFilter}::integer IS NULL OR m.chain_id = ${chainIdFilter}::integer)
           AND (${showArchived} OR m.archived_at IS NULL)
           AND (${categoryFilter}::text IS NULL OR m.category = ${categoryFilter}::text OR COALESCE(m.category_tags, '[]'::jsonb) ? ${categoryFilter}::text)
           AND (${sportFilter}::text IS NULL OR m.sport = ${sportFilter}::text)
+          AND (${search.id}::int IS NULL OR m.id = ${search.id}::int)
+          AND (${search.text}::text IS NULL OR m.id::text = ${search.text}::text
+            OR strpos(regexp_replace(lower(normalize(concat_ws(' ', m.question, m.source_event_id,
+              m.resolver_config->>'eventId', m.resolver_config->>'gamePk'), NFD)),
+              ${ADMIN_SEARCH_MARKS}, '', 'g'), ${search.text}::text) > 0)
           AND (${leagueFilter}::text IS NULL OR m.league = ${leagueFilter}::text)
           AND (
             ${cryptoTypeFilter}::text IS NULL
@@ -469,6 +502,7 @@ export default async function handler(req, res) {
         archivedAt: r.archived_at || null,
         finalScore: r.final_score || null,
         resolverConfig,
+        resolutionCriteria: parseJsonb(r.pending_source_data, null)?.resolutionCriteria || null,
         crypto5min: resolverConfig?.shape === 'binary-direction',
         cryptoIntervalMinutes,
         cryptoWindowMinutes: cryptoIntervalMinutes,

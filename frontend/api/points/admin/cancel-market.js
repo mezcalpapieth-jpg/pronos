@@ -38,7 +38,7 @@ export default async function handler(req, res) {
     await ensurePointsSchema(schemaSql);
 
     const result = await withTransaction(client => cancelPointsMarket(client, mid, {
-      actor: admin.username, reason: reasonText,
+      actor: admin.username, reason: reasonText, preview: req.body?.preview === true,
     }));
 
     return res.status(200).json(result);

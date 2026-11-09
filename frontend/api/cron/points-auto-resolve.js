@@ -99,6 +99,7 @@ import {
   NETFLIX_TOP10_PAGE,
   NETFLIX_TOP10_SOURCE,
 } from '../_lib/netflix-top10.js';
+import { resolverCheckResult, writeResolverChecks } from '../_lib/points-resolver-diagnostics.js';
 import { prepareGeneratedSpecs, upsertPending } from '../_lib/run-generators.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
@@ -1545,7 +1546,7 @@ async function queueApiChartFallbackReview({ market, cfg, sourceData, outcomes, 
  * URLs the every-15-min schedule never fires, so admins use the
  * admin endpoint to kick this off manually.
  */
-export async function runAutoResolve({ dry = false, sportsOnly = false } = {}) {
+export async function runAutoResolve({ dry = false, sportsOnly = false, marketId = null } = {}) {
   const started = Date.now();
   await ensurePointsSchema(schemaSql);
 
@@ -1553,7 +1554,7 @@ export async function runAutoResolve({ dry = false, sportsOnly = false } = {}) {
     // below (weather_api). For price resolvers the market is already
     // unified binary so there's nothing to cascade.
     // Read sports from the writer so a replica cannot keep a finished game active.
-    const candidateSql = sportsOnly ? schemaSql : readSql;
+    const candidateSql = sportsOnly || marketId != null ? schemaSql : readSql;
     const candidates = await candidateSql`
       SELECT m.id, m.question, m.category, m.start_time, m.end_time, m.resolver_type,
              m.resolver_config, m.outcomes, m.amm_mode, m.sport, m.league,
@@ -1571,6 +1572,9 @@ export async function runAutoResolve({ dry = false, sportsOnly = false } = {}) {
         ON noc.market_id = m.id
        AND noc.checkpoint_key = 'next-opponent'
       WHERE m.status = 'active'
+        AND COALESCE(m.mode, 'points') = 'points'
+        AND m.archived_at IS NULL
+        AND (${marketId}::int IS NULL OR m.id = ${marketId}::int)
         AND m.end_time IS NOT NULL
         AND m.parent_id IS NULL
         AND (
@@ -1679,10 +1683,10 @@ export async function runAutoResolve({ dry = false, sportsOnly = false } = {}) {
       errors: [],
       deferred: [],
       dryRun: dry,
-      scope: sportsOnly ? 'sports' : 'all',
+      scope: marketId != null ? 'market' : sportsOnly ? 'sports' : 'all',
     };
 
-    if (!sportsOnly) {
+    if (!sportsOnly && marketId == null) {
       try {
         await queueNextMananeraPendingMarkets({ candidates, dry, report });
       } catch (e) {
@@ -1791,7 +1795,10 @@ export async function runAutoResolve({ dry = false, sportsOnly = false } = {}) {
       }
     }
 
+    const checksStarted = new Map();
+    const sourceResponses = new Map();
     for (const m of candidates) {
+      checksStarted.set(m.id, new Date().toISOString());
       const marketOutcomes = parseJsonb(m.outcomes, []);
       const sourceData = parseJsonb(m.pending_source_data, {});
       let cfg = parseJsonb(m.resolver_config, null);
@@ -2423,6 +2430,7 @@ export async function runAutoResolve({ dry = false, sportsOnly = false } = {}) {
             }
           }
           const transcript = await readMananeraPhraseResult(cfg, { storedTranscript, storedTranscripts });
+          if (transcript.ready) sourceResponses.set(m.id, new Date().toISOString());
           if (!transcript.ready) {
             const err = new Error(transcript.reason || 'official_transcript_not_ready');
             err.benign = true;
@@ -2878,6 +2886,9 @@ export async function runAutoResolve({ dry = false, sportsOnly = false } = {}) {
           // Not completed yet = benign skip. Cron will retry on the
           // next tick; a postponed game just keeps retrying until
           // admin intervenes (no auto-escalation for now).
+          if (!result.notFound && !result.invalidResult && (result.completed || result.state)) {
+            sourceResponses.set(m.id, new Date().toISOString());
+          }
           if (!result.completed) {
             const err = new Error('not_finished_yet');
             err.benign = true;
@@ -2885,6 +2896,8 @@ export async function runAutoResolve({ dry = false, sportsOnly = false } = {}) {
               source: cfg.source,
               state: result.state || null,
               notFound: result.notFound === true,
+              invalidResult: result.invalidResult === true,
+              interrupted: result.interrupted === true,
             };
             throw err;
           }
@@ -3051,6 +3064,9 @@ export async function runAutoResolve({ dry = false, sportsOnly = false } = {}) {
         continue;
       }
 
+      if (winningIdx != null || independentLegResolutions || manualReviewCandidate) {
+        sourceResponses.set(m.id, new Date().toISOString());
+      }
       if (manualReviewCandidate) {
         try {
           await queueManualReviewCandidate({
@@ -3301,6 +3317,30 @@ export async function runAutoResolve({ dry = false, sportsOnly = false } = {}) {
         report.errors.push({ id: m.id, error: `write_failed: ${e.message}` });
       }
     }
+
+  const errors = new Map(report.errors.map(item => [item.id, item]));
+  const deferred = new Map(report.deferred.map(item => [item.id, item]));
+  const resolved = new Map(report.resolved.map(item => [item.id, item]));
+  const checks = candidates.map(market => ({
+    market_id: market.id,
+    checked_at: checksStarted.get(market.id),
+    metadata: resolverCheckResult({
+      market,
+      error: errors.get(market.id),
+      deferred: deferred.get(market.id),
+      resolved: resolved.get(market.id),
+      sourceResponseAt: sourceResponses.get(market.id) || (resolved.has(market.id) ? new Date().toISOString() : null),
+    }),
+  }));
+  if (!dry) {
+    try {
+      await writeResolverChecks(schemaSql, checks);
+    } catch (error) {
+      console.warn('[points-auto-resolve] diagnostic checkpoint failed', { code: error?.code });
+      report.diagnosticsUnavailable = true;
+    }
+  }
+  if (marketId != null) report.diagnostic = checks[0]?.metadata || null;
 
   return {
     ok: true,

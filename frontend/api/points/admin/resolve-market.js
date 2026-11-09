@@ -26,6 +26,8 @@ import { releaseOpenLimitOrdersForMarkets } from '../../_lib/points-limit-orders
 import { bestEffortPersistTopHolderSnapshot } from '../../_lib/points-top-holders.js';
 import { closeCompletedPointsResolutionCandidates } from '../../_lib/points-resolution-candidates.js';
 
+import { readSettlementPreview, settlementError, settlementRevision } from '../../_lib/points-admin-settlement-preview.js';
+
 const schemaSql = neon(process.env.DATABASE_URL);
 
 function normalizeWinningOutcomeIndexes(body = {}) {
@@ -94,7 +96,7 @@ export default async function handler(req, res) {
 
     const result = await withTransaction(async (client) => {
       const mr = await client.query(
-        `SELECT id, status, amm_mode, parent_id FROM points_markets
+        `SELECT id, question, status, amm_mode, parent_id, outcomes FROM points_markets
          WHERE id = $1 FOR UPDATE`,
         [mid],
       );
@@ -119,13 +121,32 @@ export default async function handler(req, res) {
       }
 
       const relatedIdsResult = await client.query(
-        `SELECT id FROM points_markets
+        `SELECT id, parent_id, status, outcome, leg_label FROM points_markets
           WHERE id = $1 OR parent_id = $1
           ORDER BY id ASC
           FOR UPDATE`,
         [mid],
       );
       const relatedIds = relatedIdsResult.rows.map(row => Number(row.id)).filter(Number.isFinite);
+      const legs = relatedIdsResult.rows.filter(row => row.parent_id != null && row.status !== 'canceled');
+      const options = typeof m.outcomes === 'string' ? JSON.parse(m.outcomes) : m.outcomes;
+      const outcomeCount = m.amm_mode === 'parallel' ? legs.length : options?.length || 2;
+      if (winningOutcomeIndexes.some(index => index >= outcomeCount)) throw settlementError('invalid_outcome');
+      const winners = new Map([[mid, oi]]);
+      for (const [index, leg] of legs.entries()) {
+        winners.set(leg.id, leg.status === 'active' ? (winningOutcomeIndexes.includes(index) ? 0 : 1) : leg.outcome);
+      }
+      if (body.preview === true || body.expectedMarket !== undefined) {
+        const revision = settlementRevision([m.question, options, m.amm_mode, legs]);
+        if (body.preview === true) {
+          return { ok: true, preview: {
+            ...await readSettlementPreview(client, relatedIds, { winners }),
+            question: m.question, outcomes: options, expectedMarket: revision,
+            selectedLabels: winningOutcomeIndexes.map(index => legs[index]?.leg_label || options?.[index]),
+          } };
+        }
+        if (body.expectedMarket !== revision) throw settlementError('market_changed', 409);
+      }
       await bestEffortPersistTopHolderSnapshot(
         client,
         mid,
@@ -165,25 +186,9 @@ export default async function handler(req, res) {
       }
 
       if (m.amm_mode === 'parallel') {
-        const legs = await client.query(
-          `SELECT id FROM points_markets
-           WHERE parent_id = $1
-             AND status <> 'canceled'
-           ORDER BY id ASC
-           FOR UPDATE`,
-          [mid],
-        );
-        const invalid = winningOutcomeIndexes.find(index => index >= legs.rows.length);
-        if (invalid != null) {
-          const err = new Error('invalid_outcome');
-          err.status = 400;
-          err.detail = `parent has ${legs.rows.length} legs, winning index ${invalid} out of range`;
-          throw err;
-        }
-        const winnerSet = new Set(winningOutcomeIndexes);
-        for (let i = 0; i < legs.rows.length; i++) {
-          const legId = legs.rows[i].id;
-          const legWinningOutcome = winnerSet.has(i) ? 0 : 1; // YES for winners, NO for losers
+        for (const leg of legs) {
+          const legId = leg.id;
+          const legWinningOutcome = winners.get(leg.id);
           await client.query(
             `UPDATE points_markets
                SET status = 'resolved', outcome = $1,

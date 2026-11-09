@@ -127,8 +127,10 @@ export function buildAdminMarketsQuery({
   geoFilter = 'all',
   topicFilter = 'all',
   featureFilter = 'all',
+  search = '',
 } = {}) {
   const q = new URLSearchParams({ status });
+  if (search) q.set('q', search);
   if (categoryFilter !== 'all') q.set('category', categoryFilter);
   if (featureFilter !== 'all') q.set('feature', featureFilter);
 
@@ -160,14 +162,15 @@ export function buildAdminMarketsQuery({
   return q;
 }
 
-export function formatAdminMarketDate(iso) {
+export function formatAdminMarketDate(iso, { timeZone, timeOnly = false } = {}) {
   if (!iso) return '-';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '-';
   return d.toLocaleString('es-MX', {
-    day: '2-digit',
-    month: 'short',
+    ...(timeOnly ? {} : { day: '2-digit', month: 'short' }),
     hour: '2-digit',
     minute: '2-digit',
+    timeZone,
+    ...(timeZone ? { hourCycle: 'h23' } : {}),
   });
 }

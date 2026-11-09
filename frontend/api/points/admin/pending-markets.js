@@ -29,9 +29,11 @@ import { syncMananeraPhraseFromQuestion } from '../../_lib/mananera-market-sync.
 import { syncApiPriceFromQuestion } from '../../_lib/api-price-market-sync.js';
 import { syncWeatherDateFromMarket } from '../../_lib/weather-market-sync.js';
 import { validateBeforeMonthDeadline } from '../../_lib/manual-deadline-sanity.js';
+import { checkPendingProposal, checkPendingProposals } from '../../_lib/points-admin-approval-checks.js';
 import { attachMarketTranslations } from '../../_lib/market-translations.js';
 import { assertPointsAirportApproval } from '../../_lib/points-aicm-policy.js';
 import { pointsResolverReadiness } from '../../_lib/points-resolver-readiness.js';
+import { ADMIN_SEARCH_MARKS, parseAdminMarketSearch } from '../../_lib/points-admin-market-search.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 const readSql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
@@ -259,7 +261,22 @@ async function list(req, res) {
   const status = ['pending', 'approved', 'rejected', 'all'].includes(req.query.status)
     ? req.query.status
     : 'pending';
+  const search = parseAdminMarketSearch(req.query.q);
   await ensurePointsSchema(schemaSql);
+
+  if (req.query.check_id != null) {
+    const id = Number(req.query.check_id);
+    if (!/^[1-9]\d*$/.test(String(req.query.check_id)) || id > 2147483647) {
+      return res.status(400).json({ error: 'invalid_id' });
+    }
+    const [row] = await schemaSql`SELECT * FROM points_pending_markets WHERE id = ${id}`;
+    if (!row) return res.status(404).json({ error: 'pending_not_found' });
+    if (row.status !== 'pending') return res.status(409).json({ error: 'already_reviewed' });
+    const checks = await checkPendingProposal({ query: async (query, params) => ({ rows: await schemaSql.query(query, params) }) }, row, {
+      approvalEventId: marketSourceEventForApproval(row, id),
+    });
+    return res.status(200).json({ checks });
+  }
 
   // Auto-expire stale pendings BEFORE the list query runs. Any row
   // whose end_time has already passed is no longer approvable — the
@@ -432,6 +449,12 @@ async function list(req, res) {
           mk.status AS market_status
         FROM points_pending_markets p
         LEFT JOIN points_markets mk ON mk.id = p.approved_market_id
+        WHERE TRUE
+          AND (${search.id}::int IS NULL OR p.id = ${search.id}::int)
+          AND (${search.text}::text IS NULL OR p.id::text = ${search.text}::text
+            OR strpos(regexp_replace(lower(normalize(concat_ws(' ', p.question, p.source_event_id,
+              p.resolver_config->>'eventId', p.resolver_config->>'gamePk'), NFD)),
+              ${ADMIN_SEARCH_MARKS}, '', 'g'), ${search.text}::text) > 0)
         ORDER BY
           CASE p.status WHEN 'pending' THEN 0 WHEN 'rejected' THEN 1 ELSE 2 END,
           CASE WHEN p.status = 'rejected' THEN p.reviewed_at END DESC NULLS LAST,
@@ -477,6 +500,11 @@ async function list(req, res) {
         FROM points_pending_markets p
         LEFT JOIN points_markets mk ON mk.id = p.approved_market_id
         WHERE p.status = ${status}
+          AND (${search.id}::int IS NULL OR p.id = ${search.id}::int)
+          AND (${search.text}::text IS NULL OR p.id::text = ${search.text}::text
+            OR strpos(regexp_replace(lower(normalize(concat_ws(' ', p.question, p.source_event_id,
+              p.resolver_config->>'eventId', p.resolver_config->>'gamePk'), NFD)),
+              ${ADMIN_SEARCH_MARKS}, '', 'g'), ${search.text}::text) > 0)
         ORDER BY
           CASE WHEN p.status = 'rejected' THEN p.reviewed_at END DESC NULLS LAST,
           CASE WHEN p.status = 'pending' THEN p.end_time END ASC NULLS LAST,
@@ -653,6 +681,18 @@ export async function approveOne(pid, reviewer, note, opts = {}) {
       throw err;
     }
 
+    const marketSourceEventId = marketSourceEventForApproval(r, pid);
+    if (!isOnchain) {
+      const checks = await checkPendingProposal(client, r, { lock: true, approvalEventId: marketSourceEventId });
+      const blocking = checks.find(check => check.severity === 'block');
+      if (blocking) {
+        const error = new Error(blocking.code);
+        error.status = 409;
+        error.detail = blocking.marketId ? `Mercado #${blocking.marketId}` : null;
+        throw error;
+      }
+    }
+
     const ammMode = r.amm_mode === 'parallel' ? 'parallel' : 'unified';
     let createdMarketId;
 
@@ -720,7 +760,6 @@ export async function approveOne(pid, reviewer, note, opts = {}) {
       await assertGranjaVipFinalNominees(resolverConfig, outcomes);
       await assertPointsAirportApproval(client, { ...r, resolver_config: resolverConfig });
     }
-    const marketSourceEventId = marketSourceEventForApproval(r, pid);
     const tagBundle = deriveMarketTags({
       ...r,
       source_data: sourceData,
@@ -1316,10 +1355,12 @@ async function refreshPendingPricing(pid, reviewer) {
   });
 }
 
-async function listPendingRowsForBulk(filters = {}) {
-  const rows = await readSql`
+async function listPendingRowsForBulk(filters = {}, db = readSql) {
+  const ids = filters.ids ?? null;
+  const rows = await db`
     SELECT * FROM points_pending_markets
     WHERE status = 'pending'
+      AND (${ids}::int[] IS NULL OR id = ANY(${ids}::int[]))
     ORDER BY id ASC
     LIMIT 2000
   `;
@@ -1327,7 +1368,13 @@ async function listPendingRowsForBulk(filters = {}) {
 }
 
 async function review(req, res, admin) {
-  const { id, action, note, patch, mode, chainId, chainAddress, chainMarketId, autoDeploy, filters } = req.body || {};
+  const { id, action, note, patch, mode, chainId, chainAddress, chainMarketId, autoDeploy, filters, preview } = req.body || {};
+  if ((action === 'approve_all' || action === 'refresh_pricing_all') && filters && 'ids' in Object(filters)) {
+    if (!Array.isArray(filters.ids) || filters.ids.length < 1 || filters.ids.length > 2000
+        || filters.ids.some(value => !Number.isInteger(value) || value <= 0 || value > 2147483647)) {
+      return res.status(400).json({ error: 'invalid_pending_market_ids' });
+    }
+  }
   // Shared opts passed to approveOne for both single-row and
   // approve_all paths. Default behaviour (no opts) keeps Points admin
   // approvals off-chain; the MVP admin sends mode='onchain' + chain
@@ -1351,6 +1398,15 @@ async function review(req, res, admin) {
         error: 'bulk_approve_onchain_unsupported',
         detail: 'On-chain approvals must be done one at a time so each market gets its own chain_address.',
       });
+    }
+    if (preview === true) {
+      if (!Array.isArray(filters?.ids)) return res.status(400).json({ error: 'invalid_pending_market_ids' });
+      const pending = await listPendingRowsForBulk(filters, schemaSql);
+      const client = { query: async (query, params) => ({ rows: await schemaSql.query(query, params) }) };
+      const checks = await checkPendingProposals(client, pending.map(row => ({
+        row, event: marketSourceEventForApproval(row, row.id),
+      })));
+      return res.status(200).json({ checks });
     }
     const pending = await listPendingRowsForBulk(filters || {});
     const approved = [];

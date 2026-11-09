@@ -28,6 +28,7 @@ function serializeTicket(row, messages = []) {
     updatedAt: row.updated_at,
     lastUserMessageAt: row.last_user_message_at,
     lastAdminMessageAt: row.last_admin_message_at,
+    assignedTo: row.assigned_to || null,
     messages: messages.map(m => ({
       id: m.id,
       senderType: m.sender_type,
@@ -71,8 +72,8 @@ export default async function handler(req, res) {
 
   try {
     await ensurePointsSchema(schemaSql);
-    if (req.method === 'GET') return list(req, res);
-    if (req.method === 'POST') return mutate(req, res, admin);
+    if (req.method === 'GET') return await list(req, res);
+    if (req.method === 'POST') return await mutate(req, res, admin);
     return res.status(405).json({ error: 'method_not_allowed' });
   } catch (e) {
     if (e?.status) {
@@ -85,20 +86,24 @@ export default async function handler(req, res) {
 
 async function list(req, res) {
   const status = ['open', 'closed', 'all'].includes(req.query.status) ? req.query.status : 'open';
-  const tickets = status === 'all'
-    ? await readSql`
-        SELECT *
-        FROM points_support_tickets
-        ORDER BY updated_at DESC
-        LIMIT 200
-      `
-    : await readSql`
-        SELECT *
-        FROM points_support_tickets
-        WHERE status = ${status}
-        ORDER BY updated_at DESC
-        LIMIT 200
-      `;
+  const rawId = req.query.id;
+  const id = rawId == null ? null : Number(rawId);
+  if (rawId != null && (!/^[1-9]\d*$/.test(String(rawId)) || id > 2147483647)) {
+    return res.status(400).json({ error: 'invalid_id' });
+  }
+  const tickets = await readSql`
+    SELECT t.*, c.assigned_to
+    FROM points_support_tickets t
+    LEFT JOIN points_admin_cases c ON c.kind = 'support' AND c.subject = t.id::text
+    WHERE (${id}::int IS NULL OR t.id = ${id}::int)
+      AND (${id}::int IS NOT NULL OR ${status} = 'all' OR t.status = ${status})
+    ORDER BY t.updated_at DESC
+    LIMIT 200
+  `;
+  if (id != null && !tickets.length) return res.status(404).json({ error: 'ticket_not_found' });
+  if (req.query.summary === '1') {
+    return res.status(200).json({ count: tickets.length, tickets: tickets.map(ticket => serializeTicket(ticket)) });
+  }
   if (!tickets.length) return res.status(200).json({ tickets: [], count: 0 });
 
   const ids = tickets.map(t => t.id);

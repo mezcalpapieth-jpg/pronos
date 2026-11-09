@@ -1,4 +1,6 @@
 import RiskPanel from '../components/AdminRiskPanel.jsx';
+import AdminCasePanel from '../components/AdminCasePanel.jsx';
+import { approvalIssueLabels, ProposalApproval, ResolverStatus, SettlementReview } from './PointsAdminOperations.jsx';
 /**
  * Admin panel for the points-app.
  *
@@ -11,7 +13,7 @@ import RiskPanel from '../components/AdminRiskPanel.jsx';
  * nav link for non-admins but the endpoints would 403 anyway.
  */
 import React, { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import DeckAdminPanel from '../components/DeckAdminPanel.jsx';
 import MarketLiquidityPanel from '../components/MarketLiquidityPanel.jsx';
 import AdminInterestPanel from '@app/components/AdminInterestPanel.jsx';
@@ -44,7 +46,6 @@ import {
   adminEditMarket,
   adminCancelMarket,
   adminReopenCanceledMarket,
-  adminListPendingMarkets,
   adminReviewPendingMarket,
   adminEditPendingMarket,
   adminRefreshPendingPricing,
@@ -69,21 +70,17 @@ import {
   adminUnblockApiUser,
 } from '../lib/pointsApi.js';
 import {
-  ADMIN_BASEBALL_LEAGUES,
-  ADMIN_COMBATE_LEAGUES,
-  ADMIN_CRYPTO_FILTERS,
   ADMIN_ENTERTAINMENT_TOPIC_FILTERS,
-  ADMIN_GEO_FILTERS,
-  ADMIN_MEXICO_TOPIC_FILTERS,
-  ADMIN_SOCCER_LEAGUES,
-  ADMIN_SPORT_FILTERS,
   CATEGORIES,
   MARKET_CREATION_GEO_OPTIONS,
   MARKET_CREATION_TOPIC_OPTIONS,
-  MARKET_CATEGORY_FILTERS,
   buildAdminMarketsQuery,
   formatAdminMarketDate,
 } from '../lib/adminMarketFilters.js';
+import {
+  AdminMarketFacts, AdminMarketQueue, AdminOverview, AdminQueueToolbar, AdminWorkspace,
+  adminTab, useAdminQueueData, useAdminQueueFilters,
+} from './PointsAdminWorkspace.jsx';
 
 // ─── Date helpers (dd/mm/yyyy + HH:mm) ──────────────────────────────────────
 // The native <input type="datetime-local"> defers format entirely to the
@@ -425,161 +422,86 @@ function formatSuggestedPricingSource(pricing) {
 }
 
 export default function PointsAdmin({ isAdmin }) {
-  // Read initial tab + create-form prefill from query string. Lets
-  // /c/noticias' "Crear mercado de esta noticia" deep-link into the
-  // create form with question + category pre-filled.
-  const initialTab = (() => {
-    if (typeof window === 'undefined') return 'create';
-    const sp = new URLSearchParams(window.location.search);
-    const t = sp.get('tab');
-    return ['create', 'markets', 'stats', 'pending', 'social', 'support', 'deck', 'cycles', 'risk', 'api', 'launch', 'strategies'].includes(t) ? t : 'create';
-  })();
-  const createPrefill = (() => {
-    if (typeof window === 'undefined') return null;
-    const sp = new URLSearchParams(window.location.search);
-    const q = sp.get('question');
-    if (!q) return null;
-    return {
-      question: q.slice(0, 200),
-      category: (sp.get('category') || '').slice(0, 32) || null,
-    };
-  })();
+  const [params] = useSearchParams();
+  const tab = adminTab(params);
+  const question = params.get('question');
+  const createPrefill = question ? {
+    question: question.slice(0, 200),
+    category: (params.get('category') || '').slice(0, 32) || null,
+  } : null;
   const navigate = useNavigate();
   const { authenticated, user, loading: authLoading } = usePointsAuth();
-  const [tab, setTab] = useState(initialTab); // 'create' | 'markets' | 'stats'
-  const [adminTaskCounts, setAdminTaskCounts] = useState({ pending: 0, markets: 0, social: 0, support: 0 });
+  const [adminTaskCounts, setAdminTaskCounts] = useState(null);
+  const [overviewLoading, setOverviewLoading] = useState(true);
   const [taskRefreshKey, setTaskRefreshKey] = useState(0);
 
   function refreshAdminTaskCounts() {
-    setTaskRefreshKey(k => k + 1);
+    setTaskRefreshKey(key => key + 1);
   }
 
   useEffect(() => {
-    if (authLoading) return;
-    if (!authenticated) {
-      navigate('/');
-    }
+    if (!authLoading && !authenticated) navigate('/');
   }, [authLoading, authenticated, navigate]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function loadAdminTaskCounts() {
-      if (!authenticated || !isAdmin) {
-        if (!cancelled) setAdminTaskCounts({ pending: 0, markets: 0, social: 0, support: 0 });
-        return;
-      }
-
-      const counts = await adminListTaskCounts();
-
-      if (cancelled) return;
+    if (!authenticated || !isAdmin || tab !== 'overview') return;
+    let active = true;
+    setOverviewLoading(true);
+    adminListTaskCounts().then(counts => {
+      if (!active) return;
       setAdminTaskCounts(counts);
-    }
-
-    loadAdminTaskCounts();
-    return () => { cancelled = true; };
+      setOverviewLoading(false);
+    });
+    return () => { active = false; };
   }, [authenticated, isAdmin, tab, taskRefreshKey]);
 
   if (!authenticated) return null;
   if (!isAdmin) {
     return (
-      <main style={{ padding: '100px 48px', textAlign: 'center', fontFamily: 'var(--font-mono)' }}>
+      <main style={{ padding: '100px 48px', textAlign: 'center' }}>
         <p style={{ color: 'var(--text-muted)' }}>No tienes acceso de admin.</p>
       </main>
     );
   }
 
   return (
-    <main style={{ maxWidth: 1160, margin: '0 auto', padding: 'clamp(24px, 5vw, 60px) clamp(14px, 4vw, 24px)' }}>
-      <h1 style={{
-        fontFamily: 'var(--font-display)',
-        fontSize: 'clamp(32px, 5vw, 52px)',
-        textTransform: 'uppercase',
-        letterSpacing: '0.04em',
-        color: 'var(--text-primary)',
-        marginBottom: 8,
-      }}>
-        Admin
-      </h1>
-      <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 13, marginBottom: 24 }}>
-        Gestiona mercados y premios del app de puntos.
-      </p>
-
-      <div style={{ display: 'flex', gap: 4, marginBottom: 28, borderBottom: '1px solid var(--border)', flexWrap: 'wrap' }}>
-        {[
-          { id: 'create',  label: 'Crear mercado' },
-          { id: 'pending', label: 'Por aprobar' },
-          { id: 'markets', label: 'Mercados' },
-          { id: 'support', label: 'Soporte' },
-          { id: 'social',  label: 'Tareas sociales' },
-          { id: 'strategies', label: 'Estrategias' },
-          { id: 'risk',    label: 'Riesgo' },
-          { id: 'api',     label: 'API' },
-          { id: 'deck',    label: 'Deck' },
-          { id: 'cycles',  label: 'Ciclos' },
-          { id: 'launch',  label: 'Launch' },
-          { id: 'stats',   label: 'Estadísticas' },
-        ].map(t => {
-          const active = tab === t.id;
-          const taskCount = adminTaskCounts[t.id] || 0;
-          return (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              style={{
-                background: 'none', border: 'none', padding: '10px 18px',
-                fontFamily: 'var(--font-mono)', fontSize: 12, letterSpacing: '0.08em',
-                textTransform: 'uppercase',
-                color: active ? 'var(--text-primary)' : 'var(--text-muted)',
-                borderBottom: `2px solid ${active ? 'var(--green)' : 'transparent'}`,
-                cursor: 'pointer', marginBottom: -1,
-                display: 'inline-flex', alignItems: 'center', gap: 8,
-              }}
-            >
-              {t.label}
-              {tab !== t.id && taskCount > 0 && (
-                <span style={{
-                  minWidth: 18,
-                  height: 18,
-                  padding: '0 5px',
-                  borderRadius: 999,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  background: 'rgba(245,158,11,0.16)',
-                  border: '1px solid rgba(245,158,11,0.45)',
-                  color: '#f59e0b',
-                  fontSize: 10,
-                  letterSpacing: 0,
-                  lineHeight: 1,
-                }}>
-                  {taskCount > 99 ? '99+' : taskCount}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
+    <AdminWorkspace tab={tab} username={user?.username}>
+      {tab === 'overview' && <AdminOverview counts={adminTaskCounts} loading={overviewLoading} onRefresh={refreshAdminTaskCounts} />}
       {tab === 'create' && <CreateMarketForm prefill={createPrefill} />}
       {tab === 'pending' && <PendingMarketsTable onQueueChange={refreshAdminTaskCounts} />}
-      {tab === 'markets' && (
-        <MarketsTable
-          onQueueChange={refreshAdminTaskCounts}
-          pendingResolveCount={adminTaskCounts.markets}
-        />
-      )}
+      {(tab === 'markets' || tab === 'resolution') && <MarketsTable onQueueChange={refreshAdminTaskCounts} />}
       {tab === 'social' && <SocialTasksQueue onQueueChange={refreshAdminTaskCounts} />}
       {tab === 'strategies' && <StrategiesPanel />}
-      {tab === 'risk' && <RiskPanel />}
+      {tab === 'risk' && <RiskPanel key={params.get('user') || ''} initialUsername={params.get('user') || ''} />}
       {tab === 'api' && <ApiUsagePanel />}
       {tab === 'support' && <SupportTicketsQueue onQueueChange={refreshAdminTaskCounts} />}
       {tab === 'deck' && <DeckAdminPanel />}
       {tab === 'cycles' && <CyclesPanel />}
-      {tab === 'launch' && <LaunchReadinessPanel taskCounts={adminTaskCounts} />}
+      {tab === 'launch' && (
+        <>
+          <MarketAutomationTools />
+          <LaunchReadinessPanel taskCounts={adminTaskCounts} />
+        </>
+      )}
       {tab === 'stats' && <StatsPanel />}
-    </main>
+    </AdminWorkspace>
   );
+}
+
+// ─── Market queue filters ──────────────────────────────────────────────────
+function marketQueueQuery(queue) {
+  const { category, sport, league, geo, topic, crypto_type, feature } = queue.values;
+  return buildAdminMarketsQuery({
+    status: queue.status,
+    categoryFilter: category,
+    sportFilter: sport,
+    leagueFilter: league,
+    cryptoTypeFilter: crypto_type,
+    geoFilter: geo,
+    topicFilter: topic,
+    featureFilter: feature,
+    search: queue.search,
+  });
 }
 
 // ─── October launch readiness ───────────────────────────────────────────────
@@ -2556,257 +2478,151 @@ function SupportTicketAttachments({ attachments }) {
 
 // ─── Support tickets queue ─────────────────────────────────────────────────
 function SupportTicketsQueue({ onQueueChange }) {
-  const [status, setStatus] = useState('open');
+  const [params, setParams] = useSearchParams();
+  const status = ['open', 'closed', 'all'].includes(params.get('status')) ? params.get('status') : 'open';
+  const selectedId = /^[1-9]\d*$/.test(params.get('ticket') || '') ? params.get('ticket') : null;
+  const [query, setQuery] = useState('');
   const [tickets, setTickets] = useState(null);
-  const [drafts, setDrafts] = useState({});
-  const [working, setWorking] = useState(null);
-  const [error, setError] = useState(null);
+  const [ticket, setTicket] = useState(null);
+  const [draft, setDraft] = useState('');
+  const [working, setWorking] = useState(false);
+  const [listError, setListError] = useState(false);
+  const [detailError, setDetailError] = useState(false);
+  const [actionError, setActionError] = useState(null);
+  const [revision, setRevision] = useState(0);
+  const refresh = () => setRevision(count => count + 1);
 
-  async function load() {
-    setTickets(null);
-    setError(null);
-    try {
-      const r = await adminListSupportTickets(status);
-      setTickets(Array.isArray(r.tickets) ? r.tickets : []);
-    } catch (e) {
-      setError(e.code || e.message);
-      setTickets([]);
-    }
+  useEffect(() => {
+    const controller = new AbortController();
+    setListError(false);
+    adminListSupportTickets(status, { summary: true, signal: controller.signal })
+      .then(result => { if (!controller.signal.aborted) setTickets(result.tickets || []); })
+      .catch(() => { if (!controller.signal.aborted) setListError(true); });
+    return () => controller.abort();
+  }, [status, revision]);
+
+  useEffect(() => {
+    setDraft('');
+    setActionError(null);
+  }, [selectedId]);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    const controller = new AbortController();
+    setDetailError(false);
+    getJson(`/api/points/admin/support-tickets?id=${selectedId}`, { signal: controller.signal })
+      .then(result => { if (!controller.signal.aborted) setTicket(result.tickets?.[0] || null); })
+      .catch(() => { if (!controller.signal.aborted) setDetailError(true); });
+    return () => controller.abort();
+  }, [selectedId, revision]);
+
+  function updateSelection(nextStatus, nextId) {
+    setTicket(null);
+    setDetailError(false);
+    setDraft('');
+    setActionError(null);
+    setParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.set('status', nextStatus);
+      if (nextId) next.set('ticket', nextId);
+      else next.delete('ticket');
+      return next;
+    });
   }
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [status]);
-
-  function setDraft(id, value) {
-    setDrafts(d => ({ ...d, [id]: value }));
-  }
-
-  async function reply(ticket) {
-    const message = String(drafts[ticket.id] || '').trim();
-    if (message.length < 2) return;
-    setWorking(`reply-${ticket.id}`);
+  async function act(action) {
+    if (!ticket || working) return;
+    setWorking(true);
+    setActionError(null);
     try {
-      await adminReplySupportTicket({ id: ticket.id, message });
-      setDraft(ticket.id, '');
-      await load();
+      if (action === 'reply') {
+        await adminReplySupportTicket({ id: ticket.id, message: draft.trim() });
+        setDraft('');
+      } else {
+        await adminSetSupportTicketStatus({ id: ticket.id, status: action });
+      }
+      refresh();
       onQueueChange?.();
-    } catch (e) {
-      alert(`No se pudo responder: ${e.code || e.message}`);
+    } catch (error) {
+      setActionError(`No se pudo actualizar el ticket. ${error.code || error.message}`);
     } finally {
-      setWorking(null);
+      setWorking(false);
     }
   }
 
-  async function setTicketStatus(ticket, nextStatus) {
-    setWorking(`status-${ticket.id}`);
-    try {
-      await adminSetSupportTicketStatus({ id: ticket.id, status: nextStatus });
-      await load();
-      onQueueChange?.();
-    } catch (e) {
-      alert(`No se pudo actualizar el ticket: ${e.code || e.message}`);
-    } finally {
-      setWorking(null);
-    }
-  }
-
+  const rows = tickets?.filter(row => `${row.id} ${row.subject} ${row.username}`.toLowerCase().includes(query.trim().toLowerCase()));
   return (
-    <div>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-        {[
-          { id: 'open', label: 'Abiertos' },
-          { id: 'closed', label: 'Cerrados' },
-          { id: 'all', label: 'Todos' },
-        ].map(s => (
-          <button
-            key={s.id}
-            onClick={() => setStatus(s.id)}
-            style={{
-              padding: '6px 14px',
-              borderRadius: 16,
-              border: `1px solid ${status === s.id ? 'rgba(0,232,122,0.4)' : 'var(--border)'}`,
-              background: status === s.id ? 'rgba(0,232,122,0.1)' : 'transparent',
-              color: status === s.id ? 'var(--green)' : 'var(--text-secondary)',
-              fontFamily: 'var(--font-mono)',
-              fontSize: 11,
-              cursor: 'pointer',
-              letterSpacing: '0.06em',
-              textTransform: 'uppercase',
-            }}
-          >
-            {s.label}
-          </button>
-        ))}
+    <>
+      <div className="pb-admin-toolbar">
+        <div className="pb-admin-statuses">
+          {[['open', 'Abiertos'], ['closed', 'Cerrados'], ['all', 'Todos']].map(([value, label]) => (
+            <button key={value} type="button" aria-pressed={status === value} disabled={working}
+              onClick={() => { if (value !== status) setTickets(null); updateSelection(value, null); }}>{label}</button>
+          ))}
+        </div>
+        <label className="pb-admin-field">Buscar en la lista
+          <input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Usuario, asunto o ID" />
+        </label>
       </div>
-
-      {error && (
-        <p style={{ color: 'var(--red, #ef4444)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
-          Error: {error}
-        </p>
-      )}
-      {tickets === null && (
-        <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Cargando tickets...</p>
-      )}
-      {tickets && tickets.length === 0 && (
-        <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-          Sin tickets en esta categoría.
-        </p>
-      )}
-
-      {tickets && tickets.map(ticket => {
-        const messages = Array.isArray(ticket.messages) ? ticket.messages : [];
-        const isClosed = ticket.status === 'closed';
-        return (
-          <article
-            key={ticket.id}
-            style={{
-              background: 'var(--surface1)',
-              border: '1px solid var(--border)',
-              borderRadius: 12,
-              padding: '16px 18px',
-              marginBottom: 14,
-            }}
-          >
-            <header style={{
-              display: 'grid',
-              gridTemplateColumns: 'minmax(0, 1fr) auto',
-              gap: 14,
-              alignItems: 'start',
-              marginBottom: 14,
-            }}>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', marginBottom: 4 }}>
-                  #{ticket.id} · @{ticket.username || 'usuario'} · {ticket.email || 'sin correo'} · {ticket.type || 'other'}
-                </div>
-                <h3 style={{ margin: 0, fontSize: 18, color: 'var(--text-primary)' }}>
-                  {ticket.subject || 'Sin asunto'}
-                </h3>
-                <div style={{ marginTop: 6, fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)' }}>
-                  Actualizado {ticket.updatedAt ? new Date(ticket.updatedAt).toLocaleString('es-MX') : 'sin fecha'}
-                </div>
-              </div>
-              <span style={{
-                justifySelf: 'end',
-                padding: '5px 10px',
-                borderRadius: 999,
-                border: `1px solid ${isClosed ? 'var(--border)' : 'rgba(0,232,122,0.35)'}`,
-                color: isClosed ? 'var(--text-muted)' : 'var(--green)',
-                fontFamily: 'var(--font-mono)',
-                fontSize: 10,
-                textTransform: 'uppercase',
-                letterSpacing: '0.08em',
-              }}>
-                {isClosed ? 'Cerrado' : 'Abierto'}
-              </span>
-            </header>
-
-            <div style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 10,
-              marginBottom: 14,
-              maxHeight: 360,
-              overflowY: 'auto',
-              paddingRight: 4,
-            }}>
-              {messages.map(message => {
-                const isAdminMessage = message.senderType === 'admin';
-                return (
-                  <div
-                    key={message.id}
-                    style={{
-                      alignSelf: isAdminMessage ? 'flex-end' : 'flex-start',
-                      maxWidth: '82%',
-                      border: '1px solid var(--border)',
-                      borderRadius: 10,
-                      padding: '10px 12px',
-                      background: isAdminMessage ? 'rgba(0,232,122,0.06)' : 'var(--surface2)',
-                    }}
-                  >
-                    <div style={{
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: 9,
-                      letterSpacing: '0.08em',
-                      textTransform: 'uppercase',
-                      color: 'var(--text-muted)',
-                      marginBottom: 5,
-                    }}>
-                      {isAdminMessage ? `Pronos · @${message.senderUsername || 'admin'}` : `Usuario · @${ticket.username || 'usuario'}`}
-                    </div>
-                    <div style={{ color: 'var(--text-secondary)', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>
-                      {message.body}
-                    </div>
-                    <SupportTicketAttachments attachments={message.attachments} />
-                    <div style={{
-                      marginTop: 6,
-                      display: 'flex',
-                      gap: 8,
-                      flexWrap: 'wrap',
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: 9,
-                      color: 'var(--text-muted)',
-                    }}>
-                      <span>{message.createdAt ? new Date(message.createdAt).toLocaleString('es-MX') : 'sin fecha'}</span>
-                      {isAdminMessage && <span>{message.emailed ? 'enviado por correo' : 'sin correo'}</span>}
-                    </div>
+      <div className="pb-admin-queue" data-selected={Boolean(selectedId)}>
+        <section className="pb-admin-panel pb-admin-list" aria-label="Tickets">
+          <div className="pb-admin-panel-heading"><h2>Tickets</h2></div>
+          {listError ? <p className="pb-admin-message" role="alert">No se pudo cargar la lista. <button className="pb-admin-button" onClick={refresh}>Reintentar</button></p>
+            : !rows ? <p className="pb-admin-message" role="status">Cargando tickets…</p>
+              : rows.length === 0 ? <p className="pb-admin-message">Sin tickets para mostrar.</p>
+                : <div className="pb-admin-list-rows">{rows.map(row => (
+                  <button type="button" key={row.id} className="pb-admin-row pb-admin-ticket-row"
+                    aria-current={String(row.id) === selectedId} disabled={working}
+                    onClick={() => updateSelection(status, row.id)}>
+                    <span><strong>{row.subject}</strong><small>#{row.id} · @{row.username}</small></span>
+                    <small>{row.assignedTo ? `@${row.assignedTo}` : 'Sin asignar'}</small>
+                  </button>
+                ))}</div>}
+        </section>
+        <section className="pb-admin-detail" aria-label="Detalle del ticket">
+          {selectedId && <button type="button" className="pb-admin-button pb-admin-list-back" disabled={working}
+            onClick={() => updateSelection(status, null)}>← Volver a la lista</button>}
+          {!selectedId ? <p className="pb-admin-message">Selecciona un ticket para ver la conversación y el seguimiento.</p>
+            : detailError ? <p className="pb-admin-message" role="alert">No se pudo abrir el ticket. <button className="pb-admin-button" onClick={refresh}>Reintentar</button></p>
+              : String(ticket?.id) !== selectedId ? <p className="pb-admin-message" role="status">Cargando ticket…</p>
+                : <article className="pb-admin-operation">
+                  <header>
+                    <h2>{ticket.subject}</h2>
+                    <p>#{ticket.id} · {ticket.status === 'open' ? 'Abierto' : 'Cerrado'} · <a href={`/points/u/${encodeURIComponent(ticket.username)}`}>@{ticket.username}</a>
+                      {' · '}<Link to={`?tab=risk&user=${encodeURIComponent(ticket.username)}`}>Ver riesgo ↗</Link></p>
+                  </header>
+                  <div className="pb-admin-ticket-messages">
+                    {ticket.messages.map(message => (
+                      <div key={message.id} className="pb-admin-operation" data-staff={message.senderType === 'admin'}>
+                        <small>{message.senderType === 'admin' ? 'Pronos' : 'Usuario'} · @{message.senderUsername || ticket.username}
+                          {' · '}{formatAdminMarketDate(message.createdAt, { timeZone: 'America/Mexico_City' })} CDMX
+                          {message.senderType === 'admin' && <> · {message.emailed ? 'Correo enviado' : 'Sin correo'}</>}
+                        </small>
+                        <p>{message.body}</p>
+                        <SupportTicketAttachments attachments={message.attachments} />
+                      </div>
+                    ))}
                   </div>
-                );
-              })}
-            </div>
-
-            <textarea
-              value={drafts[ticket.id] || ''}
-              onChange={(e) => setDraft(ticket.id, e.target.value)}
-              rows={3}
-              maxLength={4000}
-              placeholder="Responder al usuario..."
-              style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.5, marginBottom: 10 }}
-            />
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                className="btn-primary"
-                disabled={working === `reply-${ticket.id}` || !String(drafts[ticket.id] || '').trim()}
-                onClick={() => reply(ticket)}
-                style={{ padding: '8px 14px', fontSize: 11 }}
-              >
-                Responder
-              </button>
-              {isClosed ? (
-                <button
-                  type="button"
-                  className="btn-ghost"
-                  disabled={working === `status-${ticket.id}`}
-                  onClick={() => setTicketStatus(ticket, 'open')}
-                  style={{ padding: '8px 14px', fontSize: 11 }}
-                >
-                  Reabrir
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className="btn-ghost"
-                  disabled={working === `status-${ticket.id}`}
-                  onClick={() => setTicketStatus(ticket, 'closed')}
-                  style={{ padding: '8px 14px', fontSize: 11 }}
-                >
-                  Cerrar
-                </button>
-              )}
-            </div>
-          </article>
-        );
-      })}
-    </div>
+                  <form className="pb-admin-case-note" onSubmit={event => { event.preventDefault(); act('reply'); }}>
+                    <label className="pb-admin-field">Respuesta para el usuario
+                      <textarea rows={3} value={draft} minLength={2} maxLength={4000} required disabled={working}
+                        onChange={event => setDraft(event.target.value)} />
+                    </label>
+                    <div className="pb-admin-tools">
+                      <button type="submit" className="pb-admin-button pb-admin-primary" disabled={working || draft.trim().length < 2}>Enviar respuesta</button>
+                      <button type="button" className="pb-admin-button" disabled={working}
+                        onClick={() => act(ticket.status === 'closed' ? 'open' : 'closed')}>{ticket.status === 'closed' ? 'Reabrir ticket' : 'Cerrar ticket'}</button>
+                    </div>
+                  </form>
+                  {actionError && <p className="pb-admin-error" role="alert">{actionError}</p>}
+                  <AdminCasePanel key={ticket.id} kind="support" subject={ticket.id} onChange={refresh} />
+                </article>}
+        </section>
+      </div>
+    </>
   );
 }
 
-// ─── Create market form ──────────────────────────────────────────────────────
-// Two mode axes:
-//   - `mode`: Binario (N=2) or Múltiple (N=3..10) — controls the outcome editor.
-//   - `ammMode`: Unificado (one pool, N-outcome CPMM) or Paralelo
-//     (Polymarket-style: one binary Sí/No market per outcome grouped under
-//     a parent row). Only meaningful for Múltiple; Binario is locked to
-//     Unificado since the two modes are equivalent at N=2.
 function CreateMarketForm({ prefill }) {
   const [mode, setMode] = useState('binary'); // 'binary' | 'multi'
   const [ammMode, setAmmMode] = useState('unified'); // 'unified' | 'parallel'
@@ -3558,274 +3374,83 @@ function ParallelLegEarlyNoControls({ market, workingLegId, onResolveNo }) {
 }
 
 // ─── Markets table ───────────────────────────────────────────────────────────
-function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
-  const [markets, setMarkets] = useState(null);
-  const [filter, setFilter] = useState('all');
-  const [categoryFilter, setCategoryFilter] = useState('all');
-  const [sportFilter, setSportFilter] = useState('all');
-  const [leagueFilter, setLeagueFilter] = useState('all');
-  const [cryptoTypeFilter, setCryptoTypeFilter] = useState('all');
-  const [geoFilter, setGeoFilter] = useState('all');
-  const [topicFilter, setTopicFilter] = useState('all');
-  const [curationFilter, setCurationFilter] = useState('all');
-  const [loading, setLoading] = useState(true);
-  const [resolving, setResolving] = useState(null);
-  const [correcting, setCorrecting] = useState(null);
+function MarketsTable({ onQueueChange }) {
+  const queue = useAdminQueueFilters();
+  const filter = queue.status;
+  const query = marketQueueQuery(queue);
+  if (filter === 'active') query.set('open_only', '1');
+  const { rows: markets, setRows: setMarkets, loading, error, reload: load } = useAdminQueueData(
+    `/api/points/admin/markets?${query}`, 'markets',
+  );
+  const [settlement, setSettlement] = useState(null);
+  const [settlementNotice, setSettlementNotice] = useState(null);
   const [reviewingCandidate, setReviewingCandidate] = useState(null);
-  const [canceling, setCanceling] = useState(null);
   const [reopening, setReopening] = useState(null);
   const [autoResolving, setAutoResolving] = useState(false);
   const [hidingMarkets, setHidingMarkets] = useState(false);
-  const [homeMarketVisibility, setHomeMarketVisibility] = useState(normalizeHomeMarketVisibility());
+  const [visibilityError, setVisibilityError] = useState(null);
   // When non-null, render the edit modal for this market.
   const [editing, setEditing] = useState(null);
   const [appending, setAppending] = useState(null);
   const [converting, setConverting] = useState(null);
   const [resolvingLegNo, setResolvingLegNo] = useState(null);
 
-  const showSportFilters = categoryFilter === 'deportes';
-  const showCryptoFilters = categoryFilter === 'crypto';
-  const showGeoFilters = categoryFilter === 'mexico';
-  const showTopicFilters = categoryFilter === 'mexico' || categoryFilter === 'musica';
-  const showLeagueFilters = showSportFilters
-    && (sportFilter === 'soccer' || sportFilter === 'baseball' || sportFilter === 'combate');
-  const activeTopicFilters = categoryFilter === 'musica'
-    ? ADMIN_ENTERTAINMENT_TOPIC_FILTERS
-    : ADMIN_MEXICO_TOPIC_FILTERS;
-  const activeLeagueFilters = sportFilter === 'baseball'
-    ? ADMIN_BASEBALL_LEAGUES
-    : sportFilter === 'combate'
-      ? ADMIN_COMBATE_LEAGUES
-      : ADMIN_SOCCER_LEAGUES;
+  function reviewSettlement(action, market, selection, candidate) {
+    setSettlementNotice(null);
+    setSettlement({
+      action,
+      market,
+      candidate,
+      indexes: action === 'cancel' ? [] : normalizeOutcomeSelection(selection),
+      initialScore: action === 'candidate' ? candidate.finalScore || '' : market.finalScore || '',
+    });
+  }
 
-  async function load() {
-    setLoading(true);
-    try {
-      const q = buildAdminMarketsQuery({
-        status: filter,
-        categoryFilter,
-        sportFilter,
-        leagueFilter,
-        cryptoTypeFilter,
-        geoFilter,
-        topicFilter,
+  async function applySettlement({ finalScore, reason, expectedResolvedAt, expectedCandidate, expectedMarket }) {
+    const { action, market, indexes, candidate } = settlement;
+    const body = { marketId: market.id, winningOutcomeIndexes: indexes, finalScore };
+    let result;
+    if (action === 'resolve') {
+      result = await postJson('/api/points/admin/resolve-market', { ...body, expectedMarket });
+    } else if (action === 'correct') {
+      result = await adminCorrectResolution({ marketId: market.id, winningOutcomeIndex: indexes, finalScore, reason, expectedResolvedAt, expectedMarket });
+    } else if (action === 'cancel') {
+      result = await adminCancelMarket({ marketId: market.id, reason });
+    } else {
+      result = await adminReviewResolutionCandidate({
+        candidateId: candidate.id, action: 'confirm', outcomeIndex: indexes[0], finalScore, expectedCandidate,
       });
-      const [r, visibility] = await Promise.all([
-        getJson(`/api/points/admin/markets?${q.toString()}`),
-        adminBulkHideMarkets({ dry: true, mode: 'points' }),
-      ]);
-      setMarkets(r.markets || []);
-      setHomeMarketVisibility(normalizeHomeMarketVisibility(visibility));
-    } catch (e) {
-      setMarkets([]);
-    } finally {
-      setLoading(false);
     }
-  }
-
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [
-    filter,
-    categoryFilter,
-    sportFilter,
-    leagueFilter,
-    cryptoTypeFilter,
-    geoFilter,
-    topicFilter,
-  ]);
-
-  function selectCategoryFilter(next) {
-    setCategoryFilter(next);
-    setSportFilter('all');
-    setLeagueFilter('all');
-    setCryptoTypeFilter('all');
-    setGeoFilter('all');
-    setTopicFilter('all');
-  }
-
-  function selectSportFilter(next) {
-    setSportFilter(next);
-    if (next !== 'soccer' && next !== 'baseball' && next !== 'combate') {
-      setLeagueFilter('all');
+    if (action === 'cancel') {
+      setSettlementNotice(`Mercado #${market.id} anulado. Reembolso total de ${Number(result.totalRefunded || 0).toLocaleString('es-MX', { maximumFractionDigits: 6 })} MXNP.`);
+    } else if (action === 'correct') {
+      setSettlementNotice(`Resultado de #${market.id} corregido. ${result.reversedCount || 0} cobros revertidos.`);
+    } else {
+      setSettlementNotice(`Mercado #${market.id} resuelto.`);
     }
-  }
-
-  async function resolveMarket(marketOrId, winningOutcomeIndex, finalScore = '') {
-    const market = marketOrId && typeof marketOrId === 'object' ? marketOrId : null;
-    const marketId = market?.id || marketOrId;
-    const winningOutcomeIndexes = normalizeOutcomeSelection(winningOutcomeIndex);
-    const primaryOutcomeIndex = winningOutcomeIndexes[0];
-    setResolving(marketId);
-    try {
-      await postJson('/api/points/admin/resolve-market', {
-        marketId,
-        winningOutcomeIndex: primaryOutcomeIndex,
-        ...(winningOutcomeIndexes.length > 1 ? { winningOutcomeIndexes } : {}),
-        finalScore,
-      });
-      // In-place patch instead of refetching the whole list — the
-      // refetch would scroll the page back to the top and lose the
-      // admin's place when they're working through a stack of
-      // por-resolver candidates. Optimistically flip status to
-      // resolved + write the winning outcome locally; on the next
-      // explicit refresh / filter change the API state will be loaded.
-      setMarkets(prev => (prev || []).map(m => m.id === marketId ? {
-        ...m,
-        status: 'resolved',
-        outcome: primaryOutcomeIndex,
-        finalScore: finalScore.trim() || null,
-        resolvedAt: new Date().toISOString(),
-        parallelLegs: Array.isArray(m.parallelLegs)
-          ? m.parallelLegs.map((leg, index) => ({
-              ...leg,
-              status: 'resolved',
-              outcome: winningOutcomeIndexes.includes(index) ? 0 : 1,
-              resolvedAt: new Date().toISOString(),
-            }))
-          : m.parallelLegs,
-      } : m));
-      onQueueChange?.();
-    } catch (e) {
-      alert(`No se pudo resolver: ${e.code || e.message}${e.detail ? '\n' + e.detail : ''}`);
-    } finally {
-      setResolving(null);
-    }
-  }
-
-  async function correctResolution(market, winningOutcomeIndex) {
-    if (!market?.id || market.status !== 'resolved') return;
-    const outcomes = Array.isArray(market.outcomes) ? market.outcomes : [];
-    const winningOutcomeIndexes = normalizeOutcomeSelection(winningOutcomeIndex);
-    const primaryOutcomeIndex = winningOutcomeIndexes[0];
-    const labels = outcomeLabelsForIndexes(outcomes, winningOutcomeIndexes);
-    const ok = window.confirm(
-      `¿Cambiar resolución de "${market.question}" a "${labels}"?\n\n`
-      + 'Se revertirán cobros que ahora sean perdedores y los ganadores correctos podrán cobrar.',
-    );
-    if (!ok) return;
-
-    const reason = window.prompt('Motivo de la corrección', 'Corrección manual de resolución');
-    if (reason === null) return;
-    const defaultFinalScore = market.finalScore
-      || (winningOutcomeIndexes.length > 1 ? `Nominados: ${labels}` : '');
-    const finalScore = window.prompt('Resultado final mostrado (opcional)', defaultFinalScore);
-    if (finalScore === null) return;
-
-    setCorrecting(market.id);
-    try {
-      const result = await adminCorrectResolution({
-        marketId: market.id,
-        winningOutcomeIndex: winningOutcomeIndexes.length > 1 ? winningOutcomeIndexes : primaryOutcomeIndex,
-        reason,
-        finalScore,
-      });
-      const winnerSet = new Set(winningOutcomeIndexes);
-      setMarkets(prev => (prev || []).map((m) => {
-        if (m.id !== market.id) return m;
-        const nextLegs = Array.isArray(m.parallelLegs)
-          ? m.parallelLegs.map((leg, index) => ({
-              ...leg,
-              status: 'resolved',
-              outcome: winnerSet.has(index) ? 0 : 1,
-              resolvedAt: new Date().toISOString(),
-            }))
-          : m.parallelLegs;
-        return {
-          ...m,
-          status: 'resolved',
-          outcome: primaryOutcomeIndex,
-          resolvedAt: new Date().toISOString(),
-          finalScore: result?.finalScore ?? m.finalScore,
-          parallelLegs: nextLegs,
-        };
-      }));
-      const reversed = Number(result?.reversedTotal || 0);
-      alert(
-        `Resolución corregida.\n`
-        + `Cobros revertidos: ${result?.reversedCount || 0}\n`
-        + `MXNP revertidos: ${reversed.toLocaleString('es-MX', { maximumFractionDigits: 2 })}`,
-      );
-      onQueueChange?.();
-    } catch (e) {
-      alert(`No se pudo corregir: ${e.code || e.message}${e.detail ? '\n' + e.detail : ''}`);
-    } finally {
-      setCorrecting(null);
-    }
+    if (editing?.id === market.id) setEditing(null);
+    // Re-read the canonical result, including any parallel legs that were already settled.
+    load();
+    onQueueChange?.();
   }
 
   async function reviewResolutionCandidate(market, candidate, action, outcomeIndex = null) {
     if (!candidate?.id || !market?.id) return;
-    const selectedOutcome = outcomeIndex == null ? candidate.outcomeIndex : outcomeIndex;
-    if (action === 'confirm' && !Number.isInteger(selectedOutcome)) {
-      alert('Elige un resultado antes de confirmar.');
+    const selectedOutcome = outcomeIndex ?? candidate.outcomeIndex;
+    if (action === 'confirm') {
+      if (Number.isInteger(selectedOutcome)) reviewSettlement('candidate', market, selectedOutcome, candidate);
       return;
     }
-    const verb = action === 'confirm' ? 'confirmar' : 'negar';
-    const label = action === 'confirm'
-      ? (market.outcomes?.[selectedOutcome] || `Resultado ${Number(selectedOutcome) + 1}`)
-      : 'la sugerencia';
-    if (!window.confirm(`¿${verb[0].toUpperCase()}${verb.slice(1)} ${label} para "${market.question}"?`)) return;
-
+    if (!window.confirm(`¿Negar la sugerencia para "${market.question}"?`)) return;
     setReviewingCandidate(candidate.id);
     try {
-      await adminReviewResolutionCandidate({
-        candidateId: candidate.id,
-        action,
-        outcomeIndex: action === 'confirm' ? selectedOutcome : null,
-      });
-      setMarkets(prev => (prev || []).flatMap((m) => {
-        if (m.id !== market.id) return [m];
-        const next = action === 'confirm'
-          ? {
-              ...m,
-              status: 'resolved',
-              outcome: selectedOutcome,
-              resolvedAt: new Date().toISOString(),
-              finalScore: candidate.finalScore || m.finalScore,
-              resolutionCandidate: null,
-            }
-          : { ...m, resolutionCandidate: null };
-        return (filter === 'pending' && action === 'confirm') ? [] : [next];
-      }));
+      await adminReviewResolutionCandidate({ candidateId: candidate.id, action: 'deny' });
+      load();
       onQueueChange?.();
-    } catch (e) {
-      alert(`No se pudo ${verb}: ${e.code || e.message}${e.detail ? '\n' + e.detail : ''}`);
+    } catch (error) {
+      setSettlementNotice(`No se pudo negar la sugerencia. ${error.code || error.message}`);
     } finally {
       setReviewingCandidate(null);
-    }
-  }
-
-  async function cancelMarket(market) {
-    if (!market?.id) return false;
-    const ok = window.confirm(
-      `¿Anular "${market.question}"?\n\n`
-      + 'Se devolverá el costo base de las posiciones abiertas y el mercado ya no contará como ganado o perdido.',
-    );
-    if (!ok) return false;
-    setCanceling(market.id);
-    try {
-      const result = await adminCancelMarket({
-        marketId: market.id,
-        reason: 'Mercado anulado: el evento no ocurrió',
-      });
-      const refunded = Number(result?.totalRefunded || 0);
-      setMarkets(prev => (prev || []).flatMap((m) => {
-        if (m.id !== market.id) return [m];
-        const next = {
-          ...m,
-          status: 'canceled',
-          outcome: null,
-          resolvedAt: new Date().toISOString(),
-        };
-        return (filter === 'all' || filter === 'canceled') ? [next] : [];
-      }));
-      onQueueChange?.();
-      alert(`Mercado anulado. Devuelto: ${refunded.toFixed(2)} MXNP.`);
-      return true;
-    } catch (e) {
-      alert(`No se pudo anular: ${e.code || e.message}${e.detail ? '\n' + e.detail : ''}`);
-      return false;
-    } finally {
-      setCanceling(null);
     }
   }
 
@@ -3881,7 +3506,7 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
         },
       } : m));
       alert('Mercado convertido a binario.');
-      await load();
+      load();
     } catch (e) {
       alert(`No se pudo convertir: ${convertParallelToBinaryErrorDetail(e)}`);
     } finally {
@@ -3991,10 +3616,10 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
 
   async function toggleHomeMarketsVisibility() {
     setHidingMarkets(true);
+    setVisibilityError(null);
     try {
       const preview = await adminBulkHideMarkets({ dry: true, mode: 'points' });
       const visibility = normalizeHomeMarketVisibility(preview);
-      setHomeMarketVisibility(visibility);
       const action = visibility.suggestedAction;
       const isShowing = action === 'show';
       const count = Number((isShowing ? preview?.wouldShowCount : preview?.wouldHideCount) || 0);
@@ -4017,7 +3642,7 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
         mode: 'points',
         expectedCount: count,
       });
-      await load();
+      load();
       alert(isShowing
         ? `✓ Mercados visibles otra vez: ${result.shownCount || count}.`
         : `✓ Ocultos de listas públicas: ${result.hiddenCount || count}. Los 🏆 siguen visibles.`);
@@ -4025,7 +3650,7 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
       const detail = e.detail?.liveCount != null
         ? `\nConteo cambió: ahora hay ${e.detail.liveCount}. Intenta otra vez.`
         : '';
-      alert(`No se pudo actualizar visibilidad: ${e.code || e.message}${detail}`);
+      setVisibilityError(`No se pudo actualizar la visibilidad. ${detail || 'Vuelve a intentar.'}`);
     } finally {
       setHidingMarkets(false);
     }
@@ -4091,7 +3716,7 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
         + (deferredSample ? `\nEjemplos diferidos:\n${deferredSample}\n` : '')
         + (errorSample ? `\nEjemplos de errores:\n${errorSample}` : ''),
       );
-      await load();
+      load();
       onQueueChange?.();
     } catch (e) {
       alert(`Auto-resolver falló: ${e.code || e.message}${e.detail ? '\n' + e.detail : ''}`);
@@ -4100,266 +3725,59 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
     }
   }
 
-  const homeVisibilityAction = homeMarketVisibility.suggestedAction === 'show' ? 'show' : 'hide';
-  const isShowingHomeMarkets = homeVisibilityAction === 'show';
-  const homeVisibilityButtonLabel = hidingMarkets
-    ? (isShowingHomeMarkets ? 'Mostrando…' : 'Ocultando…')
-    : (isShowingHomeMarkets ? 'Mostrar mercados' : 'Ocultar mercados');
-
   return (
     <div>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-        {[
-          { key: 'all',      label: 'Todos' },
-          { key: 'active',   label: 'Activos' },
-          { key: 'pending',  label: 'Por resolver' },
-          { key: 'resolved', label: 'Resueltos' },
-          { key: 'canceled', label: 'Anulados' },
-        ].map(s => {
-          const taskCount = s.key === 'pending' ? pendingResolveCount : 0;
-          return (
-            <button
-              key={s.key}
-              onClick={() => setFilter(s.key)}
-              style={{
-                padding: '6px 14px',
-                borderRadius: 16,
-                border: `1px solid ${filter === s.key ? 'rgba(0,232,122,0.4)' : 'var(--border)'}`,
-                background: filter === s.key ? 'rgba(0,232,122,0.1)' : 'transparent',
-                color: filter === s.key ? 'var(--green)' : 'var(--text-secondary)',
-                fontFamily: 'var(--font-mono)', fontSize: 11, cursor: 'pointer',
-                letterSpacing: '0.06em', textTransform: 'uppercase',
-                display: 'inline-flex', alignItems: 'center', gap: 8,
-              }}
-            >
-              {s.label}
-              {taskCount > 0 && (
-                <span style={{
-                  minWidth: 18,
-                  height: 18,
-                  padding: '0 5px',
-                  borderRadius: 999,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  background: 'rgba(245,158,11,0.16)',
-                  border: '1px solid rgba(245,158,11,0.45)',
-                  color: '#f59e0b',
-                  fontSize: 10,
-                  letterSpacing: 0,
-                  lineHeight: 1,
-                }}>
-                  {taskCount > 99 ? '99+' : taskCount}
-                </span>
-              )}
-            </button>
-          );
-        })}
-
-        {/* Run the auto-resolver now — surfaced only on the Por
-            resolver view since that's where candidates live. Vercel
-            cron only runs on production, so this is the canonical
-            path on a preview URL. */}
-        {filter === 'pending' && (
-          <button
-            onClick={runAutoResolveNow}
-            disabled={autoResolving}
-            title="Ejecuta el auto-resolver ahora (el cron solo corre en producción, no en preview)"
-            style={{
-              marginLeft: 'auto',
-              padding: '6px 14px',
-              borderRadius: 16,
-              border: '1px solid rgba(245,158,11,0.4)',
-              background: 'rgba(245,158,11,0.1)',
-              color: '#f59e0b',
-              fontFamily: 'var(--font-mono)', fontSize: 11,
-              letterSpacing: '0.06em', textTransform: 'uppercase',
-              cursor: autoResolving ? 'not-allowed' : 'pointer',
-              opacity: autoResolving ? 0.5 : 1,
-              fontWeight: 600,
-            }}
-          >
-            {autoResolving ? 'Resolviendo…' : 'Resolver ahora'}
-          </button>
-        )}
-
-        <button
-          onClick={toggleHomeMarketsVisibility}
-          disabled={hidingMarkets}
-          title={isShowingHomeMarkets
-            ? 'Vuelve a mostrar los mercados activos en las listas públicas.'
-            : 'Oculta todos los mercados activos de las listas públicas. Los mercados con 🏆 siguen visibles.'}
-          style={{
-            marginLeft: filter === 'pending' ? 0 : 'auto',
-            padding: '6px 14px',
-            borderRadius: 16,
-            border: isShowingHomeMarkets ? '1px solid rgba(0,232,122,0.38)' : '1px solid rgba(239,68,68,0.4)',
-            background: isShowingHomeMarkets ? 'rgba(0,232,122,0.10)' : 'rgba(239,68,68,0.10)',
-            color: isShowingHomeMarkets ? 'var(--green)' : 'var(--red, #ef4444)',
-            fontFamily: 'var(--font-mono)', fontSize: 11,
-            letterSpacing: '0.06em', textTransform: 'uppercase',
-            cursor: hidingMarkets ? 'not-allowed' : 'pointer',
-            opacity: hidingMarkets ? 0.5 : 1,
-            fontWeight: 600,
-          }}
-        >
-          {homeVisibilityButtonLabel}
-        </button>
-      </div>
-
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-        {MARKET_CATEGORY_FILTERS.map(c => (
-          <button
-            key={c.key}
-            onClick={() => selectCategoryFilter(c.key)}
-            style={{
-              padding: '6px 12px',
-              borderRadius: 16,
-              border: `1px solid ${categoryFilter === c.key ? 'rgba(0,232,122,0.4)' : 'var(--border)'}`,
-              background: categoryFilter === c.key ? 'rgba(0,232,122,0.1)' : 'transparent',
-              color: categoryFilter === c.key ? 'var(--green)' : 'var(--text-secondary)',
-              fontFamily: 'var(--font-mono)',
-              fontSize: 11,
-              cursor: 'pointer',
-              letterSpacing: '0.04em',
-            }}
-          >
-            {c.label}
-          </button>
-        ))}
-      </div>
-
-      {showGeoFilters && (
-        <>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-            {ADMIN_GEO_FILTERS.map(g => (
-              <button
-                key={g.key}
-                onClick={() => setGeoFilter(g.key)}
-                style={{
-                  padding: '6px 12px',
-                  borderRadius: 16,
-                  border: `1px solid ${geoFilter === g.key ? 'rgba(0,232,122,0.4)' : 'var(--border)'}`,
-                  background: geoFilter === g.key ? 'rgba(0,232,122,0.1)' : 'transparent',
-                  color: geoFilter === g.key ? 'var(--green)' : 'var(--text-secondary)',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 11,
-                  cursor: 'pointer',
-                  letterSpacing: '0.04em',
-                }}
-              >
-                {g.label}
+      <AdminQueueToolbar queue={queue}>
+        <details className="pb-admin-tools-wrap">
+          <summary>Herramientas de mercados</summary>
+          <div className="pb-admin-tools">
+            {filter === 'pending' && (
+              <button className="pb-admin-button" type="button" onClick={runAutoResolveNow} disabled={autoResolving}>
+                {autoResolving ? 'Resolviendo…' : 'Ejecutar el resolver'}
               </button>
-            ))}
+            )}
+            <button className="pb-admin-button" type="button" onClick={toggleHomeMarketsVisibility} disabled={hidingMarkets}>
+              {hidingMarkets ? 'Consultando…' : 'Revisar visibilidad pública'}
+            </button>
+            <p className="pb-admin-tools-note">Revisa cuántos mercados se mostrarán u ocultarán antes de confirmar.</p>
           </div>
-        </>
-      )}
+          {visibilityError && <p className="pb-admin-message pb-admin-error" role="alert">{visibilityError}</p>}
+        </details>
+      </AdminQueueToolbar>
 
-      {showTopicFilters && (
-        <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-          {activeTopicFilters.map(t => (
-            <button
-              key={t.key}
-              onClick={() => setTopicFilter(t.key)}
-              style={{
-                padding: '5px 10px',
-                borderRadius: 14,
-                border: `1px solid ${topicFilter === t.key ? 'rgba(0,232,122,0.4)' : 'var(--border)'}`,
-                background: topicFilter === t.key ? 'rgba(0,232,122,0.1)' : 'transparent',
-                color: topicFilter === t.key ? 'var(--green)' : 'var(--text-secondary)',
-                fontFamily: 'var(--font-mono)',
-                fontSize: 10,
-                cursor: 'pointer',
-                letterSpacing: '0.04em',
-              }}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {showSportFilters && (
-        <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-          {ADMIN_SPORT_FILTERS.map(s => (
-            <button
-              key={s.key}
-              onClick={() => selectSportFilter(s.key)}
-              style={{
-                padding: '6px 12px',
-                borderRadius: 16,
-                border: `1px solid ${sportFilter === s.key ? 'rgba(0,232,122,0.4)' : 'var(--border)'}`,
-                background: sportFilter === s.key ? 'rgba(0,232,122,0.1)' : 'transparent',
-                color: sportFilter === s.key ? 'var(--green)' : 'var(--text-secondary)',
-                fontFamily: 'var(--font-mono)',
-                fontSize: 11,
-                cursor: 'pointer',
-                letterSpacing: '0.04em',
-              }}
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {showLeagueFilters && (
-        <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-          {activeLeagueFilters.map(l => (
-            <button
-              key={l.key}
-              onClick={() => setLeagueFilter(l.key)}
-              style={{
-                padding: '5px 10px',
-                borderRadius: 14,
-                border: `1px solid ${leagueFilter === l.key ? 'rgba(0,232,122,0.4)' : 'var(--border)'}`,
-                background: leagueFilter === l.key ? 'rgba(0,232,122,0.1)' : 'transparent',
-                color: leagueFilter === l.key ? 'var(--green)' : 'var(--text-secondary)',
-                fontFamily: 'var(--font-mono)',
-                fontSize: 10,
-                cursor: 'pointer',
-                letterSpacing: '0.04em',
-              }}
-            >
-              {l.label}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {showCryptoFilters && (
-        <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-          {ADMIN_CRYPTO_FILTERS.map(c => (
-            <button
-              key={c.key}
-              onClick={() => setCryptoTypeFilter(c.key)}
-              style={{
-                padding: '6px 12px',
-                borderRadius: 16,
-                border: `1px solid ${cryptoTypeFilter === c.key ? 'rgba(0,232,122,0.4)' : 'var(--border)'}`,
-                background: cryptoTypeFilter === c.key ? 'rgba(0,232,122,0.1)' : 'transparent',
-                color: cryptoTypeFilter === c.key ? 'var(--green)' : 'var(--text-secondary)',
-                fontFamily: 'var(--font-mono)',
-                fontSize: 11,
-                cursor: 'pointer',
-                letterSpacing: '0.04em',
-              }}
-            >
-              {c.label}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {loading && <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Cargando…</p>}
-      {!loading && markets?.length === 0 && (
-        <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-          Sin mercados en esta categoría.
-        </p>
-      )}
-
-      {!loading && markets?.map(m => (
+      {settlementNotice && <p className="pb-admin-message" role="status">{settlementNotice}</p>}
+      <AdminMarketQueue rows={markets} loading={loading} error={error} onRetry={load}>
+        {m => (
         <div key={m.id} className="points-admin-market-card">
+          <div className="points-admin-market-main">
+            <h2 className="points-admin-market-title">{m.question}</h2>
+            <AdminMarketFacts market={m} />
+            {m.status === 'active' && (
+              <ResolverStatus key={m.id} market={m} onChange={() => { load(); onQueueChange?.(); }} />
+            )}
+            <p className="pb-admin-tools-note">
+              {m.tradeCount ?? 0} operaciones · Liquidez inicial {Number(m.seedLiquidity || 0).toLocaleString('es-MX')} MXNP
+              {m.seriesMeta?.subtitle && <> · {m.seriesMeta.subtitle}</>}
+            </p>
+            <ParallelLegEarlyNoControls
+              market={m}
+              workingLegId={resolvingLegNo}
+              onResolveNo={resolveParallelLegNo}
+            />
+            {m.resolutionCandidate && (
+              <ResolutionCandidatePanel
+                market={m}
+                candidate={m.resolutionCandidate}
+                reviewing={reviewingCandidate === m.resolutionCandidate.id}
+                onReview={(action, outcomeIndex) => reviewResolutionCandidate(
+                  m,
+                  m.resolutionCandidate,
+                  action,
+                  outcomeIndex,
+                )}
+              />
+            )}
+          </div>
           <div className="points-admin-market-toggles">
           {/* 🔥 Featured toggle — controls whether this market appears
               on home Trending in addition to its category page. */}
@@ -4439,37 +3857,6 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
             🧪
           </button>
           </div>
-          <div className="points-admin-market-main">
-            <div className="points-admin-market-meta">
-              <MarketAdminMeta market={m} />
-            </div>
-            <div className="points-admin-market-title">
-              {m.question}
-            </div>
-            {m.status === 'active' && m.resolutionReadiness?.mode !== 'automatic' && m.resolutionReadiness && (
-              <p style={{ margin: '6px 0', color: 'var(--text-muted)', fontSize: 12 }}>
-                {m.resolutionReadiness.label}. {m.resolutionReadiness.requirement}
-              </p>
-            )}
-            <ParallelLegEarlyNoControls
-              market={m}
-              workingLegId={resolvingLegNo}
-              onResolveNo={resolveParallelLegNo}
-            />
-            {m.resolutionCandidate && (
-              <ResolutionCandidatePanel
-                market={m}
-                candidate={m.resolutionCandidate}
-                reviewing={reviewingCandidate === m.resolutionCandidate.id}
-                onReview={(action, outcomeIndex) => reviewResolutionCandidate(
-                  m,
-                  m.resolutionCandidate,
-                  action,
-                  outcomeIndex,
-                )}
-              />
-            )}
-          </div>
           <div className="points-admin-market-actions">
           {m.status === 'active' ? (
             <>
@@ -4537,8 +3924,7 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
               )}
               {filter === 'pending' && (
                 <button
-                  onClick={() => cancelMarket(m)}
-                  disabled={canceling === m.id}
+                  onClick={() => reviewSettlement('cancel', m)}
                   title="Anular el mercado y devolver el costo base de las posiciones abiertas"
                   style={{
                     padding: '6px 10px',
@@ -4548,20 +3934,19 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
                     color: 'var(--red, #ef4444)',
                     fontFamily: 'var(--font-mono)',
                     fontSize: 11,
-                    cursor: canceling === m.id ? 'not-allowed' : 'pointer',
+                    cursor: 'pointer',
                     letterSpacing: '0.04em',
                     textTransform: 'uppercase',
-                    opacity: canceling === m.id ? 0.55 : 1,
                   }}
                 >
-                  {canceling === m.id ? 'Anulando…' : 'Anular mercado'}
+                  Anular mercado
                 </button>
               )}
               {m.resolutionCandidate ? null : (
                 <ResolveControls
                   market={m}
-                  resolving={resolving === m.id}
-                  onResolve={(winnerIndex, finalScore) => resolveMarket(m, winnerIndex, finalScore)}
+                  onResolve={winnerIndex => reviewSettlement('resolve', m, winnerIndex)}
+                  buttonLabel="Revisar resolución"
                   multiple={m.ammMode === 'parallel'}
                 />
               )}
@@ -4626,8 +4011,7 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
               </span>
               <ResolveControls
                 market={m}
-                resolving={correcting === m.id}
-                onResolve={(winnerIndex) => correctResolution(m, winnerIndex)}
+                onResolve={winnerIndex => reviewSettlement('correct', m, winnerIndex)}
                 initialSelected={resolvedOutcomeIndexes(m)}
                 actionLabel="Cambiar a"
                 busyLabel="Corrigiendo…"
@@ -4638,16 +4022,18 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
           )}
           </div>
         </div>
-      ))}
+        )}
+      </AdminMarketQueue>
 
+      {settlement && <SettlementReview {...settlement} onConfirm={applySettlement} onClose={stale => { setSettlement(null); if (stale) load(); }} />}
       {editing && (
         <EditMarketModal
           market={editing}
-          onCancel={cancelMarket}
+          onCancel={market => reviewSettlement('cancel', market)}
           onClose={() => setEditing(null)}
           onSaved={async () => {
             setEditing(null);
-            await load();
+            load();
           }}
         />
       )}
@@ -4657,7 +4043,7 @@ function MarketsTable({ onQueueChange, pendingResolveCount = 0 }) {
           onClose={() => setAppending(null)}
           onSaved={async () => {
             setAppending(null);
-            await load();
+            load();
           }}
         />
       )}
@@ -5022,14 +4408,7 @@ function EditMarketModal({ market, onClose, onSaved, onCancel }) {
 
   async function runPrimaryAction() {
     if (actionMode === 'cancel') {
-      setSaving(true);
-      setErr(null);
-      const ok = await onCancel?.(market);
-      if (ok) {
-        await onSaved?.();
-        return;
-      }
-      setSaving(false);
+      onCancel?.(market);
       return;
     }
     await save();
@@ -5715,7 +5094,7 @@ function resolvedOutcomeLabel(market) {
 
 function FinalResultField({ value, onChange, disabled }) {
   return (
-    <label style={{ display: 'flex', flexDirection: 'column', gap: 5, flexBasis: '100%', margin: '8px 0', fontSize: 11, color: 'var(--text-secondary)' }}>
+    <label style={{ display: 'flex', flexDirection: 'column', gap: 5, fontSize: 11, color: 'var(--text-secondary)' }}>
       Resultado final (banner público, opcional)
       <input
         type="text"
@@ -5723,8 +5102,8 @@ function FinalResultField({ value, onChange, disabled }) {
         onChange={(event) => onChange(event.target.value)}
         disabled={disabled}
         maxLength={240}
-        placeholder="Ej. México 3-2 Brasil · Inflación: 3.8%"
-        style={{ width: '100%', minWidth: 180, padding: '8px 10px', borderRadius: 8, background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
+        placeholder="Ej. México 3-2 Brasil"
+        style={{ width: '100%', padding: '8px 10px', borderRadius: 8, background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
       />
       <span>Se muestra en la tarjeta del mercado y en su página. Déjalo vacío para ocultarlo.</span>
     </label>
@@ -5746,11 +5125,6 @@ function ResolveControls({
     .filter(index => index < outcomes.length);
   const normalizedInitial = safeInitial.length > 0 ? safeInitial : [0];
   const [selected, setSelected] = useState(normalizedInitial);
-  const [finalScore, setFinalScore] = useState(market.finalScore || '');
-
-  useEffect(() => {
-    setFinalScore(market.finalScore || '');
-  }, [market.id, market.finalScore]);
 
   useEffect(() => {
     setSelected(normalizedInitial);
@@ -5771,7 +5145,7 @@ function ResolveControls({
   }
 
   return (
-    <>
+    <div className="pb-admin-resolve-form">
       {multiple ? (
         <div className="points-admin-resolve-options">
           {outcomes.map((label, i) => {
@@ -5801,6 +5175,7 @@ function ResolveControls({
         </div>
       ) : (
         <select
+          aria-label="Resultado ganador"
           value={primarySelected}
           onChange={(e) => setSelected([Number(e.target.value)])}
           disabled={resolving}
@@ -5823,18 +5198,15 @@ function ResolveControls({
           ))}
         </select>
       )}
-      {market.status === 'active' && (
-        <FinalResultField value={finalScore} onChange={setFinalScore} disabled={resolving} />
-      )}
       <button
-        onClick={() => onResolve(multiple ? selected : primarySelected, finalScore)}
+        onClick={() => onResolve(multiple ? selected : primarySelected)}
         disabled={resolving}
         className="btn-primary"
         style={{ padding: '6px 12px', fontSize: 11 }}
       >
         {resolving ? busyLabel : (buttonLabel || `${actionLabel} ${selectedLabel || '—'}`)}
       </button>
-    </>
+    </div>
   );
 }
 
@@ -7339,105 +6711,15 @@ function StrategiesPanel() {
 // points_pending_markets. Admin triages them here: Aprobar copies the
 // spec into points_markets via the API; Rechazar just marks the row so
 // re-runs of the generator skip the same source_event_id.
-function PendingMarketsTable({ onQueueChange }) {
-  const [rows, setRows] = useState(null);
-  const [filter, setFilter] = useState('pending');
-  const [categoryFilter, setCategoryFilter] = useState('all');
-  const [sportFilter, setSportFilter] = useState('all');
-  const [leagueFilter, setLeagueFilter] = useState('all');
-  const [cryptoTypeFilter, setCryptoTypeFilter] = useState('all');
-  const [geoFilter, setGeoFilter] = useState('all');
-  const [topicFilter, setTopicFilter] = useState('all');
-  const [curationFilter, setCurationFilter] = useState('all');
-  const [loading, setLoading] = useState(true);
-  const [busyId, setBusyId] = useState(null);
+function MarketAutomationTools() {
   const [bulkBusy, setBulkBusy] = useState(false);
   const [generatingNow, setGeneratingNow] = useState(false);
-  const [err, setErr] = useState(null);
-  const [editingPending, setEditingPending] = useState(null);
   const [cryptoInterval, setCryptoInterval] = useState(5);
   const [cryptoIntervalOptions, setCryptoIntervalOptions] = useState(DEFAULT_CRYPTO_INTERVAL_OPTIONS);
   const [cryptoAssets, setCryptoAssets] = useState(DEFAULT_CRYPTO_ASSET_OPTIONS);
   const [cryptoIntervalLoading, setCryptoIntervalLoading] = useState(false);
   const [cryptoIntervalSaving, setCryptoIntervalSaving] = useState(false);
   const [cryptoIntervalError, setCryptoIntervalError] = useState(null);
-
-  const showSportFilters = categoryFilter === 'deportes';
-  const showCryptoFilters = categoryFilter === 'crypto';
-  const showGeoFilters = categoryFilter === 'mexico';
-  const showTopicFilters = categoryFilter === 'mexico' || categoryFilter === 'musica';
-  const showLeagueFilters = showSportFilters
-    && (sportFilter === 'soccer' || sportFilter === 'baseball' || sportFilter === 'combate');
-  const activeTopicFilters = categoryFilter === 'musica'
-    ? ADMIN_ENTERTAINMENT_TOPIC_FILTERS
-    : ADMIN_MEXICO_TOPIC_FILTERS;
-  const activeLeagueFilters = sportFilter === 'baseball'
-    ? ADMIN_BASEBALL_LEAGUES
-    : sportFilter === 'combate'
-      ? ADMIN_COMBATE_LEAGUES
-      : ADMIN_SOCCER_LEAGUES;
-
-  function pendingFiltersPayload() {
-    const filters = {};
-    if (categoryFilter !== 'all') filters.category = categoryFilter;
-    if (categoryFilter === 'deportes' && sportFilter !== 'all') filters.sport = sportFilter;
-    if (showLeagueFilters && leagueFilter !== 'all') filters.league = leagueFilter;
-    if (categoryFilter === 'crypto' && cryptoTypeFilter !== 'all') filters.crypto_type = cryptoTypeFilter;
-    if (categoryFilter === 'mexico' && geoFilter !== 'all') filters.geo = geoFilter;
-    if ((categoryFilter === 'mexico' || categoryFilter === 'musica') && topicFilter !== 'all') filters.topic = topicFilter;
-    if (curationFilter !== 'all') filters.feature = curationFilter;
-    return filters;
-  }
-
-  function selectCategoryFilter(next) {
-    setCategoryFilter(next);
-    setSportFilter('all');
-    setLeagueFilter('all');
-    setCryptoTypeFilter('all');
-    setGeoFilter('all');
-    setTopicFilter('all');
-  }
-
-  function selectSportFilter(next) {
-    setSportFilter(next);
-    if (next !== 'soccer' && next !== 'baseball' && next !== 'combate') {
-      setLeagueFilter('all');
-    }
-  }
-
-  async function load() {
-    setLoading(true);
-    setErr(null);
-    try {
-      const q = buildAdminMarketsQuery({
-        status: filter,
-        categoryFilter,
-        sportFilter,
-        leagueFilter,
-        cryptoTypeFilter,
-        geoFilter,
-        topicFilter,
-        featureFilter: curationFilter,
-      });
-      const r = await adminListPendingMarkets(q);
-      setRows(r.pending || []);
-    } catch (e) {
-      setRows([]);
-      setErr(e.code || e.message);
-    } finally {
-      setLoading(false);
-    }
-  }
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [
-    filter,
-    categoryFilter,
-    sportFilter,
-    leagueFilter,
-    cryptoTypeFilter,
-    geoFilter,
-    topicFilter,
-    curationFilter,
-  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -7515,6 +6797,265 @@ function PendingMarketsTable({ onQueueChange }) {
     }
   }
 
+  async function runGenerators() {
+    if (!confirm('¿Ejecutar todos los generadores ahora? Inserta/actualiza filas en la cola de pendientes.')) {
+      return;
+    }
+    setGeneratingNow(true);
+    setBulkBusy(true);
+    try {
+      const r = await adminRunGenerators({ dry: false });
+      const counts = Object.entries(r.sources || {})
+        .filter(([, v]) => v.count > 0)
+        .map(([k, v]) => `${k}:${v.count}`)
+        .join(' · ') || '(sin eventos)';
+      alert(`✓ Generación completa.\nInsertados: ${r.inserted} · Actualizados: ${r.updated} · Saltados: ${r.skipped}\n${counts}`);
+    } catch (e) {
+      alert(`Generar falló: ${e.code || e.message}`);
+    } finally {
+      setGeneratingNow(false);
+      setBulkBusy(false);
+    }
+  }
+
+  async function backfillResolvers() {
+    setBulkBusy(true);
+    try {
+      const preview = await adminBackfillResolvers({ dry: true });
+      const n = preview.candidateCount || 0;
+      if (n === 0) {
+        alert('No hay mercados que necesiten retrofit. Todo al día.');
+        return;
+      }
+      const translationN = preview.translationCandidates || 0;
+      const translationBreakdown = preview.translationCandidateBreakdown || {};
+      const translationLine = translationN > 0
+        ? `\nTraducciones: ${translationN} (${translationBreakdown.approved || 0} aprobados · ${translationBreakdown.pending || 0} pendientes)`
+        : '';
+      if (!confirm(`Retrofit: ${n} registros recibirán resolver + sport/league + logos + traducciones donde falten.${translationLine}\nContinuar?`)) {
+        return;
+      }
+      const r = await adminBackfillResolvers({ dry: false });
+      const breakdown = Object.entries(r.patchCounts || r.byResolverType || {})
+        .map(([k, v]) => `${k}: ${v}`)
+        .join(' · ');
+      const translations = r.translationsBackfilled || {};
+      const translationsLine = translations.updatedCount
+        ? `\nTraducciones: ${translations.updatedCount} (${translations.approvedCount || 0} aprobados · ${translations.pendingCount || 0} pendientes)`
+        : '';
+      alert(`✓ ${r.updatedMarketsCount ?? r.updatedCount} mercados actualizados.\n${breakdown}${translationsLine}`);
+    } catch (e) {
+      alert(`Retrofit falló: ${e.code || e.message}`);
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  // Toggle the 🔥 featured flag on a PENDING row. Carries into the
+  // created market at approval time. Optimistic update; rolls back
+  // on server rejection.
+  async function showResolveDiagnostic() {
+    try {
+      const r = await adminResolveDiagnostic();
+      const s = r.summary || {};
+      const sample = (r.missingResolver || []).slice(0, 5)
+        .map(x => `#${x.id} · ${x.question?.slice(0, 48)}`)
+        .join('\n');
+      alert(
+        `Estado de resolución (activos: ${r.totalActive})\n\n`
+        + `Listos para resolver (cron debería tomarlos): ${s.resolvable}\n`
+        + `Esperando fin de ventana: ${s.waitingWindow}\n`
+        + `Sin resolver_type (correr Retrofit): ${s.missingResolver}\n`
+        + `Manuales (admin resuelve): ${s.manual}\n`
+        + (sample ? `\nEjemplos sin resolver:\n${sample}` : ''),
+      );
+    } catch (e) {
+      alert(`Diagnóstico falló: ${e.code || e.message}`);
+    }
+  }
+
+  return (
+    <section className="pb-admin-panel pb-admin-toolbar">
+      <div className="pb-admin-panel-heading">
+        <div>
+          <h2>Automatización de mercados</h2>
+          <p>Generación de propuestas, ventanas de crypto y diagnóstico.</p>
+        </div>
+      </div>
+      <div className="pb-admin-tools">
+      {/* Generate now — runs every pipeline and upserts. Same code
+          path as the daily cron; useful on preview deploys (which
+          Vercel doesn't cron) and after editing entertainment-config. */}
+      <button
+        onClick={runGenerators}
+        disabled={bulkBusy}
+        title="Ejecuta todos los generadores y hace upsert en la cola pendiente"
+        style={{
+
+          padding: '6px 14px',
+          borderRadius: 16,
+          border: '1px solid rgba(59,130,246,0.4)',
+          background: 'rgba(59,130,246,0.1)',
+          color: '#3b82f6',
+          fontFamily: 'var(--font-mono)', fontSize: 11,
+          letterSpacing: '0.06em', textTransform: 'uppercase',
+          cursor: bulkBusy ? 'not-allowed' : 'pointer',
+          opacity: bulkBusy ? 0.5 : 1,
+          fontWeight: 600,
+        }}
+      >
+        {generatingNow ? 'Generando...' : 'Generar propuestas'}
+      </button>
+
+      <label
+        title="Define la duración de las próximas ventanas automáticas de Bitcoin y Ethereum"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: '5px 10px',
+          borderRadius: 16,
+          border: '1px solid rgba(255,92,0,0.35)',
+          background: 'rgba(255,92,0,0.08)',
+          color: 'var(--orange)',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 11,
+          letterSpacing: '0.06em',
+          textTransform: 'uppercase',
+          opacity: cryptoIntervalLoading ? 0.6 : 1,
+        }}
+      >
+        BTC/ETH
+        <select
+          value={cryptoInterval}
+          disabled={cryptoIntervalLoading || cryptoIntervalSaving}
+          onChange={(e) => saveCryptoInterval(e.target.value)}
+          style={{
+            minWidth: 96,
+            border: '1px solid var(--border)',
+            borderRadius: 12,
+            background: 'var(--surface2)',
+            color: 'var(--text-primary)',
+            padding: '4px 8px',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            outline: 'none',
+            cursor: (cryptoIntervalLoading || cryptoIntervalSaving) ? 'not-allowed' : 'pointer',
+          }}
+        >
+          {cryptoIntervalOptions.map(option => (
+            <option key={option.minutes} value={option.minutes}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <span style={{
+          width: 1,
+          alignSelf: 'stretch',
+          background: 'rgba(255,255,255,0.12)',
+        }} />
+        {cryptoAssets.map(asset => (
+          <span
+            key={asset.key}
+            title={`${asset.enabled !== false ? 'Activo' : 'Desactivado'}: ${asset.name || asset.label}`}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 5,
+              color: asset.enabled !== false ? 'var(--text-primary)' : 'var(--text-muted)',
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={asset.enabled !== false}
+              disabled={cryptoIntervalLoading || cryptoIntervalSaving}
+              onChange={(e) => saveCryptoAssetToggle(asset.key, e.target.checked)}
+              style={{
+                width: 13,
+                height: 13,
+                accentColor: 'var(--orange)',
+                cursor: (cryptoIntervalLoading || cryptoIntervalSaving) ? 'not-allowed' : 'pointer',
+              }}
+            />
+            {asset.label}
+          </span>
+        ))}
+      </label>
+
+      {cryptoIntervalError && (
+        <span style={{
+          color: 'var(--red)',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 11,
+          letterSpacing: '0.04em',
+        }}>
+          No se pudo guardar intervalo
+        </span>
+      )}
+
+      {/* Retrofit resolvers — one-shot migration for markets
+          approved before the auto-resolver code landed. Also fills
+          bilingual market copy on pending/approved generated rows. */}
+      <button
+        onClick={backfillResolvers}
+        disabled={bulkBusy}
+        title="Copia resolver_type + resolver_config + sport/league + logos y traducciones donde falten"
+        style={{
+          padding: '6px 14px',
+          borderRadius: 16,
+          border: '1px solid var(--border)',
+          background: 'transparent',
+          color: 'var(--text-secondary)',
+          fontFamily: 'var(--font-mono)', fontSize: 11,
+          letterSpacing: '0.06em', textTransform: 'uppercase',
+          cursor: bulkBusy ? 'not-allowed' : 'pointer',
+          opacity: bulkBusy ? 0.5 : 1,
+        }}
+      >
+        Completar configuración de resolvers
+      </button>
+
+      {/* Resolver diagnostic — read-only "why aren't my markets
+          resolving?" report. Buckets active markets into
+          resolvable / waiting / missing-resolver / manual. */}
+      <button
+        onClick={showResolveDiagnostic}
+        disabled={bulkBusy}
+        title="Diagnóstico: estado de la cola auto-resolver"
+        style={{
+          padding: '6px 14px',
+          borderRadius: 16,
+          border: '1px solid var(--border)',
+          background: 'transparent',
+          color: 'var(--text-secondary)',
+          fontFamily: 'var(--font-mono)', fontSize: 11,
+          letterSpacing: '0.06em', textTransform: 'uppercase',
+          cursor: bulkBusy ? 'not-allowed' : 'pointer',
+          opacity: bulkBusy ? 0.5 : 1,
+        }}
+      >
+        Diagnóstico de resolución
+      </button>
+
+      </div>
+    </section>
+  );
+}
+
+function PendingMarketsTable({ onQueueChange }) {
+  const queue = useAdminQueueFilters(true);
+  const filter = queue.status;
+  const query = marketQueueQuery(queue).toString();
+  const { rows, setRows, loading, error, reload: load } = useAdminQueueData(
+    `/api/points/admin/pending-markets?${query}`, 'pending',
+  );
+  const [busyId, setBusyId] = useState(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [editingPending, setEditingPending] = useState(null);
+  const [bulkReview, setBulkReview] = useState(null);
+  const [bulkResult, setBulkResult] = useState(null);
+  useEffect(() => { setBulkReview(null); setBulkResult(null); }, [query]);
+
   async function review(id, action) {
     setBusyId(id);
     try {
@@ -7582,15 +7123,15 @@ function PendingMarketsTable({ onQueueChange }) {
   }
 
   async function refreshAllPricing() {
-    const pendingCount = rows?.filter(r => r.status === 'pending').length || 0;
-    if (pendingCount === 0) return;
-    if (!confirm(`¿Buscar odds para hasta ${Math.min(pendingCount, 100)} mercados pendientes?`)) {
+    const ids = (rows || []).filter(row => row.status === 'pending').slice(0, 100).map(row => row.id);
+    if (!ids.length) return;
+    if (!confirm(`¿Buscar cuotas externas para ${ids.length} propuestas de esta vista?`)) {
       return;
     }
     setBulkBusy(true);
     try {
-      const r = await adminRefreshAllPendingPricing(pendingFiltersPayload());
-      await load();
+      const r = await adminRefreshAllPendingPricing({ ids });
+      load();
       alert(
         `✓ Odds revisados: ${r.refreshedCount || 0}/${r.checked || 0}.\n`
         + `Con Polymarket: ${r.foundExternalCount || 0}.\n`
@@ -7604,87 +7145,46 @@ function PendingMarketsTable({ onQueueChange }) {
     }
   }
 
+  async function reviewBulkApproval() {
+    const proposals = (rows || []).filter(row => row.status === 'pending');
+    if (!proposals.length) return;
+    setBulkResult(null);
+    setBulkBusy(true);
+    try {
+      const ids = proposals.map(row => row.id);
+      const { checks } = await postJson('/api/points/admin/pending-markets', {
+        action: 'approve_all', filters: { ids }, preview: true,
+      });
+      if (!Array.isArray(checks)) throw new Error('verification_unavailable');
+      const questions = new Map(proposals.map(row => [row.id, row.question]));
+      setBulkReview({ query, checks, questions, missing: proposals.length - checks.length });
+    } catch {
+      setBulkResult({ error: 'No se pudo verificar el lote. Vuelve a intentarlo.' });
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
   async function approveAll() {
-    const pendingCount = rows?.filter(r => r.status === 'pending').length || 0;
-    if (pendingCount === 0) return;
-    if (!confirm(`¿Aprobar los ${pendingCount} mercados pendientes? Se crearán todos con la seed y modo sugeridos.`)) {
-      return;
-    }
+    const ids = bulkReview.checks.filter(row => !row.checks.some(issue => issue.severity === 'block'))
+      .map(row => row.id);
+    if (!ids.length) return;
     setBulkBusy(true);
     try {
-      const r = await adminApproveAllPendingMarkets(null, pendingFiltersPayload());
-      await load();
-      const msg = r.failedCount > 0
-        ? `Aprobados ${r.approvedCount} de ${r.checked}. ${r.failedCount} fallaron — revisa el historial.`
-        : `✓ ${r.approvedCount} mercados aprobados.`;
-      alert(msg);
+      const result = await adminApproveAllPendingMarkets(null, { ids });
+      setBulkReview(null);
+      setBulkResult(result);
+      load();
       onQueueChange?.();
-    } catch (e) {
-      alert(`Aprobar todos falló: ${e.code || e.message}`);
+    } catch {
+      setBulkResult({ error: 'No se pudo publicar el lote. Actualiza la lista antes de volver a intentarlo.' });
+      setBulkReview(null);
+      load();
     } finally {
       setBulkBusy(false);
     }
   }
 
-  async function runGenerators() {
-    if (!confirm('¿Ejecutar todos los generadores ahora? Inserta/actualiza filas en la cola de pendientes.')) {
-      return;
-    }
-    setGeneratingNow(true);
-    setBulkBusy(true);
-    try {
-      const r = await adminRunGenerators({ dry: false });
-      await load();
-      const counts = Object.entries(r.sources || {})
-        .filter(([, v]) => v.count > 0)
-        .map(([k, v]) => `${k}:${v.count}`)
-        .join(' · ') || '(sin eventos)';
-      alert(`✓ Generación completa.\nInsertados: ${r.inserted} · Actualizados: ${r.updated} · Saltados: ${r.skipped}\n${counts}`);
-      onQueueChange?.();
-    } catch (e) {
-      alert(`Generar falló: ${e.code || e.message}`);
-    } finally {
-      setGeneratingNow(false);
-      setBulkBusy(false);
-    }
-  }
-
-  async function backfillResolvers() {
-    setBulkBusy(true);
-    try {
-      const preview = await adminBackfillResolvers({ dry: true });
-      const n = preview.candidateCount || 0;
-      if (n === 0) {
-        alert('No hay mercados que necesiten retrofit. Todo al día.');
-        return;
-      }
-      const translationN = preview.translationCandidates || 0;
-      const translationBreakdown = preview.translationCandidateBreakdown || {};
-      const translationLine = translationN > 0
-        ? `\nTraducciones: ${translationN} (${translationBreakdown.approved || 0} aprobados · ${translationBreakdown.pending || 0} pendientes)`
-        : '';
-      if (!confirm(`Retrofit: ${n} registros recibirán resolver + sport/league + logos + traducciones donde falten.${translationLine}\nContinuar?`)) {
-        return;
-      }
-      const r = await adminBackfillResolvers({ dry: false });
-      const breakdown = Object.entries(r.patchCounts || r.byResolverType || {})
-        .map(([k, v]) => `${k}: ${v}`)
-        .join(' · ');
-      const translations = r.translationsBackfilled || {};
-      const translationsLine = translations.updatedCount
-        ? `\nTraducciones: ${translations.updatedCount} (${translations.approvedCount || 0} aprobados · ${translations.pendingCount || 0} pendientes)`
-        : '';
-      alert(`✓ ${r.updatedMarketsCount ?? r.updatedCount} mercados actualizados.\n${breakdown}${translationsLine}`);
-    } catch (e) {
-      alert(`Retrofit falló: ${e.code || e.message}`);
-    } finally {
-      setBulkBusy(false);
-    }
-  }
-
-  // Toggle the 🔥 featured flag on a PENDING row. Carries into the
-  // created market at approval time. Optimistic update; rolls back
-  // on server rejection.
   async function togglePendingFeatured(row) {
     const next = !row.pendingFeatured;
     setRows(prev => (prev || []).map(r =>
@@ -7719,377 +7219,61 @@ function PendingMarketsTable({ onQueueChange }) {
     }
   }
 
-  async function showResolveDiagnostic() {
-    try {
-      const r = await adminResolveDiagnostic();
-      const s = r.summary || {};
-      const sample = (r.missingResolver || []).slice(0, 5)
-        .map(x => `#${x.id} · ${x.question?.slice(0, 48)}`)
-        .join('\n');
-      alert(
-        `Estado de resolución (activos: ${r.totalActive})\n\n`
-        + `Listos para resolver (cron debería tomarlos): ${s.resolvable}\n`
-        + `Esperando fin de ventana: ${s.waitingWindow}\n`
-        + `Sin resolver_type (correr Retrofit): ${s.missingResolver}\n`
-        + `Manuales (admin resuelve): ${s.manual}\n`
-        + (sample ? `\nEjemplos sin resolver:\n${sample}` : ''),
-      );
-    } catch (e) {
-      alert(`Diagnóstico falló: ${e.code || e.message}`);
-    }
-  }
-
-  function renderFilterGroup(options, value, onSelect, { compact = false } = {}) {
-    return (
-      <div style={{ display: 'flex', gap: 8, marginBottom: compact ? 12 : 16, flexWrap: 'wrap', alignItems: 'center' }}>
-        {options.map(option => (
-          <button
-            key={option.key}
-            onClick={() => onSelect(option.key)}
-            style={{
-              padding: compact ? '5px 10px' : '6px 12px',
-              borderRadius: compact ? 14 : 16,
-              border: `1px solid ${value === option.key ? 'rgba(0,232,122,0.4)' : 'var(--border)'}`,
-              background: value === option.key ? 'rgba(0,232,122,0.1)' : 'transparent',
-              color: value === option.key ? 'var(--green)' : 'var(--text-secondary)',
-              fontFamily: 'var(--font-mono)',
-              fontSize: compact ? 10 : 11,
-              cursor: 'pointer',
-              letterSpacing: '0.04em',
-            }}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
-    );
-  }
-
-  const pendingCurationFilters = [
-    { key: 'all', label: 'Todos', title: 'Mostrar todos los mercados pendientes de esta vista' },
-    { key: 'featured', label: '🔥', title: 'Mostrar solo mercados marcados para Trending' },
-    { key: 'tournament', label: '🏆', title: 'Mostrar solo mercados marcados para torneo' },
-  ];
-  const pendingCount = rows?.filter(r => r.status === 'pending').length || 0;
-
+  const pendingCount = rows?.filter(row => row.status === 'pending').length || 0;
+  const currentBulkReview = bulkReview?.query === query ? bulkReview : null;
+  const publishable = currentBulkReview?.checks.filter(row => !row.checks.some(issue => issue.severity === 'block')).length || 0;
   return (
     <div>
-      <div style={{
-        display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap',
-        alignItems: 'center',
-      }}>
-        {[
-          { key: 'pending',  label: 'Pendientes' },
-          { key: 'approved', label: 'Aprobados' },
-          { key: 'rejected', label: 'Rechazados' },
-          { key: 'all',      label: 'Todos' },
-        ].map(s => (
-          <button
-            key={s.key}
-            onClick={() => setFilter(s.key)}
-            style={{
-              padding: '6px 14px',
-              borderRadius: 16,
-              border: `1px solid ${filter === s.key ? 'rgba(0,232,122,0.4)' : 'var(--border)'}`,
-              background: filter === s.key ? 'rgba(0,232,122,0.1)' : 'transparent',
-              color: filter === s.key ? 'var(--green)' : 'var(--text-secondary)',
-              fontFamily: 'var(--font-mono)', fontSize: 11, cursor: 'pointer',
-              letterSpacing: '0.06em', textTransform: 'uppercase',
-            }}
-          >
-            {s.label}
-          </button>
-        ))}
-
-        {/* Bulk approve — only renders on the Pending view when there's
-            something to approve. Backend processes per-row txns so one
-            bad spec doesn't undo the rest. */}
+      <AdminQueueToolbar queue={queue} proposal>
         {filter === 'pending' && pendingCount > 0 && (
-          <button
-            onClick={approveAll}
-            disabled={bulkBusy}
-            title={`Aprobar los ${pendingCount} mercados pendientes de un jalón`}
-            style={{
-              marginLeft: 'auto',
-              padding: '6px 14px',
-              borderRadius: 16,
-              border: '1px solid rgba(0,232,122,0.45)',
-              background: 'rgba(0,232,122,0.14)',
-              color: 'var(--green)',
-              fontFamily: 'var(--font-mono)', fontSize: 11,
-              letterSpacing: '0.06em', textTransform: 'uppercase',
-              cursor: bulkBusy ? 'not-allowed' : 'pointer',
-              opacity: bulkBusy ? 0.5 : 1,
-              fontWeight: 600,
-            }}
-          >
-            {bulkBusy ? `Aprobando ${pendingCount}…` : `✓ Aprobar todos (${pendingCount})`}
-          </button>
+          <details className="pb-admin-tools-wrap">
+            <summary>Acciones en lote</summary>
+            <div className="pb-admin-tools">
+              <button className="pb-admin-button" type="button" onClick={refreshAllPricing} disabled={bulkBusy || busyId != null}>
+                Buscar cuotas
+              </button>
+              <button className="pb-admin-button" type="button" onClick={reviewBulkApproval} disabled={bulkBusy || busyId != null}>
+                Revisar aprobación ({pendingCount})
+              </button>
+              <p className="pb-admin-tools-note">Solo incluye las propuestas de los resultados actuales.</p>
+            </div>
+          </details>
         )}
-
-        {filter === 'pending' && pendingCount > 0 && (
-          <button
-            onClick={refreshAllPricing}
-            disabled={bulkBusy}
-            title={`Buscar odds externos para hasta ${Math.min(pendingCount, 100)} mercados pendientes`}
-            style={{
-              marginLeft: (filter === 'pending' && pendingCount > 0) ? 0 : 'auto',
-              padding: '6px 14px',
-              borderRadius: 16,
-              border: '1px solid rgba(255,92,0,0.45)',
-              background: 'rgba(255,92,0,0.1)',
-              color: 'var(--orange)',
-              fontFamily: 'var(--font-mono)', fontSize: 11,
-              letterSpacing: '0.06em', textTransform: 'uppercase',
-              cursor: bulkBusy ? 'not-allowed' : 'pointer',
-              opacity: bulkBusy ? 0.5 : 1,
-              fontWeight: 600,
-            }}
-          >
-            {bulkBusy ? 'Buscando odds…' : 'Buscar odds'}
-          </button>
-        )}
-
-        {/* Generate now — runs every pipeline and upserts. Same code
-            path as the daily cron; useful on preview deploys (which
-            Vercel doesn't cron) and after editing entertainment-config. */}
-        <button
-          onClick={runGenerators}
-          disabled={bulkBusy}
-          title="Ejecuta todos los generadores y hace upsert en la cola pendiente"
-          style={{
-            marginLeft: (filter === 'pending' && pendingCount > 0) ? 0 : 'auto',
-            padding: '6px 14px',
-            borderRadius: 16,
-            border: '1px solid rgba(59,130,246,0.4)',
-            background: 'rgba(59,130,246,0.1)',
-            color: '#3b82f6',
-            fontFamily: 'var(--font-mono)', fontSize: 11,
-            letterSpacing: '0.06em', textTransform: 'uppercase',
-            cursor: bulkBusy ? 'not-allowed' : 'pointer',
-            opacity: bulkBusy ? 0.5 : 1,
-            fontWeight: 600,
-          }}
-        >
-          {generatingNow ? 'Generando...' : '🔄 Generar ahora'}
-        </button>
-
-        <label
-          title="Define la duración de las próximas ventanas automáticas de Bitcoin y Ethereum"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            padding: '5px 10px',
-            borderRadius: 16,
-            border: '1px solid rgba(255,92,0,0.35)',
-            background: 'rgba(255,92,0,0.08)',
-            color: 'var(--orange)',
-            fontFamily: 'var(--font-mono)',
-            fontSize: 11,
-            letterSpacing: '0.06em',
-            textTransform: 'uppercase',
-            opacity: cryptoIntervalLoading ? 0.6 : 1,
-          }}
-        >
-          BTC/ETH
-          <select
-            value={cryptoInterval}
-            disabled={cryptoIntervalLoading || cryptoIntervalSaving}
-            onChange={(e) => saveCryptoInterval(e.target.value)}
-            style={{
-              minWidth: 96,
-              border: '1px solid var(--border)',
-              borderRadius: 12,
-              background: 'var(--surface2)',
-              color: 'var(--text-primary)',
-              padding: '4px 8px',
-              fontFamily: 'var(--font-mono)',
-              fontSize: 11,
-              outline: 'none',
-              cursor: (cryptoIntervalLoading || cryptoIntervalSaving) ? 'not-allowed' : 'pointer',
-            }}
-          >
-            {cryptoIntervalOptions.map(option => (
-              <option key={option.minutes} value={option.minutes}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <span style={{
-            width: 1,
-            alignSelf: 'stretch',
-            background: 'rgba(255,255,255,0.12)',
-          }} />
-          {cryptoAssets.map(asset => (
-            <span
-              key={asset.key}
-              title={`${asset.enabled !== false ? 'Activo' : 'Desactivado'}: ${asset.name || asset.label}`}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 5,
-                color: asset.enabled !== false ? 'var(--text-primary)' : 'var(--text-muted)',
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={asset.enabled !== false}
-                disabled={cryptoIntervalLoading || cryptoIntervalSaving}
-                onChange={(e) => saveCryptoAssetToggle(asset.key, e.target.checked)}
-                style={{
-                  width: 13,
-                  height: 13,
-                  accentColor: 'var(--orange)',
-                  cursor: (cryptoIntervalLoading || cryptoIntervalSaving) ? 'not-allowed' : 'pointer',
-                }}
-              />
-              {asset.label}
-            </span>
-          ))}
-        </label>
-
-        {cryptoIntervalError && (
-          <span style={{
-            color: 'var(--red)',
-            fontFamily: 'var(--font-mono)',
-            fontSize: 11,
-            letterSpacing: '0.04em',
-          }}>
-            No se pudo guardar intervalo
-          </span>
-        )}
-
-        {/* Retrofit resolvers — one-shot migration for markets
-            approved before the auto-resolver code landed. Also fills
-            bilingual market copy on pending/approved generated rows. */}
-        <button
-          onClick={backfillResolvers}
-          disabled={bulkBusy}
-          title="Copia resolver_type + resolver_config + sport/league + logos y traducciones donde falten"
-          style={{
-            padding: '6px 14px',
-            borderRadius: 16,
-            border: '1px solid var(--border)',
-            background: 'transparent',
-            color: 'var(--text-secondary)',
-            fontFamily: 'var(--font-mono)', fontSize: 11,
-            letterSpacing: '0.06em', textTransform: 'uppercase',
-            cursor: bulkBusy ? 'not-allowed' : 'pointer',
-            opacity: bulkBusy ? 0.5 : 1,
-          }}
-        >
-          🔧 Retrofit resolvers
-        </button>
-
-        {/* Resolver diagnostic — read-only "why aren't my markets
-            resolving?" report. Buckets active markets into
-            resolvable / waiting / missing-resolver / manual. */}
-        <button
-          onClick={showResolveDiagnostic}
-          disabled={bulkBusy}
-          title="Diagnóstico: estado de la cola auto-resolver"
-          style={{
-            padding: '6px 14px',
-            borderRadius: 16,
-            border: '1px solid var(--border)',
-            background: 'transparent',
-            color: 'var(--text-secondary)',
-            fontFamily: 'var(--font-mono)', fontSize: 11,
-            letterSpacing: '0.06em', textTransform: 'uppercase',
-            cursor: bulkBusy ? 'not-allowed' : 'pointer',
-            opacity: bulkBusy ? 0.5 : 1,
-          }}
-        >
-          🩺 Diagnóstico resolver
-        </button>
-
-      </div>
-
-      <div style={{
-        display: 'flex',
-        gap: 8,
-        marginBottom: 16,
-        flexWrap: 'wrap',
-        alignItems: 'center',
-      }}>
-        {pendingCurationFilters.map(option => {
-          const selected = curationFilter === option.key;
-          const activeColor = option.key === 'tournament'
-            ? 'rgba(250,204,21,0.58)'
-            : option.key === 'featured'
-              ? 'rgba(245,158,11,0.5)'
-              : 'rgba(0,232,122,0.4)';
-          const activeBg = option.key === 'tournament'
-            ? 'rgba(250,204,21,0.16)'
-            : option.key === 'featured'
-              ? 'rgba(245,158,11,0.15)'
-              : 'rgba(0,232,122,0.1)';
-          const activeText = option.key === 'tournament'
-            ? '#facc15'
-            : option.key === 'featured'
-              ? '#f59e0b'
-              : 'var(--green)';
-          return (
-            <button
-              key={option.key}
-              onClick={() => setCurationFilter(option.key)}
-              title={option.title}
-              aria-label={option.title}
-              style={{
-                minWidth: option.key === 'all' ? 78 : 42,
-                height: 32,
-                padding: option.key === 'all' ? '6px 14px' : '0 12px',
-                borderRadius: 16,
-                border: `1px solid ${selected ? activeColor : 'var(--border)'}`,
-                background: selected ? activeBg : 'transparent',
-                color: selected ? activeText : 'var(--text-secondary)',
-                fontFamily: 'var(--font-mono)',
-                fontSize: option.key === 'all' ? 11 : 16,
-                cursor: 'pointer',
-                letterSpacing: option.key === 'all' ? '0.06em' : 0,
-                textTransform: option.key === 'all' ? 'uppercase' : 'none',
-                lineHeight: 1,
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                filter: selected || option.key === 'all' ? 'none' : 'grayscale(1)',
-                opacity: selected || option.key === 'all' ? 1 : 0.5,
-              }}
-            >
-              {option.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {renderFilterGroup(MARKET_CATEGORY_FILTERS, categoryFilter, selectCategoryFilter)}
-      {showGeoFilters && renderFilterGroup(ADMIN_GEO_FILTERS, geoFilter, setGeoFilter, { compact: true })}
-      {showTopicFilters && renderFilterGroup(activeTopicFilters, topicFilter, setTopicFilter, { compact: true })}
-      {showSportFilters && renderFilterGroup(ADMIN_SPORT_FILTERS, sportFilter, selectSportFilter, { compact: true })}
-      {showLeagueFilters && renderFilterGroup(activeLeagueFilters, leagueFilter, setLeagueFilter, { compact: true })}
-      {showCryptoFilters && renderFilterGroup(ADMIN_CRYPTO_FILTERS, cryptoTypeFilter, setCryptoTypeFilter, { compact: true })}
-
-      <p style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', marginBottom: 16, lineHeight: 1.6 }}>
-        El agente (cron diario <code>/api/cron/generate-markets-pending</code>) descubre eventos
-        y los deja aquí para revisión. Aprobar crea el mercado con odds/liquidez sugeridos
-        usando el modo AMM sugerido. Rechazar lo deja marcado — la siguiente corrida lo omite por
-        <code> (source, source_event_id)</code>.
-      </p>
-
-      {loading && <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Cargando…</p>}
-      {err && (
-        <p style={{ color: 'var(--red, #ef4444)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
-          Error: {err}
+      </AdminQueueToolbar>
+      {bulkResult && <section className="pb-admin-operation" role="status">
+        {bulkResult.error ? <p>{bulkResult.error}</p> : <>
+          <strong>{bulkResult.approvedCount} publicados de {bulkResult.checked} revisados</strong>
+          {bulkResult.failures?.length > 0 && <ul className="pb-admin-checks">
+            {bulkResult.failures.map(failure => <li key={failure.pendingId}>
+              #{failure.pendingId} · {approvalIssueLabels[failure.error] || failure.error}
+              {failure.detail && ` · ${failure.detail}`}
+            </li>)}
+          </ul>}
+        </>}
+      </section>}
+      {currentBulkReview && <section className="pb-admin-operation" aria-label="Verificación del lote">
+        <h3>Verificación del lote</h3>
+        <p>{publishable} listas para publicar · {currentBulkReview.checks.length - publishable} bloqueadas
+          {currentBulkReview.missing > 0 && ` · ${currentBulkReview.missing} ya no están pendientes`}
         </p>
-      )}
-      {!loading && rows?.length === 0 && (
-        <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-          Nada en esta lista.
-        </p>
-      )}
+        {currentBulkReview.checks.some(row => row.checks.length) && <ul className="pb-admin-checks">
+          {currentBulkReview.checks.filter(row => row.checks.length > 0).map(row => <li key={row.id}>
+            <strong>#{row.id} · {currentBulkReview.questions.get(row.id)}</strong>
+            <ul>{row.checks.map(issue => <li key={`${issue.code}-${issue.marketId || ''}`}>
+              {issue.severity === 'block' ? 'Bloquea' : 'Revisar'} · {approvalIssueLabels[issue.code] || issue.code}
+              {issue.marketId && ` · #${issue.marketId}`}
+            </li>)}</ul>
+          </li>)}
+        </ul>}
+        <div className="pb-admin-tools">
+          <button className="pb-admin-button" type="button" disabled={bulkBusy} onClick={() => setBulkReview(null)}>Volver</button>
+          <button className="pb-admin-button pb-admin-primary" type="button" disabled={bulkBusy || busyId != null || publishable === 0}
+            onClick={approveAll}>Publicar {publishable} propuestas</button>
+        </div>
+      </section>}
 
-      {!loading && rows?.map(r => {
+      <AdminMarketQueue rows={rows} proposal loading={loading} error={error} onRetry={load}>
+        {r => {
         const isPending = r.status === 'pending';
         const isRejected = r.status === 'rejected';
         const suggestedOdds = formatSuggestedPricing(r);
@@ -8098,8 +7282,16 @@ function PendingMarketsTable({ onQueueChange }) {
           <div key={r.id} className="points-admin-pending-card">
             <div className="points-admin-pending-review">
               <div className="points-admin-pending-main">
-                <div className="points-admin-pending-title">
-                  {r.question}
+                <h2 className="points-admin-pending-title">{r.question}</h2>
+                <AdminMarketFacts market={r} proposal />
+                <div className="pb-admin-proposal-pricing">
+                  Opciones ({Array.isArray(r.outcomes) ? r.outcomes.length : 0}): {formatOutcomeList(r.outcomes)}
+                  {' · Liquidez: '}
+                  {Array.isArray(displaySeedLiquidities) && displaySeedLiquidities.length === r.outcomes?.length
+                    ? displaySeedLiquidities.map(v => Number(v).toLocaleString('es-MX')).join(' / ')
+                    : Number(r.seedLiquidity || 0).toLocaleString('es-MX')}
+                  {' MXNP'}
+                  {suggestedOdds && <> · Odds sugeridos: {suggestedOdds}</>}
                 </div>
                 <div className="points-admin-pending-controls">
                   {/* Featured (🔥) toggle — PENDING rows only. When ON at
@@ -8165,78 +7357,20 @@ function PendingMarketsTable({ onQueueChange }) {
                   )}
                   {isPending ? (
                     <div className="points-admin-pending-actions">
-                  <button
-                    onClick={() => refreshPricing(r.id)}
-                    disabled={busyId === r.id}
-                    style={{
-                      padding: '6px 12px',
-                      background: 'rgba(255,92,0,0.08)',
-                      border: '1px solid rgba(255,92,0,0.34)',
-                      borderRadius: 8,
-                      color: 'var(--orange)',
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: 11, letterSpacing: '0.04em',
-                      textTransform: 'uppercase',
-                      cursor: busyId === r.id ? 'not-allowed' : 'pointer',
-                      opacity: busyId === r.id ? 0.5 : 1,
-                    }}
-                  >
-                    Buscar odds
-                  </button>
-                  <button
-                    onClick={() => setEditingPending(r)}
-                    disabled={busyId === r.id}
-                    style={{
-                      padding: '6px 12px',
-                      background: 'transparent',
-                      border: '1px solid var(--border)',
-                      borderRadius: 8,
-                      color: 'var(--text-secondary)',
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: 11, letterSpacing: '0.04em',
-                      textTransform: 'uppercase',
-                      cursor: busyId === r.id ? 'not-allowed' : 'pointer',
-                      opacity: busyId === r.id ? 0.5 : 1,
-                    }}
-                  >
-                    Editar
-                  </button>
-                  <button
-                    onClick={() => review(r.id, 'approve')}
-                    disabled={busyId === r.id}
-                    style={{
-                      padding: '6px 12px',
-                      background: 'rgba(0,232,122,0.12)',
-                      border: '1px solid rgba(0,232,122,0.4)',
-                      borderRadius: 8,
-                      color: 'var(--green)',
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: 11, letterSpacing: '0.04em',
-                      textTransform: 'uppercase',
-                      cursor: busyId === r.id ? 'not-allowed' : 'pointer',
-                      opacity: busyId === r.id ? 0.5 : 1,
-                    }}
-                  >
-                    Aprobar
-                  </button>
-                  <button
-                    onClick={() => review(r.id, 'reject')}
-                    disabled={busyId === r.id}
-                    style={{
-                      padding: '6px 12px',
-                      background: 'transparent',
-                      border: '1px solid var(--border)',
-                      borderRadius: 8,
-                      color: 'var(--text-muted)',
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: 11, letterSpacing: '0.04em',
-                      textTransform: 'uppercase',
-                      cursor: busyId === r.id ? 'not-allowed' : 'pointer',
-                      opacity: busyId === r.id ? 0.5 : 1,
-                    }}
-                  >
-                    Rechazar
-                  </button>
+                      <ProposalApproval row={r} revision={r.sourceData} disabled={bulkBusy || busyId != null}
+                        onApprove={() => review(r.id, 'approve')} />
+                      <button className="pb-admin-button" type="button"
+                        onClick={() => setEditingPending(r)} disabled={bulkBusy || busyId != null}>
+                        Editar
+                      </button>
+                      <button className="pb-admin-button" type="button"
+                        onClick={() => refreshPricing(r.id)} disabled={bulkBusy || busyId != null}>
+                        Buscar cuotas
+                      </button>
+                      <button className="pb-admin-button" type="button"
+                        onClick={() => review(r.id, 'reject')} disabled={bulkBusy || busyId != null}>
+                        Rechazar
+                      </button>
                     </div>
                   ) : (
                     <div className="points-admin-pending-status-actions">
@@ -8253,7 +7387,7 @@ function PendingMarketsTable({ onQueueChange }) {
                   {isRejected && (
                     <button
                       onClick={() => review(r.id, 'readd')}
-                      disabled={busyId === r.id}
+                      disabled={bulkBusy || busyId != null}
                       title="Mover este mercado rechazado de vuelta a Pendientes"
                       style={{
                         padding: '6px 12px',
@@ -8274,33 +7408,12 @@ function PendingMarketsTable({ onQueueChange }) {
                     </div>
                   )}
                 </div>
-                <div className="points-admin-pending-meta points-admin-pending-meta-top">
-                  #{r.id} · {r.source} · {r.category} · {r.ammMode}
-                  {r.sport && <> · {r.sport}</>}
-                  {r.league && <>/{r.league}</>}
-                  {r.sourceData?.competitionName && <> · {r.sourceData.competitionName}</>}
-                  {r.resolverType && <> · resolver: {r.resolverType}</>}
-                </div>
-                {r.resolutionReadiness?.mode !== 'automatic' && r.resolutionReadiness && (
-                  <div className="points-admin-pending-meta" style={{ color: 'var(--accent)' }}>
-                    {r.resolutionReadiness.label}. {r.resolutionReadiness.requirement}
-                  </div>
-                )}
-                <div className="points-admin-pending-meta points-admin-pending-meta-details">
-                  Opciones ({Array.isArray(r.outcomes) ? r.outcomes.length : 0}): {formatOutcomeList(r.outcomes)}
-                  {' · Cierra: '}{formatAdminMarketDate(r.endTime)}
-                  {' · Liquidez: '}
-                  {Array.isArray(displaySeedLiquidities) && displaySeedLiquidities.length === r.outcomes?.length
-                    ? displaySeedLiquidities.map(v => Number(v).toLocaleString('es-MX')).join(' / ')
-                    : Number(r.seedLiquidity || 0).toLocaleString('es-MX')}
-                  {' MXNP'}
-                  {suggestedOdds && <> · Odds sugeridos: {suggestedOdds}</>}
-                </div>
               </div>
             </div>
           </div>
         );
-      })}
+        }}
+      </AdminMarketQueue>
 
       {editingPending && (
         <PendingMarketEditModal
@@ -8308,7 +7421,7 @@ function PendingMarketsTable({ onQueueChange }) {
           onClose={() => setEditingPending(null)}
           onSaved={async () => {
             setEditingPending(null);
-            await load();
+            load();
             onQueueChange?.();
           }}
         />

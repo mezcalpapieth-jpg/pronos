@@ -43,6 +43,8 @@ const POINTS_SCHEMA_READY_PROBE = `
     to_regclass('public.points_publicity_daily') IS NOT NULL AS points_publicity_daily,
     to_regclass('public.points_resolution_candidates') IS NOT NULL AS points_resolution_candidates,
     to_regclass('public.points_resolver_checkpoints') IS NOT NULL AS points_resolver_checkpoints,
+    to_regclass('public.points_admin_cases') IS NOT NULL AS points_admin_cases,
+    to_regclass('public.points_admin_case_notes') IS NOT NULL AS points_admin_case_notes,
     to_regclass('public.points_support_tickets') IS NOT NULL AS points_support_tickets,
     to_regclass('public.points_support_messages') IS NOT NULL AS points_support_messages,
     to_regclass('public.points_pwa_install_claims') IS NOT NULL AS points_pwa_install_claims,
@@ -850,6 +852,26 @@ const POINTS_SCHEMA_MIGRATIONS = [
     ADD COLUMN IF NOT EXISTS attachments JSONB NOT NULL DEFAULT '[]'::jsonb`,
   `CREATE INDEX IF NOT EXISTS idx_points_support_messages_ticket
     ON points_support_messages(ticket_id, created_at ASC)`,
+
+  `CREATE TABLE IF NOT EXISTS points_admin_cases (
+    kind TEXT NOT NULL CHECK (kind IN ('support', 'risk')),
+    subject TEXT NOT NULL,
+    assigned_to TEXT,
+    market_id INTEGER REFERENCES points_markets(id) ON DELETE SET NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (kind, subject)
+  )`,
+  `CREATE TABLE IF NOT EXISTS points_admin_case_notes (
+    id BIGSERIAL PRIMARY KEY,
+    kind TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    author TEXT NOT NULL,
+    body TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    FOREIGN KEY (kind, subject) REFERENCES points_admin_cases(kind, subject) ON DELETE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_admin_case_notes_subject
+    ON points_admin_case_notes(kind, subject, id DESC)`,
 
   // ── Daily claim tracking (prevents double-claim per day) ───────────────
   `CREATE TABLE IF NOT EXISTS daily_claims (

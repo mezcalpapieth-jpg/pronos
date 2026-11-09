@@ -29,7 +29,15 @@ export default async function handler(req, res) {
     if (!admin) return;
 
     const dry = req.query.dry === '1' || req.query.dry === 'true';
-    const result = await runAutoResolve({ dry });
+    const rawId = req.body?.marketId;
+    const marketId = rawId == null ? null : Number(rawId);
+    if (rawId != null && (!/^[1-9]\d*$/.test(String(rawId)) || !Number.isInteger(marketId) || marketId > 2147483647)) {
+      return res.status(400).json({ error: 'invalid_market_id' });
+    }
+    const result = await runAutoResolve({ dry, marketId });
+    if (marketId != null && result.checked === 0) {
+      return res.status(409).json({ error: 'market_not_due_for_resolver' });
+    }
     return res.status(200).json({ ...result, triggeredBy: admin.username });
   } catch (e) {
     console.error('[admin/run-auto-resolve] error', { message: e?.message, code: e?.code });

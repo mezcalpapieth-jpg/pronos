@@ -1,8 +1,10 @@
 import { releaseOpenLimitOrdersForMarkets } from './points-limit-orders.js';
 import { closeCompletedPointsResolutionCandidates } from './points-resolution-candidates.js';
 
+import { readSettlementPreview } from './points-admin-settlement-preview.js';
+
 // Call inside withTransaction. This is the same remaining-cost-basis refund used by Admin.
-export async function cancelPointsMarket(client, marketId, { actor, reason, expectedConfig = null, expectedOutcomes = null } = {}) {
+export async function cancelPointsMarket(client, marketId, { actor, reason, expectedConfig = null, expectedOutcomes = null, preview = false } = {}) {
   const found = await client.query(`SELECT id, status, parent_id, resolver_config FROM points_markets WHERE id = $1 FOR UPDATE`, [marketId]);
   const market = found.rows[0];
   const fail = (message, status = 400, detail = null) => { throw Object.assign(new Error(message), { status, detail }); };
@@ -17,6 +19,7 @@ export async function cancelPointsMarket(client, marketId, { actor, reason, expe
   }
   const related = await client.query(`SELECT id FROM points_markets WHERE id = $1 OR parent_id = $1 ORDER BY id FOR UPDATE`, [marketId]);
   const ids = related.rows.map(r => Number(r.id));
+  if (preview) return { ok: true, preview: await readSettlementPreview(client, ids, { cancel: true }) };
   await releaseOpenLimitOrdersForMarkets(client, ids, { reason: 'market_cancelled', status: 'cancelled' });
   await client.query(`SELECT market_id, username, outcome_index, shares, cost_basis FROM points_positions
     WHERE market_id = ANY($1::int[]) AND shares > 0 FOR UPDATE`, [ids]);

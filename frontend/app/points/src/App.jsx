@@ -380,6 +380,7 @@ function Shell({ onOpenLogin, isAdmin }) {
   const location = useLocation();
   const path = location.pathname;
   const isHome = path === '/';
+  const isAdminWorkspace = isAdmin && path.replace(/\/+$/, '') === '/admin';
 
   // CategoryBar is the universal browsing affordance — show it on home,
   // category pages, AND market detail so users can always jump to
@@ -396,9 +397,9 @@ function Shell({ onOpenLogin, isAdmin }) {
     <>
       {isHome && <PointsTicker />}
       {path.startsWith('/stocks') && <Suspense fallback={null}><StockLiveTicker /></Suspense>}
-      <PointsNav onOpenLogin={onOpenLogin} isAdmin={isAdmin} />
+      {!isAdminWorkspace && <PointsNav onOpenLogin={onOpenLogin} isAdmin={isAdmin} />}
       {showCategoryBar && <PointsCategoryBar />}
-      <TournamentExtensionBanner />
+      {!isAdminWorkspace && <TournamentExtensionBanner />}
       <Suspense fallback={<RouteFallback />}>
         <Routes>
           <Route path="/i" element={<PublicityRedirect source="instagram" />} />
@@ -438,7 +439,7 @@ function Shell({ onOpenLogin, isAdmin }) {
           <Route path="/terms"   element={<TermsOfService />} />
         </Routes>
       </Suspense>
-      <Footer />
+      {!isAdminWorkspace && <Footer />}
     </>
   );
 }

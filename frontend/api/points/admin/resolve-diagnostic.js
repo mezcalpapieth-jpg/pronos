@@ -24,6 +24,7 @@ import { applyCors } from '../../_lib/cors.js';
 import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { requirePointsAdmin } from '../../_lib/points-admin.js';
 import { isNextOpponentCheckDue } from '../../_lib/sports-resolver-policy.js';
+import { firstResolverSourceUrl } from '../../_lib/points-resolver-diagnostics.js';
 import { pointsResolverReadiness } from '../../_lib/points-resolver-readiness.js';
 
 const sql = neon(process.env.DATABASE_URL);
@@ -45,6 +46,51 @@ export default async function handler(req, res) {
     if (!admin) return;
 
     await ensurePointsSchema(sql);
+
+    if (req.query.market_id != null) {
+      const id = Number(req.query.market_id);
+      if (!/^[1-9]\d*$/.test(String(req.query.market_id)) || id > 2147483647) {
+        return res.status(400).json({ error: 'invalid_market_id' });
+      }
+      const [market] = await sql`
+        SELECT m.id, m.mode, m.status, m.end_time, m.source, m.resolver_type, m.resolver_config,
+          m.source_event_id, c.last_checked_at, c.metadata,
+          EXISTS (SELECT 1 FROM points_resolution_candidates rc
+                  WHERE rc.points_market_id = m.id AND rc.status = 'pending') AS has_candidate
+        FROM points_markets m
+        LEFT JOIN points_resolver_checkpoints c
+          ON c.market_id = m.id AND c.checkpoint_key = 'admin-diagnostic'
+        WHERE m.id = ${id} AND m.parent_id IS NULL AND m.mode = 'points'
+      `;
+      if (!market) return res.status(404).json({ error: 'market_not_found' });
+      const config = parseJsonb(market.resolver_config, {});
+      const observed = parseJsonb(market.metadata, {});
+      const eventId = config.eventId ?? config.gamePk ?? market.source_event_id ?? null;
+      const numericEvent = /^[1-9]\d*$/.test(String(eventId));
+      let fixtureUrl;
+      if (numericEvent && config.source === 'mlb-stats') {
+        fixtureUrl = `https://statsapi.mlb.com/api/v1/schedule?gamePk=${eventId}`;
+      } else if (numericEvent && config.source === 'espn' && /^[a-z]+\/[a-z0-9.]+$/i.test(config.leaguePath || '')) {
+        fixtureUrl = `https://site.api.espn.com/apis/site/v2/sports/${config.leaguePath}/summary?event=${eventId}`;
+      }
+      const manual = ['manual', 'manual_review'].includes(market.resolver_type);
+      const status = market.status !== 'active' ? market.status
+        : market.has_candidate ? 'manual_review'
+          : manual ? 'manual_only'
+            : !market.resolver_type ? 'configuration'
+              : observed.status || (new Date(market.end_time) > new Date() ? 'window_open' : 'no_check_recorded');
+      return res.status(200).json({
+        status,
+        resolverType: market.resolver_type,
+        provider: observed.provider || config.source || market.source || null,
+        eventId,
+        lastCheckedAt: market.last_checked_at || null,
+        sourceResponseAt: observed.sourceResponseAt || null,
+        providerState: observed.providerState || null,
+        sourceUrl: firstResolverSourceUrl(observed.sourceUrl, config.sourceUrl, config.evidenceUrl, config.url, fixtureUrl),
+        canRetry: market.status === 'active' && Boolean(market.resolver_type),
+      });
+    }
 
     const rows = await readSql`
       SELECT m.id, m.question, m.category, m.source, m.status, m.resolver_type, m.resolver_config,

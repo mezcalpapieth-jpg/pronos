@@ -1,14 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
+import AdminCasePanel from './AdminCasePanel.jsx';
 import { adminListRisk, adminUpdateRiskReview } from '../lib/pointsApi.js';
 
 // ─── Risk review ────────────────────────────────────────────────────────────
-export default function RiskPanel({ profileUsername = null }) {
+export default function RiskPanel({ profileUsername = null, initialUsername = '' }) {
   const focusedUsername = String(profileUsername || '').trim();
   const requestRef = useRef(0);
   const [data, setData] = useState(null);
   const [statusFilter, setStatusFilter] = useState('all');
-  const [usernameInput, setUsernameInput] = useState('');
-  const [usernameFilter, setUsernameFilter] = useState('');
+  const [usernameInput, setUsernameInput] = useState(initialUsername);
+  const [usernameFilter, setUsernameFilter] = useState(initialUsername);
+  const [openCase, setOpenCase] = useState(null);
   const [reviewDrafts, setReviewDrafts] = useState({});
   const [working, setWorking] = useState(null);
   const [err, setErr] = useState(null);
@@ -292,6 +294,14 @@ export default function RiskPanel({ profileUsername = null }) {
                   />
                 )}
 
+                <div>
+                  <button type="button" className="pb-admin-button" aria-expanded={openCase === row.username}
+                    onClick={() => setOpenCase(openCase === row.username ? null : row.username)}>
+                    {openCase === row.username ? 'Cerrar seguimiento' : 'Abrir seguimiento'}
+                  </button>
+                  {openCase === row.username && <AdminCasePanel key={row.username} kind="risk" subject={row.username} />}
+                </div>
+
                 {signalsOpen && (
                   <RiskInlineEvidence
                     title={`Señales de @${row.username}`}
@@ -353,12 +363,19 @@ export default function RiskPanel({ profileUsername = null }) {
         renderRow={(row) => <RiskLoopEvidenceRow key={`${row.username}-${row.marketId}`} row={row} />}
       />
 
-      <RiskEvidencePanel
-        title="Señales compartidas"
-        empty="Sin IP/device/sesión compartida entre cuentas."
-        rows={linkedSignals}
-        renderRow={(row) => <RiskSignalEvidenceRow key={`${row.signalType}-${row.signalKey}`} row={row} />}
-      />
+      {[
+        ['Red compartida (IP)', 'Una IP puede corresponder a un hogar, red pública o VPN compartida.', linkedSignals.filter(row => row.signalType === 'ip')],
+        ['Navegadores y sesiones verificados', 'Revisa la actividad y el contexto antes de asociar las cuentas.', linkedSignals.filter(row => ['device', 'session'].includes(row.signalType))],
+        ['Señales antiguas o sin verificar', 'Estas coincidencias tienen menor fuerza probatoria.', linkedSignals.filter(row => !['ip', 'device', 'session'].includes(row.signalType))],
+      ].map(([title, description, rows]) => <div key={title}>
+        <p style={adminEmptyStyle}>{description}</p>
+        <RiskEvidencePanel
+          title={title}
+          empty="Sin coincidencias registradas."
+          rows={rows}
+          renderRow={row => <RiskSignalEvidenceRow key={`${row.signalType}-${row.signalKey}`} row={row} />}
+        />
+      </div>)}
 
       <RiskEvidencePanel
         title="Actividad de navegadores compartidos"
