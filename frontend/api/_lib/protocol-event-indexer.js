@@ -1,7 +1,10 @@
 // Events from separate filters must be applied in chain order. A dispute,
 // correction or clear can occur in the same scan as its original resolution.
-export async function orderedFactoryLifecycleEvents(factory, fromBlock, toBlock) {
-  const kinds = ['MarketResolved','MarketCanceled','ResolutionDisputeOpened','ResolutionDisputeCleared','MarketResolutionCorrected'];
+export async function orderedFactoryLifecycleEvents(factory, fromBlock, toBlock, reviewed = false) {
+  const kinds = reviewed
+    ? ['ResolutionRulesCommitted', 'ResolutionProposed', 'ResolutionApproved', 'ResolutionFlagged',
+        'ResolutionReviewFinalized', 'MarketCanceled', 'ResolutionDisputeOpened']
+    : ['MarketResolved','MarketCanceled','ResolutionDisputeOpened','ResolutionDisputeCleared','MarketResolutionCorrected'];
   const batches = await Promise.all(kinds.map(async kind => (await factory.queryFilter(factory.filters[kind](), fromBlock, toBlock))
     .map(event => ({kind,event}))));
   return batches.flat().sort((a,b) => a.event.blockNumber-b.event.blockNumber || a.event.logIndex-b.event.logIndex);
@@ -10,6 +13,7 @@ export async function orderedFactoryLifecycleEvents(factory, fromBlock, toBlock)
 import { neon } from '@neondatabase/serverless';
 import { ethers } from 'ethers';
 import { ensureProtocolSchema } from './protocol-schema.js';
+import { REVIEW_EVENT_ABI, indexReviewedResolution, isReviewedFactory } from './protocol-resolution-review.js';
 
 const sql = neon(process.env.DATABASE_URL);
 
@@ -131,10 +135,20 @@ export async function runProtocolIndexer({ query = {}, isManual = false, setupSc
   const maxBatches = Math.min(Math.max(parseInteger(query.maxBatches) || configuredMaxBatches, 1), 25);
   let processed = { markets: 0, liquidity: 0, trades: 0, resolutions: 0, redemptions: 0, lifecycle: 0 };
   const factoryRuns = [];
+  let finalizedBlock;
 
-  for (const factoryConfig of factories) {
+  for (const config of factories) {
+    const reviewed = await isReviewedFactory(provider, CHAIN_ID, config.address);
+    const factoryConfig = reviewed ? { ...config, reviewed, abi: [...config.abi, ...REVIEW_EVENT_ABI] } : config;
+    if (reviewed && finalizedBlock == null) {
+      const block = await provider.send('eth_getBlockByNumber', ['finalized', false]);
+      finalizedBlock = Number(block?.number);
+      if (!Number.isSafeInteger(finalizedBlock) || finalizedBlock < 1) {
+        throw new Error('Reviewed factory requires a finalized chain head');
+      }
+    }
     let fromBlock = manualFromBlock ?? await getFactoryFromBlock(factoryConfig.address, startBlock, currentBlock, lookbackBlocks);
-    const targetBlock = Math.min(manualToBlock ?? currentBlock, currentBlock);
+    const targetBlock = Math.min(manualToBlock ?? currentBlock, reviewed ? finalizedBlock : currentBlock, currentBlock);
     let batches = 0;
 
     if (fromBlock > targetBlock) {
@@ -264,8 +278,14 @@ async function indexFactoryRange(provider, factoryConfig, fromBlock, toBlock, pr
     processed.markets++;
   }
 
-  const lifecycleEvents = await orderedFactoryLifecycleEvents(factory, fromBlock, toBlock);
+  const lifecycleEvents = await orderedFactoryLifecycleEvents(factory, fromBlock, toBlock, factoryConfig.reviewed);
   for (const { event, kind } of lifecycleEvents) {
+    if (factoryConfig.reviewed) {
+      await indexReviewedResolution(sql, CHAIN_ID, factoryConfig.address, { event, kind });
+      if (kind === 'ResolutionReviewFinalized') processed.resolutions++;
+      else processed.lifecycle++;
+      continue;
+    }
     if (kind === 'MarketResolved') {
       const { marketId, outcome } = event.args;
       await sql`

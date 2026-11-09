@@ -46,15 +46,15 @@ contract PronosAMMMulti is ERC1155Holder, ReentrancyGuard {
     bool public disputed;
     uint8 public outcome;
 
-    /// @notice block.timestamp when resolve() was called; 0 while
-    /// the market is open. Drives the post-resolution grace period
-    /// enforced by recoverDust().
+    /// @notice Timestamp of the current proposal. Zero while the market is open.
     uint256 public resolvedAt;
     uint256 public totalRedeemed;
+    uint256 public totalRecovered;
+    bool public finalized;
+    bool private immutable requiresFinalization = block.chainid == 42161;
+    uint256 public constant RESOLUTION_CHALLENGE_PERIOD = 1 days;
 
-    /// @notice Window after resolution before the factory can sweep
-    /// leftover collateral. Same value as the binary AMM so operators
-    /// don't have to remember two policies.
+    /// @notice Legacy recovery delay for pools outside Arbitrum One.
     uint256 public constant RECOVER_GRACE_PERIOD = 30 days;
 
     event LiquidityAdded(address indexed provider, uint256 amount);
@@ -66,6 +66,7 @@ contract PronosAMMMulti is ERC1155Holder, ReentrancyGuard {
     event MarketCanceled(uint256 indexed marketId);
     event ResolutionDisputeOpened(uint256 indexed marketId, uint8 outcome);
     event ResolutionDisputeCleared(uint256 indexed marketId, uint8 outcome);
+    event ResolutionFinalized(uint256 indexed marketId, uint8 outcome);
     event MarketResolutionCorrected(uint256 indexed marketId, uint8 oldOutcome, uint8 newOutcome);
     event CancelRefunded(address indexed user, uint256 payout);
     /// @notice Emitted when the factory sweeps the AMM's leftover
@@ -165,6 +166,7 @@ contract PronosAMMMulti is ERC1155Holder, ReentrancyGuard {
         internal
         returns (uint256 sharesOut)
     {
+        _requireTradingBeforeCutoff();
         require(initialized, "PronosAMMMulti: not initialized");
         require(collateralAmount > 0, "PronosAMMMulti: zero amount");
         _requireOutcome(outcomeIndex);
@@ -228,6 +230,7 @@ contract PronosAMMMulti is ERC1155Holder, ReentrancyGuard {
         internal
         returns (uint256 collateralOut)
     {
+        _requireTradingBeforeCutoff();
         require(initialized, "PronosAMMMulti: not initialized");
         require(sharesAmount > 0, "PronosAMMMulti: zero amount");
         _requireOutcome(outcomeIndex);
@@ -329,18 +332,22 @@ contract PronosAMMMulti is ERC1155Holder, ReentrancyGuard {
         emit MarketResolved(marketId, outcomeIndex);
     }
 
-    /// @notice Sweep the AMM's leftover collateral after resolution +
-    /// grace period. Mirrors the binary PronosAMM.recoverDust: burns
+    /// @notice Sweep the AMM's leftover collateral after mainnet finalization
+    /// or the legacy grace period. Mirrors the binary pool: burns
     /// the AMM's own winning-outcome tokens and transfers an equal
     /// amount of collateral to `recipient`. User-held positions stay
     /// redeemable because the burned amount equals what we transfer,
-    /// preserving the outstanding_winning_tokens == collateral_balance
-    /// invariant. Idempotent.
+    /// preserving the backing for every outstanding winning token. Idempotent.
     function recoverDust(address recipient) external onlyFactory nonReentrant {
         require(!canceled, "PronosAMMMulti: canceled");
         require(!disputed, "PronosAMMMulti: disputed");
         require(resolved, "PronosAMMMulti: not resolved");
-        require(block.timestamp >= resolvedAt + RECOVER_GRACE_PERIOD, "PronosAMMMulti: grace period not over");
+        if (requiresFinalization) {
+            require(finalized, "PronosAMMMulti: not finalized");
+            require(recipient != address(this), "PronosAMMMulti: pool recipient");
+        } else {
+            require(block.timestamp >= resolvedAt + RECOVER_GRACE_PERIOD, "PronosAMMMulti: grace period not over");
+        }
         require(recipient != address(0), "PronosAMMMulti: zero recipient");
 
         uint256 winningTokenId = token.tokenId(marketId, outcome);
@@ -351,6 +358,13 @@ contract PronosAMMMulti is ERC1155Holder, ReentrancyGuard {
 
         token.burn(address(this), winningTokenId, ammWinningBalance);
         require(collateral.transfer(recipient, ammWinningBalance), "PronosAMMMulti: transfer failed");
+        if (requiresFinalization) {
+            require(
+                collateral.balanceOf(address(this)) >= token.totalSupply(winningTokenId),
+                "PronosAMMMulti: insufficient claim backing"
+            );
+        }
+        totalRecovered += ammWinningBalance;
 
         emit DustRecovered(recipient, ammWinningBalance);
     }
@@ -360,17 +374,7 @@ contract PronosAMMMulti is ERC1155Holder, ReentrancyGuard {
     /// the caller (factory) pays gas, the holder always receives
     /// the collateral, no theft vector.
     function redeemOnBehalf(address holder, uint256 amount) external onlyFactory nonReentrant {
-        require(!canceled, "PronosAMMMulti: canceled");
-        require(!disputed, "PronosAMMMulti: disputed");
-        require(resolved, "PronosAMMMulti: not resolved");
-        require(amount > 0, "PronosAMMMulti: zero amount");
-        require(holder != address(0), "PronosAMMMulti: zero holder");
-
-        token.burn(holder, token.tokenId(marketId, outcome), amount);
-        require(collateral.transfer(holder, amount), "PronosAMMMulti: transfer failed");
-        totalRedeemed += amount;
-
-        emit WinningsRedeemed(holder, outcome, amount, amount);
+        _redeem(holder, amount);
     }
 
     modifier onlyTradingRouter() {
@@ -407,7 +411,9 @@ contract PronosAMMMulti is ERC1155Holder, ReentrancyGuard {
         require(!canceled, "PronosAMMMulti: canceled");
         require(!disputed, "PronosAMMMulti: disputed");
         require(resolved, "PronosAMMMulti: not resolved");
+        require(!requiresFinalization || finalized, "PronosAMMMulti: not finalized");
         require(amount > 0, "PronosAMMMulti: zero amount");
+        require(holder != address(0), "PronosAMMMulti: zero holder");
 
         token.burn(holder, token.tokenId(marketId, outcome), amount);
         require(collateral.transfer(holder, amount), "PronosAMMMulti: transfer failed");
@@ -418,6 +424,7 @@ contract PronosAMMMulti is ERC1155Holder, ReentrancyGuard {
 
     function cancel() external onlyFactory {
         require(!canceled, "PronosAMMMulti: already canceled");
+        require(!finalized, "PronosAMMMulti: finalized");
         require(!resolved || disputed, "PronosAMMMulti: resolved");
         require(totalRedeemed == 0, "PronosAMMMulti: payouts started");
         canceled = true;
@@ -427,9 +434,16 @@ contract PronosAMMMulti is ERC1155Holder, ReentrancyGuard {
         emit MarketPaused(true);
     }
 
+    function _requireTradingBeforeCutoff() private view {
+        if (requiresFinalization) {
+            require(ITradingRouterFactory(factory).isTradingOpen(marketId), "PronosAMMMulti: market closed");
+        }
+    }
+
     function openResolutionDispute() external onlyFactory {
         require(!canceled, "PronosAMMMulti: canceled");
         require(resolved, "PronosAMMMulti: not resolved");
+        require(!finalized, "PronosAMMMulti: finalized");
         require(!disputed, "PronosAMMMulti: already disputed");
         disputed = true;
         emit ResolutionDisputeOpened(marketId, outcome);
@@ -438,10 +452,22 @@ contract PronosAMMMulti is ERC1155Holder, ReentrancyGuard {
     function clearResolutionDispute() external onlyFactory {
         require(disputed, "PronosAMMMulti: not disputed");
         disputed = false;
+        if (requiresFinalization) resolvedAt = block.timestamp;
         emit ResolutionDisputeCleared(marketId, outcome);
     }
 
+    /// @notice Lock an undisputed mainnet outcome after its challenge period.
+    function finalizeResolution() external onlyFactory {
+        require(requiresFinalization, "PronosAMMMulti: mainnet only");
+        require(resolved && !canceled && !disputed, "PronosAMMMulti: resolution unavailable");
+        require(!finalized, "PronosAMMMulti: finalized");
+        require(block.timestamp >= resolvedAt + RESOLUTION_CHALLENGE_PERIOD, "PronosAMMMulti: challenge period");
+        finalized = true;
+        emit ResolutionFinalized(marketId, outcome);
+    }
+
     function correctResolution(uint8 newOutcome) external onlyFactory {
+        require(!finalized, "PronosAMMMulti: finalized");
         require(disputed, "PronosAMMMulti: not disputed");
         require(totalRedeemed == 0, "PronosAMMMulti: payouts started");
         _requireOutcome(newOutcome);
@@ -488,6 +514,7 @@ contract PronosAMMMulti is ERC1155Holder, ReentrancyGuard {
     }
 
     function setFeeCollector(address _feeCollector) external onlyFactory {
+        require(!requiresFinalization, "PronosAMMMulti: fixed fee collector");
         require(_feeCollector != address(0), "PronosAMMMulti: zero address");
         feeCollector = _feeCollector;
     }

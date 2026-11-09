@@ -6,16 +6,19 @@ import "./PronosTokenV2.sol";
 import "./PronosAMMMulti.sol";
 import "./PoolDeployment.sol";
 import "./TradingRouterInterfaces.sol";
+import "./MarketFeeVault.sol";
+import {MainnetResolutionReview, IResolutionReviewPool} from "./MainnetResolutionReview.sol";
 
 /**
  * @title MarketFactoryV2
  * @notice Creates and manages Pronos multi-outcome markets. Owner can sit on
  *         a Safe while marketCreator keeps routine creation automatic.
  */
-contract MarketFactoryV2 {
+contract MarketFactoryV2 is MainnetResolutionReview {
     PronosTokenV2 public immutable token;
     address public immutable poolCreationCode;
     IERC20 public immutable collateral;
+    MarketFeeVault public immutable feeVault;
 
     address public tradingRouter; // bound once; cannot expand an existing grant
     event TradingRouterBound(address indexed router);
@@ -95,7 +98,8 @@ contract MarketFactoryV2 {
         treasury = _treasury;
         liquidityReserve = _liquidityReserve;
         emergencyReserve = _emergencyReserve;
-        feeCollector = _treasury;
+        feeVault = block.chainid == 42161 ? new MarketFeeVault(collateral) : MarketFeeVault(address(0));
+        feeCollector = address(feeVault) == address(0) ? _treasury : address(feeVault);
     }
 
     /// @notice Bind a reviewed immutable router once. Existing grants cannot
@@ -118,6 +122,28 @@ contract MarketFactoryV2 {
         string[] calldata outcomes,
         uint256 seedAmount
     ) external onlyMarketCreator returns (uint256 marketId) {
+        _requireLegacyResolution();
+        return _createMarket(question, category, endTime, resolutionSource, outcomes, seedAmount);
+    }
+
+    function createReviewedMarket(ReviewedMarketInput calldata input, string[] calldata outcomes)
+        external onlyMarketCreator returns (uint256 marketId)
+    {
+        _requireRulesCommitment(input);
+        marketId = _createMarket(
+            input.question, input.category, input.endTime, input.resolutionSource, outcomes, input.seedAmount
+        );
+        _commitResolutionRules(marketId, input.rulesHash);
+    }
+
+    function _createMarket(
+        string calldata question,
+        string calldata category,
+        uint256 endTime,
+        string calldata resolutionSource,
+        string[] calldata outcomes,
+        uint256 seedAmount
+    ) internal returns (uint256 marketId) {
         require(endTime > block.timestamp, "MarketFactoryV2: end time in past");
         require(outcomes.length >= 2, "MarketFactoryV2: too few outcomes");
         require(outcomes.length <= token.MAX_OUTCOMES(), "MarketFactoryV2: too many outcomes");
@@ -158,6 +184,18 @@ contract MarketFactoryV2 {
     }
 
     function resolveMarket(uint256 marketId, uint8 outcome) external onlyResolver {
+        _requireLegacyResolution();
+        _resolveMarket(marketId, outcome);
+    }
+
+    function proposeResolution(uint256 marketId, uint8 outcome, bytes32 evidenceHash) external {
+        _requireProposalAuthor(marketId, resolver, evidenceHash);
+        require(block.timestamp >= markets[marketId].endTime, "MarketFactoryV2: market still open");
+        _resolveMarket(marketId, outcome);
+        _recordResolutionProposal(marketId, outcome, evidenceHash, msg.sender);
+    }
+
+    function _resolveMarket(uint256 marketId, uint8 outcome) internal {
         require(marketId < markets.length, "MarketFactoryV2: invalid market");
         Market storage m = markets[marketId];
         require(m.active, "MarketFactoryV2: not active");
@@ -183,19 +221,45 @@ contract MarketFactoryV2 {
         emit MarketCanceled(marketId);
     }
 
-    function openResolutionDispute(uint256 marketId) external onlyOwner {
+    function openResolutionDispute(uint256 marketId) external {
+        if (!requiresResolutionReview) require(msg.sender == owner, "MarketFactoryV2: not owner");
+        else if (msg.sender != owner) _requireReviewer();
         require(marketId < markets.length, "MarketFactoryV2: invalid market");
         PronosAMMMulti(markets[marketId].pool).openResolutionDispute();
+        if (requiresResolutionReview) resolutionProposals[marketId].approved = false;
         emit ResolutionDisputeOpened(marketId);
     }
 
-    function clearResolutionDispute(uint256 marketId) external onlyOwner {
+    function clearResolutionDispute(uint256 marketId) external {
+        if (requiresResolutionReview) _requireReviewer();
+        else require(msg.sender == owner, "MarketFactoryV2: not owner");
         require(marketId < markets.length, "MarketFactoryV2: invalid market");
         PronosAMMMulti(markets[marketId].pool).clearResolutionDispute();
+        if (requiresResolutionReview) _restartResolutionReview(marketId);
         emit ResolutionDisputeCleared(marketId);
     }
 
+    function finalizeResolution(uint256 marketId, bytes32 expectedProposalId) external onlyOwner {
+        _requireApprovedProposal(marketId, expectedProposalId);
+        PronosAMMMulti(markets[marketId].pool).finalizeResolution();
+        emit ResolutionReviewFinalized(marketId, expectedProposalId);
+    }
+
     function correctResolution(uint256 marketId, uint8 newOutcome) external onlyOwner {
+        _requireLegacyResolution();
+        _correctResolution(marketId, newOutcome);
+    }
+
+    function proposeResolutionCorrection(
+        uint256 marketId, bytes32 expectedProposalId, uint8 newOutcome, bytes32 evidenceHash
+    ) external {
+        _requireProposalAuthor(marketId, resolver, evidenceHash);
+        _requireCurrentProposal(marketId, expectedProposalId);
+        _correctResolution(marketId, newOutcome);
+        _recordResolutionProposal(marketId, newOutcome, evidenceHash, msg.sender);
+    }
+
+    function _correctResolution(uint256 marketId, uint8 newOutcome) internal {
         require(marketId < markets.length, "MarketFactoryV2: invalid market");
         PronosAMMMulti pool = PronosAMMMulti(markets[marketId].pool);
         uint8 oldOutcome = pool.outcome();
@@ -214,7 +278,7 @@ contract MarketFactoryV2 {
     /**
      * @notice Sweep a resolved market's leftover collateral to the
      *         given recipient. Mirrors MarketFactory (V1): must wait
-     *         the AMM's RECOVER_GRACE_PERIOD (30 days) past resolve();
+     *         explicit finalization on Arbitrum One or the legacy 30-day delay;
      *         idempotent after the AMM's winning reserve is drained.
      */
     function sweepDust(uint256 marketId, address recipient) external onlyOwner {
@@ -267,6 +331,7 @@ contract MarketFactoryV2 {
     }
 
     function distributeFees() external onlyOwner {
+        require(address(feeVault) == address(0), "MarketFactoryV2: use fee batches");
         uint256 total = collateral.balanceOf(feeCollector);
         require(total > 0, "MarketFactoryV2: no fees");
 
@@ -279,6 +344,13 @@ contract MarketFactoryV2 {
         require(collateral.transferFrom(feeCollector, emergencyReserve, toEmergency), "MarketFactoryV2: emergency failed");
 
         emit FeesDistributed(toTreasury, toLiquidity, toEmergency);
+    }
+
+    function distributeMarketFees(uint256 marketId, bytes32 batchId, uint256 amount) external onlyOwner {
+        require(address(feeVault) != address(0), "MarketFactoryV2: no fee vault");
+        require(marketId < markets.length, "MarketFactoryV2: invalid market");
+        uint256 collected = PronosAMMMulti(markets[marketId].pool).totalFeesCollected();
+        feeVault.distribute(marketId, batchId, amount, collected, treasury, liquidityReserve, emergencyReserve);
     }
 
     function marketCount() external view returns (uint256) {
@@ -316,8 +388,22 @@ contract MarketFactoryV2 {
         );
     }
 
+    function isTradingOpen(uint256 marketId) external view returns (bool) {
+        Market storage m = markets[marketId];
+        return m.active && block.timestamp < m.endTime;
+    }
+
+    function _reviewPool(uint256 marketId) internal view override returns (IResolutionReviewPool) {
+        return IResolutionReviewPool(markets[marketId].pool);
+    }
+
+    function setResolutionReviewer(address reviewer) external onlyOwner {
+        _configureReviewer(reviewer, owner, resolver);
+    }
+
     function transferOwnership(address newOwner) external onlyOwner {
         require(newOwner != address(0), "MarketFactoryV2: zero address");
+        _requireDistinctReviewRoles(newOwner, resolver);
         emit OwnershipTransferred(owner, newOwner);
         owner = newOwner;
     }
@@ -330,11 +416,13 @@ contract MarketFactoryV2 {
 
     function setResolver(address newResolver) external onlyOwner {
         require(newResolver != address(0), "MarketFactoryV2: zero address");
+        _requireDistinctReviewRoles(newResolver, owner);
         emit ResolverUpdated(resolver, newResolver);
         resolver = newResolver;
     }
 
     function setFeeCollector(address _feeCollector) external onlyOwner {
+        require(address(feeVault) == address(0), "MarketFactoryV2: fixed fee collector");
         require(_feeCollector != address(0), "MarketFactoryV2: zero address");
         feeCollector = _feeCollector;
     }

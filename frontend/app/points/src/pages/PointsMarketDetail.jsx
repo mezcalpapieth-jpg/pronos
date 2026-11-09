@@ -50,6 +50,7 @@ import { useIsMobile } from '@app/lib/useIsMobile.js';
 import PointsBuyModal from '../components/PointsBuyModal.jsx';
 import PointsSellPreviewModal from '../components/PointsSellPreviewModal.jsx';
 import PointsActivityTape from '../components/PointsActivityTape.jsx';
+import { ResolutionReview, useResolutionReview } from '../components/ResolutionReview.jsx';
 import MarketComments from '../components/MarketComments.jsx';
 import Crypto5MinDetail from '../components/Crypto5MinDetail.jsx';
 import TopHolders from '../components/TopHolders.jsx';
@@ -2666,6 +2667,9 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
   const isMobile = useIsMobile();
 
   const [market, setMarket] = useState(null);
+  const reviewedMainnet = market?.mode === 'onchain' && Number(market.chainId) === 42161;
+  const reviewMarketId = reviewedMainnet && Number(market.id) === Number(id) ? Number(market.id) : null;
+  const { review, refreshReview } = useResolutionReview(reviewMarketId);
   const [leagueTableState, setLeagueTableState] = useState({
     loading: false,
     table: null,
@@ -3447,13 +3451,17 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
       : displayActivityByOutcome,
   );
   const latestTradeAt = unixSecondsFromDateLike(market.lastTradeAt) || activitySummary.lastAt;
-  const isCanceled = market.status === 'canceled';
-  const parallelResolved = !isCanceled
-    && market.status === 'resolved'
+  const settlementStatus = reviewedMainnet
+    ? ({ open: 'active', finalized: 'resolved' }[review?.state] ?? review?.state ?? 'unavailable')
+    : market.status;
+  const settlementOutcome = reviewedMainnet ? review?.outcome : market.outcome;
+  const isCanceled = settlementStatus === 'canceled';
+  const parallelResolved = !reviewedMainnet && !isCanceled
+    && settlementStatus === 'resolved'
     && market.ammMode === 'parallel'
     && Array.isArray(parallelDisplayLegs)
     && parallelDisplayLegs.length > 0;
-  const winnerIndex = !isCanceled && market.status === 'resolved' && market.outcome != null ? Number(market.outcome) : null;
+  const winnerIndex = settlementStatus === 'resolved' && settlementOutcome != null ? Number(settlementOutcome) : null;
   const isResolved = parallelResolved || (winnerIndex != null && Number.isFinite(winnerIndex));
   const displayWinnerIndex = isResolved ? displayOutcomeIndices.indexOf(winnerIndex) : null;
   const displayWinnerIndexes = isResolved && market.ammMode === 'parallel' && Array.isArray(parallelDisplayLegs)
@@ -3462,7 +3470,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
         .filter(index => index !== null)
     : (displayWinnerIndex >= 0 ? [displayWinnerIndex] : []);
   const displayWinnerIndexSet = new Set(displayWinnerIndexes);
-  const isTradingLocked = !isResolved && (isCanceled || gameFinished || market.seriesLocked || market.status !== 'active');
+  const isTradingLocked = !isResolved && (isCanceled || gameFinished || market.seriesLocked || settlementStatus !== 'active');
   const seriesSubtitle = formatSeriesSubtitle(market.seriesMeta, { t });
   function pctFor(i) {
     if (isResolved) {
@@ -3487,7 +3495,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
   const isLive = !isResolved
     && !gameFinished
     && liveSportsMarket
-    && market.status === 'active'
+    && settlementStatus === 'active'
     && market.startTime
     && new Date(market.startTime) <= _now
     && (!market.endTime || new Date(market.endTime) > _now);
@@ -3495,7 +3503,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
   const showLive = isLive && !isClosingSoon;
   const isPendingResolution = !isResolved
     && !showLive
-    && market.status === 'active'
+    && settlementStatus === 'active'
     && (gameFinished || (market.endTime && new Date(market.endTime) < _now));
   const showTemperatureResolutionNote = isTemperatureMarket(market);
   const canTrade = !isResolved && !isPendingResolution && !isTradingLocked && market.executionReady !== false;
@@ -3844,6 +3852,9 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
                 <span>Las posiciones abiertas fueron devueltas.</span>
               </div>
             )}
+
+            {reviewedMainnet && <ResolutionReview marketId={reviewMarketId}
+              {...{ review, authenticated, onOpenLogin, refreshReview }} />}
 
             {/* Final-score strip — shown right below the question on resolved
                 markets whose resolver filled in a score / result. */}
@@ -4460,7 +4471,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
                           </button>
                         </div>
                       )}
-                      {isResolved && p.canRedeem && (
+                      {isResolved && p.canRedeem && (!reviewedMainnet || market.executionReady === true) && (
                         <button
                           onClick={() => handleRedeemPosition(p)}
                           className="btn-primary"

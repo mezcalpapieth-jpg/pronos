@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
+import {ERC1155Supply} from "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Supply.sol";
 
 /**
  * @title PronosTokenV2
@@ -9,7 +10,7 @@ import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
  *         Token IDs use marketId * TOKEN_STRIDE + outcomeIndex so v2 markets
  *         can safely support more than two outcomes without colliding.
  */
-contract PronosTokenV2 is ERC1155 {
+contract PronosTokenV2 is ERC1155Supply {
     uint256 public constant TOKEN_STRIDE = 256;
     uint8 public constant MAX_OUTCOMES = 8;
 

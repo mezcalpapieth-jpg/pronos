@@ -30,6 +30,7 @@ import {MarketFactory} from "../src/MarketFactory.sol";
  *   RESOLVER_ADDRESS      - If set, resolver role transfers to this address during deploy
  *   ADMIN_SAFE_ADDRESS    - Mainnet-safe alias for ADMIN_ADDRESS; must be deployed
  *   RESOLVER_SAFE_ADDRESS - Mainnet-safe alias for RESOLVER_ADDRESS; must be deployed
+ *   RESOLUTION_REVIEWER_SAFE_ADDRESS - Required independent reviewer on Arbitrum One
  */
 contract DeployProtocol is Script {
     function run() external {
@@ -40,6 +41,7 @@ contract DeployProtocol is Script {
         address liquidityReserve = vm.envAddress("LIQUIDITY_RESERVE");
         address emergencyReserve = vm.envAddress("EMERGENCY_RESERVE");
         address feeCollector = vm.envOr("FEE_COLLECTOR_ADDRESS", treasury);
+        require(block.chainid != 42161 || feeCollector == treasury, "Arbitrum One uses a dedicated fee vault");
         address marketCreator = vm.envOr("MARKET_CREATOR_ADDRESS", address(0));
         if (marketCreator == address(0)) marketCreator = vm.envOr("ONCHAIN_DEPLOYER_ADDRESS", address(0));
         address adminAddress = vm.envOr("ADMIN_ADDRESS", address(0));
@@ -57,10 +59,11 @@ contract DeployProtocol is Script {
             resolverAddress = resolverSafe;
         }
 
+        address reviewer = mainnetReviewer(vm.addr(deployerKey), adminAddress, resolverAddress);
+
         console.log("=== Deploying Pronos Protocol ===");
         console.log("Collateral:", collateral);
         console.log("Treasury:", treasury);
-        console.log("Fee collector:", feeCollector);
 
         vm.startBroadcast(deployerKey);
 
@@ -71,6 +74,7 @@ contract DeployProtocol is Script {
         // 2. Deploy MarketFactory
         MarketFactory factory = new MarketFactory(address(token), collateral, treasury, liquidityReserve, emergencyReserve);
         console.log("MarketFactory deployed:", address(factory));
+        console.log("Fee collector:", factory.feeCollector());
 
         // 3. Authorize factory as minter and transfer token ownership
         token.setMinter(address(factory), true);
@@ -87,6 +91,8 @@ contract DeployProtocol is Script {
             factory.setResolver(resolverAddress);
             console.log("Resolver transferred to:", resolverAddress);
         }
+
+        if (reviewer != address(0)) factory.setResolutionReviewer(reviewer);
 
         if (marketCreator != address(0)) {
             factory.setMarketCreator(marketCreator);
@@ -124,6 +130,17 @@ contract DeployProtocol is Script {
         console.log("  1. Add the Vercel env vars above");
         console.log("  2. Run /api/migrate if needed");
         console.log("  3. Create first market with seed liquidity from /mvp/admin");
+    }
+
+    function mainnetReviewer(address deployer, address admin, address resolver) private view returns (address reviewer) {
+        if (block.chainid != 42161) return address(0);
+        reviewer = vm.envAddress("RESOLUTION_REVIEWER_SAFE_ADDRESS");
+        requireDeployed("RESOLUTION_REVIEWER_SAFE_ADDRESS", reviewer);
+        require(
+            resolver != address(0) && resolver != deployer && resolver != admin
+                && reviewer != deployer && reviewer != admin && reviewer != resolver,
+            "Arbitrum One requires distinct owner, resolver, and reviewer"
+        );
     }
 
     function requireDeployed(string memory label, address account) internal view {

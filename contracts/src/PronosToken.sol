@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
+import {ERC1155Supply} from "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Supply.sol";
 
 /**
  * @title PronosToken
@@ -9,7 +10,7 @@ import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
  *         Each market has two token IDs: YES = marketId*2, NO = marketId*2+1.
  *         Only authorized minters (AMM pools) can mint/burn.
  */
-contract PronosToken is ERC1155 {
+contract PronosToken is ERC1155Supply {
     address public owner;
     mapping(address => bool) public minters;
 

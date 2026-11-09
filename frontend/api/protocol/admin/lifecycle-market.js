@@ -177,13 +177,14 @@ export default async function handler(req, res) {
         });
       }
       const rows = await schemaSql`
-        SELECT id, status, market_id, factory_address, protocol_version
+        SELECT id, status, market_id, factory_address, protocol_version, resolution_review
         FROM protocol_markets
         WHERE id = ${mid}
         LIMIT 1
       `;
       if (rows.length === 0) return res.status(404).json({ error: 'market_not_found' });
       const market = rows[0];
+      if (market.resolution_review) return res.status(409).json({ error: 'use_reviewed_resolution' });
       if (!market.factory_address || market.market_id == null) {
         return res.status(500).json({ error: 'market_missing_chain_metadata' });
       }
@@ -201,7 +202,7 @@ export default async function handler(req, res) {
       const currentRows = await client.query(
         `SELECT id, question, status, previous_status, outcome, resolved_at,
                 lifecycle_note, lifecycle_updated_at, lifecycle_updated_by,
-                canceled_at, dispute_opened_at
+                canceled_at, dispute_opened_at, resolution_review
            FROM protocol_markets
           WHERE id = $1
           FOR UPDATE`,
@@ -211,6 +212,7 @@ export default async function handler(req, res) {
         throw statusError('market_not_found', 404);
       }
       const market = currentRows.rows[0];
+      if (market.resolution_review) throw statusError('use_reviewed_resolution', 409);
       const refundReport = await buildRefundReport(client, mid);
       const actor = admin.username || admin.user || 'admin';
       const lifecycleNote = cleanNote(note, action === 'cancel'

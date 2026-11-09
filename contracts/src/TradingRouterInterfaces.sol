@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 interface ITradingRouterFactory {
     function tradingRouter() external view returns (address);
+    function isTradingOpen(uint256 marketId) external view returns (bool);
 }
 
 interface ITradingRouterBinding {

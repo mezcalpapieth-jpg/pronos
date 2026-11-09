@@ -2,6 +2,7 @@ import RiskPanel from '../components/AdminRiskPanel.jsx';
 import AdminOnchainOperations from '../components/AdminOnchainOperations.jsx';
 import AdminOnchainTransactions from '../components/AdminOnchainTransactions.jsx';
 import AdminOnchainSettlement from '../components/AdminOnchainSettlement.jsx';
+import { AdminResolutionReview } from '../components/ResolutionReview.jsx';
 /**
  * Admin panel for the points-app.
  *
@@ -1003,6 +1004,7 @@ function LaunchReadinessPanel({ taskCounts, isAdmin }) {
       <AdminOnchainOperations isAdmin={isAdmin} />
       <AdminOnchainTransactions isAdmin={isAdmin} />
       <AdminOnchainSettlement isAdmin={isAdmin} />
+      {isAdmin && <AdminResolutionReview />}
       <section style={{
         background: 'var(--surface1)',
         border: '1px solid var(--border)',

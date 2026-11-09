@@ -7,6 +7,8 @@ import "./PronosToken.sol";
 import "./PronosAMM.sol";
 import "./PoolDeployment.sol";
 import "./TradingRouterInterfaces.sol";
+import "./MarketFeeVault.sol";
+import {MainnetResolutionReview, IResolutionReviewPool} from "./MainnetResolutionReview.sol";
 
 /**
  * @title MarketFactory
@@ -18,7 +20,7 @@ import "./TradingRouterInterfaces.sol";
  * Revenue distribution:
  *   70% treasury, 20% liquidity reserve, 10% emergency reserve
  */
-contract MarketFactory is ReentrancyGuard {
+contract MarketFactory is ReentrancyGuard, MainnetResolutionReview {
     // ─── State ────────────────────────────────────────────────────────────────
 
     PronosToken public immutable token;
@@ -27,6 +29,7 @@ contract MarketFactory is ReentrancyGuard {
     // MockMXNB. The contract doesn't care which token it is — only
     // the deploy script and environment do.
     IERC20      public immutable collateral;
+    MarketFeeVault public immutable feeVault;
 
     address public tradingRouter; // bound once; cannot expand an existing grant
     event TradingRouterBound(address indexed router);
@@ -113,7 +116,8 @@ contract MarketFactory is ReentrancyGuard {
         treasury          = _treasury;
         liquidityReserve  = _liquidityReserve;
         emergencyReserve  = _emergencyReserve;
-        feeCollector      = _treasury; // default: fees go to treasury
+        feeVault = block.chainid == 42161 ? new MarketFeeVault(collateral) : MarketFeeVault(address(0));
+        feeCollector = address(feeVault) == address(0) ? _treasury : address(feeVault);
     }
 
     // ─── Market Creation ─────────────────────────────────────────────────────
@@ -146,6 +150,27 @@ contract MarketFactory is ReentrancyGuard {
         string calldata resolutionSource,
         uint256 seedAmount
     ) external onlyMarketCreator returns (uint256 marketId) {
+        _requireLegacyResolution();
+        return _createMarket(question, category, endTime, resolutionSource, seedAmount);
+    }
+
+    function createReviewedMarket(ReviewedMarketInput calldata input)
+        external onlyMarketCreator returns (uint256 marketId)
+    {
+        _requireRulesCommitment(input);
+        marketId = _createMarket(
+            input.question, input.category, input.endTime, input.resolutionSource, input.seedAmount
+        );
+        _commitResolutionRules(marketId, input.rulesHash);
+    }
+
+    function _createMarket(
+        string calldata question,
+        string calldata category,
+        uint256 endTime,
+        string calldata resolutionSource,
+        uint256 seedAmount
+    ) internal returns (uint256 marketId) {
         require(endTime > block.timestamp, "MarketFactory: end time in past");
         require(seedAmount > 0, "MarketFactory: zero seed");
 
@@ -184,6 +209,18 @@ contract MarketFactory is ReentrancyGuard {
     // ─── Market Management ───────────────────────────────────────────────────
 
     function resolveMarket(uint256 marketId, uint8 outcome) external onlyResolver {
+        _requireLegacyResolution();
+        _resolveMarket(marketId, outcome);
+    }
+
+    function proposeResolution(uint256 marketId, uint8 outcome, bytes32 evidenceHash) external {
+        _requireProposalAuthor(marketId, resolver, evidenceHash);
+        require(block.timestamp >= markets[marketId].endTime, "MarketFactory: market still open");
+        _resolveMarket(marketId, outcome);
+        _recordResolutionProposal(marketId, outcome, evidenceHash, msg.sender);
+    }
+
+    function _resolveMarket(uint256 marketId, uint8 outcome) internal {
         require(marketId < markets.length, "MarketFactory: invalid market");
         Market storage m = markets[marketId];
         require(m.active, "MarketFactory: not active");
@@ -208,19 +245,45 @@ contract MarketFactory is ReentrancyGuard {
         emit MarketCanceled(marketId);
     }
 
-    function openResolutionDispute(uint256 marketId) external onlyOwner {
+    function openResolutionDispute(uint256 marketId) external {
+        if (!requiresResolutionReview) require(msg.sender == owner, "MarketFactory: not owner");
+        else if (msg.sender != owner) _requireReviewer();
         require(marketId < markets.length, "MarketFactory: invalid market");
         PronosAMM(markets[marketId].pool).openResolutionDispute();
+        if (requiresResolutionReview) resolutionProposals[marketId].approved = false;
         emit ResolutionDisputeOpened(marketId);
     }
 
-    function clearResolutionDispute(uint256 marketId) external onlyOwner {
+    function clearResolutionDispute(uint256 marketId) external {
+        if (requiresResolutionReview) _requireReviewer();
+        else require(msg.sender == owner, "MarketFactory: not owner");
         require(marketId < markets.length, "MarketFactory: invalid market");
         PronosAMM(markets[marketId].pool).clearResolutionDispute();
+        if (requiresResolutionReview) _restartResolutionReview(marketId);
         emit ResolutionDisputeCleared(marketId);
     }
 
+    function finalizeResolution(uint256 marketId, bytes32 expectedProposalId) external onlyOwner {
+        _requireApprovedProposal(marketId, expectedProposalId);
+        PronosAMM(markets[marketId].pool).finalizeResolution();
+        emit ResolutionReviewFinalized(marketId, expectedProposalId);
+    }
+
     function correctResolution(uint256 marketId, uint8 newOutcome) external onlyOwner {
+        _requireLegacyResolution();
+        _correctResolution(marketId, newOutcome);
+    }
+
+    function proposeResolutionCorrection(
+        uint256 marketId, bytes32 expectedProposalId, uint8 newOutcome, bytes32 evidenceHash
+    ) external {
+        _requireProposalAuthor(marketId, resolver, evidenceHash);
+        _requireCurrentProposal(marketId, expectedProposalId);
+        _correctResolution(marketId, newOutcome);
+        _recordResolutionProposal(marketId, newOutcome, evidenceHash, msg.sender);
+    }
+
+    function _correctResolution(uint256 marketId, uint8 newOutcome) internal {
         require(marketId < markets.length, "MarketFactory: invalid market");
         PronosAMM pool = PronosAMM(markets[marketId].pool);
         uint8 oldOutcome = pool.outcome();
@@ -240,9 +303,8 @@ contract MarketFactory is ReentrancyGuard {
      * @notice Sweep a resolved market's leftover collateral to the
      *         given recipient (typically treasury or liquidity reserve).
      *
-     * The AMM's RECOVER_GRACE_PERIOD (30 days post-resolution) must
-     * have elapsed before this succeeds — gives winning holders a
-     * full month to redeem before the protocol recovers the residual.
+     * Arbitrum One pools require explicit finalization and retain full backing
+     * for holders. Other pools keep the 30-day recovery delay.
      *
      * Idempotent: a second call after the AMM's reserve is drained
      * is a no-op (no revert), so a "sweep all resolved markets"
@@ -328,6 +390,7 @@ contract MarketFactory is ReentrancyGuard {
      *     rounding (verified by testFuzz_distributeFees_no_dust).
      */
     function distributeFees() external onlyOwner nonReentrant {
+        require(address(feeVault) == address(0), "MarketFactory: use fee batches");
         uint256 total = collateral.balanceOf(feeCollector);
         require(total > 0, "MarketFactory: no fees");
 
@@ -341,6 +404,13 @@ contract MarketFactory is ReentrancyGuard {
         require(collateral.transferFrom(feeCollector, emergencyReserve, toEmergency), "MarketFactory: emergency failed");
 
         emit FeesDistributed(toTreasury, toLiquidity, toEmergency);
+    }
+
+    function distributeMarketFees(uint256 marketId, bytes32 batchId, uint256 amount) external onlyOwner {
+        require(address(feeVault) != address(0), "MarketFactory: no fee vault");
+        require(marketId < markets.length, "MarketFactory: invalid market");
+        uint256 collected = PronosAMM(markets[marketId].pool).totalFeesCollected();
+        feeVault.distribute(marketId, batchId, amount, collected, treasury, liquidityReserve, emergencyReserve);
     }
 
     // ─── View Functions ──────────────────────────────────────────────────────
@@ -368,8 +438,22 @@ contract MarketFactory is ReentrancyGuard {
 
     // ─── Admin ───────────────────────────────────────────────────────────────
 
+    function isTradingOpen(uint256 marketId) external view returns (bool) {
+        Market storage m = markets[marketId];
+        return m.active && block.timestamp < m.endTime;
+    }
+
+    function _reviewPool(uint256 marketId) internal view override returns (IResolutionReviewPool) {
+        return IResolutionReviewPool(markets[marketId].pool);
+    }
+
+    function setResolutionReviewer(address reviewer) external onlyOwner {
+        _configureReviewer(reviewer, owner, resolver);
+    }
+
     function transferOwnership(address newOwner) external onlyOwner {
         require(newOwner != address(0), "MarketFactory: zero address");
+        _requireDistinctReviewRoles(newOwner, resolver);
         emit OwnershipTransferred(owner, newOwner);
         owner = newOwner;
     }
@@ -382,11 +466,13 @@ contract MarketFactory is ReentrancyGuard {
 
     function setResolver(address newResolver) external onlyOwner {
         require(newResolver != address(0), "MarketFactory: zero address");
+        _requireDistinctReviewRoles(newResolver, owner);
         emit ResolverUpdated(resolver, newResolver);
         resolver = newResolver;
     }
 
     function setFeeCollector(address _feeCollector) external onlyOwner {
+        require(address(feeVault) == address(0), "MarketFactory: fixed fee collector");
         require(_feeCollector != address(0), "MarketFactory: zero address");
         emit FeeCollectorUpdated(feeCollector, _feeCollector);
         feeCollector = _feeCollector;

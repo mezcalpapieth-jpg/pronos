@@ -11,10 +11,10 @@ interface IPoolIdentity {
     function marketId() external view returns (uint256);
 }
 
-/// @notice Fixed, non-upgradeable Sepolia trading scope. Every call trades for
+/// @notice Fixed, non-upgradeable trading scope. Every call trades for
 /// msg.sender and pays that same wallet. No arbitrary calls, recipients, token
 /// transfers or admin entry points. Funds go directly between wallet and pool.
-contract PronosTradingRouter is ReentrancyGuard {
+abstract contract PronosTradingRouterBase is ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     uint256 public constant VERSION = 1;
@@ -24,8 +24,8 @@ contract PronosTradingRouter is ReentrancyGuard {
     PronosToken public immutable tokenV1;
     PronosTokenV2 public immutable tokenV2;
 
-    constructor(address v1, address v2) {
-        require(block.chainid == 421614, "Router: Sepolia only");
+    constructor(address v1, address v2, uint256 chainId, string memory wrongChain) {
+        require(block.chainid == chainId, wrongChain);
         require(v1 != v2 && v1.code.length > 0 && v2.code.length > 0, "Router: factories");
         factoryV1 = MarketFactory(v1);
         factoryV2 = MarketFactoryV2(v2);
@@ -95,5 +95,17 @@ contract PronosTradingRouter is ReentrancyGuard {
         (bool binary, ) = _market(pool, false);
         if (binary) PronosAMM(pool).redeemRouted(msg.sender, amount);
         else PronosAMMMulti(pool).redeemRouted(msg.sender, amount);
+    }
+}
+
+contract PronosTradingRouter is PronosTradingRouterBase {
+    constructor(address v1, address v2) PronosTradingRouterBase(v1, v2, 421614, "Router: Sepolia only") {}
+}
+
+contract PronosMainnetTradingRouter is PronosTradingRouterBase {
+    address public constant MXNB = 0xF197FFC28c23E0309B5559e7a166f2c6164C80aA;
+
+    constructor(address v1, address v2) PronosTradingRouterBase(v1, v2, 42161, "Router: Arbitrum One only") {
+        require(address(collateral) == MXNB && MXNB.code.length > 0, "Router: official MXNB required");
     }
 }

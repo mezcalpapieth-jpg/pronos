@@ -77,6 +77,28 @@ const PROTOCOL_SCHEMA_MIGRATIONS = [
   `ALTER TABLE protocol_markets ADD COLUMN IF NOT EXISTS lifecycle_updated_by TEXT`,
   `ALTER TABLE protocol_markets ADD COLUMN IF NOT EXISTS canceled_at TIMESTAMPTZ`,
   `ALTER TABLE protocol_markets ADD COLUMN IF NOT EXISTS dispute_opened_at TIMESTAMPTZ`,
+  `ALTER TABLE protocol_markets ADD COLUMN IF NOT EXISTS resolution_review JSONB,
+    ADD COLUMN IF NOT EXISTS resolution_review_block BIGINT,
+    ADD COLUMN IF NOT EXISTS resolution_review_log INTEGER`,
+  `CREATE TABLE IF NOT EXISTS protocol_resolution_objections (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    market_id INTEGER NOT NULL REFERENCES protocol_markets(id),
+    proposal_id TEXT NOT NULL,
+    source TEXT NOT NULL CHECK (source IN ('points', 'chain')),
+    source_key TEXT NOT NULL,
+    reporter_address TEXT,
+    objection_hash TEXT NOT NULL,
+    detail TEXT,
+    tx_hash TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(market_id, proposal_id, source, source_key)
+  )`,
+  `CREATE INDEX IF NOT EXISTS protocol_resolution_objections_queue
+    ON protocol_resolution_objections(id DESC)`,
+  `CREATE TABLE IF NOT EXISTS protocol_resolution_documents (
+    hash TEXT PRIMARY KEY,
+    content TEXT NOT NULL
+  )`,
   `ALTER TABLE protocol_markets ADD COLUMN IF NOT EXISTS featured BOOLEAN NOT NULL DEFAULT false`,
   `CREATE INDEX IF NOT EXISTS idx_protocol_markets_featured_status
     ON protocol_markets(featured, status) WHERE featured = true`,

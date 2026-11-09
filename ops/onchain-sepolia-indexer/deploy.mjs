@@ -14,7 +14,8 @@ const repo = execFileSync('git', ['rev-parse','--show-toplevel'], { encoding:'ut
 const git = args => execFileSync('git', args, { cwd:repo, encoding:'utf8' });
 const branch = git(['branch','--show-current']).trim();
 assert.equal(branch, 'onchain-sepolia');
-git(['diff','--exit-code','HEAD','--','ops/onchain-sepolia-indexer','frontend/api/_lib/protocol-event-indexer.js','frontend/api/_lib/protocol-schema.js']);
+const indexerModules = ['protocol-event-indexer.js', 'protocol-resolution-review.js', 'protocol-schema.js'];
+git(['diff','--exit-code','HEAD','--','ops/onchain-sepolia-indexer', ...indexerModules.map(name => `frontend/api/_lib/${name}`)]);
 const sha = git(['rev-parse','HEAD']).trim();
 const cli = process.env.VERCEL_CLI_PATH;
 assert.ok(cli, 'Set VERCEL_CLI_PATH to the installed Vercel CLI entry point');
@@ -31,7 +32,7 @@ for (const path of git(['ls-files','ops/onchain-sepolia-indexer']).trim().split(
   await writeFile(target,git(['show',`${sha}:${path}`]));
 }
 await mkdir(join(destination,'src'),{recursive:true});
-for (const name of ['protocol-event-indexer.js','protocol-schema.js']) {
+for (const name of indexerModules) {
   await writeFile(join(destination,'src',name),git(['show',`${sha}:frontend/api/_lib/${name}`]));
 }
 await writeFile(join(destination,'source.json'),JSON.stringify({branch,sha}));
