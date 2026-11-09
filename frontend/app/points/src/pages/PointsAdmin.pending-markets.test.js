@@ -68,7 +68,7 @@ test('Points admin can edit generated markets and per-option liquidity before ap
 test('Points pending queue persists taxonomy filters and sends only displayed IDs for bulk actions', () => {
   const pendingTableSource = sourceForFunction('PendingMarketsTable');
   assert.match(pendingTableSource, /useAdminQueueFilters\(true\)/);
-  assert.match(pendingTableSource, /<AdminQueueToolbar queue=\{queue\} proposal>/);
+  assert.match(pendingTableSource, /<AdminQueueToolbar queue=\{queue\} proposal\s+searchAction=/);
   assert.match(pendingTableSource, /const ids = proposals\.map\(row => row\.id\)/);
   assert.match(pendingTableSource, /action: 'approve_all', filters: \{ ids \}, preview: true/);
   assert.match(pendingTableSource, /bulkReview\.checks\.filter/);
@@ -82,12 +82,16 @@ test('Points pending queue persists taxonomy filters and sends only displayed ID
   assert.match(pendingApiSource, /invalid_pending_market_ids/);
 });
 
-test('Points market automation shows a generation in-progress state under Sistema', () => {
+test('Points admin shares the generator between Sistema and Por aprobar and reloads proposals after it runs', () => {
   const tools = sourceForFunction('MarketAutomationTools');
-  assert.match(source, /tab === 'launch'[\s\S]*?<MarketAutomationTools \/>/);
-  assert.match(tools, /setGeneratingNow\(true\)[\s\S]*adminRunGenerators/);
-  assert.match(tools, /setGeneratingNow\(false\)[\s\S]*setBulkBusy\(false\)/);
-  assert.match(tools, /generatingNow \? 'Generando\.\.\.' : 'Generar propuestas'/);
+  const pending = sourceForFunction('PendingMarketsTable');
+  const button = sourceForFunction('GenerateMarketsButton');
+  assert.match(tools, /<GenerateMarketsButton generator=\{generator\}/);
+  assert.match(pending, /searchAction=\{<GenerateMarketsButton generator=\{generator\}/);
+  assert.match(pending, /reloadKey: generator\.revision/);
+  assert.match(source, /setGeneratingNow\(true\)[\s\S]*adminRunGenerators[\s\S]*setGenerationRevision[\s\S]*setGeneratingNow\(false\)/);
+  assert.match(button, /disabled=\{disabled \|\| generator.busy\}/);
+  assert.match(button, /generator.busy \? 'Generando…' : 'Generar mercados'/);
 });
 
 test('Points pending queue keeps large generated fields readable', () => {

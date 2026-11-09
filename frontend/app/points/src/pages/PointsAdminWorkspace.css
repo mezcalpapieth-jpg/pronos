@@ -13,6 +13,7 @@
   color: var(--admin-text);
   font: 14px/1.5 var(--font-body, system-ui, sans-serif);
   min-height: calc(100dvh - 64px);
+  overflow-anchor: none;
 }
 
 [data-theme="dark"] .pb-admin {
