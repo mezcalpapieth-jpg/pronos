@@ -9,19 +9,21 @@ import { cancelPointsMarket } from '../_lib/points-cancel-market.js';
 
 const ddlSource = await readFile(new URL('../_lib/points-schema.js', import.meta.url), 'utf8');
 const ddl = ddlSource.match(/`(CREATE TABLE IF NOT EXISTS points_official_result_snapshots[\s\S]*?)`/)[1];
+const resolutionCandidatesDdl = ddlSource.match(/`(CREATE TABLE IF NOT EXISTS points_resolution_candidates[\s\S]*?)`/)[1];
 const cutoff = '2026-10-19T14:00:00Z';
 const cfg = automaticConfig('rotten-tomatoes-cutoff', { cutoff });
 const clock = () => new Date('2026-10-19T13:59:05Z');
 const payload = { state: 'scored', score: 51, startedAt: clock().toISOString(), capturedAt: '2026-10-19T13:59:08Z' };
 async function database() {
   const db = new PGlite();
-  await db.exec(`CREATE TABLE points_markets (id INTEGER PRIMARY KEY, parent_id INTEGER, mode TEXT DEFAULT 'points', status TEXT DEFAULT 'active',
+  await db.exec(`CREATE TABLE points_markets (id INTEGER PRIMARY KEY, parent_id INTEGER, status TEXT DEFAULT 'active', mode TEXT DEFAULT 'points',
     resolver_type TEXT DEFAULT 'api_chart', resolver_config JSONB, outcomes JSONB, outcome INTEGER,
     resolved_at TIMESTAMPTZ, resolved_by TEXT);
     CREATE TABLE points_positions (market_id INTEGER, username TEXT, outcome_index INTEGER, shares NUMERIC, cost_basis NUMERIC, updated_at TIMESTAMPTZ);
     CREATE TABLE points_balances (username TEXT PRIMARY KEY, balance NUMERIC, updated_at TIMESTAMPTZ);
     CREATE TABLE points_distributions (username TEXT, amount NUMERIC, kind TEXT, reference_id INTEGER, reason TEXT);
     CREATE TABLE points_limit_orders (id INTEGER, market_id INTEGER, status TEXT);
+    ${resolutionCandidatesDdl};
     ${ddl};`);
   await db.query(`INSERT INTO points_markets (id, resolver_config, outcomes) VALUES (1,$1::jsonb,$2::jsonb)`, [JSON.stringify(cfg), JSON.stringify(RT_OUTCOMES)]);
   return db;
@@ -60,16 +62,25 @@ test('automatic cancellation uses the admin refund procedure exactly once and gu
   const db = await database();
   try {
     await db.exec(`INSERT INTO points_positions VALUES (1,'alice',0,300,100,NOW()),(1,'bob',1,200,75,NOW());
-      INSERT INTO points_balances VALUES ('alice',500,NOW()),('bob',400,NOW());`);
+      INSERT INTO points_balances VALUES ('alice',500,NOW()),('bob',400,NOW());
+      INSERT INTO points_resolution_candidates (points_market_id, outcome_index) VALUES (1, 0);`);
     await assert.rejects(db.transaction(tx => cancelPointsMarket(tx, 1, { expectedConfig: { wrong: true } })), /contract_changed/);
     assert.equal((await db.query('SELECT balance FROM points_balances WHERE username=$1', ['alice'])).rows[0].balance, '500');
     const r = await db.transaction(tx => cancelPointsMarket(tx, 1, { actor: 'resolver:official-result', reason: 'No score', expectedConfig: cfg }));
     assert.equal(r.totalRefunded, 175);
-    assert.equal((await db.query('SELECT balance FROM points_balances WHERE username=$1', ['alice'])).rows[0].balance, '600');
-    assert.equal((await db.query('SELECT status, outcome FROM points_markets')).rows[0].status, 'canceled');
-    assert.equal((await db.query('SELECT SUM(shares) AS shares FROM points_positions')).rows[0].shares, '0');
     await assert.rejects(db.transaction(tx => cancelPointsMarket(tx, 1, { actor: 'retry' })), /not_active/);
-    assert.equal((await db.query('SELECT COUNT(*) FROM points_distributions')).rows[0].count, 2);
+    assert.deepEqual((await db.query('SELECT username, balance FROM points_balances ORDER BY username')).rows, [
+      { username: 'alice', balance: '600' },
+      { username: 'bob', balance: '475' },
+    ]);
+    assert.deepEqual((await db.query('SELECT status, outcome FROM points_markets')).rows, [{ status: 'canceled', outcome: null }]);
+    assert.deepEqual((await db.query('SELECT SUM(shares) AS shares, SUM(cost_basis) AS cost_basis FROM points_positions')).rows,
+      [{ shares: '0', cost_basis: '0' }]);
+    assert.deepEqual((await db.query('SELECT username, amount, kind, reference_id FROM points_distributions ORDER BY username')).rows, [
+      { username: 'alice', amount: '100', kind: 'market_cancel_refund', reference_id: 1 },
+      { username: 'bob', amount: '75', kind: 'market_cancel_refund', reference_id: 1 },
+    ]);
+    assert.deepEqual((await db.query('SELECT status FROM points_resolution_candidates')).rows, [{ status: 'denied' }]);
   } finally { await db.close(); }
 });
 

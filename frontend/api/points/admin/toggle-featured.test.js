@@ -7,7 +7,7 @@ process.env.DATABASE_URL ||= 'postgresql://unused:unused@localhost/unused';
 const { updatePendingTournamentFeature } = await import('./toggle-featured.js');
 if (previousUrl === undefined) delete process.env.DATABASE_URL;
 
-test('adding a pending trophy raises uniform defaults visibly without repricing custom or approved rows', async () => {
+test('pending trophies apply the current opening floors and preserve custom or approved prices', async () => {
   const db = new PGlite();
   try {
     await db.exec(`CREATE TABLE points_pending_markets (
@@ -25,13 +25,13 @@ test('adding a pending trophy raises uniform defaults visibly without repricing 
     const update = (id, flag = true) => db.transaction(client => updatePendingTournamentFeature(client, id, flag));
     const [sports] = await update(1);
     assert.equal(Number(sports.seed_liquidity), 7500);
-    assert.deepEqual(sports.seed_liquidities, [7500,7500,7500]);
+    assert.deepEqual(sports.seed_liquidities, [7500, 7500, 7500]);
     assert.deepEqual((await update(1))[0], sports);
     assert.deepEqual((await update(1,false))[0].seed_liquidities, sports.seed_liquidities);
-    assert.deepEqual((await update(2))[0].seed_liquidities, [3750,3750,3750]);
+    assert.deepEqual((await update(2))[0].seed_liquidities, [3750, 3750, 3750]);
     assert.deepEqual((await update(3))[0].seed_liquidities, [1000,2000,3000]);
     assert.deepEqual((await update(4))[0].seed_liquidities, [1000,1000,1000]);
-    assert.deepEqual((await update(5))[0].seed_liquidities, [7500,7500,7500]);
+    assert.deepEqual((await update(5))[0].seed_liquidities, sports.seed_liquidities);
     assert.deepEqual(await update(999), []);
   } finally { await db.close(); }
 });

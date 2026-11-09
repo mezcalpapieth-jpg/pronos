@@ -278,10 +278,12 @@ test('Points admin can edit active market logos and repair active parallel marke
   assert.match(source, /Reserva No/);
   assert.match(source, /Más reserva No = Sí más alto/);
   assert.match(source, /parallelLegs:\s*parallelLegPatches/);
-  assert.match(apiSource, /adminEditMarket\(\{ marketId, question, startTime, endTime, category, imageUrl, outcomeImages, parallelLegs, finalScore \}\)/);
-  assert.match(apiSource, /imageUrl/);
-  assert.match(apiSource, /outcomeImages/);
-  assert.match(apiSource, /parallelLegs/);
+  const editPayload = apiSource.match(/postJson\('\/api\/points\/admin\/edit-market', \{([^}]+)\}\)/)?.[1];
+  assert.ok(editPayload, 'expected edit-market request payload');
+  const fields = editPayload.split(',').map(field => field.trim());
+  for (const field of ['imageUrl', 'outcomeImages', 'parallelLegs', 'finalScore']) {
+    assert.ok(fields.includes(field), `edit payload should include ${field}`);
+  }
 });
 
 test('Points admin time edits do not block on untouched depleted parallel reserves', () => {

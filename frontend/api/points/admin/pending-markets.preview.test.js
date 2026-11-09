@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import { attachPointsOpeningLiquidity } from '../../_lib/market-pricing.js';
+import { pointsResolverReadiness } from '../../_lib/points-resolver-readiness.js';
 import { pendingApprovalOptions, pendingApprovalSettings } from '../../_lib/onchain-preview-approval.js';
 
 const source = await readFile(new URL('./pending-markets.js', import.meta.url), 'utf8');
@@ -20,6 +21,7 @@ function harness(env, { approvalError, authenticated = true, rows = [] } = {}) {
     console: { error() {} },
     neon: () => async strings => { calls.sql++; return strings.join('').includes('FROM points_pending_markets p') ? rows : []; },
     attachPointsOpeningLiquidity,
+    pointsResolverReadiness,
     applyCors: () => false,
     requirePointsAdmin: (_req, res) => {
       if (authenticated) return { username: 'test-admin' };
@@ -134,6 +136,7 @@ test('preview seed display follows the chosen approval destination without chang
     assert.equal(res.statusCode, 200);
     assert.equal(res.body.pending[0].seedLiquidity, expected);
     assert.deepEqual(res.body.pending[0].seedLiquidities, [expected,expected,expected]);
+    assert.equal(res.body.pending[0].resolutionReadiness?.mode, query.previewApprovalMode === 'points' ? 'missing' : undefined);
   }
   assert.equal(row.seed_liquidity, 1000);
   const production = harness({ ...previewEnv, VERCEL_ENV: 'production' }, { rows: [row] });

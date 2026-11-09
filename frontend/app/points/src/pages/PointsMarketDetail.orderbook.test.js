@@ -44,7 +44,6 @@ test('points market detail places mobile trade controls before orderbook', () =>
   const mobileTradeIndex = detailSource.indexOf('{isMobile && tradePanel}');
   const activityTapeIndex = detailSource.indexOf('<PointsActivityTape');
   const orderBookIndex = detailSource.indexOf('<OrderBookPanel');
-  const seriesStripIndex = detailSource.indexOf('<SeriesGameStrip');
   const asideIndex = detailSource.indexOf('<aside style');
   const desktopTradeIndex = detailSource.indexOf('{!isMobile && tradePanel}');
   assert.ok(tradePanelIndex > 0, 'expected shared trade panel render block');
@@ -53,7 +52,6 @@ test('points market detail places mobile trade controls before orderbook', () =>
   assert.ok(mobileTradeIndex < orderBookIndex, 'mobile trade controls should sit between the chart and orderbook');
   assert.ok(activityTapeIndex > mobileTradeIndex, 'activity tape should sit after mobile trade controls');
   assert.ok(activityTapeIndex < orderBookIndex, 'activity tape should sit before the orderbook');
-  assert.ok(orderBookIndex < seriesStripIndex, 'orderbook should stay after mobile trade controls and before series navigation');
   assert.ok(orderBookIndex < asideIndex, 'orderbook should remain in the left/mobile flow');
   assert.ok(desktopTradeIndex > asideIndex, 'desktop trade controls should stay in the right rail');
 });

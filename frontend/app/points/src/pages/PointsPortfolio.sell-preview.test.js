@@ -132,16 +132,22 @@ test('portfolio shows combinada tickets in their own tab', () => {
   assert.match(source, /points\.portfolio\.tab\.parlays/);
   assert.match(source, /tab === 'combinadas'/);
   assert.match(source, /Ganó:/);
-  assert.match(source, /title="Liquidadas"/);
-  assert.match(source, /<ParlaysView parlays=\{parlays\} loading=\{loading\}/);
+  assert.match(source, /<ParlayTicketSection title="Por cobrar" tickets=\{claimable\}/);
+  assert.match(source, /<ParlayTicketSection title="En curso" tickets=\{open\}/);
+  assert.match(source, /<ParlayTicketSection title="Resultados" tickets=\{settled\}/);
+  assert.match(source, /<ParlaysView parlays=\{parlays\} loading=\{loading\} onClaim=\{handleParlayClaim\}/);
 });
 
 test('portfolio separates open PnL from total account PnL', () => {
-  assert.match(source, /Promise\.all\(\[\s*fetchPositions\(\),\s*fetchHistory\(\{ cycle: 'current' \}\)\.catch\(\(\) => null\),\s*\]\)/s);
-  assert.match(source, /const openPnl = Number\(summary\?\.pnl \|\| 0\)/);
-  assert.match(source, /const totalPnl = Number\(historySummary\?\.totalPnl \?\? openPnl\)/);
-  assert.match(source, /label: 'PnL abierto'/);
-  assert.match(source, /label: 'PnL total'/);
+  assert.match(source, /fetchPositions\(\)/);
+  assert.match(source, /fetchHistory\(\{ cycle: 'current' \}\)/);
+  assert.match(source, /setSummary\(positionsResult\.summary \|\| null\)/);
+  assert.match(source, /setHistorySummary\(historyResult\.summary\)/);
+  assert.match(source, /const marketOpenPnl = Number\(\(onchain \? summary\?\.unrealizedPnl : summary\?\.pnl\) \|\| 0\)/);
+  assert.match(source, /const openPnl = marketOpenPnl \+ Number\(stockPortfolio\?\.summary\?\.unrealizedPnl \|\| 0\)/);
+  assert.match(source, /const totalPnl = Number\(historySummary\?\.totalPnl \?\? marketOpenPnl\) \+ Number\(stockPortfolio\?\.summary\?\.pnl \|\| 0\)/);
+  assert.match(source, /label: 'PnL abierto', value: stockValuesUnknown \? '—' : signedFmt\(openPnl\)/);
+  assert.match(source, /label: 'PnL total', value: stockValuesUnknown \? '—' : signedFmt\(totalPnl\)/);
 });
 
 test('portfolio PnL and history can switch between current and previous cycles', () => {
@@ -151,7 +157,7 @@ test('portfolio PnL and history can switch between current and previous cycles',
   assert.match(source, /fetchHistory\(\{ cycle: historyCycleScope \}\)/);
   assert.match(source, /cycleScope=\{pnlCycleScope\}/);
   assert.match(source, /onCycleScopeChange=\{setPnlCycleScope\}/);
-  assert.match(source, /onCycleScopeChange=\{setHistoryCycleScope\}/);
+  assert.match(source, /onCycleScopeChange=\{onchain \? undefined : setHistoryCycleScope\}/);
   assert.match(source, /cycle_closed:\s*\{ label: 'CICLO ANTERIOR'/);
   assert.match(pnlChartCardSource, /CYCLE_SCOPES/);
   assert.match(pnlChartCardSource, /CICLO ANTERIOR/);

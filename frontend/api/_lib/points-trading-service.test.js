@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { executePointsBuy, executePointsSell } from './points-trading-service.js';
 import { previewHybridBuy, previewHybridSell } from './points-trade-router.js';
+import { NEXT_TOURNAMENT_RANKING_CUTOFF_ISO, NEXT_TOURNAMENT_SCORING_START_ISO } from './points-tournament-config.js';
 
 const source = await readFile(new URL('./points-trading-service.js', import.meta.url), 'utf8');
 
@@ -220,12 +221,17 @@ test('failed buy/sell slippage guards roll back every balance, position, order a
   assert.deepEqual(db.state, before);
 });
 
-test('tournament share caps remain enforced on AMM-only routing', async () => {
+test('AMM-only routing enforces the share cap during the tournament', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date(NEXT_TOURNAMENT_SCORING_START_ISO) });
   const db = ledger({ tournament: true });
   db.state.balances.taker = 20000;
   const before = structuredClone(db.state);
   await assert.rejects(db.trade('buy', { collateral: 10000 }), { message: 'tournament_share_cap', status: 400 });
   assert.deepEqual(db.state, before);
+
+  t.mock.timers.setTime(Date.parse(NEXT_TOURNAMENT_RANKING_CUTOFF_ISO) + 1);
+  await db.trade('buy', { collateral: 10000 });
+  assert.equal(db.state.trades.length, 1);
 });
 
 test('partial fills transfer only filled shares and preserve the remaining ask escrow', async () => {
