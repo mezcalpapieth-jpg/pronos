@@ -6,7 +6,18 @@ export function jsonArray(value) {
 }
 
 export function marketView(row) {
-  const outcomes = jsonArray(row.protocol_outcomes || row.outcomes);
+  const linked = row.protocol_id != null && Number(row.chain_id) === Number(row.protocol_chain_id)
+    && String(row.chain_address).toLowerCase() === String(row.pool_address).toLowerCase()
+    && row.chain_market_id != null && String(row.chain_market_id) === String(row.contract_market_id);
+  const indexedOutcomes = jsonArray(row.protocol_outcomes || row.outcomes);
+  const publishedOutcomes = jsonArray(row.outcomes);
+  // V1 creation events carry no labels. Points stores the published names
+  // in contract order, while the indexer fills those slots with Sí and No.
+  const usesV1Placeholders = linked && row.protocol_version === 'v1' && indexedOutcomes.length === 2
+    && indexedOutcomes[0] === 'Sí' && indexedOutcomes[1] === 'No';
+  const outcomes = usesV1Placeholders && publishedOutcomes.length === 2
+    && publishedOutcomes.every(label => typeof label === 'string' && label.trim())
+    ? publishedOutcomes : indexedOutcomes;
   const count = outcomes.length;
   let prices = jsonArray(row.prices).map(Number);
   if (!prices.length && count === 2 && row.yes_price != null && row.no_price != null) {
@@ -14,9 +25,6 @@ export function marketView(row) {
   }
   const validPrices = prices.length === count && count >= 2
     && prices.every(p => Number.isFinite(p) && p >= 0 && p <= 1);
-  const linked = row.protocol_id != null && Number(row.chain_id) === Number(row.protocol_chain_id)
-    && String(row.chain_address).toLowerCase() === String(row.pool_address).toLowerCase()
-    && row.chain_market_id != null && String(row.chain_market_id) === String(row.contract_market_id);
   return {
     id: Number(row.id), mode: row.mode || 'points',
     parentMarketId: row.parent_id == null ? null : Number(row.parent_id),

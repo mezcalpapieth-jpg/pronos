@@ -18,6 +18,37 @@ test('market mapping distinguishes all three IDs, zero contract IDs, and V1/V2 o
   assert.equal(marketView({ ...row, protocol_version: 'v2', protocol_status: 'resolved', protocol_outcome: 0 }).outcome, 0);
 });
 
+test('V1 sports labels follow the published order in prices, positions and redemptions', () => {
+  const outcomes = ['Atlanta Hawks', 'Los Angeles Lakers'];
+  const fixture = { ...row, outcomes: JSON.stringify(outcomes) };
+  const market = marketView(fixture);
+  assert.deepEqual(market.outcomes, outcomes);
+  assert.deepEqual(market.prices, [0.6, 0.4]);
+  assert.equal(market.executionReady, true);
+
+  const trades = [buy(0, 2, 4), buy(1, 2, 5)];
+  const resolved = marketView({ ...fixture, protocol_status: 'resolved', protocol_outcome: 2 });
+  const claimable = portfolioView([resolved], trades, []);
+  assert.deepEqual(claimable.positions.map(p => [p.outcomeLabel, p.claimablePayout]), [
+    ['Atlanta Hawks', 0], ['Los Angeles Lakers', 5],
+  ]);
+  const redeem = { market_id: 3, outcome_index: null, shares: 5, payout: 5, block_number: 2 };
+  const claimed = portfolioView([resolved], trades, [redeem]);
+  assert.equal(claimed.history[0].winningOutcomeLabel, 'Los Angeles Lakers');
+  assert.equal(claimed.history[0].transactions.at(-1).outcomeLabel, 'Los Angeles Lakers');
+  assert.equal(claimed.history[0].claimablePayout, 0);
+});
+
+test('unusable Points labels and authoritative protocol labels keep their existing behavior', () => {
+  for (const outcomes of [undefined, ['Sí', 'No'], ['Atlanta Hawks', ' '], ['A', 'B', 'C']]) {
+    assert.deepEqual(marketView({ ...row, outcomes }).outcomes, ['Sí', 'No']);
+  }
+  const outcomes = ['Atlanta Hawks', 'Los Angeles Lakers'];
+  assert.deepEqual(marketView({ ...row, outcomes, protocol_version: 'v2' }).outcomes, ['Sí', 'No']);
+  assert.deepEqual(marketView({ ...row, outcomes, protocol_outcomes: ['A', 'B'] }).outcomes, ['A', 'B']);
+  assert.deepEqual(marketView({ ...row, outcomes, contract_market_id: 7 }).outcomes, ['Sí', 'No']);
+});
+
 test('only linked server mappings expose factory identity for future-market consent coverage', () => {
   assert.equal(marketView({ ...row, factory_address: '0xAbC' }).factoryAddress, '0xabc');
   assert.equal(marketView({ ...row, factory_address: '0xAbC', protocol_id: null }).factoryAddress, null);
