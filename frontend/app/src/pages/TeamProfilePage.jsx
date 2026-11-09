@@ -10,7 +10,8 @@ import { isFeaturedTeam, toggleFeaturedTeam } from '../lib/featuredTeams.js';
 import { logoForTeamInRows, marketOnlyRowForTeam } from '../lib/teamProfileRows.js';
 
 const CHAIN_ID = Number(import.meta.env.VITE_ONCHAIN_CHAIN_ID || 42161);
-const ACTIVE_PENDING_STATES = new Set(['open', 'pending', 'por-resolver', 'disputa']);
+const CURRENT_FIXTURE_STATES = new Set(['live', 'postponed', 'delayed', 'suspended']);
+const ACTIVE_PENDING_STATES = new Set(['open', 'pending', 'por-resolver', 'disputa', ...CURRENT_FIXTURE_STATES]);
 
 function formatDateTime(value) {
   if (!value) return 'Por definir';
@@ -41,6 +42,16 @@ function stateLabel(state) {
       return { label: 'Por resolver', color: '#f59e0b', bg: 'rgba(245,158,11,0.12)' };
     case 'cancelado':
       return { label: 'Anulado', color: 'var(--text-muted)', bg: 'rgba(255,255,255,0.06)' };
+    case 'live':
+      return { label: 'En vivo', color: 'var(--green)', bg: 'rgba(0,232,122,0.12)' };
+    case 'postponed':
+      return { label: 'Pospuesto', color: '#f59e0b', bg: 'rgba(245,158,11,0.12)' };
+    case 'delayed':
+      return { label: 'Demorado', color: '#f59e0b', bg: 'rgba(245,158,11,0.12)' };
+    case 'suspended':
+      return { label: 'Suspendido', color: '#f59e0b', bg: 'rgba(245,158,11,0.12)' };
+    case 'awarded':
+      return { label: 'Adjudicado', color: 'var(--text-muted)', bg: 'rgba(255,255,255,0.06)' };
     case 'disputa':
       return { label: 'Disputa', color: '#ff5757', bg: 'rgba(255,87,87,0.12)' };
     default:
@@ -66,7 +77,8 @@ function rowTimeMs(row) {
 }
 
 function isHistoricalRow(row) {
-  if (['closed', 'resolved', 'cancelado'].includes(row?.state)) return true;
+  if (['closed', 'resolved', 'cancelado', 'awarded'].includes(row?.state)) return true;
+  if (CURRENT_FIXTURE_STATES.has(row?.fixtureState)) return false;
   const ms = rowTimeMs(row);
   return ms > 0 && ms < Date.now();
 }
@@ -110,7 +122,12 @@ async function loadMarkets(surface) {
 function TeamScheduleRow({ row, onOpen }) {
   const badge = stateLabel(row.state);
   const path = marketPath(row.market);
-  const finalScore = row.market?.finalScore || row.finalScore || null;
+  const fixtureBadge = row.market && row.fixtureState !== row.state
+    && (CURRENT_FIXTURE_STATES.has(row.fixtureState) || ['cancelado', 'awarded'].includes(row.fixtureState))
+    ? stateLabel(row.fixtureState)
+    : null;
+  const finalScore = row.market?.finalScore || (row.fixtureState === 'closed' ? row.finalScore : null);
+  const liveScore = row.fixtureState === 'live' ? row.finalScore : null;
   return (
     <div style={{
       display: 'grid',
@@ -161,7 +178,9 @@ function TeamScheduleRow({ row, onOpen }) {
         }}>
           <span>{formatDateTime(row.startsAt)}</span>
           {row.venue && <span>{row.venue}</span>}
+          {fixtureBadge && <span style={{ color: fixtureBadge.color }}>{fixtureBadge.label}</span>}
           {finalScore && <span style={{ color: 'var(--green)' }}>Final {finalScore}</span>}
+          {!finalScore && liveScore && <span style={{ color: 'var(--green)' }}>{liveScore}</span>}
         </div>
       </div>
       <button

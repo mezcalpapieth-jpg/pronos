@@ -513,18 +513,12 @@ export async function fetchPriceHistory(ids, { days = 30, hours, outcome = 0, li
     limit: String(limit),
   });
   if (hours != null) q.set('hours', String(hours));
-  try {
-    // Path kept flat (`/api/points/price-history`) to avoid Vercel's
-    // filesystem-routing conflict where a `markets/` directory would
-    // shadow the sibling `markets.js` file.
-    const { history = {} } = await getJson(`/api/points/price-history?${q}`);
-    return history;
-  } catch {
-    // Price history is a nice-to-have — don't break the UI if the snapshot
-    // table is empty or the endpoint hiccups. The Sparkline will render a
-    // truthful empty/flat state instead of inventing movement.
-    return {};
+  const { history } = await getJson(`/api/points/price-history?${q}`);
+  if (!history || typeof history !== 'object' || Array.isArray(history)
+    || Object.values(history).some(series => !Array.isArray(series))) {
+    throw new Error('invalid_price_history');
   }
+  return history;
 }
 
 export async function fetchCryptoHistory(marketId) {
@@ -551,8 +545,7 @@ export async function fetchPnlHistory({ username, days = 0, cycle = 'current' } 
     const { series = [], current = 0, cycle: cycleMeta = null } = await getJson(`/api/points/pnl-history?${q}`);
     return { series, current, cycle: cycleMeta };
   } catch {
-    // Same posture as price history: the chart is additive, so a failure
-    // renders the truthful empty state rather than breaking the page.
+    // PnL history is optional on the profile and portfolio.
     return { series: [], current: 0 };
   }
 }
