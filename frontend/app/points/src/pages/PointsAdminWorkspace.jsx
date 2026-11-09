@@ -50,9 +50,32 @@ function adminHref(tab) {
 }
 
 export function AdminWorkspace({ tab, username, children }) {
+  const main = useRef(null);
   const [moreSections, setMoreSections] = useState(() =>
     SECTIONS.slice(1).some(([, items]) => items.some(([id]) => id === tab)));
   const title = tab === 'overview' ? 'Panel de administración' : TAB_TITLES[tab] || 'Nuevo mercado';
+  const showPreview = import.meta.env.VITE_VERCEL_ENV === 'preview'
+    && !['pronos.io', 'www.pronos.io'].includes(window.location.hostname);
+
+  function holdViewport() {
+    const content = main.current;
+    if (window.scrollY && content) {
+      // A loading or empty queue still needs enough height to hold the current viewport.
+      content.style.minHeight = `${Math.max(0, Math.ceil(window.innerHeight - content.getBoundingClientRect().top))}px`;
+    }
+  }
+
+  useEffect(() => {
+    const content = main.current;
+    function releaseViewport() {
+      if (!content.style.minHeight) return;
+      const minimum = Math.ceil(window.innerHeight - content.getBoundingClientRect().top);
+      if (!window.scrollY || minimum <= 0) content.style.minHeight = '';
+      else if (minimum < parseFloat(content.style.minHeight)) content.style.minHeight = `${minimum}px`;
+    }
+    window.addEventListener('scroll', releaseViewport, { passive: true });
+    return () => window.removeEventListener('scroll', releaseViewport);
+  }, []);
 
   return (
     <div className="pb-admin">
@@ -79,7 +102,9 @@ export function AdminWorkspace({ tab, username, children }) {
             ))}
           </div>
         </nav>
-        <main className="pb-admin-main">
+        <main className="pb-admin-main" ref={main}
+          onClickCapture={holdViewport} onSubmitCapture={holdViewport}
+          onChangeCapture={event => { if (event.target.tagName === 'SELECT') holdViewport(); }}>
           <div className="pb-admin-heading">
             <div>
               <h1>{title}</h1>
@@ -87,7 +112,7 @@ export function AdminWorkspace({ tab, username, children }) {
             </div>
             {tab !== 'create' && <Link className="pb-admin-button pb-admin-primary" to="/admin?tab=create">+ Nuevo mercado</Link>}
           </div>
-          {import.meta.env.VITE_VERCEL_ENV === 'preview' && (
+          {showPreview && (
             <p className="pb-admin-preview"><QueueBadge status={['Vista previa', 'info']} /> El catálogo y los tickets pueden diferir de producción.</p>
           )}
           {children}
@@ -165,7 +190,7 @@ export function AdminOverview({ counts, loading, onRefresh }) {
             <h2 id="pb-admin-catalog-heading">Catálogo de mercados</h2>
             <p>Abre los mercados activos por categoría o consulta el historial.</p>
           </div>
-          <Link className="pb-admin-button" to="/admin?tab=markets">Ver todos los mercados <span aria-hidden="true">→</span></Link>
+          <Link className="pb-admin-button" to="/admin?tab=markets" preventScrollReset>Ver todos los mercados <span aria-hidden="true">→</span></Link>
         </div>
         <div className="pb-admin-chips">
           {MARKET_CATEGORY_FILTERS.map(({ key, label }) => (
@@ -233,20 +258,21 @@ export function useAdminQueueFilters(proposal = false) {
     next.delete('item');
     if (key === 'category') for (const filter of FILTER_KEYS.slice(1, -1)) next.delete(filter);
     if (key === 'sport') next.delete('league');
-    setParams(next);
+    setParams(next, { preventScrollReset: true });
   }
   function reset() {
     const next = new URLSearchParams(params);
     for (const key of [...FILTER_KEYS, 'q', 'item']) next.delete(key);
-    setParams(next);
+    setParams(next, { preventScrollReset: true });
   }
 
   return { statuses, status, values, search, update, reset, hasFilters };
 }
 
-export function useAdminQueueData(url, field, { keepPrevious = false } = {}) {
+export function useAdminQueueData(url, field, { keepPrevious = false, reloadKey = 0 } = {}) {
   const [state, setState] = useState(null);
   const [refresh, setRefresh] = useState(0);
+  const revision = `${reloadKey}:${refresh}`;
 
   useEffect(() => {
     if (!url) return;
@@ -255,20 +281,20 @@ export function useAdminQueueData(url, field, { keepPrevious = false } = {}) {
       data => {
         if (controller.signal.aborted) return;
         const rows = data?.[field];
-        setState({ url, refresh, data, rows: Array.isArray(rows) ? rows : null, error: !Array.isArray(rows) });
+        setState({ url, revision, data, rows: Array.isArray(rows) ? rows : null, error: !Array.isArray(rows) });
       },
       () => {
-        if (!controller.signal.aborted) setState({ url, refresh, rows: null, error: true });
+        if (!controller.signal.aborted) setState({ url, revision, rows: null, error: true });
       },
     );
     return () => controller.abort();
-  }, [url, field, refresh]);
+  }, [url, field, revision]);
 
-  const current = state?.url === url && (keepPrevious || state?.refresh === refresh) ? state : null;
+  const current = state?.url === url && (keepPrevious || state?.revision === revision) ? state : null;
   return {
     rows: current?.rows,
     data: current?.data,
-    loading: Boolean(url) && current?.refresh !== refresh,
+    loading: Boolean(url) && current?.revision !== revision,
     error: current?.error,
     reload: () => setRefresh(value => value + 1),
     setRows: update => setState(prev => prev?.url === url && prev.rows
@@ -291,7 +317,7 @@ export function AdminFilterGroup({ label, options, value, onChange, categories =
   );
 }
 
-export function AdminQueueToolbar({ queue, proposal = false, children }) {
+export function AdminQueueToolbar({ queue, proposal = false, searchAction, children }) {
   const { statuses, status, values, search, update, reset, hasFilters } = queue;
   const [draft, setDraft] = useState(search);
   useEffect(() => { setDraft(search); }, [search]);
@@ -316,6 +342,7 @@ export function AdminQueueToolbar({ queue, proposal = false, children }) {
           </label>
           <button type="submit" className="pb-admin-button">Buscar</button>
         </form>
+        {searchAction}
         {(hasFilters || draft) && <button type="button" className="pb-admin-button" onClick={() => { setDraft(''); reset(); }}>Limpiar filtros</button>}
       </div>
       <div className="pb-admin-filters">
@@ -336,6 +363,10 @@ export function AdminQueueToolbar({ queue, proposal = false, children }) {
   );
 }
 
+export function focusAdminQueuePanel(element) {
+  element?.focus({ preventScroll: !window.matchMedia('(max-width: 820px)').matches });
+}
+
 export function AdminMarketQueue({ rows, queue, proposal = false, loading, error, onRetry, children }) {
   const [params, setParams] = useSearchParams();
   const detail = useRef(null);
@@ -344,16 +375,16 @@ export function AdminMarketQueue({ rows, queue, proposal = false, loading, error
   const selected = rows?.find(row => String(row.id) === selectedId);
   const displayed = selected || rows?.[0];
   const shouldFocusDetail = useRef(false);
-  const shouldFocusList = useRef(false);
+  const returnToRow = useRef(null);
 
   function select(id) {
     const next = new URLSearchParams(params);
     if (id == null) {
-      shouldFocusList.current = true;
+      returnToRow.current = selectedId;
       next.delete('item');
     } else {
       if (String(id) === selectedId) {
-        detail.current?.focus();
+        focusAdminQueuePanel(detail.current);
         return;
       }
       shouldFocusDetail.current = true;
@@ -365,10 +396,10 @@ export function AdminMarketQueue({ rows, queue, proposal = false, loading, error
   useEffect(() => {
     if (shouldFocusDetail.current && selected) {
       shouldFocusDetail.current = false;
-      detail.current?.focus();
-    } else if (shouldFocusList.current && !selectedId) {
-      shouldFocusList.current = false;
-      activeRow.current?.focus();
+      focusAdminQueuePanel(detail.current);
+    } else if (returnToRow.current && !selectedId) {
+      returnToRow.current = null;
+      focusAdminQueuePanel(activeRow.current);
     }
   }, [selected, selectedId]);
 
@@ -382,7 +413,7 @@ export function AdminMarketQueue({ rows, queue, proposal = false, loading, error
       <strong>{queue.hasFilters ? 'Sin coincidencias' : proposal ? 'Sin propuestas en esta vista' : 'Sin mercados en esta vista'}</strong>
       {queue.hasFilters
         ? <button className="pb-admin-button" onClick={queue.reset} type="button">Quitar filtros</button>
-        : !proposal && queue.status !== 'all' && <Link className="pb-admin-button" to="/admin?tab=markets">Ver todos los mercados</Link>}
+        : !proposal && queue.status !== 'all' && <Link className="pb-admin-button" to="/admin?tab=markets" preventScrollReset>Ver todos los mercados</Link>}
     </div>
   );
   return (
@@ -392,7 +423,7 @@ export function AdminMarketQueue({ rows, queue, proposal = false, loading, error
         <div className="pb-admin-list-rows">
           {rows.map(row => (
             <button className="pb-admin-row" type="button" key={row.id} onClick={() => select(row.id)}
-              ref={row.id === displayed.id ? activeRow : null} aria-pressed={row.id === displayed.id}
+              ref={String(row.id) === returnToRow.current ? activeRow : null} aria-pressed={row.id === displayed.id}
               aria-controls="pb-admin-queue-detail">
               <span>
                 <strong>{row.question}</strong>

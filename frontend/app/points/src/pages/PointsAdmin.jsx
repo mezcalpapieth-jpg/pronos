@@ -83,7 +83,7 @@ import {
 } from '../lib/adminMarketFilters.js';
 import {
   AdminFilterGroup, AdminMarketFacts, AdminMarketQueue, AdminOverview, AdminQueueToolbar, AdminWorkspace, QueueBadge,
-  adminTab, useAdminQueueData, useAdminQueueFilters,
+  adminTab, focusAdminQueuePanel, useAdminQueueData, useAdminQueueFilters,
 } from './PointsAdminWorkspace.jsx';
 
 // ─── Date helpers (dd/mm/yyyy + HH:mm) ──────────────────────────────────────
@@ -438,9 +438,40 @@ export default function PointsAdmin({ isAdmin }) {
   const [adminTaskCounts, setAdminTaskCounts] = useState(null);
   const [overviewLoading, setOverviewLoading] = useState(true);
   const [taskRefreshKey, setTaskRefreshKey] = useState(0);
+  const [generatingNow, setGeneratingNow] = useState(false);
+  const [generationRevision, setGenerationRevision] = useState(0);
 
   function refreshAdminTaskCounts() {
     setTaskRefreshKey(key => key + 1);
+  }
+
+  async function runGenerators() {
+    if (generatingNow || !confirm('¿Ejecutar todos los generadores ahora? Inserta/actualiza filas en la cola de pendientes.')) {
+      return;
+    }
+    setGeneratingNow(true);
+    try {
+      const r = await adminRunGenerators({ dry: false });
+      setGenerationRevision(revision => revision + 1);
+      refreshAdminTaskCounts();
+      const counts = Object.entries(r.sources || {})
+        .filter(([, v]) => v.count > 0)
+        .map(([k, v]) => `${k}:${v.count}`)
+        .join(' · ') || '(sin eventos)';
+      const stats = Object.entries(r.sources || {});
+      const expired = stats.reduce((total, [, source]) => total + (source.expiredCount || 0), 0);
+      const feedErrors = stats.flatMap(([name, source]) => [
+        ...(source.error ? [`${name} · ${source.error}`] : []),
+        ...(source.feedErrors || []).map(({ feed, code }) => `${feed} · ${code}`),
+      ]);
+      const title = feedErrors.length ? 'Generación terminada con errores de fuentes.' : '✓ Generación completa.';
+      const errors = feedErrors.length ? `\n\nFuentes con errores\n${feedErrors.join('\n')}` : '';
+      alert(`${title}\nInsertados: ${r.inserted} · Actualizados: ${r.updated} · Saltados: ${r.skipped} · Vencidos excluidos: ${expired}\n${counts}${errors}`);
+    } catch (e) {
+      alert(`Generar falló: ${e.code || e.message}`);
+    } finally {
+      setGeneratingNow(false);
+    }
   }
 
   useEffect(() => {
@@ -468,11 +499,13 @@ export default function PointsAdmin({ isAdmin }) {
     );
   }
 
+  const generator = { busy: generatingNow, run: runGenerators, revision: generationRevision };
+
   return (
     <AdminWorkspace tab={tab} username={user?.username}>
       {tab === 'overview' && <AdminOverview counts={adminTaskCounts} loading={overviewLoading} onRefresh={refreshAdminTaskCounts} />}
       {tab === 'create' && <CreateMarketForm prefill={createPrefill} />}
-      {tab === 'pending' && <PendingMarketsTable onQueueChange={refreshAdminTaskCounts} />}
+      {tab === 'pending' && <PendingMarketsTable onQueueChange={refreshAdminTaskCounts} generator={generator} />}
       {(tab === 'markets' || tab === 'resolution') && <MarketsTable onQueueChange={refreshAdminTaskCounts} />}
       {tab === 'social' && <SocialTasksQueue onQueueChange={refreshAdminTaskCounts} />}
       {tab === 'strategies' && <StrategiesPanel />}
@@ -483,7 +516,7 @@ export default function PointsAdmin({ isAdmin }) {
       {tab === 'cycles' && <CyclesPanel />}
       {tab === 'launch' && (
         <>
-          <MarketAutomationTools />
+          <MarketAutomationTools generator={generator} />
           <LaunchReadinessPanel taskCounts={adminTaskCounts} isAdmin={isAdmin} />
         </>
       )}
@@ -2513,8 +2546,8 @@ function SupportTicketsQueue({ onQueueChange }) {
     setDraft('');
     setActionError(null);
     setNotice(null);
-    if (focusTarget.current === 'detail' && selectedId) detail.current?.focus();
-    if (focusTarget.current && !selectedId) ticketRows.current.get(focusTarget.current)?.focus();
+    if (focusTarget.current === 'detail' && selectedId) focusAdminQueuePanel(detail.current);
+    if (focusTarget.current && !selectedId) focusAdminQueuePanel(ticketRows.current.get(focusTarget.current));
     focusTarget.current = null;
   }, [selectedId]);
 
@@ -6696,9 +6729,17 @@ function StrategiesPanel() {
 // points_pending_markets. Admin triages them here: Aprobar copies the
 // spec into points_markets via the API; Rechazar just marks the row so
 // re-runs of the generator skip the same source_event_id.
-function MarketAutomationTools() {
+function GenerateMarketsButton({ generator, disabled }) {
+  return (
+    <button type="button" className="pb-admin-button pb-admin-primary" onClick={generator.run}
+      disabled={disabled || generator.busy} title="Ejecuta los generadores y actualiza la cola de propuestas">
+      {generator.busy ? 'Generando…' : 'Generar mercados'}
+    </button>
+  );
+}
+
+function MarketAutomationTools({ generator }) {
   const [bulkBusy, setBulkBusy] = useState(false);
-  const [generatingNow, setGeneratingNow] = useState(false);
   const [cryptoInterval, setCryptoInterval] = useState(5);
   const [cryptoIntervalOptions, setCryptoIntervalOptions] = useState(DEFAULT_CRYPTO_INTERVAL_OPTIONS);
   const [cryptoAssets, setCryptoAssets] = useState(DEFAULT_CRYPTO_ASSET_OPTIONS);
@@ -6781,35 +6822,6 @@ function MarketAutomationTools() {
     }
   }
 
-  async function runGenerators() {
-    if (!confirm('¿Ejecutar todos los generadores ahora? Inserta/actualiza filas en la cola de pendientes.')) {
-      return;
-    }
-    setGeneratingNow(true);
-    setBulkBusy(true);
-    try {
-      const r = await adminRunGenerators({ dry: false });
-      const counts = Object.entries(r.sources || {})
-        .filter(([, v]) => v.count > 0)
-        .map(([k, v]) => `${k}:${v.count}`)
-        .join(' · ') || '(sin eventos)';
-      const stats = Object.entries(r.sources || {});
-      const expired = stats.reduce((total, [, source]) => total + (source.expiredCount || 0), 0);
-      const feedErrors = stats.flatMap(([name, source]) => [
-        ...(source.error ? [`${name} · ${source.error}`] : []),
-        ...(source.feedErrors || []).map(({ feed, code }) => `${feed} · ${code}`),
-      ]);
-      const title = feedErrors.length ? 'Generación terminada con errores de fuentes.' : '✓ Generación completa.';
-      const errors = feedErrors.length ? `\n\nFuentes con errores\n${feedErrors.join('\n')}` : '';
-      alert(`${title}\nInsertados: ${r.inserted} · Actualizados: ${r.updated} · Saltados: ${r.skipped} · Vencidos excluidos: ${expired}\n${counts}${errors}`);
-    } catch (e) {
-      alert(`Generar falló: ${e.code || e.message}`);
-    } finally {
-      setGeneratingNow(false);
-      setBulkBusy(false);
-    }
-  }
-
   async function backfillResolvers() {
     setBulkBusy(true);
     try {
@@ -6875,29 +6887,7 @@ function MarketAutomationTools() {
         </div>
       </div>
       <div className="pb-admin-tools">
-      {/* Generate now — runs every pipeline and upserts. Same code
-          path as the daily cron; useful on preview deploys (which
-          Vercel doesn't cron) and after editing entertainment-config. */}
-      <button
-        onClick={runGenerators}
-        disabled={bulkBusy}
-        title="Ejecuta todos los generadores y hace upsert en la cola pendiente"
-        style={{
-
-          padding: '6px 14px',
-          borderRadius: 16,
-          border: '1px solid rgba(59,130,246,0.4)',
-          background: 'rgba(59,130,246,0.1)',
-          color: '#3b82f6',
-          fontFamily: 'var(--font-mono)', fontSize: 11,
-          letterSpacing: '0.06em', textTransform: 'uppercase',
-          cursor: bulkBusy ? 'not-allowed' : 'pointer',
-          opacity: bulkBusy ? 0.5 : 1,
-          fontWeight: 600,
-        }}
-      >
-        {generatingNow ? 'Generando...' : 'Generar propuestas'}
-      </button>
+      <GenerateMarketsButton generator={generator} disabled={bulkBusy} />
 
       <label
         title="Define la duración de las próximas ventanas automáticas de Bitcoin y Ethereum"
@@ -6990,7 +6980,7 @@ function MarketAutomationTools() {
           bilingual market copy on pending/approved generated rows. */}
       <button
         onClick={backfillResolvers}
-        disabled={bulkBusy}
+        disabled={bulkBusy || generator.busy}
         title="Copia resolver_type + resolver_config + sport/league + logos y traducciones donde falten"
         style={{
           padding: '6px 14px',
@@ -7000,8 +6990,8 @@ function MarketAutomationTools() {
           color: 'var(--text-secondary)',
           fontFamily: 'var(--font-mono)', fontSize: 11,
           letterSpacing: '0.06em', textTransform: 'uppercase',
-          cursor: bulkBusy ? 'not-allowed' : 'pointer',
-          opacity: bulkBusy ? 0.5 : 1,
+          cursor: (bulkBusy || generator.busy) ? 'not-allowed' : 'pointer',
+          opacity: (bulkBusy || generator.busy) ? 0.5 : 1,
         }}
       >
         Completar configuración de resolvers
@@ -7034,7 +7024,7 @@ function MarketAutomationTools() {
   );
 }
 
-function PendingMarketsTable({ onQueueChange }) {
+function PendingMarketsTable({ onQueueChange, generator }) {
   const queue = useAdminQueueFilters(true);
   const filter = queue.status;
   const [approvalSettings, setApprovalSettings] = useState(null);
@@ -7047,7 +7037,7 @@ function PendingMarketsTable({ onQueueChange }) {
   if (approvalMode && previewApprovalMode) queueParams.set('previewApprovalMode', previewApprovalMode);
   const query = queueParams.toString();
   const { rows, setRows, loading, error, data, reload: load } = useAdminQueueData(
-    `/api/points/admin/pending-markets?${query}`, 'pending',
+    `/api/points/admin/pending-markets?${query}`, 'pending', { reloadKey: generator.revision },
   );
   useEffect(() => {
     if (data) setApprovalSettings(data.approvalSettings || null);
@@ -7063,11 +7053,7 @@ function PendingMarketsTable({ onQueueChange }) {
     setBusyId(id);
     try {
       await adminReviewPendingMarket(id, action, null, action === 'approve' ? previewApprovalMode : undefined);
-      // Don't reload — admin's scroll position is preserved if we
-      // mutate the local rows array instead of refetching. Reload
-      // was causing the page to "jump back to the top" between
-      // every approval. Backend already committed the status flip;
-      // the next manual refresh (or a tab switch) re-syncs.
+      // Update the reviewed row locally after the server confirms the change.
       setRows(prev => {
         if (!Array.isArray(prev)) return prev;
         // On the Pending tab, drop the row entirely so the queue
@@ -7251,7 +7237,8 @@ function PendingMarketsTable({ onQueueChange }) {
           </p>
         </div>
       )}
-      <AdminQueueToolbar queue={queue} proposal>
+      <AdminQueueToolbar queue={queue} proposal
+        searchAction={<GenerateMarketsButton generator={generator} disabled={bulkBusy || busyId != null} />}>
         {filter === 'pending' && pendingCount > 0 && (
           <details className="pb-admin-tools-wrap">
             <summary>Acciones en lote</summary>
