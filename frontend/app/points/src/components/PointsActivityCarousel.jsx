@@ -35,6 +35,7 @@ import { useIsMobile } from '@app/lib/useIsMobile.js';
 import { localizedOutcomeLabels, localizedTitle, useLang, useT } from '@app/lib/i18n.js';
 import { ActivityCarouselSkeleton } from './PointsSkeleton.jsx';
 import PointsActivityTape from './PointsActivityTape.jsx';
+import PriceHistoryNotice from './PriceHistoryNotice.jsx';
 import { fetchCryptoHistory, fetchPriceHistory, fetchTradeActivity, fetchTradeTape } from '../lib/pointsApi.js';
 import { isClosingSoonNonSportsMarket, isLiveSportsMarket } from '../lib/marketStatus.js';
 
@@ -354,11 +355,6 @@ function mergeCryptoHistoryByParent(baseHistory, cryptoResults) {
   return merged;
 }
 
-function seriesForSlide(m, history) {
-  if (!m) return [];
-  return history?.[marketIdKey(m.id)] || history?.[m.id] || [];
-}
-
 function isBinaryYesNoOutcomes(outcomes) {
   if (!Array.isArray(outcomes) || outcomes.length !== 2) return false;
   const [a, b] = outcomes.map(o => String(o || '').trim().toLowerCase());
@@ -381,7 +377,7 @@ function chartSeriesForOutcome(entry, rawSeries, now) {
         .filter(pt => Number.isFinite(pt.t) && pt.t > 0 && Number.isFinite(pt.p))
     : [];
   const last = points[points.length - 1];
-  if (!last || (now > last.t && Math.abs(Number(last.p) - targetPct) >= 0.25)) {
+  if (last && now > last.t && Math.abs(last.p - targetPct) >= 0.25) {
     points.push({ t: now, p: targetPct });
   }
 
@@ -581,7 +577,7 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
 
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
-  const [history, setHistory] = useState({});
+  const [charts, setCharts] = useState({});
   // Bucketed fills for the last seven days, keyed by display market id.
   // Parallel legs are rolled back onto their parent before this lands.
   // One fetch feeds all three things on screen: who gets a slide, the
@@ -785,12 +781,11 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
     setIndex(i => (slides.length === 0 ? 0 : Math.min(i, slides.length - 1)));
   }, [slides.length]);
 
-  // Charts for the markets that made the cut. fetchPriceHistory swallows
-  // its own errors and resolves to {}, so a cold snapshot table degrades
-  // to the Sparkline's flat state instead of taking down home.
+  // Each outcome batch can affect different slides. Retain the previous
+  // complete chart for an affected market while refreshing the others.
   useEffect(() => {
     if (priceHistoryGroups.length === 0 && cryptoHistoryMarkets.length === 0) {
-      setHistory({});
+      setCharts({});
       return undefined;
     }
     let cancelled = false;
@@ -798,7 +793,8 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
       Promise.all(
         priceHistoryGroups.map(group =>
           fetchPriceHistory(group.ids, { hours: CHART_HISTORY_HOURS, outcome: group.outcome, limit: CHART_HISTORY_LIMIT })
-            .then(history => ({ group, history: history || {} })),
+            .then(history => ({ group, history }))
+            .catch(() => ({ group, history: null })),
         ),
       ),
       Promise.all(
@@ -812,7 +808,24 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
     ]).then(([priceResults, cryptoResults]) => {
       if (cancelled) return;
       const priceHistory = remapHistoryByParent(priceResults, priceHistoryRequest);
-      setHistory(mergeCryptoHistoryByParent(priceHistory, cryptoResults));
+      const failedMarkets = new Set(
+        priceResults.filter(result => result.history === null)
+          .flatMap(result => result.group.targets.map(target => target.parentKey)),
+      );
+      for (const key of failedMarkets) delete priceHistory[key];
+      const nextHistory = mergeCryptoHistoryByParent(priceHistory, cryptoResults);
+      setCharts(previous => {
+        const next = {};
+        for (const [key, series] of Object.entries(nextHistory)) next[key] = { series };
+        for (const key of failedMarkets) {
+          const lastSeries = previous[key]?.series;
+          next[key] = {
+            series: lastSeries?.some(points => points?.length > 0) ? lastSeries : nextHistory[key],
+            error: true,
+          };
+        }
+        return next;
+      });
     });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1029,7 +1042,12 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
               && chartStyleOverride !== 'single'
               && (chartStyleOverride === 'rivals' || !isBinaryYesNoOutcomes(mOutcomes));
             const isMultiChart = isParallel || mOutcomes.length > 2 || isOutcomePairChart;
-            const mOutcomeSeries = seriesForSlide(m, history);
+            const chartKey = marketIdKey(m.id);
+            const chart = charts[chartKey];
+            const mOutcomeSeries = chart?.series || [];
+            const mChartState = chart?.error
+              ? (mOutcomeSeries.some(points => points?.length > 0) ? 'stale' : 'unavailable')
+              : (!chart && priceHistoryRequest.parentIds.has(chartKey) ? 'loading' : null);
             const mSeries = Array.isArray(mOutcomeSeries?.[0]) ? mOutcomeSeries[0] : [];
             const mLeader = isMultiChart ? leadingOutcomeForMarket(m, t('points.activity.tied'), mOutcomes) : null;
             const mLeadPct = isMultiChart ? mLeader.pct : Math.round((mPrices[0] ?? 0.5) * 100);
@@ -1179,7 +1197,8 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                       )}
                     </div>
 
-                    {isMultiChart ? (
+                    {mChartState && <PriceHistoryNotice state={mChartState} />}
+                    {(mChartState === null || mChartState === 'stale') && (isMultiChart ? (
                       <MultiSparkline
                         height={isMobile ? 168 : 200}
                         strokeWidth={1.5}
@@ -1190,10 +1209,13 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                           key: `opt-${entry.index}`,
                           label: entry.label,
                           color: chartColorForOutcome(entry.index, mOutcomes.length),
-                          data: chartSeriesForOutcome(entry, mOutcomeSeries?.[entry.index], mChartEnd),
+                          data: chart?.error
+                            ? mOutcomeSeries[entry.index] || []
+                            : chartSeriesForOutcome(entry, mOutcomeSeries?.[entry.index], mChartEnd),
                           targetPct: Math.round((entry.price || 0) * 100),
                         }))}
                         activity={[m._buckets || []]}
+                        showEmptyState={mChartState !== 'stale'}
                         emptyLabel={t('points.activity.noHistory')}
                         emptySubLabel={t('points.activity.noHistorySub')}
                         legendNote={mOutcomes.length > mChartEntries.length ? (
@@ -1225,12 +1247,15 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                         endLabelWidth={140}
                         timeMin={mChartStart}
                         timeMax={mChartEnd}
-                        data={chartSeriesForOutcome(mChartEntries[0] || mOutcomeEntries[0], mSeries, mChartEnd)}
+                        data={chart?.error
+                          ? mSeries
+                          : chartSeriesForOutcome(mChartEntries[0] || mOutcomeEntries[0], mSeries, mChartEnd)}
                         targetPct={mLeadPct}
+                        showEmptyState={mChartState !== 'stale'}
                         emptyLabel={t('points.activity.noHistory')}
                         emptySubLabel={t('points.activity.noHistorySub')}
                       />
-                    )}
+                    ))}
 
                     {/* Outcome legend — leaders first on parallel markets. */}
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 14 }}>

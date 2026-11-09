@@ -51,6 +51,7 @@ import PointsBuyModal from '../components/PointsBuyModal.jsx';
 import PointsSellPreviewModal from '../components/PointsSellPreviewModal.jsx';
 import PointsActivityTape from '../components/PointsActivityTape.jsx';
 import { ResolutionReview, useResolutionReview } from '../components/ResolutionReview.jsx';
+import PriceHistoryNotice from '../components/PriceHistoryNotice.jsx';
 import MarketComments from '../components/MarketComments.jsx';
 import Crypto5MinDetail from '../components/Crypto5MinDetail.jsx';
 import TopHolders from '../components/TopHolders.jsx';
@@ -2675,9 +2676,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
     table: null,
     warning: null,
   });
-  // historyByOutcome[i] = [{t, p}] for outcome i. Populated for every
-  // outcome so the chart can render one line per option on multi markets.
-  const [historyByOutcome, setHistoryByOutcome] = useState(null);
+  const [historyByRange, setHistoryByRange] = useState({});
   const [activityByOutcome, setActivityByOutcome] = useState(null);
   const [liveScore, setLiveScore] = useState(null);
   const [finishedGameId, setFinishedGameId] = useState(null);
@@ -2761,7 +2760,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    setHistoryByOutcome(null);
+    setHistoryByRange({});
     setActivityByOutcome(null);
     setTradeTape([]);
     chartRangeTouchedRef.current = false;
@@ -2816,7 +2815,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
   ]);
 
   useEffect(() => {
-    if (!market?.id) return undefined;
+    if (!market?.id || String(market.id) !== id) return undefined;
 
     if (!chartRangeTouchedRef.current) {
       const preferredRange = '1';
@@ -2845,81 +2844,56 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
       return { t, p };
     };
     const withTail = (series, outcomeIdx, leg = null) => {
-      const tail = tailPointFor(outcomeIdx, leg);
-      if (!tail) return series;
       const last = series.at(-1);
-      if (last && last.t >= tail.t) return series;
+      if (!last) return series;
+      const tail = tailPointFor(outcomeIdx, leg);
+      if (!tail || last.t >= tail.t) return series;
       return [...series, tail];
     };
 
-    const load = async () => {
-      if (market.ammMode === 'parallel' && Array.isArray(market.legs)) {
-        const series = await Promise.all(
-          market.legs.map((leg, i) =>
-            fetchPriceHistory([leg.id], { days: range.days, hours: range.hours, outcome: 0, limit: range.limit })
-              .then(h => withTail(h[leg.id] || [], i, leg))
-              .catch(() => withTail([], i, leg)),
-          ),
-        );
-        const activity = await Promise.all(
-          market.legs.map((leg) =>
-            fetchTradeActivity([leg.id], { days: range.days, hours: range.hours, outcome: 'all', buckets: range.buckets })
-              .then(a => a[leg.id] || [])
-              .catch(() => []),
-          ),
-        );
-        if (!cancelled) {
-          setHistoryByOutcome(series);
-          setActivityByOutcome(activity);
-        }
-        return;
-      }
+    const legs = market.ammMode === 'parallel' && Array.isArray(market.legs) ? market.legs : null;
+    const outcomes = Array.isArray(market.outcomes) ? market.outcomes : [];
+    const historyTargets = legs
+      ? legs.map(leg => ({ marketId: leg.id, outcome: 0 }))
+      : outcomes.map((_, outcome) => ({ marketId: market.id, outcome }));
 
-      if (!Array.isArray(market.outcomes)) {
-        if (!cancelled) {
-          setHistoryByOutcome([]);
-          setActivityByOutcome([]);
-        }
-        return;
-      }
-
-      const n = market.outcomes.length;
-      const series = await Promise.all(
-        Array.from({ length: n }, (_, i) =>
-          fetchPriceHistory([market.id], { days: range.days, hours: range.hours, outcome: i, limit: range.limit })
-            .then(h => withTail(h[market.id] || [], i))
-            .catch(() => withTail([], i)),
-        ),
-      );
-      const activity = n <= 2
-        ? [
-            await fetchTradeActivity([market.id], { days: range.days, hours: range.hours, outcome: 'all', buckets: range.buckets })
-              .then(a => a[market.id] || [])
-              .catch(() => []),
-            [],
-          ]
-        : await Promise.all(
-            Array.from({ length: n }, (_, i) =>
-              fetchTradeActivity([market.id], { days: range.days, hours: range.hours, outcome: i, buckets: range.buckets })
-                .then(a => a[market.id] || [])
-                .catch(() => []),
-            ),
-          );
+    Promise.all(historyTargets.map(({ marketId, outcome }) =>
+      fetchPriceHistory([marketId], { days: range.days, hours: range.hours, outcome, limit: range.limit })
+        .then(h => h[marketId] || []),
+    )).then(rawSeries => {
       if (!cancelled) {
-        setHistoryByOutcome(series);
-        setActivityByOutcome(activity);
+        setHistoryByRange(prev => ({
+          ...prev,
+          [chartRange]: {
+            series: rawSeries.map((series, i) => withTail(series, i, legs?.[i])),
+          },
+        }));
       }
-    };
-
-    load().catch(() => {
+    }).catch(() => {
       if (!cancelled) {
-        setHistoryByOutcome([]);
-        setActivityByOutcome([]);
+        setHistoryByRange(prev => ({
+          ...prev,
+          [chartRange]: { ...prev[chartRange], error: true },
+        }));
       }
+    });
+
+    const activityTargets = legs
+      ? legs.map(leg => ({ marketId: leg.id, outcome: 'all' }))
+      : outcomes.length <= 2
+        ? [{ marketId: market.id, outcome: 'all' }]
+        : historyTargets;
+    Promise.all(activityTargets.map(({ marketId, outcome }) =>
+      fetchTradeActivity([marketId], { days: range.days, hours: range.hours, outcome, buckets: range.buckets })
+        .then(a => a[marketId] || [])
+        .catch(() => []),
+    )).then(activity => {
+      if (!cancelled) setActivityByOutcome(activity);
     });
 
     return () => { cancelled = true; };
   }, [
+    id,
     chartRange,
     market?.ammMode,
     market?.id,
@@ -3363,7 +3337,8 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
     : prices;
   const displayOutcomeImages = displayOutcomeIndices.map(i => market.outcomeImages?.[i] || null);
   const displayOutcomeCountryLabels = displayOutcomeIndices.map(i => market.outcomeCountryLabels?.[i] || null);
-  const displayHistoryByOutcome = displayOutcomeIndices.map(i => historyByOutcome?.[i] || []);
+  const priceHistory = historyByRange[chartRange];
+  const displayHistoryByOutcome = displayOutcomeIndices.map(i => priceHistory?.series?.[i] || []);
   const displayActivityByOutcome = displayOutcomeIndices.map(i => activityByOutcome?.[i] || []);
   // Admin's explicit chart-style pick (only meaningful at N=2) wins over
   // the label-based auto-detect below.
@@ -3373,6 +3348,12 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
     : chartStyleOverride === 'single'
     ? true
     : displayOutcomes.length < 2 || isBinaryYesNoOutcomes(displayOutcomes);
+  const hasPriceHistory = useSingleLineChart
+    ? displayHistoryByOutcome[0]?.length > 0
+    : displayHistoryByOutcome.some(series => series.length > 0);
+  const priceHistoryState = priceHistory?.error
+    ? (hasPriceHistory ? 'stale' : 'unavailable')
+    : (priceHistory ? null : 'loading');
   const activeChartRange = detailChartRangeFor(chartRange);
 
   const marketOpenedAt = market.createdAt
@@ -3994,7 +3975,8 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
                     line and a 95% line looked the same height and the
                     reader could not compare them. One color per option,
                     matching the buy buttons below. */}
-                {useSingleLineChart ? (
+                {priceHistoryState && <PriceHistoryNotice state={priceHistoryState} />}
+                {(priceHistoryState === null || priceHistoryState === 'stale') && (useSingleLineChart ? (
                   <Sparkline
                     height={200}
                     color={OUTCOME_COLORS[0]}
@@ -4009,8 +3991,9 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
                     activity={displayActivityByOutcome?.[0] || []}
                     targetPct={chartPctFor(0)}
                     seed={`points-detail-${market.id}-${displayOutcomes[0] || 'yes'}`}
-                    emptyLabel="Sin actividad todavía"
-                    emptySubLabel="El precio se moverá con el primer trade."
+                    showEmptyState={priceHistoryState !== 'stale'}
+                    emptyLabel={t('points.activity.noHistory')}
+                    emptySubLabel={t('points.activity.noHistorySub')}
                   />
                 ) : (
                   // Chart shows the current leaders. Parallel tournament
@@ -4044,8 +4027,9 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
                         }))}
                         activity={chartIndices.map(i => displayActivityByOutcome?.[i] || [])}
                         annotations={liveScoreAnnotations}
-                        emptyLabel="Sin actividad todavía"
-                        emptySubLabel="El precio se moverá con el primer trade."
+                        showEmptyState={priceHistoryState !== 'stale'}
+                        emptyLabel={t('points.activity.noHistory')}
+                        emptySubLabel={t('points.activity.noHistorySub')}
                         legendNote={displayOutcomes.length > 4 ? (
                           <span style={{
                             fontFamily: 'var(--font-mono)',
@@ -4060,7 +4044,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
                       />
                     );
                   })()
-                )}
+                ))}
                 <MarketActivityStrip
                   summary={activitySummary}
                   rangeLabel={t(activeChartRange.labelKey)}

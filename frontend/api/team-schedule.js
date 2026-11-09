@@ -152,6 +152,7 @@ function normalizeEspnEvent(event, profile) {
   const { comp, home, away } = espnCompetitors(event);
   const sourceEventId = String(event?.id || '');
   if (!sourceEventId || !event?.date) return null;
+  const statusType = event?.status?.type || comp?.status?.type;
   const homeScore = competitorScore(home);
   const awayScore = competitorScore(away);
   return {
@@ -159,8 +160,10 @@ function normalizeEspnEvent(event, profile) {
     source: 'espn',
     sourceEventId,
     startsAt: event.date,
-    status: event?.status?.type?.state || null,
-    statusDetail: event?.status?.type?.shortDetail || event?.status?.type?.detail || null,
+    status: statusType?.state || null,
+    statusCode: statusType?.name || null,
+    statusDetail: statusType?.shortDetail || statusType?.detail || null,
+    statusCompleted: statusType?.completed ?? null,
     sport: profile.sport,
     league: profile.league,
     homeName: competitorName(home),

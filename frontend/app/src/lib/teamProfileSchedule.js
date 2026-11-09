@@ -1,3 +1,5 @@
+import { marketOnlyState } from './teamProfileRows.js';
+
 function eventKey(source, sourceEventId) {
   const src = String(source || '').toLowerCase();
   const id = String(sourceEventId || '').toLowerCase();
@@ -19,46 +21,26 @@ function marketEventKeys(market) {
   return keys;
 }
 
-function isFinishedScheduleStatus(value) {
-  const key = String(value || '').toLowerCase();
-  return [
-    'closed',
-    'complete',
-    'completed',
-    'final',
-    'finished',
-    'full_time',
-    'post',
-    'status_final',
-  ].some(status => key === status || key.includes(status));
-}
-
-function isPastScheduleRow(scheduleRow) {
-  const startMs = scheduleRow?.startsAt ? new Date(scheduleRow.startsAt).getTime() : NaN;
-  if (!Number.isFinite(startMs)) return false;
-  return startMs + 3 * 60 * 60 * 1000 < Date.now();
-}
-
-function rowState(scheduleRow, market) {
-  if (!market) {
-    if (
-      isFinishedScheduleStatus(scheduleRow?.status)
-      || isFinishedScheduleStatus(scheduleRow?.statusDetail)
-      || isPastScheduleRow(scheduleRow)
-    ) {
-      return 'closed';
-    }
-    return 'pending';
+function fixtureState(row) {
+  const specific = [row.statusCode, row.statusDetail, row.status]
+    .filter(Boolean)
+    .map(value => String(value).trim().toLowerCase().replace(/^status_/, '').replace(/[^a-z0-9]+/g, '_'));
+  for (const status of specific) {
+    if (/^postponed(?:_|$)/.test(status)) return 'postponed';
+    if (/^delayed(?:_|$)/.test(status)) return 'delayed';
+    if (/^(suspended|interrupted)(?:_|$)/.test(status)) return 'suspended';
+    if (/^(canceled|cancelled|abandoned)(?:_|$)/.test(status)) return 'cancelado';
+    if (/^(forfeit|forfeited|awarded)(?:_|$)/.test(status)) return 'awarded';
   }
-  if (market.status === 'resolved') return 'resolved';
-  if (market.status === 'canceled' || market.status === 'cancelled') return 'cancelado';
-  if (market.status === 'disputed') return 'disputa';
-
-  const endMs = market.endTime ? new Date(market.endTime).getTime() : 0;
-  if (market.status === 'active' && endMs > 0 && endMs < Date.now()) return 'por-resolver';
-  if (market.status === 'active') return 'open';
-
-  return market.status || scheduleRow?.status || 'pending';
+  for (const status of specific) {
+    if (/^(in|live|in_progress|halftime|half_time|paused|end_period|end_of_period)$/.test(status)) return 'live';
+    if (/^(closed|complete|completed|final(?:_.*)?|finished|full_time|ft|aet)$/.test(status)) return 'closed';
+    if (status === 'post' && row.statusCompleted !== false) return 'closed';
+    if (/^(pre|scheduled|timed|not_started)$/.test(status)) return 'pending';
+  }
+  if (specific.length > 0) return 'pending';
+  const startMs = Date.parse(row.startsAt);
+  return startMs + 3 * 60 * 60 * 1000 < Date.now() ? 'closed' : 'pending';
 }
 
 export function mergeScheduleWithMarkets(schedule = [], markets = []) {
@@ -73,10 +55,12 @@ export function mergeScheduleWithMarkets(schedule = [], markets = []) {
     .map(item => {
       const key = eventKey(item?.source, item?.sourceEventId);
       const market = key ? byKey.get(key) || null : null;
+      const fixture = fixtureState(item);
       return {
         ...item,
         market,
-        state: rowState(item, market),
+        fixtureState: fixture,
+        state: market ? marketOnlyState(market) : fixture,
       };
     })
     .sort((a, b) => {

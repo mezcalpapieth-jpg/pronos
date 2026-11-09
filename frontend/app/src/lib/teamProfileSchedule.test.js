@@ -82,3 +82,34 @@ test('team profile schedule can link ESPN markets by resolver event id', () => {
   assert.equal(rows[0].state, 'resolved');
   assert.equal(rows[0].market.id, 9);
 });
+
+test('team schedules honor fixture statuses ahead of elapsed kickoff time and generic ESPN state', t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-05-30T20:00:00.000Z') });
+  const startsAt = '2026-05-30T15:00:00.000Z';
+  const fixtures = [
+    [{ status: 'in', statusDetail: '75′' }, 'live'],
+    [{ status: 'post', statusCode: 'STATUS_POSTPONED' }, 'postponed'],
+    [{ status: 'post', statusDetail: 'Postponed due to weather' }, 'postponed'],
+    [{ status: 'post', statusCompleted: false }, 'pending'],
+    [{ status: 'post', statusCode: 'STATUS_FINAL_OVERTIME', statusCompleted: true }, 'closed'],
+    [{ status: 'SUSPENDED' }, 'suspended'],
+    [{ status: 'PAUSED' }, 'live'],
+    [{ status: 'CANCELLED' }, 'cancelado'],
+    [{ status: 'TIMED' }, 'pending'],
+    [{ status: 'unknown' }, 'pending'],
+    [{}, 'closed'],
+  ];
+
+  const rows = mergeScheduleWithMarkets(fixtures.map(([status], id) => ({ id, startsAt, ...status })));
+  assert.deepEqual(rows.map(row => row.state), fixtures.map(([, expected]) => expected));
+});
+
+test('a fixture interruption stays visible independently of its linked market status', () => {
+  const [row] = mergeScheduleWithMarkets(
+    [{ source: 'espn', sourceEventId: '401', status: 'post', statusCode: 'STATUS_SUSPENDED' }],
+    [{ id: 9, source: 'espn', sourceEventId: '401', status: 'active' }],
+  );
+
+  assert.equal(row.state, 'open');
+  assert.equal(row.fixtureState, 'suspended');
+});

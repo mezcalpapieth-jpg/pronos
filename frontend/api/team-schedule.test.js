@@ -47,7 +47,7 @@ test('team schedule normalizes ESPN event logos and object scores', () => {
   const row = _internal.normalizeEspnEvent({
     id: '401',
     date: '2026-05-21T02:00:00.000Z',
-    status: { type: { state: 'post', shortDetail: 'FT' } },
+    status: { type: { state: 'post', name: 'STATUS_FINAL', completed: true, shortDetail: 'FT' } },
     competitions: [{
       venue: { fullName: 'Estadio Olimpico Universitario' },
       competitors: [
@@ -71,5 +71,8 @@ test('team schedule normalizes ESPN event logos and object scores', () => {
   assert.equal(row.awayLogo, 'pumas.png');
   assert.equal(row.homeScore, 2);
   assert.equal(row.awayScore, 1);
+  assert.equal(row.status, 'post');
+  assert.equal(row.statusCode, 'STATUS_FINAL');
+  assert.equal(row.statusCompleted, true);
   assert.equal(row.finalScore, '2-1');
 });

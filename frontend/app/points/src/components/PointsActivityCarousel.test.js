@@ -101,7 +101,7 @@ test('parallel carousel charts draw leg histories without adopting a child ident
   assert.match(carousel, /function leadingOutcomeForMarket/);
   assert.match(carousel, /<MultiSparkline/);
   assert.match(carousel, /series=\{mChartEntries\.map\(entry =>/);
-  assert.match(carousel, /data: chartSeriesForOutcome\(entry, mOutcomeSeries\?\.\[entry\.index\], mChartEnd\)/);
+  assert.match(carousel, /: chartSeriesForOutcome\(entry, mOutcomeSeries\?\.\[entry\.index\], mChartEnd\)/);
   assert.match(carousel, /activity=\{\[m\._buckets \|\| \[\]\]\}/);
   assert.match(carousel, /points\.activity\.tied/);
   assert.match(carousel, /isMultiChart \? mLeader\.label : mOutcomes\[0\]/);
@@ -171,7 +171,7 @@ test('bitcoin crypto carousel slide backfills from crypto tick history', () => {
   assert.match(carousel, /const shifted = Number\.isFinite\(targetPct\) && Number\.isFinite\(lastPct\)/);
   assert.match(carousel, /const cryptoHistoryMarkets = useMemo/);
   assert.match(carousel, /fetchCryptoHistory\(m\.id\)/);
-  assert.match(carousel, /setHistory\(mergeCryptoHistoryByParent\(priceHistory, cryptoResults\)\)/);
+  assert.match(carousel, /const nextHistory = mergeCryptoHistoryByParent\(priceHistory, cryptoResults\)/);
 });
 
 test('visible parallel slide polling keeps querying leg activity', () => {

@@ -129,7 +129,8 @@ async function makeWinCard({ item, username, amount, outcomeLabel }) {
   const outcomeIndex = primaryOutcomeIndex(item);
   let series = [];
   if (historyMarketId) {
-    const history = await fetchPriceHistory([historyMarketId], { days: 30, outcome: outcomeIndex, limit: 160 });
+    const history = await fetchPriceHistory([historyMarketId], { days: 30, outcome: outcomeIndex, limit: 160 })
+      .catch(() => ({}));
     series = history?.[String(historyMarketId)] || history?.[Number(historyMarketId)] || [];
   }
 
