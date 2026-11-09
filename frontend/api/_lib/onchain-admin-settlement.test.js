@@ -22,10 +22,10 @@ async function fixture(t,{variant='v1',timeout=false,status='active'}={}) {
   await db.exec(`CREATE TABLE points_markets(id int,mode text,chain_id int,chain_address text,chain_market_id text,parent_id int,amm_mode text,question text,
       resolver_type text,resolver_config jsonb,outcomes jsonb,start_time timestamptz,end_time timestamptz,sport text,league text,status text);
     CREATE TABLE points_pending_markets(id int,approved_market_id int,source_data jsonb);
-    CREATE TABLE protocol_markets(id int,chain_id int,factory_address text,pool_address text,market_id bigint,protocol_version text,outcome_count int,status text,outcome int,resolver_config jsonb,resolver_type text,outcomes jsonb);
+    CREATE TABLE protocol_markets(id int,chain_id int,factory_address text,pool_address text,market_id bigint,protocol_version text,outcome_count int,status text,outcome int,resolver_config jsonb,resolver_type text,outcomes jsonb,tx_hash text);
     INSERT INTO points_markets VALUES(42,'onchain',421614,'${addr(4)}','0',null,'unified','Fixture',
       'sports_api','{}','["Yes","No"]',null,now()-interval '1 hour',null,null,'active');
-    INSERT INTO protocol_markets VALUES(99,421614,'${addr(variant==='v2'?2:1)}','${addr(4)}',0,'${variant}',${variant==='v2'?3:2},'${status}',null,'{}','sports_api','["Yes","No"]');`);
+    INSERT INTO protocol_markets VALUES(99,421614,'${addr(variant==='v2'?2:1)}','${addr(4)}',0,'${variant}',${variant==='v2'?3:2},'${status}',null,'{}','sports_api','["Yes","No"]',null);`);
   const sql=async(parts,...values)=>(await db.query(parts.reduce((s,p,i)=>s+(i?`$${i}`:'')+p,''),values)).rows;
   let nonce=0,receipt=null,receiptReady=!timeout,fee='10000000',balance=ethers.utils.parseEther('1'),chain=421614,binding=addr(4);
   const signed=[],sent=[];

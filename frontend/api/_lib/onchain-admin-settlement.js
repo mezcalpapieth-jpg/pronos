@@ -64,7 +64,8 @@ export async function loadSettlementMarket(sql, id, env) {
   const rows = await sql`SELECT p.id AS points_id, p.mode, p.chain_id AS points_chain_id,
       p.chain_address, p.chain_market_id, p.parent_id, p.amm_mode, p.question,
       m.id AS protocol_id, m.chain_id, m.factory_address, m.pool_address, m.market_id AS contract_id,
-      m.protocol_version, m.outcome_count, m.status, m.outcome, m.resolver_type, m.resolver_config, m.outcomes
+      m.protocol_version, m.outcome_count, m.status, m.outcome, m.resolver_type, m.resolver_config, m.outcomes,
+      m.tx_hash AS creation_tx_hash
     FROM points_markets p LEFT JOIN protocol_markets m
       ON m.chain_id = p.chain_id AND LOWER(m.pool_address) = LOWER(p.chain_address)
       AND m.market_id::text = p.chain_market_id::text

@@ -11,7 +11,7 @@ async function fixture(t){
     CREATE TABLE sepolia_trade_requests(request_key text,chain_id int,wallet_address text,suborg_id text,action text,payload jsonb,status text,created_at timestamptz DEFAULT now());
     CREATE TABLE points_markets(id int,chain_id int,mode text,chain_address text,chain_market_id text,parent_id int,amm_mode text,question text,
       resolver_type text,resolver_config jsonb,outcomes jsonb,start_time timestamptz,end_time timestamptz,sport text,league text,status text);
-    CREATE TABLE protocol_markets(id int,chain_id int,status text,pool_address text,market_id int,factory_address text,question text,start_time timestamptz,end_time timestamptz,resolver_type text,resolver_config jsonb,outcomes jsonb,outcome_count int,protocol_version text,sport text,league text,outcome int);
+    CREATE TABLE protocol_markets(id int,chain_id int,status text,pool_address text,market_id int,factory_address text,question text,start_time timestamptz,end_time timestamptz,resolver_type text,resolver_config jsonb,outcomes jsonb,outcome_count int,protocol_version text,sport text,league text,outcome int,tx_hash text);
     CREATE TABLE points_pending_markets(id int,approved_market_id int,source_data jsonb);`);
   for(const ddl of RESOLVER_MIGRATION)await db.exec(ddl);
   const sql=async(parts,...v)=>(await db.query(parts.reduce((s,p,i)=>s+(i?`$${i}`:'')+p,''),v)).rows;
@@ -19,7 +19,7 @@ async function fixture(t){
   const settle=async args=>{calls.push(args);return {httpStatus:200,body:{txHash:'0xtest'}};};
   const decide=async m=>{decisions.push(m);return {winningIdx:0,finalScore:'2-1',resolverInfo:{source:'fixture'}};};
   return {db,sql,calls,decisions,async seed(id,{mode='onchain',chain=421614,factory=addr(1),type='sports_api',cfg={source:'espn',shape:'binary'},end="now()-interval '1 hour'"}={}){
-    await db.query(`INSERT INTO protocol_markets VALUES($1,$2,'active',$3,$1,$4,'Fixture',null,${end},$5,$6,'["Yes","No"]',2,'v1',null,null,null)`,[id,chain,addr(4),factory,type,JSON.stringify(cfg)]);
+    await db.query(`INSERT INTO protocol_markets VALUES($1,$2,'active',$3,$1,$4,'Fixture',null,${end},$5,$6,'["Yes","No"]',2,'v1',null,null,null,null)`,[id,chain,addr(4),factory,type,JSON.stringify(cfg)]);
     await db.query(`INSERT INTO points_markets VALUES($1,$2,$3,$4,($1::int)::text,null,'unified','Fixture',
       $5,$6,'["Published A","Published B"]',null,${end},null,null,'active')`,[id,chain,mode,addr(4),type,JSON.stringify(cfg)]);
   },run:extra=>runSepoliaResolver({sql,provider:{getNetwork:async()=>({chainId:421614})},env,decide,settle,...extra})};

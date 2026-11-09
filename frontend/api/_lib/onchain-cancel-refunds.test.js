@@ -16,9 +16,9 @@ const iface=new ethers.utils.Interface(['function pushCancelRefund(uint256,addre
 async function fixture(t,{variant='v1',timeout=false}={}) {
   const db=new PGlite();t.after(()=>db.close());for(const ddl of [...TRADE_REQUEST_SCHEMA,...SETTLEMENT_MIGRATION])await db.exec(ddl);
   await db.exec(`CREATE TABLE points_markets(id int,mode text,chain_id int,chain_address text,chain_market_id text,parent_id int,amm_mode text,question text);
-    CREATE TABLE protocol_markets(id int,chain_id int,factory_address text,pool_address text,market_id bigint,protocol_version text,outcome_count int,status text,outcome int,resolver_config jsonb,resolver_type text,outcomes jsonb);
+    CREATE TABLE protocol_markets(id int,chain_id int,factory_address text,pool_address text,market_id bigint,protocol_version text,outcome_count int,status text,outcome int,resolver_config jsonb,resolver_type text,outcomes jsonb,tx_hash text);
     INSERT INTO points_markets VALUES(42,'onchain',421614,'${pool}','0',null,'unified','Fixture');
-    INSERT INTO protocol_markets VALUES(99,421614,'${addr(variant==='v2'?2:1)}','${pool}',0,'${variant}',${variant==='v2'?3:2},'canceled',null,'{}','sports_api','[]');`);
+    INSERT INTO protocol_markets VALUES(99,421614,'${addr(variant==='v2'?2:1)}','${pool}',0,'${variant}',${variant==='v2'?3:2},'canceled',null,'{}','sports_api','[]',null);`);
   const sql=async(parts,...values)=>(await db.query(parts.reduce((s,p,i)=>s+(i?`$${i}`:'')+p,''),values)).rows;
   let basis=9000000n,balance=10000000n,poolCash=10000000n,nonce=0,receipt=null,ready=!timeout,anchor=hash;
   const signed=[],sent=[],reads=[];

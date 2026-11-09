@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { ethers } from 'ethers';
 import { previewResolutionPayouts } from './onchain-resolution-payouts.js';
 import { preview as env } from './test-support/sepolia-settlement.mjs';
 
@@ -48,4 +49,44 @@ test('open, resolved and reorganized markets cannot yield a reviewable payout', 
   await assert.rejects(previewResolutionPayouts(fixture('v1', { end: 101 })), /settlement_market_still_open/);
   await assert.rejects(previewResolutionPayouts(fixture('v1', { resolved: true })), /settlement_market_state_changed/);
   await assert.rejects(previewResolutionPayouts(fixture('v2', { moved: true })), /settlement_resolution_anchor_changed/);
+});
+
+test('legacy tokens reconstruct outstanding supply from anchored mints and burns', async () => {
+  const args = fixture('v1');
+  const { market, provider } = args;
+  const original = args.contractAt;
+  const tokenAddress = await original(market.pool_address).token({ blockTag: 77 });
+  const token = original(tokenAddress);
+  token.totalSupply = async () => { throw Object.assign(Error('missing method'), { code: 'CALL_EXCEPTION', data: '0x' }); };
+  const events = new ethers.utils.Interface([
+    'event MarketCreated(uint256 indexed marketId,address pool,string question,string category,uint256 endTime)',
+    'event TransferSingle(address indexed operator,address indexed from,address indexed to,uint256 id,uint256 value)',
+    'event TransferBatch(address indexed operator,address indexed from,address indexed to,uint256[] ids,uint256[] values)',
+  ]);
+  const zero = ethers.constants.AddressZero, pool = market.pool_address, seedTx = '0x' + 'ab'.repeat(32);
+  market.creation_tx_hash = seedTx;
+  const event = (name, params, transactionHash) => ({
+    ...events.encodeEventLog(events.getEvent(name), params), blockNumber: 40, transactionHash,
+  });
+  const created = event('MarketCreated', [0,pool,'Fixture','general',99],seedTx);
+  const minted = event('TransferBatch', [pool,zero,pool,[0,1,99],[22_000_000,25_000_000,2_000_000]],seedTx);
+  const burned = [event('TransferSingle',[pool,pool,zero,0,2_000_000],'0xtrade'),
+    event('TransferSingle',[pool,pool,zero,1,5_000_000],'0xtrade')];
+  provider.getTransactionReceipt = async hash => {
+    assert.equal(hash, seedTx);
+    return {status:1,blockNumber:40,transactionHash:seedTx,logs:[{...created,address:market.factory_address}]};
+  };
+  provider.getLogs = async filter => {
+    assert.equal(filter.toBlock,77);
+    assert.equal(filter.address,tokenAddress);
+    assert.equal(filter.fromBlock,40);
+    return [minted,...burned].filter(row => filter.topics.every((topic,i) => topic == null || row.topics[i] === topic));
+  };
+  const result = await previewResolutionPayouts(args);
+  assert.deepEqual(result.payouts, [
+    { outcome:0,payoutUnits:'5000000',shortfallUnits:'0' },
+    { outcome:1,payoutUnits:'10000000',shortfallUnits:'1000000' },
+  ]);
+  minted.transactionHash = '0xwrong';
+  await assert.rejects(previewResolutionPayouts(args), /settlement_share_supply_unavailable/);
 });

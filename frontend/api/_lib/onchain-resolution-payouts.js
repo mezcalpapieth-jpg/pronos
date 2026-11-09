@@ -17,6 +17,68 @@ const tokenAbi = [
   'function yesTokenId(uint256) view returns(uint256)',
   'function noTokenId(uint256) view returns(uint256)',
 ];
+const createdV1 = new ethers.utils.Interface([
+  'event MarketCreated(uint256 indexed marketId,address pool,string question,string category,uint256 endTime)',
+]);
+const createdV2 = new ethers.utils.Interface([
+  'event MarketCreated(uint256 indexed marketId,address pool,string question,string category,uint256 endTime,string resolutionSource,string[] outcomes)',
+]);
+const transfers = new ethers.utils.Interface([
+  'event TransferSingle(address indexed operator,address indexed from,address indexed to,uint256 id,uint256 value)',
+  'event TransferBatch(address indexed operator,address indexed from,address indexed to,uint256[] ids,uint256[] values)',
+]);
+const zeroTopic = ethers.constants.HashZero;
+const legacyLogWindow = 9_000_000;
+
+async function legacySupplies({ market, provider, tokenAddress, ids, blockNumber }) {
+  const creation = market.protocol_version === 'v2' ? createdV2 : createdV1;
+  if (!/^0x[\da-f]{64}$/i.test(market.creation_tx_hash || '')) throw tradeError('settlement_share_supply_unavailable', 409);
+  const receipt = await provider.getTransactionReceipt(market.creation_tx_hash);
+  const [topic, marketTopic] = creation.encodeFilterTopics('MarketCreated', [market.contract_id]);
+  const events = receipt?.logs?.filter(log => address(log.address) === address(market.factory_address)
+    && log.topics[0] === topic && log.topics[1] === marketTopic);
+  if (receipt?.status !== 1 || !Number.isSafeInteger(receipt.blockNumber) || receipt.blockNumber > blockNumber
+    || blockNumber - receipt.blockNumber >= legacyLogWindow * 8
+    || events?.length !== 1 || address(creation.parseLog(events[0]).args.pool) !== address(market.pool_address)) {
+    throw tradeError('settlement_share_supply_unavailable', 409);
+  }
+  const supplies = new Map(ids.map(id => [id.toString(), 0n]));
+  const seeded = new Set();
+  // Single-value topics allow the Sepolia RPC to use its indexed filters
+  // across older markets. Ordinary ERC-1155 transfers leave supply unchanged.
+  for (let fromBlock = receipt.blockNumber; fromBlock <= blockNumber; fromBlock += legacyLogWindow) {
+    const toBlock = Math.min(blockNumber, fromBlock + legacyLogWindow - 1);
+    await Promise.all(['TransferSingle', 'TransferBatch'].flatMap(name => [true, false].map(async mint => {
+      const signature = transfers.getEventTopic(name);
+      const topics = mint ? [signature, null, zeroTopic] : [signature, null, null, zeroTopic];
+      const logs = await provider.getLogs({ address: tokenAddress, fromBlock, toBlock, topics });
+      for (const log of logs) {
+        const { args } = transfers.parseLog(log);
+        const entries = name === 'TransferSingle' ? [[args.id, args.value]] : args[3].map((id, i) => [id, args[4][i]]);
+        for (const [id, amount] of entries) {
+          const key = id.toString();
+          if (!supplies.has(key)) continue;
+          const quantity = units(amount);
+          supplies.set(key, supplies.get(key) + (mint ? quantity : -quantity));
+          if (mint && quantity > 0n && log.transactionHash === receipt.transactionHash
+            && address(args.to) === address(market.pool_address)) seeded.add(key);
+        }
+      }
+    })));
+  }
+  if (seeded.size !== ids.length) throw tradeError('settlement_share_supply_unavailable', 409);
+  return ids.map(id => supplies.get(id.toString()));
+}
+
+async function readSupplies({ token, ids, at, ...context }) {
+  try {
+    return (await Promise.all(ids.map(id => token.totalSupply(id, at)))).map(units);
+  } catch (error) {
+    // The original Sepolia tokens implement ERC-1155 without ERC1155Supply.
+    if (error.code !== 'CALL_EXCEPTION' || error.data !== '0x') throw error;
+    return legacySupplies({ ...context, ids, blockNumber: at.blockTag });
+  }
+}
 
 export async function previewResolutionPayouts({ market, provider, env, outcome,
   contractAt = (addr, abi) => new ethers.Contract(addr, abi, provider) }) {
@@ -50,17 +112,21 @@ export async function previewResolutionPayouts({ market, provider, env, outcome,
 
   const token = contractAt(tokenAddress, tokenAbi);
   const cash = contractAt(collateral, ['function balanceOf(address) view returns(uint256)']);
-  const balance = units(await cash.balanceOf(market.pool_address, at));
   const indexes = outcome == null ? Array.from({ length: count }, (_, i) => i) : [outcome];
-  const payouts = await Promise.all(indexes.map(async index => {
-    const id = multi ? await token.tokenId(market.contract_id, index, at)
-      : await token[index === 0 ? 'yesTokenId' : 'noTokenId'](market.contract_id, at);
-    const [supply, reserve] = await Promise.all([token.totalSupply(id, at), token.balanceOf(market.pool_address, id, at)]);
+  const ids = await Promise.all(indexes.map(index => multi ? token.tokenId(market.contract_id, index, at)
+    : token[index === 0 ? 'yesTokenId' : 'noTokenId'](market.contract_id, at)));
+  const [supply, reserves, cashBalance] = await Promise.all([
+    readSupplies({ token, ids, at, market, provider, tokenAddress }),
+    Promise.all(ids.map(id => token.balanceOf(market.pool_address, id, at))),
+    cash.balanceOf(market.pool_address, at),
+  ]);
+  const balance = units(cashBalance);
+  const payouts = indexes.map((index, i) => {
     // A winning share redeems 1:1. The pool's own shares are treasury inventory.
-    const payout = units(supply) - units(reserve);
+    const payout = supply[i] - units(reserves[i]);
     if (payout < 0n) throw tradeError('settlement_invalid_share_supply', 409);
     return { outcome: index, payoutUnits: String(payout), shortfallUnits: String(payout > balance ? payout - balance : 0n) };
-  }));
+  });
   if ((await provider.getBlock(block.number))?.hash?.toLowerCase() !== block.hash.toLowerCase()) {
     throw tradeError('settlement_resolution_anchor_changed', 409);
   }
