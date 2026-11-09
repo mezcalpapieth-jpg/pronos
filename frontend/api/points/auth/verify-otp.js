@@ -107,7 +107,7 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'invalid_code' });
       }
       console.error('[auth/verify-otp] verifyOtp error', { message: e?.message, code: e?.code });
-      return res.status(502).json({ error: 'turnkey_unavailable', detail: e?.message?.slice(0, 240) || null });
+      return res.status(502).json({ error: 'turnkey_unavailable' });
     }
 
     let session;
@@ -116,7 +116,7 @@ export default async function handler(req, res) {
       session = r.session;
     } catch (e) {
       console.error('[auth/verify-otp] otpLogin error', { message: e?.message, code: e?.code });
-      return res.status(502).json({ error: 'session_failed', detail: e?.message?.slice(0, 240) || null });
+      return res.status(502).json({ error: 'session_failed' });
     }
 
     // At this point the OTP is verified and the user "owns" the sub-org.

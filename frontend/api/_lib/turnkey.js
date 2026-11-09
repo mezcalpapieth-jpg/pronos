@@ -10,14 +10,17 @@
  *   TURNKEY_ORGANIZATION_ID   — parent org UUID
  *   TURNKEY_API_PUBLIC_KEY    — hex-encoded P-256 public key registered with Turnkey
  *   TURNKEY_API_PRIVATE_KEY   — hex-encoded P-256 private key for stamping
+ *   TURNKEY_AUTH_API_PUBLIC_KEY / TURNKEY_AUTH_API_PRIVATE_KEY — optional
+ *     separate parent credential for login, required for accounts where
+ *     the default key is installed as a delegated trading signer
  *   TURNKEY_APP_NAME          — optional, defaults to 'Pronos Points'
  *   TURNKEY_API_BASE_URL      — optional, defaults to https://api.turnkey.com
  */
 
 import { Turnkey } from '@turnkey/sdk-server';
 
-let cachedClient = null;
 let cachedApi = null;
+let cachedLoginApi = null;
 
 function missing(name) {
   return !process.env[name] || process.env[name].trim() === '';
@@ -39,25 +42,35 @@ export function isTurnkeyConfigured() {
       && !missing('TURNKEY_API_PRIVATE_KEY');
 }
 
-function turnkeyClient() {
-  if (cachedClient) return cachedClient;
-  const { orgId, pubKey, privKey, apiBase } = getEnv();
+function createApiClient({ orgId, pubKey, privKey, apiBase }) {
   if (!orgId || !pubKey || !privKey) {
     throw new Error('Turnkey not configured: set TURNKEY_ORGANIZATION_ID, TURNKEY_API_PUBLIC_KEY, TURNKEY_API_PRIVATE_KEY');
   }
-  cachedClient = new Turnkey({
+  return new Turnkey({
     apiBaseUrl: apiBase,
     apiPublicKey: pubKey,
     apiPrivateKey: privKey,
     defaultOrganizationId: orgId,
-  });
-  return cachedClient;
+  }).apiClient();
 }
 
 function api() {
-  if (cachedApi) return cachedApi;
-  cachedApi = turnkeyClient().apiClient();
-  return cachedApi;
+  return cachedApi ??= createApiClient(getEnv());
+}
+
+function loginApi() {
+  if (cachedLoginApi) return cachedLoginApi;
+  const pubKey = process.env.TURNKEY_AUTH_API_PUBLIC_KEY?.trim();
+  const privKey = process.env.TURNKEY_AUTH_API_PRIVATE_KEY?.trim();
+  if (!pubKey && !privKey) return api();
+  if (!pubKey || !privKey) throw new Error('Turnkey login not configured: both login keys are required');
+
+  const config = getEnv();
+  if (pubKey.toLowerCase() === config.pubKey?.trim().toLowerCase()
+    || privKey.toLowerCase() === config.privKey?.trim().toLowerCase()) {
+    throw new Error('Turnkey login not configured: login and trading credentials must be separate');
+  }
+  return cachedLoginApi = createApiClient({ ...config, pubKey, privKey });
 }
 
 export function buildSuborgCreationParams(email, { nowMs = Date.now() } = {}) {
@@ -94,11 +107,12 @@ export function buildSuborgCreationParams(email, { nowMs = Date.now() } = {}) {
 export async function getOrCreateSuborg(email) {
   const { orgId } = getEnv();
   const normalized = email.toLowerCase().trim();
+  const login = loginApi();
 
   // Step 1 — look up existing sub-orgs keyed to this email.
   let lookup;
   try {
-    lookup = await api().getVerifiedSubOrgIds({
+    lookup = await login.getVerifiedSubOrgIds({
       organizationId: orgId,
       filterType: 'EMAIL',
       filterValue: normalized,
@@ -106,7 +120,7 @@ export async function getOrCreateSuborg(email) {
   } catch (e) {
     // Fall back to unverified lookup — Turnkey can return an error when
     // the filter matches nothing on the verified view.
-    lookup = await api().getSubOrgIds({
+    lookup = await login.getSubOrgIds({
       organizationId: orgId,
       filterType: 'EMAIL',
       filterValue: normalized,
@@ -121,7 +135,7 @@ export async function getOrCreateSuborg(email) {
   // email user in the root quorum. The backend must never be installed
   // as root: day-to-day preauthorized investing should be handled by a
   // scoped Turnkey policy, not root authority.
-  const created = await api().createSubOrganization(buildSuborgCreationParams(normalized));
+  const created = await login.createSubOrganization(buildSuborgCreationParams(normalized));
   if (!created?.subOrganizationId) {
     throw new Error('createSubOrganization returned no subOrganizationId');
   }
@@ -149,7 +163,7 @@ export async function ensureBackendRootUser() {
  */
 export async function sendOtp(email, { otpLength = 6 } = {}) {
   const { appName } = getEnv();
-  const result = await api().initOtp({
+  const result = await loginApi().initOtp({
     otpType: 'OTP_TYPE_EMAIL',
     contact: email.toLowerCase().trim(),
     appName,
@@ -162,7 +176,7 @@ export async function sendOtp(email, { otpLength = 6 } = {}) {
 }
 
 export async function verifyOtp(otpId, otpCode) {
-  const result = await api().verifyOtp({ otpId, otpCode });
+  const result = await loginApi().verifyOtp({ otpId, otpCode });
   if (!result?.verificationToken) {
     throw new Error('verifyOtp returned no verificationToken');
   }
@@ -175,7 +189,7 @@ export async function verifyOtp(otpId, otpCode) {
  * it's the sub-org ID the session belongs to.
  */
 export async function otpLogin({ suborgId, verificationToken, publicKey, sessionLengthSeconds = 3600 }) {
-  const result = await api().otpLogin({
+  const result = await loginApi().otpLogin({
     organizationId: suborgId,
     verificationToken,
     publicKey,
@@ -315,7 +329,7 @@ export async function deleteDelegationPolicyOnSuborg({ suborgId, policyId }) {
 export async function getSuborgRootUserEmail(suborgId) {
   if (!suborgId) return null;
   try {
-    const result = await api().getUsers({ organizationId: suborgId });
+    const result = await loginApi().getUsers({ organizationId: suborgId });
     const users = result?.users || [];
     if (users.length === 0) return null;
     // Sub-orgs created via getOrCreateSuborg() have exactly one root
@@ -336,10 +350,11 @@ export async function getSuborgRootUserEmail(suborgId) {
  */
 export async function getSuborgWalletAddress(suborgId) {
   try {
-    const wallets = await api().getWallets({ organizationId: suborgId });
+    const login = loginApi();
+    const wallets = await login.getWallets({ organizationId: suborgId });
     const wallet = wallets?.wallets?.[0];
     if (!wallet?.walletId) return null;
-    const accounts = await api().getWalletAccounts({
+    const accounts = await login.getWalletAccounts({
       organizationId: suborgId,
       walletId: wallet.walletId,
     });
