@@ -30,6 +30,7 @@ import { syncApiPriceFromQuestion } from '../../_lib/api-price-market-sync.js';
 import { syncWeatherDateFromMarket } from '../../_lib/weather-market-sync.js';
 import { validateBeforeMonthDeadline } from '../../_lib/manual-deadline-sanity.js';
 import { checkPendingProposal, checkPendingProposals } from '../../_lib/points-admin-approval-checks.js';
+import { generateProposalCriteria } from '../../_lib/points-proposal-criteria.js';
 import { attachMarketTranslations } from '../../_lib/market-translations.js';
 import { assertPointsAirportApproval } from '../../_lib/points-aicm-policy.js';
 import { pointsResolverReadiness } from '../../_lib/points-resolver-readiness.js';
@@ -739,7 +740,11 @@ export async function approveOne(pid, reviewer, note, opts = {}) {
       sport: r.sport,
       league: r.league,
     });
-    const resolverConfig = syncedWeather.resolverConfig || null;
+    const syncedResolverConfig = syncedWeather.resolverConfig || null;
+    const criteria = !isOnchain && syncedResolverConfig
+      ? generateProposalCriteria(r.resolver_type, syncedResolverConfig, sourceData, outcomes)
+      : null;
+    const resolverConfig = criteria ? { ...syncedResolverConfig, criteria } : syncedResolverConfig;
     const deadlineCheck = validateBeforeMonthDeadline({
       question: r.question,
       endTime: endDate.toISOString(),

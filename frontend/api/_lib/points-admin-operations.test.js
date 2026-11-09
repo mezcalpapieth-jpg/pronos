@@ -3,6 +3,7 @@ import test from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
 import { checkPendingProposal, proposalChecks } from './points-admin-approval-checks.js';
 import { cancelPointsMarket } from './points-cancel-market.js';
+import { generateProposalCriteria } from './points-proposal-criteria.js';
 import { assertExpectedResolution, readSettlementPreview } from './points-admin-settlement-preview.js';
 import { PRONOS_TREASURY_USERNAME } from './points-limit-orders.js';
 import { resolverCheckResult, writeResolverChecks } from './points-resolver-diagnostics.js';
@@ -60,6 +61,52 @@ test('proposal checks block definite duplicates and missing fixture IDs while al
     VALUES (4,'¿Ganará el local?',$1::timestamptz + INTERVAL '1 hour','["Sí","No"]','active')`, [row.end_time]);
   const similar = await checkPendingProposal(db, row, { approvalEventId: 'event-42:reopen-3-5' });
   assert.ok(similar.some(check => check.code === 'similar_market' && check.marketId === 4 && check.severity === 'warning'));
+});
+
+test('approval checks accept generated criteria only for supported resolver configurations', () => {
+  const config = { source: 'espn', leaguePath: 'basketball/nba', eventId: '400001', shape: 'binary' };
+  const outcomes = ['Atlanta Hawks', 'Los Angeles Lakers'];
+  const row = {
+    question: '¿Quién gana Los Angeles Lakers @ Atlanta Hawks?',
+    sport: 'nba',
+    end_time: new Date(Date.now() + 86400000),
+    resolver_type: 'sports_api',
+    resolver_config: config,
+    outcomes,
+  };
+
+  assert.deepEqual(proposalChecks(row), []);
+  assert.match(generateProposalCriteria(row.resolver_type, config, {}, outcomes), /ganador.*ESPN.*400001/);
+  assert.deepEqual(proposalChecks(row, [{ id: 17, exact: false }]), [
+    { severity: 'warning', code: 'similar_market', marketId: 17 },
+  ]);
+  for (const invalidConfig of [
+    { ...config, source: 'unknown' },
+    { ...config, eventId: null },
+    { ...config, leaguePath: null },
+    { ...config, shape: 'draw3' },
+  ]) {
+    assert.ok(proposalChecks({ ...row, resolver_config: invalidConfig }).some(check => check.code === 'missing_criteria'));
+  }
+  assert.equal(generateProposalCriteria('manual', config, {}, outcomes), null);
+  assert.equal(generateProposalCriteria('sports_api', { ...config, criteria: 'Criterio del administrador.' }, {}, outcomes), null);
+  assert.equal(generateProposalCriteria('sports_api', config, { resolutionCriteria: 'Criterio original.' }, outcomes), null);
+  assert.equal(generateProposalCriteria('sports_api', config, {}, ['Sí', 'No']), null);
+});
+
+test('generated criteria describe the configured soccer, price and chart rules', () => {
+  const fixture = { source: 'espn', leaguePath: 'soccer/uefa.champions', eventId: 400002 };
+  assert.match(generateProposalCriteria('sports_api', { ...fixture, shape: 'draw3' }, {},
+    ['Fenerbahçe', 'Empate', 'Liverpool']), /90 minutos.*prórroga y la tanda de penales quedan fuera/);
+  assert.match(generateProposalCriteria('sports_api', { ...fixture, shape: 'binary' }, {},
+    ['Fenerbahçe', 'Liverpool']), /Se incluye la prórroga o la tanda de penales/);
+  assert.match(generateProposalCriteria('sports_api', { ...fixture, shape: 'total-goals-over', threshold: 3.5 }, {},
+    ['Sí', 'No']), /supera 3\.5/);
+  assert.match(generateProposalCriteria('api_price', { source: 'finnhub', symbol: 'AAPL', op: 'gte', yesOutcome: 1, threshold: 120 }, {},
+    ['No', 'Sí']), /AAPL.*Finnhub.*Sí si el valor es mayor o igual que 120.*gana No/);
+  assert.match(generateProposalCriteria('api_chart', { source: 'apple-mx-songs',
+    legs: [{ label: 'Artista', artist: 'Artista' }, { label: 'Otro', artist: null }] }, {},
+    ['Artista', 'Otro']), /Apple Music México.*gana «Otro»/);
 });
 
 test('resolver diagnostics keep the newest blocker and last verified response across overlapping checks', async t => {
