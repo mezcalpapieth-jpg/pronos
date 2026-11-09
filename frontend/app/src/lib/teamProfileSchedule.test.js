@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 
 import { mergeScheduleWithMarkets } from './teamProfileSchedule.js';
 
-test('team profile schedule links imported markets and marks missing imports pending', () => {
+test('team profile schedule links imported markets and marks missing imports pending', t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-05-30T15:00:00.000Z') });
   const schedule = [
     {
       id: 'game-1',
@@ -41,7 +42,8 @@ test('team profile schedule links imported markets and marks missing imports pen
   assert.equal(rows[1].market, null);
 });
 
-test('team profile schedule marks past missing-market games closed', () => {
+test('team profile schedule marks past missing-market games closed', t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-05-30T15:00:00.000Z') });
   const rows = mergeScheduleWithMarkets([
     {
       id: 'old-game',
