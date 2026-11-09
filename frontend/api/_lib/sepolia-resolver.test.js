@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {PGlite} from '@electric-sql/pglite';
 import {RESOLVER_MIGRATION,runSepoliaResolver,automaticResolutionSupported,previewSepoliaResolutions,inspectResolutionCandidate,reviewSepoliaResolution} from './sepolia-resolver.js';
+import {loadSettlementMarket,settlementSourceHash} from './onchain-admin-settlement.js';
 import {preview} from './test-support/sepolia-settlement.mjs';
 const env={...preview,ONCHAIN_RESOLVER_SCHEDULE_ENABLED:'true',VERCEL_GIT_COMMIT_SHA:'a'.repeat(40)};
 const addr=n=>`0x${String(n).repeat(40)}`;
@@ -30,6 +31,8 @@ test('automatic source allowlist leaves parallel and review-heavy markets manual
 });
 test('scheduled resolver filters chain/factory/mode/time and saves deterministic source-reviewed intents',async t=>{
   const f=await fixture(t);await f.seed(1);await f.seed(2,{mode:'points'});await f.seed(3,{chain:42161});await f.seed(4,{factory:addr(8)});await f.seed(5,{end:"now()+interval '1 hour'"});
+  await f.seed(6);
+  await f.db.exec("UPDATE points_markets SET end_time=now()+interval '1 hour' WHERE id=6");
   const first=await f.run(),second=await f.run();assert.equal(first.resolved.length,1);assert.equal(f.decisions.length,2);
   assert.equal(f.calls[0].input.marketId,1);assert.equal(f.calls[0].key,f.calls[1].key);assert.equal(f.calls[0].origin,'scheduler');
   assert.match(f.calls[0].expectedSourceHash,/^[a-f0-9]{64}$/);assert.equal(f.calls[0].evidence.finalScore,'2-1');
@@ -37,10 +40,11 @@ test('scheduled resolver filters chain/factory/mode/time and saves deterministic
 });
 test('pending signed requests resume before new evidence; no new intent until reconciliation',async t=>{
   const f=await fixture(t);await f.seed(1);
-  const input={marketId:91,action:'resolve',outcome:1,reason:'Scheduled verified source resolution',origin:'scheduler'};
+  const input={marketId:91,action:'resolve',outcome:1,reason:'Scheduled verified source resolution',reviewHash:'b'.repeat(64),origin:'scheduler'};
   await f.db.query(`INSERT INTO sepolia_trade_requests VALUES('auto_original',421614,$1,'ops','admin_resolve',$2,'pending',now())`,[env.ONCHAIN_RESOLVER_ADDRESS.toLowerCase(),JSON.stringify(input)]);
   const r=await f.run({settle:async args=>{f.calls.push(args);return {httpStatus:202,body:{txHash:'0xpending'}};}});
   assert.equal(r.pending.length,1);assert.equal(f.decisions.length,0);assert.equal(f.calls.length,1);assert.equal(f.calls[0].key,'auto_original');assert.equal(f.calls[0].input.marketId,91);
+  assert.equal(f.calls[0].input.reviewHash,input.reviewHash);
 });
 test('leases serialize invocations and disabled/wrong-chain calls cannot create requests',async t=>{
   const f=await fixture(t);
@@ -65,6 +69,51 @@ test('read-only source inspection works with scheduling off and cannot create ru
   assert.equal(result.transactionsSubmitted,0);assert.equal(result.schedulingEnabled,false);
   assert.deepEqual(result.candidates.map(m=>m.status),['ready','manual','deferred']);
   assert.equal((await f.db.query('SELECT count(*) FROM sepolia_resolver_runs')).rows[0].count,0);
+});
+
+test('scheduler and Por resolver use the same published ESPN result when the V1 index has generic labels', async t => {
+  const f = await fixture(t);
+  const cfg = { source:'espn',shape:'binary',leaguePath:'basketball/nba',eventId:'401000001',
+    homeName:'Atlanta Hawks',awayName:'Los Angeles Lakers' };
+  await f.seed(16,{cfg});
+  await f.db.exec(`UPDATE protocol_markets SET resolver_type=NULL,resolver_config=NULL WHERE id=16;
+    UPDATE points_markets SET outcomes='["Atlanta Hawks","Los Angeles Lakers"]' WHERE id=16`);
+  const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=${cfg.eventId}`;
+  let final = false;
+  t.mock.method(globalThis, 'fetch', async request => {
+    if (new URL(request).pathname.endsWith('/scoreboard')) return { ok:true,json:async()=>({events:[]}) };
+    assert.equal(request,url);
+    return { ok:true,json:async()=>({header:{id:cfg.eventId,competitions:[{
+      status:{type:{state:final?'post':'in',completed:final,name:final?'STATUS_FINAL':'STATUS_IN_PROGRESS'}},
+      competitors:[
+        {homeAway:'away',score:'108',winner:true,team:{displayName:cfg.awayName}},
+        {homeAway:'home',score:'102',winner:false,team:{displayName:cfg.homeName}},
+      ],
+    }]}}) };
+  });
+  const args = {sql:f.sql,env:{...env,ONCHAIN_RESOLVER_SCHEDULE_ENABLED:'false'},
+    provider:{getNetwork:async()=>({chainId:421614})}};
+  const inProgress = await previewSepoliaResolutions(args);
+  assert.equal(inProgress.candidates[0].status,'deferred');
+  assert.equal(inProgress.candidates[0].input,undefined);
+
+  final = true;
+  const scheduled = await previewSepoliaResolutions(args);
+  const manual = await reviewSepoliaResolution({...args,marketId:16,payoutPreview:async()=>({payouts:[]})});
+  const [decision] = scheduled.candidates;
+  assert.equal(decision.status,'ready');
+  assert.deepEqual(manual.outcomes,[cfg.homeName,cfg.awayName]);
+  assert.equal(manual.suggestedOutcome,1);
+  assert.equal(decision.input.outcome,manual.suggestedOutcome);
+  assert.equal(decision.input.reviewHash,manual.reviewHash);
+  assert.equal(decision.expectedSourceHash,settlementSourceHash(await loadSettlementMarket(f.sql,16,env)));
+  assert.equal(manual.evidence.url,url);
+  assert.equal(decision.evidence.finalScore,manual.evidence.score);
+  assert.match(manual.evidence.score,/102-108/);
+  assert.equal(scheduled.schedulingEnabled,false);
+  assert.equal(scheduled.transactionsSubmitted,0);
+  assert.equal(f.calls.length,0);
+  assert.equal((await f.db.query('SELECT count(*) FROM sepolia_trade_requests')).rows[0].count,0);
 });
 test('unavailable evidence cannot starve later markets across bounded scheduled runs',async t=>{
   const f=await fixture(t);for(let i=1;i<=27;i++)await f.seed(i,{end:"'2026-01-01T00:00:00Z'::timestamptz"});

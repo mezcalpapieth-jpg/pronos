@@ -30,13 +30,12 @@ export function automaticResolutionSupported(m) {
 }
 async function resolutionCandidates(sql,env,cursor=null) {
   return await sql`SELECT p.id AS points_id,p.parent_id,p.amm_mode,
-          m.id,m.question,m.start_time,m.end_time,m.resolver_type,m.resolver_config,m.outcomes,
-          m.outcome_count,m.protocol_version,m.market_id,m.factory_address,m.sport,m.league,
-          pm.source_data AS pending_source_data
+          m.id AS protocol_id,m.question,m.end_time,m.resolver_type,m.resolver_config,m.outcomes,
+          m.outcome_count,m.protocol_version,m.market_id AS contract_id,m.factory_address,m.pool_address
         FROM protocol_markets m JOIN points_markets p ON p.chain_id=m.chain_id AND p.mode='onchain'
           AND LOWER(p.chain_address)=LOWER(m.pool_address) AND p.chain_market_id::text=m.market_id::text
-        LEFT JOIN LATERAL (SELECT source_data FROM points_pending_markets WHERE approved_market_id=p.id ORDER BY id DESC LIMIT 1) pm ON true
         WHERE m.chain_id=421614 AND m.status='active' AND p.parent_id IS NULL
+          AND p.status='active' AND p.end_time<=now()
           AND LOWER(m.factory_address)=ANY(${settlementSettings(env).factories}::text[])
           AND m.end_time IS NOT NULL AND m.end_time<now()
         AND (${cursor?.endTime || null}::timestamptz IS NULL OR (m.end_time,m.id)>(${cursor?.endTime || null}::timestamptz,${cursor?.marketId || 0}))
@@ -56,30 +55,33 @@ function resolutionEvidenceUrl(cfg) {
   return null;
 }
 
-export async function reviewSepoliaResolution({ sql, provider, env, marketId, decide, payoutPreview = previewResolutionPayouts }) {
-  if (!resolverSettings(env).configured) throw tradeError('resolver_isolation_failed', 403);
-  if (Number((await provider.getNetwork()).chainId) !== 421614) throw tradeError('resolver_wrong_chain', 503);
-  const market = await loadSettlementMarket(sql, marketId, env);
-  const published = await loadPublishedResolution(sql, marketId);
+function publishedResolutionCandidate(market, published) {
   const outcomes = parseAutoResolverJsonb(published.outcomes, []);
   if (!Array.isArray(outcomes) || outcomes.length !== Number(market.outcome_count)
     || outcomes.some(label => typeof label !== 'string' || !label.trim())) throw tradeError('settlement_invalid_outcomes', 409);
   if (market.protocol_version === 'v2' && tradePayloadHash(outcomes) !== tradePayloadHash(parseAutoResolverJsonb(market.outcomes, []))) {
     throw tradeError('settlement_invalid_outcomes', 409);
   }
-  const candidate = {
+  return {
     ...market, ...published, outcomes, id: market.protocol_id, market_id: market.contract_id,
     resolver_type: published.resolver_type || market.resolver_type,
     resolver_config: published.resolver_type ? published.resolver_config : market.resolver_config,
   };
+}
 
+export async function reviewSepoliaResolution({ sql, provider, env, marketId, decide, payoutPreview = previewResolutionPayouts }) {
+  if (!resolverSettings(env).configured) throw tradeError('resolver_isolation_failed', 403);
+  if (Number((await provider.getNetwork()).chainId) !== 421614) throw tradeError('resolver_wrong_chain', 503);
+  const market = await loadSettlementMarket(sql, marketId, env);
+  const published = await loadPublishedResolution(sql, marketId);
+  const candidate = publishedResolutionCandidate(market, published);
   const [decision, estimate] = await Promise.all([
     inspectResolutionCandidate(candidate, { sql, decide }),
     payoutPreview({ market, provider, env }),
   ]);
   const cfg = parseAutoResolverJsonb(candidate.resolver_config, {}) || {};
   return {
-    marketId, chainId: 421614, status: decision.status, outcomes,
+    marketId, chainId: 421614, status: decision.status, outcomes: candidate.outcomes,
     criteria: pendingResolutionCriteria(cfg, parseAutoResolverJsonb(published.pending_source_data, {})),
     suggestedOutcome: decision.input?.outcome ?? null,
     evidence: {
@@ -106,6 +108,22 @@ export async function inspectResolutionCandidate(m,{sql,decide=resolveAutoResolv
   }catch(error){return {marketId:Number(m.points_id),status:'deferred',reason:error.benign?'evidence_not_ready_or_review_required':'source_or_settlement_unavailable'};}
   finally{clearTimeout(timer);}
 }
+
+async function inspectScheduledResolution(market, options) {
+  try {
+    const published = await loadPublishedResolution(options.sql, market.points_id);
+    const candidate = publishedResolutionCandidate(market, published);
+    const decision = await inspectResolutionCandidate(candidate, options);
+    if (decision.status === 'ready') {
+      decision.input.reviewHash = settlementQueueReviewHash(market, published);
+      decision.expectedSourceHash = settlementSourceHash(market);
+    }
+    return decision;
+  } catch (error) {
+    if (error.status !== 409) throw error;
+    return { marketId: Number(market.points_id), status: 'deferred', reason: error.message };
+  }
+}
 // Read-only inspection also works while scheduling is disabled. It never takes
 // a signing lease, writes a run/request, or receives signer credentials.
 export async function previewSepoliaResolutions({sql,provider,env,decide,now=()=>Date.now(),timeoutMs=15000}) {
@@ -114,7 +132,7 @@ export async function previewSepoliaResolutions({sql,provider,env,decide,now=()=
   const candidates=await resolutionCandidates(sql,env),results=[],deadline=now()+60000;
   for(const m of candidates.slice(0,5)) {
     if(now()>=deadline)break;
-    results.push(await inspectResolutionCandidate(m,{sql,decide,now,timeoutMs}));
+    results.push(await inspectScheduledResolution(m,{sql,decide,now,timeoutMs}));
   }
   return {mode:'read_only',schedulingEnabled:resolverSettings(env).enabled,checked:results.length,truncated:candidates.length>results.length,
     candidates:results,transactionsSubmitted:0};
@@ -164,10 +182,10 @@ export async function runSepoliaResolver({ sql, provider, env, sign, now = () =>
       const seen = new Set();
       for (const m of candidates) {
         if (now()>=deadline || attempts>=3) break;
-        if (seen.has(m.id)) continue;
-        seen.add(m.id); report.checked++;
-        report.cursor={endTime:new Date(m.end_time).toISOString(),marketId:Number(m.id)};
-        const review=await inspectResolutionCandidate(m,{sql,decide,now});
+        if (seen.has(m.protocol_id)) continue;
+        seen.add(m.protocol_id); report.checked++;
+        report.cursor={endTime:new Date(m.end_time).toISOString(),marketId:Number(m.protocol_id)};
+        const review=await inspectScheduledResolution(m,{sql,decide,now});
         if(review.status!=='ready') {report.deferred.push({marketId:review.marketId,reason:review.reason});continue;}
         try {
           await submit(review.input,review.key,{expectedSourceHash:review.expectedSourceHash,evidence:review.evidence});
