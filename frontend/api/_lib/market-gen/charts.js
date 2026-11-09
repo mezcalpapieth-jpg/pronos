@@ -25,6 +25,19 @@ import { formatMexicoDateEs, mexicoIsoWeekKey, nextMexicoFridayClose } from './m
 // parallel UI flow in the admin queue. If fewer than 4 distinct
 // artists appear in the top 10 we use what's there.
 const LEG_TARGET = 4;
+const APPLE_CHART_ATTEMPT_MS = 5_000;
+
+async function readGeneratorChart() {
+  const read = () => readAppleMxSongs({ signal: AbortSignal.timeout(APPLE_CHART_ATTEMPT_MS) });
+  try {
+    return await read();
+  } catch (error) {
+    if (error.name !== 'TimeoutError' && !(error instanceof TypeError)
+        && !(error.status >= 500 && error.status < 600)) throw error;
+    console.warn('[market-gen/charts] retrying Apple Music', { message: error.message });
+    return read();
+  }
+}
 
 function distinctTopArtists(entries, target) {
   const seen = new Map();
@@ -40,11 +53,12 @@ function distinctTopArtists(entries, target) {
   return Array.from(seen.values());
 }
 
-export async function generateChartsMarkets() {
+export async function generateChartsMarkets({ reportFeedError = () => {} } = {}) {
   let chart;
   try {
-    chart = await readAppleMxSongs();
+    chart = await readGeneratorChart();
   } catch (e) {
+    reportFeedError('Apple Music', e);
     console.error('[market-gen/charts] apple-music read failed', { message: e?.message });
     return [];
   }

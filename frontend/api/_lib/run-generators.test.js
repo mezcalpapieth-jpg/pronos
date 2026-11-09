@@ -63,6 +63,56 @@ test('source timing is reported for empty, failed and skipped generators and the
   assert.ok(sourceStats.empty.elapsedMs > 0);
 });
 
+test('Football Data and charts overlap the serial lane without reordering output', async t => {
+  const { runAllGenerators } = await import('./run-generators.js');
+  t.mock.method(console, 'error', () => {});
+  let releaseSoccer;
+  const held = new Promise(resolve => { releaseSoccer = resolve; });
+  const started = [];
+  const spec = id => [{ source_event_id: id, question: id, outcomes: ['Sí', 'No'] }];
+  const generators = [
+    { name: 'soccer', run: async () => { started.push('soccer'); await held; return spec('soccer'); } },
+    { name: 'espn-soccer', run: async () => { started.push('espn-soccer'); return spec('espn-soccer'); } },
+    { name: 'charts', run: async () => { started.push('charts'); throw new Error('chart unavailable'); } },
+    { name: 'next', run: async () => { started.push('next'); return spec('next'); } },
+  ];
+  const pending = runAllGenerators({ generators, parallelSources: true });
+  assert.deepEqual(started, ['soccer', 'charts', 'espn-soccer']);
+  releaseSoccer();
+  const { allSpecs, sourceStats } = await pending;
+  assert.deepEqual(started, ['soccer', 'charts', 'espn-soccer', 'next']);
+  assert.deepEqual(allSpecs.map(spec => spec.source_event_id), ['soccer', 'espn-soccer', 'next']);
+  assert.deepEqual(Object.keys(sourceStats), ['soccer', 'espn-soccer', 'charts', 'next']);
+  assert.equal(sourceStats.charts.error, 'chart unavailable');
+});
+
+test('expired candidates are counted separately and partial or empty feed failures are reported', async t => {
+  const { runAllGenerators, upsertPending, upsertProtocolPending } = await import('./run-generators.js');
+  t.mock.method(console, 'warn', () => {});
+  const expired = { source_event_id: 'past', end_time: '2000-01-01T00:00:00Z' };
+  const upcoming = { source_event_id: 'future', end_time: '2099-01-01T00:00:00Z' };
+  const { allSpecs, sourceStats } = await runAllGenerators({ generators: [
+    { name: 'partial', async run({ reportFeedError }) {
+      reportFeedError('Chart', Object.assign(new Error('provider detail'), { status: 504 }));
+      return [expired, upcoming];
+    } },
+    { name: 'empty', async run() { return []; } },
+    { name: 'offline', async run({ reportFeedError }) {
+      reportFeedError('Provider', new DOMException('request timed out', 'TimeoutError'));
+      return [];
+    } },
+  ] });
+  assert.deepEqual(allSpecs.map(s => s.source_event_id), ['future']);
+  assert.equal(sourceStats.partial.count, 1);
+  assert.equal(sourceStats.partial.expiredCount, 1);
+  assert.deepEqual(sourceStats.partial.feedErrors, [{ feed: 'Chart', code: 'http_504' }]);
+  assert.deepEqual(sourceStats.offline.feedErrors, [{ feed: 'Provider', code: 'timeout' }]);
+  assert.equal(sourceStats.empty.feedErrors, undefined);
+  for (const upsert of [upsertPending, upsertProtocolPending]) {
+    assert.equal((await upsert(() => assert.fail('expired candidate must not reach storage'), [expired])).skipped, 1);
+  }
+});
+
 test('generator runner includes the AICM infrastructure pipeline', () => {
   assert.match(source, /generateAicmMarkets/);
   assert.match(source, /\{ name:\s*'aicm',\s*run:\s*generateAicmMarkets/);

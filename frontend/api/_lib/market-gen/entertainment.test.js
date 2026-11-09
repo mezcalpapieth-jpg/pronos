@@ -137,49 +137,30 @@ test('TMDb weekend box-office discovery emits manual-review pending specs', () =
   assert.equal(spec.source_data.suggestedPricing.source, 'source-signals:tmdb-popularity');
 });
 
-test('Netflix Top 10 TSV rows create global and Mexico manual-review specs', () => {
-  const rows = _internal.parseTsv([
-    'week\tcategory\tweekly_rank\tshow_title\tcountry_name',
-    '2026-08-10\tTV (English)\t1\tOuter Banks\tMexico',
-    '2026-08-10\tTV (English)\t2\tWednesday\tMexico',
-    '2026-08-17\tTV (English)\t2\tOuter Banks\tMexico',
-    '2026-08-17\tTV (Non-English)\t1\tLa Casa\tMexico',
-    '2026-08-17\tFilms (English)\t1\tNot TV\tMexico',
-  ].join('\n'));
-
-  assert.equal(_internal.latestNetflixWeek(rows), '2026-08-17');
-  const picked = _internal.topNetflixRows(rows, { country: 'Mexico', limit: 2 });
-  assert.deepEqual(picked.map(item => item.title), ['La Casa', 'Outer Banks']);
-
+test('Netflix drafts identify the exact chart, target week, and applicable rank', () => {
+  const item = { title: 'La Casa', rank: 1, row: { week: '2026-08-16' } };
   const close = new Date('2026-08-25T06:00:00Z');
-  const globalSpec = _internal.netflixTop10Spec(picked[0], { scope: 'global', mode: 'number1', close });
-  const mexicoSpec = _internal.netflixTop10Spec(picked[1], { scope: 'mx', mode: 'top3', close });
+  const targetWeek = '2026-08-23';
+  const global = _internal.netflixTop10Spec(item, { chart: 'global-non-en', close, targetWeek });
+  const english = _internal.netflixTop10Spec(item, { chart: 'global-en', close, targetWeek });
+  const mexico = _internal.netflixTop10Spec(item, { chart: 'mx', close, targetWeek });
 
-  assert.equal(globalSpec.source, 'entertainment-api');
-  assert.equal(globalSpec.question, '¿La Casa será #1 global en Netflix TV esta semana?');
-  assert.equal(globalSpec.start_time, '2026-08-25T00:00:00.000Z');
-  assert.equal(globalSpec.end_time, '2026-08-25T06:00:00.000Z');
-  assert.equal(globalSpec.resolver_type, 'manual_review');
-  assert.equal(globalSpec.source_data.kind, 'netflix_top10');
-  assert.equal(globalSpec.source_data.targetRank, 1);
-  assert.deepEqual(globalSpec.geo_tags, ['world']);
-  assert.deepEqual(globalSpec.topic_tags, ['tv']);
-  assert.equal(mexicoSpec.question, '¿Outer Banks entra al Top 3 de Netflix México esta semana?');
-  assert.equal(mexicoSpec.start_time, '2026-08-25T00:00:00.000Z');
-  assert.equal(mexicoSpec.source_data.targetRank, 3);
-  assert.deepEqual(mexicoSpec.geo_tags, ['mexico']);
-  assert.equal(mexicoSpec.source_data.suggestedPricing.source, 'source-signals:netflix-top10-rank');
-});
-
-test('Netflix Top 10 markets open on the close date instead of a week early', () => {
-  const close = new Date('2026-09-15T06:00:00Z');
-  const spec = _internal.netflixTop10Spec(
-    { title: "Death of the Pastor's Wife", rank: 1, row: { week: '2026-09-08' } },
-    { scope: 'mx', mode: 'top3', close },
-  );
-
-  assert.equal(spec.start_time, '2026-09-15T00:00:00.000Z');
-  assert.equal(spec.end_time, '2026-09-15T06:00:00.000Z');
+  assert.equal(global.source, 'entertainment-api');
+  assert.match(global.question, /otros idiomas.*2026-08-23/);
+  assert.equal(global.start_time, '2026-08-25T00:00:00.000Z');
+  assert.equal(global.end_time, '2026-08-25T06:00:00.000Z');
+  assert.equal(global.resolver_type, 'manual_review');
+  assert.equal(global.resolver_config.chart, 'global-non-en');
+  assert.equal(global.resolver_config.targetWeek, targetWeek);
+  assert.match(global.resolver_config.evidence[0].url, /tv-non-english\?week=2026-08-16$/);
+  assert.equal(global.source_data.targetRank, 1);
+  assert.deepEqual(global.geo_tags, ['world']);
+  assert.notEqual(global.source_event_id, english.source_event_id);
+  assert.match(english.question, /series en inglés/);
+  assert.match(mexico.question, /Top 3.*México/);
+  assert.equal(mexico.source_data.targetRank, 3);
+  assert.deepEqual(mexico.geo_tags, ['mexico']);
+  assert.equal(mexico.source_data.suggestedPricing.source, 'source-signals:netflix-top10-rank');
 });
 
 test('API entertainment discovery is gated by env vars', () => {

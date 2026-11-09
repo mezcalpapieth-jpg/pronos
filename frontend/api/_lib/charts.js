@@ -26,11 +26,12 @@ const APPLE_MX_SONGS_URL =
  * Fetch the Apple Music MX "Top canciones" feed.
  * Returns an array of { rank, name, artist, id } sorted by current rank.
  */
-export async function readAppleMxSongs() {
+export async function readAppleMxSongs({ signal } = {}) {
   const res = await fetch(APPLE_MX_SONGS_URL, {
     headers: { 'Accept': 'application/json', 'User-Agent': 'pronos.io/1.0' },
+    signal,
   });
-  if (!res.ok) throw new Error(`apple-music: HTTP ${res.status}`);
+  if (!res.ok) throw Object.assign(new Error(`apple-music: HTTP ${res.status}`), { status: res.status });
   const data = await res.json();
   const results = data?.feed?.results;
   if (!Array.isArray(results) || results.length === 0) {

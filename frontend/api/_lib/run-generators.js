@@ -8,9 +8,8 @@
  * Exported:
  *   GENERATORS           — canonical registry; adding a new pipeline is
  *                          a one-line push here
- *   runAllGenerators()   — fires every generator in sequence; one bad
- *                          source logs + records the error but doesn't
- *                          drop the batch
+ *   runAllGenerators()   — runs the source registry and records individual
+ *                          failures without dropping the batch
  *   upsertPending(sql, specs) — ON CONFLICT DO UPDATE upsert into
  *                          points_pending_markets. WHERE guards keep
  *                          approved/rejected rows frozen and avoid no-op
@@ -69,6 +68,7 @@ const MARKET_ICON = null;
 const APPROVED_SCHEDULE_SYNC_SOURCES = new Set([
   'espn-atp-match',
 ]);
+const PARALLEL_GENERATORS = new Set(['soccer', 'charts']);
 
 export const GENERATORS = [
   { name: 'soccer',         run: generateSoccerMarkets        },
@@ -119,35 +119,82 @@ export async function prepareGeneratedSpecs(specs) {
   return pricedSpecs.map(spec => attachMarketTranslations(attachMarketContextBlocks(spec)));
 }
 
-export async function runAllGenerators({ disabledGenerators = [], generators = GENERATORS } = {}) {
-  const allSpecs = [];
-  const sourceStats = {};
-  for (const gen of generators) {
-    if (disabledGenerators.includes(gen.name)) {
-      sourceStats[gen.name] = { count: 0, skipped: true, reason: 'source_disabled', elapsedMs: 0 };
-      continue;
+function feedErrorCode(error) {
+  if (error?.name === 'TimeoutError' || error?.name === 'AbortError') return 'timeout';
+  if (Number.isInteger(error?.status)) return `http_${error.status}`;
+  const code = error?.code || error?.message;
+  if (typeof code === 'string' && /^[a-z][a-z0-9_-]{1,79}$/i.test(code)) return code;
+  return 'fetch_failed';
+}
+
+function isExpiredSpec(spec, now = Date.now()) {
+  return spec.end_time != null && new Date(spec.end_time).getTime() <= now;
+}
+
+async function runGenerator(gen, disabledGenerators) {
+  if (disabledGenerators.includes(gen.name)) {
+    return { specs: [], stats: { count: 0, skipped: true, reason: 'source_disabled', elapsedMs: 0 } };
+  }
+  const started = performance.now();
+  const elapsedMs = () => Math.round(performance.now() - started);
+  const feedErrors = new Map();
+  const reportFeedError = (feed, error) => {
+    const code = feedErrorCode(error);
+    feedErrors.set(`${feed}:${code}`, { feed, code });
+  };
+  const diagnostics = () => feedErrors.size ? { feedErrors: [...feedErrors.values()] } : {};
+  try {
+    const specs = await gen.run({ reportFeedError });
+    const contextualSpecs = await prepareGeneratedSpecs(specs);
+    return { specs: contextualSpecs, stats: { count: contextualSpecs.length, elapsedMs: elapsedMs(), ...diagnostics() } };
+  } catch (e) {
+    console.error('[run-generators] generator failed', {
+      source: gen.name,
+      message: e?.message,
+      stack: e?.stack?.split('\n').slice(0, 5).join('\n'),
+    });
+    return { specs: [], stats: { count: 0, error: e?.message?.slice(0, 200) || 'unknown', elapsedMs: elapsedMs(), ...diagnostics() } };
+  }
+}
+
+export async function runAllGenerators({
+  disabledGenerators = [],
+  generators = GENERATORS,
+  parallelSources = process.env.VERCEL_ENV === 'preview'
+    && process.env.VERCEL_GIT_COMMIT_REF === 'onchain-sepolia'
+    && process.env.ONCHAIN_CHAIN_ID === '421614',
+} = {}) {
+  const lanes = { soccer: [], charts: [], remaining: [] };
+  for (const [index, gen] of generators.entries()) {
+    const lane = parallelSources && PARALLEL_GENERATORS.has(gen.name) ? gen.name : 'remaining';
+    lanes[lane].push({ gen, index });
+  }
+  // Football Data and Apple use separate providers. Keep each serial and
+  // preserve the ordering and provider concurrency of the other sources.
+  const results = new Array(generators.length);
+  await Promise.all(Object.values(lanes).map(async lane => {
+    for (const { gen, index } of lane) {
+      results[index] = await runGenerator(gen, disabledGenerators);
     }
-    const started = performance.now();
-    try {
-      const specs = await gen.run();
-      const contextualSpecs = await prepareGeneratedSpecs(specs);
-      sourceStats[gen.name] = { count: contextualSpecs.length };
-      if (contextualSpecs.length) allSpecs.push(...contextualSpecs);
-    } catch (e) {
-      console.error('[run-generators] generator failed', {
-        source: gen.name,
-        message: e?.message,
-        stack: e?.stack?.split('\n').slice(0, 5).join('\n'),
+  }));
+  const finishedAt = Date.now();
+  for (const [index, result] of results.entries()) {
+    const specs = result.specs.filter(spec => !isExpiredSpec(spec, finishedAt));
+    const expiredCount = result.specs.length - specs.length;
+    if (expiredCount) {
+      result.specs = specs;
+      Object.assign(result.stats, { count: specs.length, expiredCount });
+    }
+    if (result.stats.feedErrors?.length) {
+      console.warn('[run-generators] feed errors', {
+        source: generators[index].name, count: result.stats.count, feedErrors: result.stats.feedErrors,
       });
-      sourceStats[gen.name] = {
-        count: 0,
-        error: e?.message?.slice(0, 200) || 'unknown',
-      };
-    } finally {
-      sourceStats[gen.name].elapsedMs = Math.round(performance.now() - started);
     }
   }
-  return { allSpecs, sourceStats };
+  return {
+    allSpecs: results.flatMap(result => result.specs),
+    sourceStats: Object.fromEntries(results.map(({ stats }, index) => [generators[index].name, stats])),
+  };
 }
 
 export async function upsertPending(sql, allSpecs) {
@@ -155,7 +202,7 @@ export async function upsertPending(sql, allSpecs) {
   let updated = 0;
   let skipped = 0;
   for (const spec of allSpecs) {
-    if (isAviationEdgeMarket(spec) && !aviationEdgeEnabled()) {
+    if (isExpiredSpec(spec) || (isAviationEdgeMarket(spec) && !aviationEdgeEnabled())) {
       skipped++;
       continue;
     }
@@ -471,6 +518,10 @@ export async function upsertProtocolPending(sql, allSpecs) {
   let updated = 0;
   let skipped = 0;
   for (const s of allSpecs) {
+    if (isExpiredSpec(s)) {
+      skipped++;
+      continue;
+    }
     try {
       const tags = deriveMarketTags(s);
       const result = await sql`

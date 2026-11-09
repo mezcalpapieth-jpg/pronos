@@ -55,7 +55,7 @@ function eventsFromData(data) {
 
 async function fetchJson(url, fetchImpl) {
   const res = await fetchImpl(url, { headers: { Accept: 'application/json' } });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status });
   return res.json();
 }
 
@@ -82,6 +82,7 @@ export async function fetchEspnScoreboardData({
   preferDaily = false,
   logPrefix,
   logContext = {},
+  reportFeedError = () => {},
 } = {}) {
   const dates = expandEspnDateRange(dateRange);
   const errors = [];
@@ -91,7 +92,7 @@ export async function fetchEspnScoreboardData({
     try {
       return await fetchJson(url, fetchImpl);
     } catch (error) {
-      errors.push({ query: dateRange, message: error?.message || String(error) });
+      errors.push(error);
     }
   }
 
@@ -101,12 +102,14 @@ export async function fetchEspnScoreboardData({
     try {
       daily.push(await fetchJson(url, fetchImpl));
     } catch (error) {
-      errors.push({ query: date, message: error?.message || String(error) });
+      errors.push(error);
+      reportFeedError(error);
     }
   }
 
   if (daily.length) return mergeScoreboards(daily);
 
+  if (!dates.length && errors.length) reportFeedError(errors[0]);
   if (logPrefix) {
     const first = errors[0];
     console.error(logPrefix, {

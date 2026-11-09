@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  assertNetflixDraftChart,
   buildNetflixTop10ResolutionReview,
   fetchNetflixTop10PageRows,
   fetchNetflixTop10Rows,
@@ -10,6 +11,7 @@ import {
   parseNetflixTop10Tsv,
   topNetflixRows,
 } from './netflix-top10.js';
+import { _internal as entertainment } from './market-gen/entertainment.js';
 
 function jsSingleQuotedJson(value) {
   return JSON.stringify(value)
@@ -39,6 +41,65 @@ function netflixPageHtml(items) {
   };
   return `<script>netflix.reactContext.models.graphql = JSON.parse('${jsSingleQuotedJson(payload)}');</script>`;
 }
+
+function fullChart(category, week) {
+  return Array.from({ length: 10 }, (_, index) => ({
+    rank: index + 1, title: `${category} ${index + 1}`, category, week,
+  }));
+}
+
+test('Netflix discovery keeps Mexico and non-English drafts when the English chart times out', async t => {
+  t.mock.method(console, 'warn', () => {});
+  const failures = [];
+  const specs = await entertainment.discoverNetflixTop10Specs({
+    now: new Date('2026-11-09T00:00:00Z'),
+    fetchImpl: async url => {
+      if (url.endsWith('/top10/tv')) throw new DOMException('expired', 'TimeoutError');
+      const category = url.endsWith('/mexico/tv') ? 'SERIES' : 'NONENGLISH_SERIES';
+      return new Response(netflixPageHtml(fullChart(category, '2026-11-01')));
+    },
+    reportFeedError: (feed, error) => failures.push([feed, error.code]),
+  });
+  assert.deepEqual(failures, [['Netflix · global-en', 'netflix_top10_timeout']]);
+  assert.deepEqual(specs.map(s => s.source_data.chart), ['global-non-en', 'mx', 'mx']);
+  assert.ok(specs.every(s => s.source_data.targetWeek === '2026-11-08'));
+});
+
+test('Netflix review uses the pinned week and language chart and rejects incomplete results', async () => {
+  const week = '2026-11-08';
+  const options = {
+    cfg: { chart: 'global-non-en', targetWeek: week },
+    sourceData: { title: 'Shared Show', targetRank: 1 },
+    outcomes: ['Sí', 'No'],
+  };
+  const nonEnglish = fullChart('NONENGLISH_SERIES', week);
+  nonEnglish[1].title = 'Shared Show';
+  const english = fullChart('ENGLISH_SERIES', week);
+  english[0].title = 'Shared Show';
+  const review = await buildNetflixTop10ResolutionReview({
+    ...options,
+    fetchImpl: async url => {
+      assert.match(url, /\/tv-non-english\?week=2026-11-08$/);
+      return new Response(netflixPageHtml([...english, ...nonEnglish, ...fullChart('NONENGLISH_SERIES', '2026-11-15')]));
+    },
+  });
+  assert.equal(review.resolverConfigPatch.suggestedOutcomeIndex, 1);
+  assert.equal(review.sourceDataPatch.netflixTop10LastSnapshot.latestWeek, week);
+  assert.equal(review.sourceDataPatch.netflixTop10LastSnapshot.rank, 2);
+  await assert.rejects(buildNetflixTop10ResolutionReview({
+    ...options, fetchImpl: async () => new Response(netflixPageHtml(nonEnglish.slice(0, 4))),
+  }), { code: 'netflix_top10_incomplete_chart' });
+  await assert.rejects(buildNetflixTop10ResolutionReview({
+    ...options, fetchImpl: async () => new Response(netflixPageHtml(fullChart('NONENGLISH_SERIES', '2026-11-01'))),
+  }), { code: 'netflix_top10_not_published_yet' });
+});
+
+test('pending approval rejects legacy Netflix drafts with an ambiguous global chart', () => {
+  const draft = { source: 'entertainment-api', source_event_id: 'netflix-top10:global:number1:2026-11-10:lupin' };
+  assert.throws(() => assertNetflixDraftChart(draft), { status: 409, code: 'netflix_top10_chart_required' });
+  assert.doesNotThrow(() => assertNetflixDraftChart({ ...draft, source_event_id: draft.source_event_id.replace(':global:', ':global-non-en:') }));
+  assert.doesNotThrow(() => assertNetflixDraftChart({ ...draft, source_event_id: draft.source_event_id.replace(':global:', ':mx:') }));
+});
 
 test('Netflix Top 10 parser selects the latest TV rows for Mexico', () => {
   const rows = parseNetflixTop10Tsv([

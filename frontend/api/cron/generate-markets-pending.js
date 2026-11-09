@@ -71,7 +71,9 @@ export default async function handler(req, res) {
       sources: Object.fromEntries(Object.entries(sourceStats).map(([name, stat]) => [name, {
         elapsedMs: stat.elapsedMs,
         count: stat.count,
-        status: stat.skipped ? 'skipped' : stat.error ? 'error' : 'ok',
+        expiredCount: stat.expiredCount || 0,
+        status: stat.skipped ? 'skipped' : stat.error ? 'error' : stat.feedErrors?.length ? 'feed_error' : 'ok',
+        feedErrors: stat.feedErrors,
       }])),
     }));
 

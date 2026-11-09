@@ -7660,7 +7660,15 @@ function PendingMarketsTable({ onQueueChange }) {
         .filter(([, v]) => v.count > 0)
         .map(([k, v]) => `${k}:${v.count}`)
         .join(' · ') || '(sin eventos)';
-      alert(`✓ Generación completa.\nInsertados: ${r.inserted} · Actualizados: ${r.updated} · Saltados: ${r.skipped}\n${counts}`);
+      const stats = Object.entries(r.sources || {});
+      const expired = stats.reduce((total, [, source]) => total + (source.expiredCount || 0), 0);
+      const feedErrors = stats.flatMap(([name, source]) => [
+        ...(source.error ? [`${name} · ${source.error}`] : []),
+        ...(source.feedErrors || []).map(({ feed, code }) => `${feed} · ${code}`),
+      ]);
+      const title = feedErrors.length ? 'Generación terminada con errores de fuentes.' : '✓ Generación completa.';
+      const errors = feedErrors.length ? `\n\nFuentes con errores\n${feedErrors.join('\n')}` : '';
+      alert(`${title}\nInsertados: ${r.inserted} · Actualizados: ${r.updated} · Saltados: ${r.skipped} · Vencidos excluidos: ${expired}\n${counts}${errors}`);
       onQueueChange?.();
     } catch (e) {
       alert(`Generar falló: ${e.code || e.message}`);

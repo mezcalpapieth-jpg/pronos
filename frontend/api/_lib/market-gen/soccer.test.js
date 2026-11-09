@@ -293,3 +293,80 @@ test('team-calendar supplement is skipped by default', async (t) => {
   assert.ok(urls.every(url => !url.includes('/teams/')));
   assert.equal(_internal.soccerTeamSupplementEnabled(), false);
 });
+
+function setBulkTestEnvironment(t) {
+  const originalKey = process.env.FOOTBALL_DATA_API_KEY;
+  const originalSupplement = process.env.POINTS_SOCCER_TEAM_SUPPLEMENT;
+  process.env.FOOTBALL_DATA_API_KEY = 'test-key';
+  delete process.env.POINTS_SOCCER_TEAM_SUPPLEMENT;
+  t.after(() => {
+    if (originalKey === undefined) delete process.env.FOOTBALL_DATA_API_KEY;
+    else process.env.FOOTBALL_DATA_API_KEY = originalKey;
+    if (originalSupplement === undefined) delete process.env.POINTS_SOCCER_TEAM_SUPPLEMENT;
+    else process.env.POINTS_SOCCER_TEAM_SUPPLEMENT = originalSupplement;
+  });
+}
+
+function bulkFixture(id, code, utcDate) {
+  return {
+    id, utcDate, status: 'SCHEDULED', competition: { code },
+    homeTeam: { name: 'Home' }, awayTeam: { name: 'Away' },
+  };
+}
+
+test('bulk fixture requests cover the final day and retain competition order and resolver data', async t => {
+  setBulkTestEnvironment(t);
+  const requests = [];
+  t.mock.method(globalThis, 'fetch', async url => {
+    const request = new URL(url);
+    requests.push(request);
+    const { searchParams: params } = request;
+    const kickoff = params.get('dateFrom') + 'T18:00:00Z';
+    const finalDay = new Date(Date.parse(params.get('dateTo')) - 6 * 3600_000).toISOString();
+    const matches = requests.length === 1
+      ? [bulkFixture(3, 'PL', kickoff), bulkFixture(1, 'PL', kickoff)]
+      : [bulkFixture(2, 'PD', finalDay)];
+    return Response.json({
+      filters: { competitions: params.get('competitions') },
+      resultSet: { count: matches.length },
+      matches,
+    });
+  });
+  const specs = await generateSoccerMarkets({ bulk: true });
+  assert.equal(requests.length, 2);
+  assert.ok(requests.every(request => request.pathname === '/v4/matches'));
+  const day = (request, key) => Date.parse(request.searchParams.get(key)) / 86_400_000;
+  const start = day(requests[0], 'dateFrom');
+  assert.equal(day(requests[0], 'dateTo'), start + 10);
+  assert.equal(day(requests[1], 'dateFrom'), start + 10);
+  assert.equal(day(requests[1], 'dateTo'), start + 15);
+  assert.deepEqual(specs.map(spec => [spec.league, spec.resolver_config.matchId]), [
+    ['la-liga', 2], ['premier-league', 1], ['premier-league', 3],
+  ]);
+});
+
+test('an incomplete bulk window falls back for every competition without retaining partial fixtures', async t => {
+  setBulkTestEnvironment(t);
+  const requests = [];
+  t.mock.method(globalThis, 'fetch', async url => {
+    const request = new URL(url);
+    requests.push(request.pathname);
+    const kickoff = request.searchParams.get('dateFrom') + 'T18:00:00Z';
+    if (request.pathname === '/v4/matches') {
+      return Response.json({
+        filters: { competitions: request.searchParams.get('competitions') },
+        resultSet: { count: 1 },
+        matches: requests.length === 1 ? [bulkFixture(1, 'PL', kickoff)] : [],
+      });
+    }
+    return Response.json({
+      matches: request.pathname === '/v4/competitions/PL/matches' ? [bulkFixture(2, 'PL', kickoff)] : [],
+    });
+  });
+  const specs = await generateSoccerMarkets({ bulk: true });
+  assert.deepEqual(requests, [
+    '/v4/matches', '/v4/matches',
+    ..._internal.COMPETITIONS_ALL_FIXTURES.map(code => `/v4/competitions/${code}/matches`),
+  ]);
+  assert.deepEqual(specs.filter(spec => spec.league === 'premier-league').map(spec => spec.resolver_config.matchId), [2]);
+});

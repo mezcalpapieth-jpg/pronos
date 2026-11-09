@@ -216,7 +216,7 @@ function dateRangeForConfig(config, now = new Date()) {
   return `${formatDateCompact(now)}-${formatDateCompact(horizon)}`;
 }
 
-async function fetchLeagueEvents(leagueCode, dateRange, fetchImpl = fetch) {
+async function fetchLeagueEvents(leagueCode, dateRange, fetchImpl = fetch, reportFeedError = () => {}) {
   const data = await fetchEspnScoreboardData({
     baseUrl: `${BASE}/${leagueCode}/scoreboard`,
     dateRange,
@@ -224,6 +224,7 @@ async function fetchLeagueEvents(leagueCode, dateRange, fetchImpl = fetch) {
     preferDaily: true,
     logPrefix: '[market-gen/espn-soccer] scoreboard fetch failed',
     logContext: { league: leagueCode },
+    reportFeedError: error => reportFeedError(`ESPN · ${leagueCode}`, error),
   });
   return Array.isArray(data?.events) ? data.events : [];
 }
@@ -357,6 +358,7 @@ export async function generateEspnSoccerMarkets({
   now = new Date(),
   fetchLeagueEventsFn = fetchLeagueEvents,
   leagueConcurrency = process.env.ESPN_SOCCER_LEAGUE_CONCURRENCY,
+  reportFeedError,
 } = {}) {
   const configured = Number(leagueConcurrency);
   const limit = Number.isInteger(configured) && configured > 0
@@ -374,7 +376,7 @@ export async function generateEspnSoccerMarkets({
       const index = next++;
       const config = leagues[index];
       try {
-        const events = await fetchLeagueEventsFn(config.leagueCode, dateRangeForConfig(config, now));
+        const events = await fetchLeagueEventsFn(config.leagueCode, dateRangeForConfig(config, now), undefined, reportFeedError);
         const specs = [];
         for (const event of events) {
           if (!eventMatchesWhitelist(event, config.whitelist)) continue;

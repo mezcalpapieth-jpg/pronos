@@ -12,10 +12,11 @@ function uniformProbabilities(count) {
 export async function generateGranjaVipMarkets({
   now = new Date(),
   fetchImpl = fetch,
+  reportFeedError,
 } = {}) {
   if (process.env.GRANJA_VIP_OFFICIAL_ENABLED === 'false') return [];
 
-  const snapshot = await readGranjaVipOfficialSnapshot({ fetchImpl, now });
+  const snapshot = await readGranjaVipOfficialSnapshot({ fetchImpl, now, reportFeedError });
   return ['elimination', 'capataz'].map(kind => buildGranjaVipWeeklyMarketSpec({ snapshot, now, kind }))
     .filter(Boolean).map(weeklySpec => attachSuggestedPricing(weeklySpec, {
       probabilities: uniformProbabilities(weeklySpec.outcomes.length),

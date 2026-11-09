@@ -24,6 +24,15 @@ import {
   POPULAR_EVENTS,
 } from '../entertainment-config.js';
 import { attachSuggestedPricing } from '../market-pricing.js';
+import {
+  NETFLIX_TV_CHARTS,
+  fetchNetflixTvChart,
+  isCompleteNetflixChart,
+  latestNetflixWeek,
+  netflixChartRows,
+  netflixWeek,
+  topNetflixRows,
+} from '../netflix-top10.js';
 
 // Only generate markets for events that resolve within this many days.
 // Prevents the queue from filling with events months ahead — admin can
@@ -34,8 +43,6 @@ const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5';
 const ENTERTAINMENT_DISCOVERY_LIMIT = 5;
 const TMDB_API_BASE = 'https://api.themoviedb.org/3';
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w500';
-const NETFLIX_TOP10_GLOBAL_TSV = 'https://www.netflix.com/tudum/top10/data/all-weeks-global.tsv';
-const NETFLIX_TOP10_COUNTRIES_TSV = 'https://www.netflix.com/tudum/top10/data/all-weeks-countries.tsv';
 const DISCOVERY_FETCH_TIMEOUT_MS = 8000;
 
 function aiPricingEnabled() {
@@ -187,17 +194,6 @@ async function fetchJson(url, options = {}) {
   }
 }
 
-async function fetchText(url, options = {}) {
-  const { signal, cleanup } = withTimeoutSignal();
-  try {
-    const res = await fetch(url, { ...options, signal });
-    if (!res.ok) throw new Error(`http_${res.status}`);
-    return await res.text();
-  } finally {
-    cleanup();
-  }
-}
-
 async function tmdbGet(path, params = {}) {
   const url = new URL(`${TMDB_API_BASE}${path}`);
   for (const [key, value] of Object.entries(params)) {
@@ -298,7 +294,7 @@ function movieWeekendBoxOfficeSpec(movie, { weekend = currentWeekendWindow(), ra
   });
 }
 
-async function discoverMovieWeekendSpecs({ now = new Date(), limit = ENTERTAINMENT_DISCOVERY_LIMIT } = {}) {
+async function discoverMovieWeekendSpecs({ now = new Date(), limit = ENTERTAINMENT_DISCOVERY_LIMIT, reportFeedError = () => {} } = {}) {
   if (!tmdbEnabled()) return [];
   const weekend = currentWeekendWindow(now);
   try {
@@ -323,77 +319,10 @@ async function discoverMovieWeekendSpecs({ now = new Date(), limit = ENTERTAINME
       .map((movie, rank) => movieWeekendBoxOfficeSpec(movie, { weekend, rank }))
       .filter(Boolean);
   } catch (e) {
+    reportFeedError('TMDb', e);
     console.warn('[market-gen/entertainment] TMDb discovery skipped', { message: e?.message });
     return [];
   }
-}
-
-function parseTsv(text) {
-  const lines = String(text || '').trim().split(/\r?\n/).filter(Boolean);
-  if (lines.length < 2) return [];
-  const headers = lines[0].split('\t').map(header => normalizeSlug(header).replace(/-/g, '_'));
-  return lines.slice(1).map(line => {
-    const cells = line.split('\t');
-    const row = {};
-    headers.forEach((header, index) => {
-      row[header] = cells[index] ?? '';
-    });
-    return row;
-  });
-}
-
-function rowValue(row, names) {
-  for (const name of names) {
-    const key = normalizeSlug(name).replace(/-/g, '_');
-    const value = row?.[key];
-    if (value !== undefined && value !== null && String(value).trim()) return String(value).trim();
-  }
-  return '';
-}
-
-function netflixTitle(row) {
-  return rowValue(row, ['show_title', 'title', 'name', 'season_title']);
-}
-
-function netflixWeek(row) {
-  return rowValue(row, ['week', 'week_of', 'week_start', 'week_start_date', 'week_ending']);
-}
-
-function netflixRank(row) {
-  return Number(rowValue(row, ['weekly_rank', 'rank', 'position']));
-}
-
-function isNetflixTvRow(row) {
-  const category = rowValue(row, ['category', 'list', 'type']).toLowerCase();
-  return /tv|series|show/.test(category);
-}
-
-function latestNetflixWeek(rows) {
-  return rows
-    .map(netflixWeek)
-    .filter(Boolean)
-    .sort()
-    .at(-1) || null;
-}
-
-function topNetflixRows(rows, { country = null, limit = ENTERTAINMENT_DISCOVERY_LIMIT } = {}) {
-  const latestWeek = latestNetflixWeek(rows);
-  if (!latestWeek) return [];
-  const countryNorm = country ? normalizeTopicText(country) : null;
-  return uniqueBy(
-    rows
-      .filter(row => netflixWeek(row) === latestWeek)
-      .filter(isNetflixTvRow)
-      .filter(row => {
-        if (!countryNorm) return true;
-        const rowCountry = normalizeTopicText(rowValue(row, ['country_name', 'country', 'market']));
-        return rowCountry === countryNorm;
-      })
-      .map(row => ({ row, title: netflixTitle(row), rank: netflixRank(row) }))
-      .filter(item => item.title && Number.isFinite(item.rank))
-      .sort((a, b) => a.rank - b.rank),
-    item => normalizeSlug(item.title),
-  ).slice(0, limit);
 }
 
 function netflixProbabilityForRank(rank, mode) {
@@ -409,23 +338,24 @@ function netflixProbabilityForRank(rank, mode) {
   return 0.16;
 }
 
-function netflixTop10Spec(item, { scope = 'global', mode = 'number1', close = netflixWeekClose() } = {}) {
+function netflixTop10Spec(item, { chart, close, targetWeek }) {
+  const { scope, label: chartLabel, url } = NETFLIX_TV_CHARTS[chart];
+  const mode = scope === 'mx' ? 'top3' : 'number1';
   const title = String(item?.title || '').trim();
   if (!title) return null;
   // Keep weekly Netflix markets off live/trending until the close date.
   const start = startOfUtcDate(close) || close;
   const titleSlug = normalizeSlug(title);
   const metric = mode === 'top3' ? 'top3' : 'number1';
-  const sourceEventId = `netflix-top10:${scope}:${metric}:${isoDate(close)}:${titleSlug}`;
+  const sourceEventId = `netflix-top10:${chart}:${metric}:${isoDate(close)}:${titleSlug}`;
   const evidence = [
     {
       title: 'Netflix Top 10',
-      url: 'https://www.netflix.com/tudum/top10',
+      url: `${url}?week=${netflixWeek(item.row)}`,
     },
   ];
-  const question = scope === 'mx'
-    ? `¿${title} entra al Top 3 de Netflix México esta semana?`
-    : `¿${title} será #1 global en Netflix TV esta semana?`;
+  const rankLabel = mode === 'top3' ? 'el Top 3' : 'el puesto #1';
+  const question = `¿${title} estará en ${rankLabel} del ranking ${chartLabel} de Netflix para la semana que termina el ${targetWeek}?`;
   const spec = {
     source: 'entertainment-api',
     source_event_id: sourceEventId,
@@ -438,18 +368,23 @@ function netflixTop10Spec(item, { scope = 'global', mode = 'number1', close = ne
     end_time: close.toISOString(),
     amm_mode: 'unified',
     resolver_type: 'manual_review',
-    resolver_config: manualReviewConfig({
-      sourceEventId,
-      criteria: scope === 'mx'
-        ? 'Resolver Sí si Netflix Top 10 coloca este título dentro del Top 3 de TV en México para la semana objetivo. Resolver No si queda fuera del Top 3 o no aparece.'
-        : 'Resolver Sí si Netflix Top 10 coloca este título como #1 global de TV para la semana objetivo. Resolver No si queda en otra posición o no aparece.',
-      evidence,
-    }),
+    resolver_config: {
+      ...manualReviewConfig({
+        sourceEventId,
+        criteria: `Resolver Sí si alguna temporada de ${title} aparece en ${rankLabel} del ranking ${chartLabel} de Netflix para la semana que termina el ${targetWeek}. Resolver No si el ranking completo de esa semana se publica y ninguna temporada cumple el criterio.`,
+        evidence,
+      }),
+      chart,
+      targetWeek,
+      targetRank: scope === 'mx' ? 3 : 1,
+    },
     source_data: {
       kind: 'netflix_top10',
       sourceProvider: 'netflix-top10',
       title,
       scope,
+      chart,
+      targetWeek,
       targetRank: scope === 'mx' ? 3 : 1,
       latestKnownRank: item.rank,
       latestKnownWeek: netflixWeek(item.row),
@@ -471,27 +406,36 @@ function netflixTop10Spec(item, { scope = 'global', mode = 'number1', close = ne
   });
 }
 
-async function discoverNetflixTop10Specs({ now = new Date(), limit = ENTERTAINMENT_DISCOVERY_LIMIT } = {}) {
+async function discoverNetflixTop10Specs({
+  now = new Date(), limit = ENTERTAINMENT_DISCOVERY_LIMIT, fetchImpl = fetch, reportFeedError = () => {},
+} = {}) {
   if (!netflixTop10Enabled()) return [];
-  try {
-    const close = netflixWeekClose(now);
-    const [globalText, countriesText] = await Promise.all([
-      fetchText(process.env.NETFLIX_TOP10_GLOBAL_TSV_URL || NETFLIX_TOP10_GLOBAL_TSV),
-      fetchText(process.env.NETFLIX_TOP10_COUNTRIES_TSV_URL || NETFLIX_TOP10_COUNTRIES_TSV),
-    ]);
-    const globalRows = parseTsv(globalText);
-    const countryRows = parseTsv(countriesText);
-    const globalSpecs = topNetflixRows(globalRows, { limit: Math.ceil(limit / 2) })
-      .map(item => netflixTop10Spec(item, { scope: 'global', mode: 'number1', close }))
-      .filter(Boolean);
-    const mexicoSpecs = topNetflixRows(countryRows, { country: 'Mexico', limit: Math.floor(limit / 2) || 1 })
-      .map(item => netflixTop10Spec(item, { scope: 'mx', mode: 'top3', close }))
-      .filter(Boolean);
-    return [...globalSpecs, ...mexicoSpecs].slice(0, limit);
-  } catch (e) {
-    console.warn('[market-gen/entertainment] Netflix Top 10 discovery skipped', { message: e?.message });
-    return [];
-  }
+  const close = netflixWeekClose(now);
+  // Netflix charts cover Monday through Sunday and are published on Tuesday.
+  const targetWeek = isoDate(new Date(close.getTime() - 2 * 86_400_000));
+  const globalLimit = Math.ceil(limit / 2);
+  const charts = [
+    ['global-en', Math.ceil(globalLimit / 2)],
+    ['global-non-en', Math.floor(globalLimit / 2)],
+    ['mx', Math.floor(limit / 2)],
+  ];
+  const results = await Promise.all(charts.filter(([, count]) => count > 0).map(async ([chart, count]) => {
+    try {
+      const { rows } = await fetchNetflixTvChart(chart, { fetchImpl });
+      const week = latestNetflixWeek(rows);
+      const chartRows = netflixChartRows(rows, chart, week);
+      if (!isCompleteNetflixChart(chartRows)) throw new Error('netflix_top10_incomplete_chart');
+      const daysBeforeTarget = (Date.parse(targetWeek) - Date.parse(week)) / 86_400_000;
+      if (daysBeforeTarget === 0) return []; // Results already published.
+      if (daysBeforeTarget !== 7 && daysBeforeTarget !== 14) throw new Error('netflix_top10_unexpected_week');
+      return topNetflixRows(chartRows, { limit: count }).map(item => netflixTop10Spec(item, { chart, close, targetWeek }));
+    } catch (error) {
+      reportFeedError(`Netflix · ${chart}`, error);
+      console.warn('[market-gen/entertainment] Netflix chart discovery skipped', { chart, message: error.message });
+      return [];
+    }
+  }));
+  return results.flat();
 }
 
 function normalizeTopicText(value) {
@@ -839,7 +783,7 @@ function popularEventSpec(ev) {
   });
 }
 
-export async function generateEntertainmentMarkets() {
+export async function generateEntertainmentMarkets({ reportFeedError } = {}) {
   const specs = [];
 
   for (const award of AWARD_CEREMONIES) {
@@ -862,8 +806,8 @@ export async function generateEntertainmentMarkets() {
     const s = popularEventSpec(ev);
     if (s) specs.push(s);
   }
-  specs.push(...await discoverMovieWeekendSpecs());
-  specs.push(...await discoverNetflixTop10Specs());
+  specs.push(...await discoverMovieWeekendSpecs({ reportFeedError }));
+  specs.push(...await discoverNetflixTop10Specs({ reportFeedError }));
 
   const out = [];
   for (const spec of specs) out.push(await maybeAttachAiPricing(spec));
@@ -880,16 +824,13 @@ export const _internal = {
   discoverMovieWeekendSpecs,
   discoverNetflixTop10Specs,
   explicitTags,
-  latestNetflixWeek,
   movieWeekendBoxOfficeSpec,
   startOfUtcDate,
   netflixTop10Spec,
   normalizeSlug,
-  parseTsv,
   popularEventSpec,
   suggestPricingWithAnthropic,
   tmdbEnabled,
-  topNetflixRows,
   uniformProbabilities,
   withinHorizon,
 };

@@ -71,7 +71,8 @@ const TEAM_MATCH_SUPPLEMENT_IDS = [
 
 // Competition codes to pull. Everything listed here imports every scheduled
 // fixture inside the window; admin approval is the curation layer.
-const COMPETITIONS_ALL_FIXTURES = ['CL', 'CLI', 'PD', 'PL', 'SA', 'BL1'];
+const COMPETITION_IDS = { CL: 2001, CLI: 2152, PD: 2014, PL: 2021, SA: 2019, BL1: 2002 };
+const COMPETITIONS_ALL_FIXTURES = Object.keys(COMPETITION_IDS);
 const COMPETITIONS_TEAM_FILTER  = [];
 
 // Map football-data competition code → canonical league slug used by
@@ -105,6 +106,8 @@ const SPANISH_SECOND_DIVISION_CODES = new Set(['SD']);
 const SPANISH_SECOND_DIVISION_NAME_RE = /\b(segunda|laliga\s*2|la\s*liga\s*2|hypermotion)\b/i;
 
 const API_BASE = 'https://api.football-data.org/v4';
+const DAY_MS = 86_400_000;
+const REQUEST_TIMEOUT_MS = 8_000;
 
 function soccerTeamSupplementEnabled() {
   const raw = String(process.env.POINTS_SOCCER_TEAM_SUPPLEMENT || '').trim().toLowerCase();
@@ -215,11 +218,13 @@ function isOneLeggedCupFinal(match, competitionCode) {
 // response. Their free tier is 10 req/min; if `remaining` falls low we
 // wait for the reset window before issuing the next request.
 function parseRateLimit(res) {
-  const reset = Number(res.headers.get('X-RequestCounter-Reset'));
-  const remaining = Number(res.headers.get('X-Requests-Available-Minute'));
+  const numberHeader = name => {
+    const value = res.headers.get(name);
+    return value !== null && /^\d+$/.test(value) ? Number(value) : null;
+  };
   return {
-    resetSec: Number.isFinite(reset) ? reset : null,
-    remaining: Number.isFinite(remaining) ? remaining : null,
+    resetSec: numberHeader('X-RequestCounter-Reset'),
+    remaining: numberHeader('X-Requests-Available-Minute'),
   };
 }
 
@@ -238,13 +243,20 @@ async function fetchJson(url, apiKey) {
       && lastSeenRate.remaining <= 1
       && lastSeenRate.resetSec !== null) {
     const elapsedMs = Date.now() - lastSeenRate.when;
-    const waitMs = Math.max(0, lastSeenRate.resetSec * 1000 - elapsedMs) + 250;
-    if (waitMs > 0) await sleep(Math.min(65_000, waitMs));
+    const waitMs = Math.min(65_000, lastSeenRate.resetSec * 1000 - elapsedMs + 250);
+    if (waitMs > 0) {
+      console.info('[market-gen/soccer] waiting for Football Data quota', {
+        waitMs, remaining: lastSeenRate.remaining,
+      });
+      await sleep(waitMs);
+    }
   }
 
-  let res = await fetch(url, {
+  const request = () => fetch(url, {
     headers: { 'X-Auth-Token': apiKey, 'Accept': 'application/json' },
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
+  let res = await request();
 
   if (res.status === 429) {
     const retryAfter = Number(res.headers.get('Retry-After'))
@@ -252,9 +264,7 @@ async function fetchJson(url, apiKey) {
                     || 30;
     console.warn('[market-gen/soccer] 429 rate-limited; sleeping', { retryAfter });
     await sleep(Math.min(65_000, retryAfter * 1000 + 250));
-    res = await fetch(url, {
-      headers: { 'X-Auth-Token': apiKey, 'Accept': 'application/json' },
-    });
+    res = await request();
   }
 
   const rate = parseRateLimit(res);
@@ -269,17 +279,52 @@ async function fetchJson(url, apiKey) {
   return res.json();
 }
 
+async function fetchBulkCompetitionMatches(apiKey, dateFrom, splitDate, dateTo, reportFeedError) {
+  const competitions = Object.values(COMPETITION_IDS).join(',');
+  const matchesByCompetition = new Map(COMPETITIONS_ALL_FIXTURES.map(code => [code, []]));
+  try {
+    // Football Data limits the cross-competition endpoint to ten days.
+    // Its exclusive dateTo requires advancing the legacy inclusive end date.
+    for (const [from, to] of [[dateFrom, splitDate], [splitDate, dateTo]]) {
+      const data = await fetchJson(
+        `${API_BASE}/matches?dateFrom=${from}&dateTo=${to}&status=SCHEDULED&competitions=${competitions}`, apiKey,
+      );
+      if (!Array.isArray(data?.matches) || data.resultSet?.count !== data.matches.length
+          || data.filters?.competitions !== competitions) {
+        throw new Error('incomplete bulk fixture response');
+      }
+      for (const match of data.matches) {
+        const matches = matchesByCompetition.get(match?.competition?.code);
+        if (!matches || !Number.isSafeInteger(match.id) || !Number.isFinite(Date.parse(match.utcDate))) {
+          throw new Error('unexpected bulk fixture');
+        }
+        matches.push(match);
+      }
+    }
+    for (const matches of matchesByCompetition.values()) {
+      matches.sort((a, b) => Date.parse(a.utcDate) - Date.parse(b.utcDate) || a.id - b.id);
+    }
+    return matchesByCompetition;
+  } catch (error) {
+    reportFeedError('Football Data · consulta agrupada', error);
+    console.warn('[market-gen/soccer] bulk fetch failed; using competition requests', { message: error.message });
+    return null;
+  }
+}
+
 /**
  * Fetch scheduled matches in a date window for one competition.
  * Returns the raw `matches` array from the API (or [] on failure).
  */
-async function fetchCompetitionMatches(apiKey, competitionCode, dateFrom, dateTo) {
+async function fetchCompetitionMatches(apiKey, competitionCode, dateFrom, dateTo, reportFeedError) {
   const url = `${API_BASE}/competitions/${competitionCode}/matches`
     + `?dateFrom=${dateFrom}&dateTo=${dateTo}&status=SCHEDULED`;
   try {
     const data = await fetchJson(url, apiKey);
-    return Array.isArray(data?.matches) ? data.matches : [];
+    if (!Array.isArray(data?.matches)) throw new Error('invalid_fixture_response');
+    return data.matches;
   } catch (e) {
+    reportFeedError(`Football Data · ${competitionCode}`, e);
     // Log but keep going with other competitions; one bad request
     // shouldn't drop the whole batch.
     console.error('[market-gen/soccer] competition fetch failed', {
@@ -291,13 +336,15 @@ async function fetchCompetitionMatches(apiKey, competitionCode, dateFrom, dateTo
   }
 }
 
-async function fetchTeamMatches(apiKey, team, dateFrom, dateTo) {
+async function fetchTeamMatches(apiKey, team, dateFrom, dateTo, reportFeedError) {
   const url = `${API_BASE}/teams/${team.id}/matches`
     + `?dateFrom=${dateFrom}&dateTo=${dateTo}&status=SCHEDULED`;
   try {
     const data = await fetchJson(url, apiKey);
-    return Array.isArray(data?.matches) ? data.matches : [];
+    if (!Array.isArray(data?.matches)) throw new Error('invalid_fixture_response');
+    return data.matches;
   } catch (e) {
+    reportFeedError(`Football Data · ${team.name || team.id}`, e);
     console.error('[market-gen/soccer] team fetch failed', {
       team: team?.name || team?.id,
       message: e?.message,
@@ -460,23 +507,36 @@ function matchToMarketSpecs(match, competitionCode) {
  * competitions), it would only produce one spec since match.id is
  * globally unique across football-data.org.
  */
-export async function generateSoccerMarkets({ horizonDays = 14 } = {}) {
+export async function generateSoccerMarkets({
+  horizonDays = 14,
+  reportFeedError = () => {},
+  bulk = process.env.VERCEL_ENV === 'preview'
+    && process.env.VERCEL_GIT_COMMIT_REF === 'onchain-sepolia'
+    && process.env.ONCHAIN_CHAIN_ID === '421614',
+} = {}) {
   const apiKey = process.env.FOOTBALL_DATA_API_KEY;
   if (!apiKey) {
+    reportFeedError('Football Data', new Error('missing_api_key'));
     console.warn('[market-gen/soccer] FOOTBALL_DATA_API_KEY not set — skipping');
     return [];
   }
   const now = new Date();
-  const horizon = new Date(now.getTime() + horizonDays * 86_400_000);
+  const horizon = new Date(now.getTime() + horizonDays * DAY_MS);
   const dateFrom = formatDate(now);
   const dateTo   = formatDate(horizon);
 
   const seenMatchIds = new Set();
   const specs = [];
+  const bulkMatches = bulk && horizonDays === 14
+    ? await fetchBulkCompetitionMatches(
+      apiKey, dateFrom, formatDate(new Date(now.getTime() + 10 * DAY_MS)), formatDate(new Date(horizon.getTime() + DAY_MS)),
+      reportFeedError,
+    )
+    : null;
 
   // Every fixture in-window for each configured competition.
   for (const code of COMPETITIONS_ALL_FIXTURES) {
-    let matches = await fetchCompetitionMatches(apiKey, code, dateFrom, dateTo);
+    let matches = bulkMatches?.get(code) ?? await fetchCompetitionMatches(apiKey, code, dateFrom, dateTo, reportFeedError);
     if (matches.length === 0) {
       matches = fallbackFinalMatchesForCompetition(code, dateFrom, dateTo);
     }
@@ -492,7 +552,7 @@ export async function generateSoccerMarkets({ horizonDays = 14 } = {}) {
     // such as Bayern vs Dortmund even when their competition is not one
     // of the league codes we pull above.
     for (const team of TEAM_MATCH_SUPPLEMENT_IDS) {
-      const matches = await fetchTeamMatches(apiKey, team, dateFrom, dateTo);
+      const matches = await fetchTeamMatches(apiKey, team, dateFrom, dateTo, reportFeedError);
       for (const rawMatch of matches) {
         if (seenMatchIds.has(rawMatch.id)) continue;
         if (!shouldImportTeamSupplementMatch(rawMatch)) continue;

@@ -84,6 +84,7 @@ function statusTimeText(event) {
 export async function generateNcaafMarkets({
   now = new Date(),
   fetchImpl = fetch,
+  reportFeedError = () => {},
 } = {}) {
   const current = now instanceof Date ? now : new Date(now);
   const horizon = new Date(current.getTime() + HORIZON_DAYS * 86_400_000);
@@ -95,6 +96,7 @@ export async function generateNcaafMarkets({
     fetchImpl,
     preferDaily: true,
     logPrefix: '[market-gen/ncaaf] scoreboard fetch failed',
+    reportFeedError: error => reportFeedError('ESPN · NCAAF', error),
   });
   if (!data) return [];
 

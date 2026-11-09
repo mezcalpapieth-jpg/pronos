@@ -63,6 +63,28 @@ test('dated article parsing excludes Corral VIP and requires publication metadat
   assert.equal(parseOfficialGranjaArticle(article('Lista de nominados', '2026-10-14T21:00:00', '<p>Lista</p>'), BASE).publishedAt, '2026-10-14T21:00:00.000Z');
 });
 
+test('Arc articles with a separate headline produce a draft from the complete Friday nominee list', async () => {
+  const path = 'lista-final-de-nominados-semana-9/';
+  const now = new Date('2026-11-08T10:00:00Z');
+  const html = `<meta property="article:published_time" content="2026-11-06T22:41:05-06:00">
+    <main><h1 class="b-headline">Lista FINAL de Nominados de la semana 9</h1>
+    <article class="b-article-body">
+      <p>En la lista FINAL de Nominados de <a>La Granja VIP</a> queda Mario “Mono” Osuna, Natalia Alcocer, Ivonne Montero, Kevyn “Bicolor” Contreras y Fernando Lozada; quienes el domingo están en riesgo.</p>
+    </article><aside><p>Actualmente los nominados son Carlos Trejo y Kunno.</p></aside></main>`;
+  const fetchImpl = async input => {
+    const url = new URL(input);
+    const body = url.pathname.endsWith(path) ? html : `${OFFICIAL_SECTION_HTML}<a href="${path}">Lista FINAL de Nominados</a>`;
+    return { ok: true, status: 200, text: async () => body };
+  };
+  const snapshot = await readGranjaVipOfficialSnapshot({ now, fetchImpl });
+  const spec = buildGranjaVipWeeklyMarketSpec({ snapshot, now });
+  assert.equal(snapshot.nominationPublishedAt, '2026-11-07T04:41:05.000Z');
+  assert.equal(spec?.source_event_id, 'granja-vip-elimination:2026-11-08');
+  assert.deepEqual(new Set(spec.outcomes), new Set([
+    'Mono Osuna', 'Natalia Alcocer', 'Ivonne Montero', 'Kevyn Contreras "Bicolor"', 'Fernando Lozada',
+  ]));
+});
+
 test('stale and unrelated nominees never generate the next weeks elimination', async () => {
   const fetchImpl = fixtureFetch([
     { path: 'nominados-pasados/', title: 'OFICIAL: Lista de nominados', publishedAt: '2026-10-08T23:00:00Z', body: '<p>Actualmente los nominados son: Carlos Trejo, Kunno e Ivonne Montero.</p>' },
@@ -364,16 +386,16 @@ test('official monthly and news sitemaps discover the Friday lineup and Sunday r
   const fetchImpl=async input=>{
     const url=new URL(input);urls.push(url.href);
     let html=OFFICIAL_SECTION_HTML;
-    if(url.pathname.endsWith('sitemap-202610.xml'))html=`<urlset><url><loc>${new URL(OCT_FINAL.path,BASE)}</loc><lastmod>2026-10-17T04:48:00Z</lastmod></url>
+    if(url.pathname.endsWith('sitemap-202610.xml/'))html=`<urlset><url><loc>${new URL(OCT_FINAL.path,BASE)}</loc><lastmod>2026-10-17T04:48:00Z</lastmod></url>
       <url><loc>https://attacker.example/aztecauno/la-granja-vip/fake-nominados/</loc></url></urlset>`;
-    else if(url.pathname.endsWith('newslatest-sitemap-latest.xml'))html=`<urlset><url><loc>${new URL(OCT_RESULT.path,BASE)}</loc><lastmod>2026-10-19T05:09:00Z</lastmod></url></urlset>`;
+    else if(url.pathname.endsWith('sitemap-news-latest.xml/'))html=`<urlset><url><loc>${new URL(OCT_RESULT.path,BASE)}</loc><lastmod>2026-10-19T05:09:00Z</lastmod></url></urlset>`;
     else {const found=articles.find(a=>url.pathname===new URL(a.path,BASE).pathname);if(found)html=article(found.title,found.publishedAt,found.body);}
     return {ok:true,status:200,text:async()=>html};
   };
   const result=await readGranjaVipOfficialResult(OCT_CFG,OCT_OUTCOMES,{fetchImpl,now:new Date('2026-10-19T06:00:00Z')});
   assert.equal(result.winningIdx,0);
   assert.ok(urls.some(u=>u.includes('sitemap-202610.xml')));
-  assert.ok(urls.some(u=>u.includes('newslatest-sitemap-latest.xml')));
+  assert.ok(urls.some(u=>u.includes('sitemap-news-latest.xml')));
   assert.ok(urls.every(u=>new URL(u).hostname==='www.tvazteca.com'));
 });
 

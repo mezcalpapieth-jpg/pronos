@@ -18,7 +18,7 @@ function formatDateCompact(d) {
   return formatEspnDateCompact(d);
 }
 
-export async function generateNbaMarkets() {
+export async function generateNbaMarkets({ reportFeedError = () => {} } = {}) {
   const now = new Date();
   const baseCutoffMs = now.getTime() + BASE_HORIZON_DAYS * 86_400_000;
   const scoreboardStart = new Date(now.getTime() - SCOREBOARD_LOOKBACK_DAYS * 86_400_000);
@@ -30,6 +30,7 @@ export async function generateNbaMarkets() {
     dateRange: range,
     preferDaily: true,
     logPrefix: '[market-gen/nba] scoreboard fetch failed',
+    reportFeedError: error => reportFeedError('ESPN · NBA', error),
   });
   if (!data) return [];
 

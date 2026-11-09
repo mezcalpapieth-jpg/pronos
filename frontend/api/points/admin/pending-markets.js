@@ -25,6 +25,7 @@ import { attachDefaultSuggestedPricing, attachPointsOpeningLiquidity, seedLiquid
 import { tryAttachPolymarketPricing } from '../../_lib/polymarket-pricing.js';
 import { LCDLF_SOURCE } from '../../_lib/lcdlf-official.js';
 import { assertGranjaVipFinalNominees } from '../../_lib/granja-vip-official.js';
+import { assertNetflixDraftChart } from '../../_lib/netflix-top10.js';
 import { syncMananeraPhraseFromQuestion } from '../../_lib/mananera-market-sync.js';
 import { syncApiPriceFromQuestion } from '../../_lib/api-price-market-sync.js';
 import { syncWeatherDateFromMarket } from '../../_lib/weather-market-sync.js';
@@ -634,6 +635,7 @@ export async function approveOne(pid, reviewer, note, opts = {}) {
       err.detail = `status=${r.status}`;
       throw err;
     }
+    assertNetflixDraftChart(r);
 
     const outcomes = parseJsonb(r.outcomes, []);
     if (!Array.isArray(outcomes) || outcomes.length < 2) {

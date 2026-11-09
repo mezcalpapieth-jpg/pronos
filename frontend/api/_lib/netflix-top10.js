@@ -5,6 +5,11 @@ export const NETFLIX_TOP10_COUNTRIES_TSV = 'https://www.netflix.com/tudum/top10/
 export const NETFLIX_TOP10_GLOBAL_TV_PAGE = `${NETFLIX_TOP10_PAGE}/tv`;
 export const NETFLIX_TOP10_GLOBAL_NON_ENGLISH_TV_PAGE = `${NETFLIX_TOP10_PAGE}/tv-non-english`;
 export const NETFLIX_TOP10_MEXICO_TV_PAGE = `${NETFLIX_TOP10_PAGE}/mexico/tv`;
+export const NETFLIX_TV_CHARTS = {
+  'global-en': { scope: 'global', category: 'TV (English)', label: 'global de series en inglés', url: NETFLIX_TOP10_GLOBAL_TV_PAGE },
+  'global-non-en': { scope: 'global', category: 'TV (Non-English)', label: 'global de series en otros idiomas', url: NETFLIX_TOP10_GLOBAL_NON_ENGLISH_TV_PAGE },
+  mx: { scope: 'mx', category: 'TV', label: 'de series en México', url: NETFLIX_TOP10_MEXICO_TV_PAGE },
+};
 
 const DEFAULT_FETCH_TIMEOUT_MS = 8000;
 const DEFAULT_COUNTRIES_FETCH_TIMEOUT_MS = 20000;
@@ -293,7 +298,7 @@ export function parseNetflixTop10PagePayload(html) {
 
 function pageCategoryToTsvCategory(category, scope) {
   const value = String(category || '').trim().toUpperCase();
-  if (scope === 'mx') return 'TV';
+  if (scope === 'mx') return value === 'SERIES' ? 'TV' : value;
   if (value === 'ENGLISH_SERIES') return 'TV (English)';
   if (value === 'NONENGLISH_SERIES') return 'TV (Non-English)';
   if (value === 'SERIES') return 'TV';
@@ -352,6 +357,27 @@ async function fetchNetflixTop10PageRowsForUrl(url, {
     accept: 'text/html,application/xhtml+xml,*/*',
   });
   return pageRowsFromPayload(parseNetflixTop10PagePayload(text), { scope, url });
+}
+
+export function netflixChartRows(rows, chart, week) {
+  const { scope, category } = NETFLIX_TV_CHARTS[chart];
+  return netflixResolutionRows(rows, { scope, week }).filter(row => row.category === category);
+}
+
+export function isCompleteNetflixChart(rows) {
+  const ranks = new Set(rows.map(netflixRank));
+  return rows.length === 10 && ranks.size === 10 && rows.every(row => {
+    const rank = netflixRank(row);
+    return Number.isInteger(rank) && rank >= 1 && rank <= 10 && netflixTitle(row);
+  });
+}
+
+export async function fetchNetflixTvChart(chart, { week, fetchImpl = fetch, timeoutMs = DEFAULT_FETCH_TIMEOUT_MS } = {}) {
+  if (!Object.hasOwn(NETFLIX_TV_CHARTS, chart)) throw errorWithCode('netflix_top10_invalid_chart');
+  const { scope, url: chartUrl } = NETFLIX_TV_CHARTS[chart];
+  const url = week ? `${chartUrl}?week=${encodeURIComponent(week)}` : chartUrl;
+  const rows = await fetchNetflixTop10PageRowsForUrl(url, { scope, fetchImpl, timeoutMs });
+  return { rows, url, urls: [url] };
 }
 
 export async function fetchNetflixTop10PageRows({
@@ -435,7 +461,12 @@ export async function buildNetflixTop10ResolutionReview({
 } = {}) {
   const data = sourceData && typeof sourceData === 'object' ? sourceData : {};
   const config = cfg && typeof cfg === 'object' ? cfg : {};
-  const scope = normalizeNetflixScope(data.scope || config.scope);
+  const chart = data.chart || config.chart;
+  const targetWeek = data.targetWeek || config.targetWeek;
+  if ((chart || targetWeek) && (!Object.hasOwn(NETFLIX_TV_CHARTS, chart) || !/^\d{4}-\d{2}-\d{2}$/.test(targetWeek))) {
+    throw errorWithCode('netflix_top10_invalid_chart_or_week');
+  }
+  const scope = chart ? NETFLIX_TV_CHARTS[chart].scope : normalizeNetflixScope(data.scope || config.scope);
   const targetRank = Number(data.targetRank ?? config.targetRank ?? (scope === 'mx' ? 3 : 1));
   const title = String(data.title || config.title || '').trim();
   if (!title) throw errorWithCode('netflix_top10_missing_title');
@@ -443,15 +474,22 @@ export async function buildNetflixTop10ResolutionReview({
 
   let fetched = rows
     ? { rows, url: scope === 'mx' ? NETFLIX_TOP10_COUNTRIES_TSV : NETFLIX_TOP10_GLOBAL_TSV }
-    : await fetchNetflixTop10Rows({ scope, fetchImpl });
-  let fetchedSource = rows ? 'provided-rows' : 'official-tsv';
+    : chart
+      ? await fetchNetflixTvChart(chart, { week: targetWeek, fetchImpl })
+      : await fetchNetflixTop10Rows({ scope, fetchImpl });
+  let fetchedSource = rows ? 'provided-rows' : chart ? 'official-page' : 'official-tsv';
   let scopeRows = fetched.rows
     .filter(isNetflixTvRow)
     .filter(row => scope !== 'mx' || netflixCountryMatches(row, 'Mexico') || netflixCountryMatches(row, 'MX'));
   let latestWeek = latestNetflixWeek(scopeRows);
-  if (!latestWeek) throw errorWithCode('netflix_top10_empty');
+  if (chart) {
+    scopeRows = netflixChartRows(scopeRows, chart, targetWeek);
+    if (!scopeRows.length) throw errorWithCode('netflix_top10_not_published_yet');
+    if (!isCompleteNetflixChart(scopeRows)) throw errorWithCode('netflix_top10_incomplete_chart');
+    latestWeek = targetWeek;
+  } else if (!latestWeek) throw errorWithCode('netflix_top10_empty');
   const latestKnownWeek = String(data.latestKnownWeek || config.latestKnownWeek || '').trim();
-  if (latestKnownWeek && latestWeek <= latestKnownWeek && !rows) {
+  if (!chart && latestKnownWeek && latestWeek <= latestKnownWeek && !rows) {
     try {
       const pageFetched = await fetchNetflixTop10PageRows({ scope, fetchImpl });
       const pageRows = pageFetched.rows
@@ -471,7 +509,7 @@ export async function buildNetflixTop10ResolutionReview({
       );
     }
   }
-  if (latestKnownWeek && latestWeek <= latestKnownWeek) {
+  if (!chart && latestKnownWeek && latestWeek <= latestKnownWeek) {
     throw errorWithCode('netflix_top10_not_published_yet');
   }
 
@@ -484,7 +522,7 @@ export async function buildNetflixTop10ResolutionReview({
   const inTarget = Number.isFinite(rank) && rank <= targetRank;
   const { yesOutcome, noOutcome } = yesNoOutcomeIndexes(outcomes);
   const suggestedOutcomeIndex = inTarget ? yesOutcome : noOutcome;
-  const scopeLabel = scope === 'mx' ? 'México' : 'global';
+  const scopeLabel = chart ? NETFLIX_TV_CHARTS[chart].label : scope === 'mx' ? 'México' : 'global';
   const targetLabel = targetRank === 1 ? '#1' : `Top ${targetRank}`;
   const finalScore = match
     ? `Netflix Top 10 ${scopeLabel}: #${rank} ${netflixDisplayTitle(match.row)} (${latestWeek})`
@@ -542,6 +580,15 @@ export function isNetflixTop10Market({ cfg, row, sourceData } = {}) {
   return source === NETFLIX_TOP10_SOURCE
     || source === 'manual-netflix-top10'
     || kind === 'netflix_top10';
+}
+
+export function assertNetflixDraftChart(row) {
+  if (row?.source === 'entertainment-api' && /^netflix-top10:global:/.test(row.source_event_id)) {
+    const error = errorWithCode('netflix_top10_chart_required');
+    error.status = 409;
+    error.detail = 'Regenera este borrador para seleccionar el ranking de series en inglés o en otros idiomas.';
+    throw error;
+  }
 }
 
 export const _internal = {

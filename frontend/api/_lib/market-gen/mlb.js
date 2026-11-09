@@ -45,7 +45,7 @@ function formatDateCompact(d) {
   return formatEspnDateCompact(d);
 }
 
-export async function generateMlbMarkets() {
+export async function generateMlbMarkets({ reportFeedError = () => {} } = {}) {
   const now = new Date();
   const baseCutoffMs = now.getTime() + BASE_HORIZON_DAYS * 86_400_000;
   const horizon = new Date(now.getTime() + SERIES_HORIZON_DAYS * 86_400_000);
@@ -56,6 +56,7 @@ export async function generateMlbMarkets() {
     dateRange: range,
     preferDaily: true,
     logPrefix: '[market-gen/mlb] scoreboard fetch failed',
+    reportFeedError: error => reportFeedError('ESPN · MLB', error),
   });
   if (!data) return [];
 

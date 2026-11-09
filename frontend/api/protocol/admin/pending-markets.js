@@ -23,6 +23,7 @@ import {
   upsertProtocolMarketMetadata,
 } from '../../_lib/protocol-market-admin.js';
 import { normalizeSeedLiquidities } from '../../_lib/market-liquidity.js';
+import { assertNetflixDraftChart } from '../../_lib/netflix-top10.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 const readSql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
@@ -186,6 +187,7 @@ function deployerConfig() {
 }
 
 function validatePendingRow(r) {
+  assertNetflixDraftChart(r);
   if (!ALLOWED_PROTOCOL_CATEGORIES.has(r.category)) {
     const err = new Error('invalid_category'); err.status = 400; throw err;
   }

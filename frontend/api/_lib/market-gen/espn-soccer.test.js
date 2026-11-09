@@ -247,10 +247,11 @@ test('ESPN soccer fetches daily scoreboards instead of one broad range', async (
 test('limited league concurrency preserves daily coverage, deduplication and spec order', async () => {
   async function run(leagueConcurrency) {
     const requested = [];
+    const failures = [];
     const activeLeagues = new Set();
     let peak = 0;
     let overlappedWithinLeague = false;
-    const fetchLeagueEventsFn = (league, range) => _internal.fetchLeagueEvents(league, range, async input => {
+    const fetchLeagueEventsFn = (league, range, _fetch, reportFeedError) => _internal.fetchLeagueEvents(league, range, async input => {
       const url = new URL(input);
       const date = url.searchParams.get('dates');
       requested.push(`${league}:${date}`);
@@ -261,11 +262,12 @@ test('limited league concurrency preserves daily coverage, deduplication and spe
       activeLeagues.delete(league);
       if (date === '20261109') return { ok: false, status: 503 };
       return { ok: true, json: async () => ({ events: [espnEvent()] }) };
-    });
+    }, reportFeedError);
     const specs = await generateEspnSoccerMarkets({
       now: new Date('2026-11-08T12:00:00Z'), leagueConcurrency, fetchLeagueEventsFn,
+      reportFeedError: (feed, error) => failures.push(`${feed}: ${error.status}`),
     });
-    return { specs, requested, peak, overlappedWithinLeague };
+    return { specs, requested, failures, peak, overlappedWithinLeague };
   }
   const serial = await run(0);
   const concurrent = await run(9);
@@ -274,6 +276,8 @@ test('limited league concurrency preserves daily coverage, deduplication and spe
   assert.equal(concurrent.overlappedWithinLeague, false);
   assert.equal(concurrent.requested.length, 256);
   assert.deepEqual(concurrent.requested.toSorted(), serial.requested.toSorted());
+  assert.ok(concurrent.failures.includes('ESPN · mex.1: 503'));
+  assert.deepEqual(concurrent.failures.toSorted(), serial.failures.toSorted());
   assert.equal(concurrent.specs.length, 15);
   assert.deepEqual(concurrent.specs, serial.specs);
 });

@@ -97,13 +97,14 @@ function teamLogo(competitor) {
   return competitor?.team?.logo || competitor?.team?.logos?.[0]?.href || null;
 }
 
-async function fetchLeagueEvents({ leagueConfig, range, fetchImpl }) {
+async function fetchLeagueEvents({ leagueConfig, range, fetchImpl, reportFeedError }) {
   const data = await fetchEspnScoreboardData({
     baseUrl: leagueConfig.baseUrl,
     dateRange: range,
     fetchImpl,
     preferDaily: true,
     logPrefix: `[market-gen/${leagueConfig.league}] scoreboard fetch failed`,
+    reportFeedError: error => reportFeedError(`ESPN · ${leagueConfig.leagueLabel}`, error),
   });
   return data || null;
 }
@@ -164,6 +165,7 @@ export async function generateNcaaBasketballMarkets({
   now = new Date(),
   fetchImpl = fetch,
   leagues = LEAGUES,
+  reportFeedError = () => {},
 } = {}) {
   const current = now instanceof Date ? now : new Date(now);
   const horizon = new Date(current.getTime() + HORIZON_DAYS * 86_400_000);
@@ -171,7 +173,7 @@ export async function generateNcaaBasketballMarkets({
   const specs = [];
 
   for (const leagueConfig of leagues) {
-    const data = await fetchLeagueEvents({ leagueConfig, range, fetchImpl });
+    const data = await fetchLeagueEvents({ leagueConfig, range, fetchImpl, reportFeedError });
     const events = Array.isArray(data?.events) ? data.events : [];
     for (const ev of events) {
       if (ev?.status?.type?.state !== 'pre') continue;

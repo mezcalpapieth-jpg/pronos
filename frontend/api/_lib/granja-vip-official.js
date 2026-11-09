@@ -382,7 +382,7 @@ async function fetchFreshText(url, {
   const target = new URL(url);
   if (target.protocol !== 'https:' || target.hostname !== 'www.tvazteca.com'
     || (!target.pathname.startsWith('/aztecauno/la-granja-vip/')
-      && !/^\/aztecauno\/(?:newslatest-sitemap-latest|sitemap-\d{6})\.xml$/.test(target.pathname)) || target.username || target.password || target.port) {
+      && !/^\/arc\/outboundfeeds\/sitemap-(?:news-latest|\d{6})\.xml\/$/.test(target.pathname)) || target.username || target.password || target.port) {
     throw new Error('granja_vip_untrusted_url');
   }
   if (cacheBust) target.searchParams.set('_pronos', String(Date.now()));
@@ -416,13 +416,13 @@ async function fetchFreshText(url, {
 export function parseOfficialGranjaArticle(html, url) {
   const { document } = parseHTML(html);
   const article = [...document.querySelectorAll('article')].find(node => node.querySelector('h1'));
-  const title = article?.querySelector('h1')?.textContent.trim();
+  const title = (article?.querySelector('h1') || document.querySelector('main h1.b-headline'))?.textContent.trim();
+  const body = article?.querySelector('.articleBody') || article || document.querySelector('main article.b-article-body');
   const rawDate = document.querySelector('meta[property="article:published_time"]')?.getAttribute('content');
-  if (!title || !rawDate || /corral vip/i.test(title)) return null;
+  if (!title || !body || !rawDate || /corral vip/i.test(title)) return null;
   // Brightspot emits UTC timestamps without an offset (21:45 = 15:45 CDMX).
   const published = new Date(/(?:Z|[+-]\d{2}:\d{2})$/.test(rawDate) ? rawDate : `${rawDate}Z`);
   if (!Number.isFinite(published.getTime())) return null;
-  const body = article.querySelector('.articleBody') || article;
   const paragraphs = [...body.querySelectorAll('p, li')].map(node => node.textContent.replace(/\s+/g, ' ').trim()).filter(Boolean);
   return { title, url, publishedAt: published.toISOString(), paragraphs };
 }
@@ -475,10 +475,10 @@ export function extractParticipantsFromOfficialHtml(html, {
 
 function nominationList(text) {
   const paragraph = stripHtml(text);
-  const marker = /(?:actualmente los nominados son|son los granjeros que forman parte de la lista de nominados|lista (?:actualizada|final|definitiva) de nominados[\s,:-]*(?:(?:esta|quedo) )?(?:son|integrad[ao]s? por|conformad[ao]s? por|se posicionaron))\s*:?\s*/i.exec(stripAccents(paragraph));
+  const marker = /(?:actualmente los nominados son|son los granjeros que forman parte de la lista de nominados|lista (?:actualizada|final|definitiva) de nominados[\s,:-]*(?:(?:esta|quedo) )?(?:son|integrad[ao]s? por|conformad[ao]s? por|se posicionaron|de la granja vip quedan?))\s*:?\s*/i.exec(stripAccents(paragraph));
   // Only names after the explicit list marker count. Earlier sentences can
   // mention the person who saved/removed a nominee, and sidebars are unrelated.
-  return marker ? paragraph.slice(marker.index + marker[0].length).split(/[.!?;]/)[0] : null;
+  return marker ? paragraph.slice(marker.index + marker[0].length).split(/[.!?;]|,\s+quienes\b/i)[0] : null;
 }
 
 function completeNominationList(list, rows) {
@@ -544,6 +544,7 @@ export async function readGranjaVipOfficialSnapshot({
   now = new Date(),
   historicalField = false,
   articleEvidence = [],
+  reportFeedError = () => {},
 } = {}) {
   const sourceUrl = getBaseUrl(baseUrl);
   let discovered = [];
@@ -559,6 +560,7 @@ export async function readGranjaVipOfficialSnapshot({
     discovered = extractParticipantsFromOfficialHtml(officialHtml, { baseUrl: sourceUrl });
   } catch (e) {
     fetchError = e?.message || 'fetch_failed';
+    reportFeedError('TV Azteca · portada', e);
   }
 
   const fallback = loadGranjaVipParticipants();
@@ -578,16 +580,20 @@ export async function readGranjaVipOfficialSnapshot({
   // publishes these feeds in robots.txt: monthly covers Friday, news the gala.
   const months = new Set([close, new Date(close.getTime() - 2 * 86400000)]
     .map(date => formatMexicoDateYmd(date).slice(0, 7).replace('-', '')));
-  const discoveryUrls = ['notas-la-granja-vip', 'videos'].map(path => new URL(path, sourceUrl).href)
-    .concat('https://www.tvazteca.com/aztecauno/newslatest-sitemap-latest.xml',
-      [...months].map(month => `https://www.tvazteca.com/aztecauno/sitemap-${month}.xml`));
+  const discoveryUrls = [
+    new URL('notas-la-granja-vip/', sourceUrl).href,
+    ...['news-latest', ...months].map(feed => `https://www.tvazteca.com/arc/outboundfeeds/sitemap-${feed}.xml/?outputType=xml`),
+  ];
   await Promise.all(discoveryUrls.map(async url => {
+    const sitemap = new URL(url).pathname.endsWith('.xml/');
     try {
       const page = await fetchFreshText(url, { fetchImpl });
-      if (!page.ok) return;
-      if (new URL(url).pathname.endsWith('.xml')) sitemapLinks.push(...officialGranjaSitemapLinks(page.text));
+      if (!page.ok) throw new Error(`http_${page.status}`);
+      if (sitemap) sitemapLinks.push(...officialGranjaSitemapLinks(page.text));
       else discoveryHtml += page.text;
-    } catch { /* Other official listings may still provide evidence. */ }
+    } catch (error) {
+      reportFeedError('TV Azteca · búsqueda de artículos', error);
+    }
   }));
   const weekStart = formatMexicoDateYmd(new Date(close.getTime() - 6 * 86400000));
   const weekEnd = formatMexicoDateYmd(close);
@@ -606,12 +612,16 @@ export async function readGranjaVipOfficialSnapshot({
     await Promise.all(links.slice(0, 12).map(async article => {
       try {
         const articleResponse = await fetchFreshText(article.url, { fetchImpl, cacheBust: true });
-        if (!articleResponse.ok) return;
+        if (!articleResponse.ok) throw new Error(`http_${articleResponse.status}`);
         const parsed = parseOfficialGranjaArticle(articleResponse.text, article.url);
+        if (!parsed && nominationLinkPriority(article) === 0) {
+          reportFeedError('TV Azteca · artículo oficial', new Error('official_article_unreadable'));
+        }
         if (!parsed || parsed.publishedAt > now.toISOString()) return;
         currentArticles.push(parsed);
-      } catch {
+      } catch (error) {
         // Missing dated evidence must never fall back to sidebar headlines.
+        reportFeedError('TV Azteca · artículo oficial', error);
       }
     }));
   }
@@ -651,6 +661,9 @@ export async function readGranjaVipOfficialSnapshot({
     break;
   }
   const nominated = rows.filter(row => row.statusKey === 'nominado');
+  if (finalArticles.length && !nominationFinal) {
+    reportFeedError('TV Azteca · lista final', new Error('official_nominees_unverified'));
+  }
   const eliminated = rows.filter(row => row.statusKey === 'eliminado');
   const peones = rows.filter(row => row.statusKey === 'peon');
   const active = rows.filter(row => row.statusKey !== 'eliminado');

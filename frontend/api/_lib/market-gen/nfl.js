@@ -31,6 +31,7 @@ function teamLogo(competitor) {
 export async function generateNflMarkets({
   now = new Date(),
   fetchImpl = fetch,
+  reportFeedError = () => {},
 } = {}) {
   const current = now instanceof Date ? now : new Date(now);
   const horizon = new Date(current.getTime() + HORIZON_DAYS * 86_400_000);
@@ -42,6 +43,7 @@ export async function generateNflMarkets({
     fetchImpl,
     preferDaily: true,
     logPrefix: '[market-gen/nfl] scoreboard fetch failed',
+    reportFeedError: error => reportFeedError('ESPN · NFL', error),
   });
   if (!data) return [];
 

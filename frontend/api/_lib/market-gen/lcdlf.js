@@ -15,10 +15,14 @@ function uniformProbabilities(count) {
 export async function generateLcdlfMarkets({
   now = new Date(),
   fetchImpl = fetch,
+  reportFeedError = () => {},
 } = {}) {
   if (process.env.LCDLF_OFFICIAL_ENABLED === 'false') return [];
 
   const snapshot = await readLcdlfOfficialSnapshot({ fetchImpl, now });
+  for (const row of snapshot.rows) {
+    if (!row.ok) reportFeedError('La Casa de los Famosos', row.httpStatus ? { status: row.httpStatus } : { message: row.error });
+  }
   const nominationSpecs = buildLcdlfNominationMarketSpecs({ snapshot, now });
   const weeklySpec = buildLcdlfWeeklyMarketSpec({ snapshot, now });
   const finalSixthSpec = buildLcdlfFinalSixthPlaceMarketSpec({ snapshot, now });
