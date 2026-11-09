@@ -14,9 +14,9 @@ const SECTIONS = [
     ['markets', 'Mercados', 'Revisa mercados activos, pendientes de resolución e históricos.'],
     ['pending', 'Por aprobar', 'Revisa las propuestas antes de publicarlas.'],
     ['resolution', 'Por resolver', 'Revisa resultados propuestos y mercados que ya cerraron.'],
-    ['support', 'Soporte', 'Lee las conversaciones y da seguimiento a tickets abiertos y cerrados.'],
   ]],
   ['Usuarios', [
+    ['support', 'Soporte', 'Lee las conversaciones y da seguimiento a tickets abiertos y cerrados.'],
     ['social', 'Tareas sociales'],
     ['risk', 'Riesgo'],
     ['api', 'Uso de API'],
