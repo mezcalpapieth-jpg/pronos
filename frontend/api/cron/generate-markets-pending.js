@@ -62,7 +62,18 @@ export default async function handler(req, res) {
 
   try {
     await ensurePointsSchema(sql);
+    const generationStarted = performance.now();
     const { allSpecs, sourceStats } = await runAllGenerators({ disabledGenerators: disabledPointsGenerators() });
+    const generationMs = Math.round(performance.now() - generationStarted);
+    console.info('[cron/generate-markets-pending] generator timings', JSON.stringify({
+      dryRun,
+      generationMs,
+      sources: Object.fromEntries(Object.entries(sourceStats).map(([name, stat]) => [name, {
+        elapsedMs: stat.elapsedMs,
+        count: stat.count,
+        status: stat.skipped ? 'skipped' : stat.error ? 'error' : 'ok',
+      }])),
+    }));
 
     if (dryRun) {
       const scheduleSync = await syncApprovedMarketSchedules(sql, allSpecs, { dryRun: true });
@@ -72,6 +83,7 @@ export default async function handler(req, res) {
         specs: allSpecs.slice(0, 20),
         totalSpecs: allSpecs.length,
         scheduleSync,
+        generationMs,
         elapsedMs: Date.now() - started,
       });
     }
@@ -96,6 +108,7 @@ export default async function handler(req, res) {
       skipped,
       scheduleSync,
       trophyAutoApproval,
+      generationMs,
       elapsedMs: Date.now() - started,
     });
   } catch (e) {

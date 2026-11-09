@@ -36,6 +36,7 @@ import { nationalTeamMarketTranslations, spanishNationalTeamName } from '../nati
 
 const BASE = 'https://site.api.espn.com/apis/site/v2/sports/soccer';
 const HORIZON_DAYS = 14;
+const MAX_LEAGUE_CONCURRENCY = 3;
 const SUMMER_BREAK_MONTHS_UTC = new Set([5, 6, 7]); // June, July, August
 const PLACEHOLDER_TEAM_RE = /^(?:tbd|to be determined)(?:\s|$)/i;
 
@@ -215,10 +216,11 @@ function dateRangeForConfig(config, now = new Date()) {
   return `${formatDateCompact(now)}-${formatDateCompact(horizon)}`;
 }
 
-async function fetchLeagueEvents(leagueCode, dateRange) {
+async function fetchLeagueEvents(leagueCode, dateRange, fetchImpl = fetch) {
   const data = await fetchEspnScoreboardData({
     baseUrl: `${BASE}/${leagueCode}/scoreboard`,
     dateRange,
+    fetchImpl,
     preferDaily: true,
     logPrefix: '[market-gen/espn-soccer] scoreboard fetch failed',
     logContext: { league: leagueCode },
@@ -354,20 +356,40 @@ function eventToSpec(ev, {
 export async function generateEspnSoccerMarkets({
   now = new Date(),
   fetchLeagueEventsFn = fetchLeagueEvents,
+  leagueConcurrency = process.env.ESPN_SOCCER_LEAGUE_CONCURRENCY,
 } = {}) {
-  const specs = [];
+  const configured = Number(leagueConcurrency);
+  const limit = Number.isInteger(configured) && configured > 0
+    ? Math.min(configured, MAX_LEAGUE_CONCURRENCY)
+    : 1;
+  const leagues = ESPN_SOCCER_LEAGUES.filter(config => shouldFetchLeagueEvents(config, now));
+  const specsByLeague = new Array(leagues.length);
+  let next = 0;
+  let failure;
 
-  for (const config of ESPN_SOCCER_LEAGUES) {
-    if (!shouldFetchLeagueEvents(config, now)) continue;
-    const dateRange = dateRangeForConfig(config, now);
-    for (const ev of await fetchLeagueEventsFn(config.leagueCode, dateRange)) {
-      if (!eventMatchesWhitelist(ev, config.whitelist)) continue;
-      const spec = eventToSpec(ev, config);
-      if (spec) specs.push(spec);
+  // Each league still walks its daily scoreboards serially. Store results by
+  // registry index so that completion order cannot change the pending specs.
+  async function loadLeagues() {
+    while (!failure && next < leagues.length) {
+      const index = next++;
+      const config = leagues[index];
+      try {
+        const events = await fetchLeagueEventsFn(config.leagueCode, dateRangeForConfig(config, now));
+        const specs = [];
+        for (const event of events) {
+          if (!eventMatchesWhitelist(event, config.whitelist)) continue;
+          const spec = eventToSpec(event, config);
+          if (spec) specs.push(spec);
+        }
+        specsByLeague[index] = specs;
+      } catch (error) {
+        failure ??= { error };
+      }
     }
   }
-
-  return specs;
+  await Promise.all(Array.from({ length: Math.min(limit, leagues.length) }, loadLeagues));
+  if (failure) throw failure.error;
+  return specsByLeague.flat();
 }
 
 // Exported for tests / manual inspection

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { setTimeout as delay } from 'node:timers/promises';
 
 const source = await readFile(new URL('./run-generators.js', import.meta.url), 'utf8');
 
@@ -42,6 +43,24 @@ test('runAllGenerators attaches suggested pricing to generated specs before upse
   assert.match(source, /return specs\.map\(spec => attachUniformGeneratedPricing\(spec\)\)/);
   assert.match(source, /return pricedSpecs\.map\(spec => attachMarketTranslations\(attachMarketContextBlocks\(spec\)\)\)/);
   assert.match(source, /const contextualSpecs = await prepareGeneratedSpecs\(specs\)/);
+});
+
+test('source timing is reported for empty, failed and skipped generators and the batch continues', async t => {
+  const { runAllGenerators } = await import('./run-generators.js');
+  t.mock.method(console, 'error', () => {});
+  const { sourceStats } = await runAllGenerators({
+    disabledGenerators: ['disabled'],
+    generators: [
+      { name: 'disabled', run: () => assert.fail('disabled generator called') },
+      { name: 'failed', run: async () => { await delay(5); throw new Error('unavailable'); } },
+      { name: 'empty', run: async () => { await delay(5); return []; } },
+    ],
+  });
+  assert.deepEqual(sourceStats.disabled, { count: 0, skipped: true, reason: 'source_disabled', elapsedMs: 0 });
+  assert.equal(sourceStats.failed.error, 'unavailable');
+  assert.ok(sourceStats.failed.elapsedMs > 0);
+  assert.equal(sourceStats.empty.count, 0);
+  assert.ok(sourceStats.empty.elapsedMs > 0);
 });
 
 test('generator runner includes the AICM infrastructure pipeline', () => {

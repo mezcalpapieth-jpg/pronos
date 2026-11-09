@@ -124,9 +124,10 @@ export async function runAllGenerators({ disabledGenerators = [], generators = G
   const sourceStats = {};
   for (const gen of generators) {
     if (disabledGenerators.includes(gen.name)) {
-      sourceStats[gen.name] = { count: 0, skipped: true, reason: 'source_disabled' };
+      sourceStats[gen.name] = { count: 0, skipped: true, reason: 'source_disabled', elapsedMs: 0 };
       continue;
     }
+    const started = performance.now();
     try {
       const specs = await gen.run();
       const contextualSpecs = await prepareGeneratedSpecs(specs);
@@ -142,6 +143,8 @@ export async function runAllGenerators({ disabledGenerators = [], generators = G
         count: 0,
         error: e?.message?.slice(0, 200) || 'unknown',
       };
+    } finally {
+      sourceStats[gen.name].elapsedMs = Math.round(performance.now() - started);
     }
   }
   return { allSpecs, sourceStats };

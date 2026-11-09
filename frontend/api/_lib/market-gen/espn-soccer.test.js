@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { setImmediate as yieldToRequests } from 'node:timers/promises';
 
 import { generateEspnSoccerMarkets, _internal } from './espn-soccer.js';
 
@@ -241,6 +242,40 @@ test('ESPN soccer fetches daily scoreboards instead of one broad range', async (
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test('limited league concurrency preserves daily coverage, deduplication and spec order', async () => {
+  async function run(leagueConcurrency) {
+    const requested = [];
+    const activeLeagues = new Set();
+    let peak = 0;
+    let overlappedWithinLeague = false;
+    const fetchLeagueEventsFn = (league, range) => _internal.fetchLeagueEvents(league, range, async input => {
+      const url = new URL(input);
+      const date = url.searchParams.get('dates');
+      requested.push(`${league}:${date}`);
+      if (activeLeagues.has(league)) overlappedWithinLeague = true;
+      activeLeagues.add(league);
+      peak = Math.max(peak, activeLeagues.size);
+      await yieldToRequests();
+      activeLeagues.delete(league);
+      if (date === '20261109') return { ok: false, status: 503 };
+      return { ok: true, json: async () => ({ events: [espnEvent()] }) };
+    });
+    const specs = await generateEspnSoccerMarkets({
+      now: new Date('2026-11-08T12:00:00Z'), leagueConcurrency, fetchLeagueEventsFn,
+    });
+    return { specs, requested, peak, overlappedWithinLeague };
+  }
+  const serial = await run(0);
+  const concurrent = await run(9);
+  assert.equal(serial.peak, 1);
+  assert.equal(concurrent.peak, 3);
+  assert.equal(concurrent.overlappedWithinLeague, false);
+  assert.equal(concurrent.requested.length, 256);
+  assert.deepEqual(concurrent.requested.toSorted(), serial.requested.toSorted());
+  assert.equal(concurrent.specs.length, 15);
+  assert.deepEqual(concurrent.specs, serial.specs);
 });
 
 test('ESPN soccer events with placeholder team names are skipped', () => {
