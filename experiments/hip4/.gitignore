@@ -1,0 +1,3 @@
+.local-testnet/
+.venv/
+__pycache__/

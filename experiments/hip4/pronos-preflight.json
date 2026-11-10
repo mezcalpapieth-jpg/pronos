@@ -1,0 +1,20 @@
+{
+  "network": "Testnet",
+  "trader": "0x53454f7449d447067663c3e2bc21b027b277d71c",
+  "traderSpotUSDC": "0",
+  "builderSpotUSDC": "0",
+  "builder": {
+    "address": "0x040fe3673b6bded15d949eefccf3509a2284cd04",
+    "abstraction": "default",
+    "perpsUSDCAccountValue": "0.0",
+    "rewards": {
+      "builderRewards": "0.0",
+      "unclaimedRewards": "0.0",
+      "tokenToState": []
+    }
+  },
+  "approvedTenthsOfBps": 0,
+  "checkedAtUtc": "2026-11-10T19:21:51+00:00",
+  "pronosExchangeRequestsSent": 0,
+  "result": "blocked-unfunded"
+}

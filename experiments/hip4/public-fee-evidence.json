@@ -1,0 +1,76 @@
+{
+  "network": "Hyperliquid HyperCore testnet",
+  "attribution": "Public third-party testnet fills",
+  "verifiedAtUtc": "2026-11-10T19:18:35Z",
+  "endpoint": "https://api.hyperliquid-testnet.xyz/info",
+  "method": "POST",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "documentation": {
+    "fillFields": "https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/info-endpoint#retrieve-a-users-fills-by-time",
+    "outcomeBuilderFees": "https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/hip-4-deployer-actions#builder-codes"
+  },
+  "replay": "POST each sample's requestBody to the endpoint and select the response row matching fill.tid, fill.coin and fill.side. Each request includes the single public fill-owner address required for this lookup. API history is limited to the user's 10,000 most recent fills.",
+  "interpretation": "The two sample rows show a nonzero builderFee charged in testnet USDC. The total fee already includes builderFee. HIP-4 builder fee collection is best effort. Pronos-tagged execution and accrual in a Pronos builder account remain unverified.",
+  "samples": [
+    {
+      "requestBody": {
+        "type": "userFillsByTime",
+        "user": "0xe30be6dd1e4a9a3ad98d6f09b5913137aacb0842",
+        "startTime": 1794274734207,
+        "endTime": 1794274738207,
+        "aggregateByTime": false
+      },
+      "fill": {
+        "coin": "#265930",
+        "px": "0.505",
+        "sz": "22.0",
+        "side": "B",
+        "time": 1794274736207,
+        "dir": "Buy",
+        "hash": "0x5902062e9436d3815a7b042dc47675010a001e142f39f253fccab181533aad6b",
+        "oid": 64958353706,
+        "crossed": true,
+        "fee": "0.0001111",
+        "feeToken": "USDC",
+        "builderFee": "0.0001111",
+        "tid": 742657672152812
+      },
+      "derived": {
+        "timeUtc": "2026-11-10T01:38:56.207Z",
+        "notionalUsdc": "11.11",
+        "builderFeeBps": "0.1"
+      }
+    },
+    {
+      "requestBody": {
+        "type": "userFillsByTime",
+        "user": "0xb9406be0defa3a1f49f0d4ddaeac7901b305902a",
+        "startTime": 1786050405332,
+        "endTime": 1786050409332,
+        "aggregateByTime": false
+      },
+      "fill": {
+        "coin": "#112400",
+        "px": "0.45",
+        "sz": "23.0",
+        "side": "A",
+        "time": 1786050407332,
+        "dir": "Sell",
+        "hash": "0x3f50df2815d9b60240ca042650c956010201010db0dcd4d4e3198a7ad4dd8fec",
+        "oid": 57521550976,
+        "crossed": true,
+        "fee": "0.0025875",
+        "feeToken": "USDC",
+        "builderFee": "0.0025875",
+        "tid": 825695623242810
+      },
+      "derived": {
+        "timeUtc": "2026-08-06T21:06:47.332Z",
+        "notionalUsdc": "10.35",
+        "builderFeeBps": "2.5"
+      }
+    }
+  ]
+}
