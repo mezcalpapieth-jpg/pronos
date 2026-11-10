@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { pendingApprovalSettings } from './onchain-preview-approval.js';
 
 export const GAS_CHAIN_ID = 421614;
+export const SEPOLIA_INCOMING_RESERVE_ADDRESS = '0x0Caa37c077924038e14e9D8dE46B5208788e52CF';
 export const gasError = (code = 'gas_funding_unavailable') => Object.assign(new Error(code), { status: 503 });
 const validAddress = a => ethers.utils.isAddress(a || '') && a.toLowerCase() !== ethers.constants.AddressZero;
 export function isSepoliaGasDatabase(url) {
@@ -23,7 +24,7 @@ export function sepoliaGasSettings(env = process.env) {
     env.ONCHAIN_DEPLOYER_ADDRESS, env.ONCHAIN_RESOLVER_ADDRESS, env.ONCHAIN_OWNER_ADDRESS,
     env.MARKET_CREATOR_ADDRESS, env.ADMIN_SAFE_ADDRESS, env.RESOLVER_SAFE_ADDRESS,
     // The incoming reserve stays out of the hosted signing path.
-    '0x0Caa37c077924038e14e9D8dE46B5208788e52CF',
+    SEPOLIA_INCOMING_RESERVE_ADDRESS,
   ].some(a => a?.toLowerCase() === funder);
   return {
     requested, enabled,
