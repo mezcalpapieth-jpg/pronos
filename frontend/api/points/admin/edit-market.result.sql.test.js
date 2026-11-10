@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
+import { hasGeneratedReviewedRules } from '../../_lib/reviewed-market-settings.js';
 
 const source = await readFile(new URL('./edit-market.js', import.meta.url), 'utf8');
 
@@ -12,7 +13,8 @@ test('admins can add, update, and remove a public result without changing settle
     id INT PRIMARY KEY, question TEXT, category TEXT, start_time TIMESTAMPTZ, end_time TIMESTAMPTZ,
     sport TEXT, league TEXT, outcomes JSONB, image_url TEXT, outcome_images JSONB,
     resolver_type TEXT, resolver_config JSONB, category_tags JSONB, geo_tags JSONB, topic_tags JSONB,
-    status TEXT, amm_mode TEXT, parent_id INT, seed_liquidity NUMERIC, final_score TEXT, outcome INT
+    status TEXT, amm_mode TEXT, parent_id INT, seed_liquidity NUMERIC, final_score TEXT, outcome INT,
+    mode TEXT DEFAULT 'points', chain_id INT, resolution_src TEXT
   );
   INSERT INTO points_markets (id, question, category, outcomes, status, outcome, amm_mode, resolver_config, start_time, end_time)
     VALUES (1, 'Legacy market', 'general', '["Yes","No"]', 'resolved', 1, 'unified', '{"original":true}', '2026-10-02', '2026-10-01');`);
@@ -24,6 +26,7 @@ test('admins can add, update, and remove a public result without changing settle
     applyCors: () => false,
     requirePointsAdmin: () => ({ username: 'admin' }),
     ensurePointsSchema: async () => {},
+    hasGeneratedReviewedRules,
     // Simulate a resolver whose current sync rules differ from its stored
     // legacy config. A display-only edit must leave that config untouched.
     syncMananeraPhraseFromQuestion: () => ({ resolverConfig: { changed: true } }),
@@ -53,5 +56,12 @@ test('admins can add, update, and remove a public result without changing settle
     const response = await request({ marketId: 1, finalScore: value });
     assert.equal(response.code, 400);
     assert.equal(response.data.error, error);
+  }
+  await db.exec(`UPDATE points_markets SET mode = 'onchain', chain_id = 42161,
+    resolution_src = '/api/points/resolution-review?document=0x01' WHERE id = 1`);
+  for (const patch of [{ question: 'Different question' }, { endTime: '2026-11-01' }, { finalScore: 'Unofficial' }]) {
+    const response = await request({ marketId: 1, ...patch });
+    assert.equal(response.code, 409);
+    assert.equal(response.data.error, 'reviewed_market_terms_immutable');
   }
 });

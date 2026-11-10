@@ -29,12 +29,13 @@ import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { requirePointsAdmin } from '../../_lib/points-admin.js';
 import { withTransaction } from '../../_lib/db-tx.js';
 import { releaseOpenLimitOrdersForMarkets } from '../../_lib/points-limit-orders.js';
+import { hasGeneratedReviewedRules, reviewedCreationError } from '../../_lib/reviewed-market-settings.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 
 export async function voidOneMarket(client, marketId, reason, adminUsername) {
   const lookup = await client.query(
-    `SELECT id, status, amm_mode, parent_id
+    `SELECT id, status, amm_mode, parent_id, mode, chain_id, resolution_src
        FROM points_markets
       WHERE id = $1
       FOR UPDATE`,
@@ -44,6 +45,9 @@ export async function voidOneMarket(client, marketId, reason, adminUsername) {
     const err = new Error('market_not_found'); err.status = 404; throw err;
   }
   const m = lookup.rows[0];
+  if (hasGeneratedReviewedRules(m)) {
+    throw reviewedCreationError('reviewed_market_requires_onchain_settlement', 'Use the reviewed factory workflow.');
+  }
   if (m.parent_id) {
     const err = new Error('leg_not_directly_voidable');
     err.status = 400;

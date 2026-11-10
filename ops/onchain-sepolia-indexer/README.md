@@ -68,12 +68,23 @@ worker verifies the new factories enforce review and reads their events only
 through the finalized head. Apply the protocol schema and worker grants
 before starting that backfill.
 
-The isolated app preview uses `ONCHAIN_SEPOLIA_REVIEW_ENABLED=true` alongside
-its existing preview and settlement gates. When rehearsing a reviewed market,
-point settlement to the reviewed factories and use a Points market linked to
-a pool created with `createReviewedMarket`. The existing legacy creation form
-uses the original factory call. Publish the exact rules document against the
-indexed hash in **Revisión de liquidaciones**.
+On the isolated app preview, configure the same reviewed factory addresses and
+start block, point `ONCHAIN_MARKET_FACTORY_ADDRESS` and
+`ONCHAIN_MARKET_FACTORY_V2_ADDRESS` to the reviewed factories, and retain the
+existing MXNP collateral address. Keep the legacy addresses configured for
+existing markets. Pin a trading router bound to both reviewed factories and
+their share tokens before enabling broadcast. Enable `ONCHAIN_SEPOLIA_REVIEW_ENABLED` and
+`ONCHAIN_REVIEWED_CREATION_ENABLED` to use reviewed creation from **Por aprobar**.
+Set `ONCHAIN_REVIEWED_CREATOR_ADDRESS`, `ONCHAIN_REVIEWED_CREATOR_SUBORG_ID`,
+`ONCHAIN_REVIEWED_CREATION_MAX_SEED_MXNP`, and
+`ONCHAIN_REVIEWED_CREATION_MAX_GAS_ETH`. The dedicated creator needs gas,
+existing MXNP and an allowance on each reviewed factory before enabling
+`ONCHAIN_REVIEWED_CREATION_BROADCAST_ENABLED`.
+
+The form commits the exact written or generated criteria in `createReviewedMarket`
+for a single pool of two to eight outcomes. Proposals appear in **Publicando**
+until the finalized receipt matches the indexed pool and rules hash. Use
+**Continuar publicación** to check progress or retry the same signed transaction.
 
 In **Por resolver**, the resolver proposes the outcome and commits the evidence.
 In **Revisión de liquidaciones**, the reviewer can approve or open a dispute.

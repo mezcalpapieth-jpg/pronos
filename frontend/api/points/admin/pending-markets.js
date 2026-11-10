@@ -1,7 +1,7 @@
 /**
  * Admin queue for agent-generated markets awaiting approval.
  *
- * GET  /api/points/admin/pending-markets?status=pending|approved|rejected
+ * GET  /api/points/admin/pending-markets?status=pending|creation_pending|approved|rejected
  *   → list rows (most-recent first)
  * POST /api/points/admin/pending-markets
  *   body: { id, action: 'approve' | 'reject' | 'readd' | 'edit', note?, patch? }
@@ -38,6 +38,11 @@ import { pendingApprovalOptions, pendingApprovalSettings } from '../../_lib/onch
 import { assertPointsAirportApproval } from '../../_lib/points-aicm-policy.js';
 import { pointsResolverReadiness } from '../../_lib/points-resolver-readiness.js';
 import { ADMIN_SEARCH_MARKS, parseAdminMarketSearch } from '../../_lib/points-admin-market-search.js';
+import { ensureReviewedCreationSchema } from '../../_lib/reviewed-market-creation-schema.js';
+import { reviewedCreationEnabled, reviewedCreationError } from '../../_lib/reviewed-market-settings.js';
+import { SEPOLIA_REVIEW_CHAIN, sepoliaReviewEnabled } from '../../_lib/sepolia-resolution-review.js';
+import { sepoliaReviewedRules, supportsSepoliaReviewedShape } from '../../_lib/reviewed-market-rules.js';
+import { publicResolutionEvidenceUrl } from '../../_lib/onchain-admin-settlement.js';
 
 const schemaSql = neon(process.env.DATABASE_URL);
 const readSql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
@@ -45,6 +50,8 @@ const ALLOWED_CATEGORIES = new Set([
   'general', 'mexico', 'politica', 'deportes', 'finanzas', 'crypto', 'musica', 'world-cup', 'ai',
 ]);
 const MAX_PENDING_OUTCOMES = 64;
+const sepoliaReviewedApprovalRequired = () => pendingApprovalSettings().previewEnabled
+  && (process.env.ONCHAIN_SEPOLIA_REVIEW_ENABLED === 'true' || process.env.ONCHAIN_REVIEWED_CREATION_ENABLED === 'true');
 const PARALLEL_LEG_MIN_BINARY_RESERVE = Number.isFinite(Number(process.env.POINTS_PARALLEL_LEG_MIN_BINARY_RESERVE))
   ? Math.max(100, Number(process.env.POINTS_PARALLEL_LEG_MIN_BINARY_RESERVE))
   : 1000;
@@ -91,7 +98,7 @@ function draftPendingResolutionRules(row) {
 function oneClickApprovalKey(row, rules, checks) {
   if (!rules?.generated || checks.some(check => check.code !== 'missing_criteria')) return null;
   // Bind the shortcut to the reviewed proposal, rules and deployment inputs.
-  const reviewed = [row.id, row.source, row.source_event_id, row.question, row.outcomes,
+  const reviewed = [row.id, row.source, row.source_event_id, row.question, row.category, row.amm_mode, row.outcomes,
     new Date(row.start_time).getTime(), new Date(row.end_time).getTime(),
     parseJsonb(row.resolver_config, null), Number(row.seed_liquidity), row.seed_liquidities,
     rules.criteria, rules.sourceUrl];
@@ -259,6 +266,15 @@ export default async function handler(req, res) {
     const admin = requirePointsAdmin(req, res);
     if (!admin) return;
 
+    if (req.method === 'GET' && req.query?.reviewedCreationId !== undefined) {
+      if (!reviewedCreationEnabled()) throw reviewedCreationError('reviewed_creation_disabled', null, 403);
+      const id = reviewedPendingId(req.query.reviewedCreationId);
+      const { getReviewedCreation } = await import('../../_lib/reviewed-market-creation.js');
+      await ensureReviewedCreationSchema(withTransaction);
+      const creation = await getReviewedCreation(id, withTransaction, Number(process.env.ONCHAIN_CHAIN_ID));
+      res.setHeader('Cache-Control', 'private, no-store');
+      return res.status(200).json({ creation });
+    }
     if (req.method === 'GET')  return await list(req, res);
     if (req.method === 'POST') return await review(req, res, admin);
     return res.status(405).json({ error: 'method_not_allowed' });
@@ -282,8 +298,9 @@ export default async function handler(req, res) {
 
 async function list(req, res) {
   const approvalSettings = pendingApprovalSettings();
+  const reviewedSepolia = sepoliaReviewEnabled();
   const approvalOptions = pendingApprovalOptions({ previewApprovalMode: req.query?.previewApprovalMode });
-  const status = ['pending', 'approved', 'rejected', 'all'].includes(req.query.status)
+  const status = ['pending', 'creation_pending', 'approved', 'rejected', 'all'].includes(req.query.status)
     ? req.query.status
     : 'pending';
   const search = parseAdminMarketSearch(req.query.q);
@@ -306,7 +323,11 @@ async function list(req, res) {
     if (requireRules) {
       const otherChecks = checks.filter(check => check.code !== 'missing_criteria');
       if (!resolutionRules) otherChecks.push({ severity: 'block', code: 'missing_criteria' });
-      const approvalKey = oneClickApprovalKey(pendingRowWithOpeningLiquidity(row, approvalOptions), resolutionRules, checks);
+      if (reviewedSepolia && !supportsSepoliaReviewedShape(row.amm_mode, parseJsonb(row.outcomes, []))) {
+        otherChecks.push({ severity: 'block', code: 'reviewed_market_shape_unsupported' });
+      }
+      const approvalKey = otherChecks.some(check => check.severity === 'block') ? null
+        : oneClickApprovalKey(pendingRowWithOpeningLiquidity(row, approvalOptions), resolutionRules, checks);
       return res.status(200).json({ checks: otherChecks, resolutionRules, oneClickApprovalKey: approvalKey });
     }
     return res.status(200).json({ checks });
@@ -557,6 +578,7 @@ async function list(req, res) {
       const rules = draftPendingResolutionRules(row);
       if (!rules?.generated) continue;
       generatedRules.set(row.id, rules);
+      if (reviewedSepolia && !supportsSepoliaReviewedShape(row.amm_mode, row.outcomes)) continue;
       candidates.push({ row, event: marketSourceEventForApproval(row, row.id) });
     }
     const checked = await checkPendingProposals(approvalReader, candidates);
@@ -566,8 +588,16 @@ async function list(req, res) {
     }
   }
 
+  const creationIds = filteredRows.filter(row => row.status === 'creation_pending').map(row => row.id);
+  const creations = reviewedSepolia && creationIds.length ? await schemaSql`
+    SELECT pending_id AS id, status, rules_hash AS "rulesHash", tx_hash AS "transactionHash",
+      last_error AS "lastError"
+    FROM protocol_reviewed_market_creations
+    WHERE pending_id = ANY(${creationIds}::int[]) AND spec->>'chainId' = '421614'
+  ` : [];
+  const creationById = new Map(creations.map(creation => [creation.id, creation]));
   return res.status(200).json({
-    approvalSettings,
+    approvalSettings: { ...approvalSettings, ...(reviewedSepolia ? { reviewedSepolia: true } : {}) },
     pending: filteredRows.map(r => {
       const sourceData = parseJsonb(r.source_data, {});
       const resolverConfig = parseJsonb(r.resolver_config, null);
@@ -604,6 +634,7 @@ async function list(req, res) {
         geoTags: parseJsonb(r.geo_tags, []),
         topicTags: parseJsonb(r.topic_tags, []),
         status: r.status,
+        ...(creationById.has(r.id) ? { creation: creationById.get(r.id) } : {}),
         adminNote: r.admin_note,
         reviewer: r.reviewer,
         reviewedAt: r.reviewed_at,
@@ -630,6 +661,149 @@ async function list(req, res) {
   });
 }
 
+async function preparePendingApproval(client, r, pid, opts) {
+  const { isOnchain, requireRules } = opts;
+  assertNetflixDraftChart(r);
+
+  const outcomes = parseJsonb(r.outcomes, []);
+  if (!Array.isArray(outcomes) || outcomes.length < 2) {
+    const err = new Error('invalid_outcomes'); err.status = 400; throw err;
+  }
+  const normalizedLiquidity = normalizeSeedLiquidities({
+    outcomes,
+    seedLiquidity: r.seed_liquidity,
+    seedLiquidities: parseJsonb(r.seed_liquidities, null),
+  });
+  if (normalizedLiquidity.error) {
+    const err = new Error(normalizedLiquidity.error); err.status = 400; throw err;
+  }
+  const seedValues = normalizedLiquidity.values;
+  const seed = normalizedLiquidity.fallback;
+  const seedLiquiditiesJson = JSON.stringify(seedValues);
+  const endDate = r.end_time ? new Date(r.end_time) : null;
+  if (!endDate || isNaN(endDate.getTime()) || endDate <= new Date()) {
+    const err = new Error('invalid_end_time'); err.status = 400;
+    err.detail = 'end_time must be in the future at approval time';
+    throw err;
+  }
+
+  const marketSourceEventId = marketSourceEventForApproval(r, pid);
+  const approvalChecks = !isOnchain || requireRules
+    ? await checkPendingProposal(client, r, { lock: true, approvalEventId: marketSourceEventId })
+    : [];
+  if (!opts.oneClickApprovalKey) {
+    const blocking = approvalChecks.find(check => check.severity === 'block');
+    if (blocking) {
+      const error = new Error(blocking.code);
+      error.status = 409;
+      error.detail = blocking.marketId ? `Mercado #${blocking.marketId}` : null;
+      throw error;
+    }
+  }
+
+  const ammMode = r.amm_mode === 'parallel' ? 'parallel' : 'unified';
+
+  const startIso = r.start_time ? new Date(r.start_time).toISOString() : null;
+
+  const outcomeImages = parseJsonb(r.outcome_images, null);
+  const outcomeImagesJson = Array.isArray(outcomeImages) && outcomeImages.length === outcomes.length
+    ? JSON.stringify(outcomeImages)
+    : null;
+
+  const pendingFeatured = r.featured === true;
+  const pendingTournamentFeatured = r.tournament_featured === true;
+  const pendingIsTestMarket = r.is_test_market === true;
+  const syncedMananera = syncMananeraPhraseFromQuestion({
+    question: r.question,
+    resolverConfig: parseJsonb(r.resolver_config, null),
+    sourceData: parseJsonb(r.source_data, {}),
+  });
+  const syncedApiPrice = syncApiPriceFromQuestion({
+    question: r.question,
+    resolverConfig: syncedMananera.resolverConfig,
+    sourceData: syncedMananera.sourceData || {},
+  });
+  const syncedWeather = syncWeatherDateFromMarket({
+    question: r.question,
+    endTime: endDate.toISOString(),
+    resolverConfig: syncedApiPrice.resolverConfig,
+    sourceData: syncedApiPrice.sourceData || syncedMananera.sourceData || {},
+  });
+  const reopenedFromCanceledMarketId = Number(r.approved_market_id || 0);
+  const sourceDataBase = syncedWeather.sourceData || syncedApiPrice.sourceData || syncedMananera.sourceData || {};
+  const sourceDataForApproval = Number.isInteger(reopenedFromCanceledMarketId) && reopenedFromCanceledMarketId > 0
+    ? {
+        ...sourceDataBase,
+        reopenedFromCanceledMarketId: sourceDataBase.reopenedFromCanceledMarketId || reopenedFromCanceledMarketId,
+        reopenedFromSource: sourceDataBase.reopenedFromSource || r.source || null,
+        reopenedFromSourceEventId: sourceDataBase.reopenedFromSourceEventId || r.source_event_id || null,
+      }
+    : sourceDataBase;
+  let sourceData = withFreshMarketTranslations({
+    question: r.question,
+    outcomes,
+    sourceData: sourceDataForApproval,
+    sport: r.sport,
+    league: r.league,
+  });
+  let resolverConfig = syncedWeather.resolverConfig || null;
+  let resolutionSource = r.resolution_source || 'Pronos auto-resolver';
+  let rules;
+  if (requireRules) {
+    rules = pendingApprovalResolutionRules({ ...r, outcomes, resolver_config: resolverConfig, source_data: sourceData });
+    if (opts.oneClickApprovalKey && opts.oneClickApprovalKey !== oneClickApprovalKey(r, rules, approvalChecks)) {
+      throw Object.assign(new Error('proposal_approval_changed'), {
+        status: 409,
+        detail: 'La propuesta cambió. Revisa la versión actual antes de publicarla.',
+      });
+    }
+    if (!rules) throw Object.assign(new Error('missing_criteria'), {
+      status: 409,
+      detail: 'Agrega criterios escritos de resolución antes de publicar en Arbitrum Sepolia.',
+    });
+    resolverConfig = { ...resolverConfig, criteria: rules.criteria };
+    if (rules.generated) {
+      resolverConfig.evidenceUrl ||= rules.sourceUrl;
+      sourceData = { ...sourceData, resolutionCriteria: rules.criteria };
+      resolutionSource = r.resolution_source || rules.sourceUrl;
+    }
+  }
+  const deadlineCheck = validateBeforeMonthDeadline({
+    question: r.question,
+    endTime: endDate.toISOString(),
+    resolverConfig,
+    sourceData,
+    startTime: startIso,
+    now: new Date(),
+  });
+  if (deadlineCheck) {
+    const err = new Error(deadlineCheck.error);
+    err.status = 400;
+    err.detail = deadlineCheck.detail;
+    throw err;
+  }
+  // Pointbreak approvals re-read Friday's official final lineup, including
+  // older provisional drafts that were generated before this guard existed.
+  if (!isOnchain) {
+    await assertGranjaVipFinalNominees(resolverConfig, outcomes);
+    await assertPointsAirportApproval(client, { ...r, resolver_config: resolverConfig });
+  }
+  const tagBundle = deriveMarketTags({
+    ...r,
+    source_data: sourceData,
+    resolver_config: resolverConfig || {},
+    category_tags: parseJsonb(r.category_tags, []),
+    geo_tags: parseJsonb(r.geo_tags, []),
+    topic_tags: parseJsonb(r.topic_tags, []),
+  });
+  const categoryTagsJson = JSON.stringify(tagBundle.categoryTags);
+  const geoTagsJson = JSON.stringify(tagBundle.geoTags);
+  const topicTagsJson = JSON.stringify(tagBundle.topicTags);
+  return { outcomes, seed, seedValues, seedLiquiditiesJson, endDate, marketSourceEventId, ammMode, startIso,
+    outcomeImagesJson, pendingFeatured, pendingTournamentFeatured, pendingIsTestMarket, sourceData,
+    resolverConfig, resolutionSource, rules, categoryTagsJson, geoTagsJson, topicTagsJson };
+}
+
 /**
  * Approve ONE pending row — copy its spec into points_markets and flip
  * the pending row to 'approved'. Runs inside its own withTransaction so
@@ -651,6 +825,9 @@ async function list(req, res) {
 export async function approveOne(pid, reviewer, note, opts = {}) {
   const marketMode = opts.mode === 'onchain' ? 'onchain' : 'points';
   const isOnchain = marketMode === 'onchain';
+  if (isOnchain && Number(opts.chainId) === SEPOLIA_REVIEW_CHAIN && sepoliaReviewedApprovalRequired()) {
+    throw reviewedCreationError('reviewed_single_approval_required', 'Usa la aprobación revisada de Sepolia.');
+  }
   const requireRules = isOnchain && pendingApprovalSettings().previewEnabled;
   let chainIdNum = null;
   let chainAddressStr = null;
@@ -719,142 +896,11 @@ export async function approveOne(pid, reviewer, note, opts = {}) {
       err.detail = `status=${r.status}`;
       throw err;
     }
-    assertNetflixDraftChart(r);
-
-    const outcomes = parseJsonb(r.outcomes, []);
-    if (!Array.isArray(outcomes) || outcomes.length < 2) {
-      const err = new Error('invalid_outcomes'); err.status = 400; throw err;
-    }
-    const normalizedLiquidity = normalizeSeedLiquidities({
-      outcomes,
-      seedLiquidity: r.seed_liquidity,
-      seedLiquidities: parseJsonb(r.seed_liquidities, null),
-    });
-    if (normalizedLiquidity.error) {
-      const err = new Error(normalizedLiquidity.error); err.status = 400; throw err;
-    }
-    const seedValues = normalizedLiquidity.values;
-    const seed = normalizedLiquidity.fallback;
-    const seedLiquiditiesJson = JSON.stringify(seedValues);
-    const endDate = r.end_time ? new Date(r.end_time) : null;
-    if (!endDate || isNaN(endDate.getTime()) || endDate <= new Date()) {
-      const err = new Error('invalid_end_time'); err.status = 400;
-      err.detail = 'end_time must be in the future at approval time';
-      throw err;
-    }
-
-    const marketSourceEventId = marketSourceEventForApproval(r, pid);
-    const approvalChecks = !isOnchain || requireRules
-      ? await checkPendingProposal(client, r, { lock: true, approvalEventId: marketSourceEventId })
-      : [];
-    if (!opts.oneClickApprovalKey) {
-      const blocking = approvalChecks.find(check => check.severity === 'block');
-      if (blocking) {
-        const error = new Error(blocking.code);
-        error.status = 409;
-        error.detail = blocking.marketId ? `Mercado #${blocking.marketId}` : null;
-        throw error;
-      }
-    }
-
-    const ammMode = r.amm_mode === 'parallel' ? 'parallel' : 'unified';
+    const { outcomes, seed, seedValues, seedLiquiditiesJson, endDate, marketSourceEventId, ammMode, startIso,
+      outcomeImagesJson, pendingFeatured, pendingTournamentFeatured, pendingIsTestMarket, sourceData,
+      resolverConfig, resolutionSource, categoryTagsJson, geoTagsJson, topicTagsJson } =
+      await preparePendingApproval(client, r, pid, { isOnchain, requireRules, oneClickApprovalKey: opts.oneClickApprovalKey });
     let createdMarketId;
-
-    const startIso = r.start_time ? new Date(r.start_time).toISOString() : null;
-
-    const outcomeImages = parseJsonb(r.outcome_images, null);
-    const outcomeImagesJson = Array.isArray(outcomeImages) && outcomeImages.length === outcomes.length
-      ? JSON.stringify(outcomeImages)
-      : null;
-
-    const pendingFeatured = r.featured === true;
-    const pendingTournamentFeatured = r.tournament_featured === true;
-    const pendingIsTestMarket = r.is_test_market === true;
-    const syncedMananera = syncMananeraPhraseFromQuestion({
-      question: r.question,
-      resolverConfig: parseJsonb(r.resolver_config, null),
-      sourceData: parseJsonb(r.source_data, {}),
-    });
-    const syncedApiPrice = syncApiPriceFromQuestion({
-      question: r.question,
-      resolverConfig: syncedMananera.resolverConfig,
-      sourceData: syncedMananera.sourceData || {},
-    });
-    const syncedWeather = syncWeatherDateFromMarket({
-      question: r.question,
-      endTime: endDate.toISOString(),
-      resolverConfig: syncedApiPrice.resolverConfig,
-      sourceData: syncedApiPrice.sourceData || syncedMananera.sourceData || {},
-    });
-    const reopenedFromCanceledMarketId = Number(r.approved_market_id || 0);
-    const sourceDataBase = syncedWeather.sourceData || syncedApiPrice.sourceData || syncedMananera.sourceData || {};
-    const sourceDataForApproval = Number.isInteger(reopenedFromCanceledMarketId) && reopenedFromCanceledMarketId > 0
-      ? {
-          ...sourceDataBase,
-          reopenedFromCanceledMarketId: sourceDataBase.reopenedFromCanceledMarketId || reopenedFromCanceledMarketId,
-          reopenedFromSource: sourceDataBase.reopenedFromSource || r.source || null,
-          reopenedFromSourceEventId: sourceDataBase.reopenedFromSourceEventId || r.source_event_id || null,
-        }
-      : sourceDataBase;
-    let sourceData = withFreshMarketTranslations({
-      question: r.question,
-      outcomes,
-      sourceData: sourceDataForApproval,
-      sport: r.sport,
-      league: r.league,
-    });
-    let resolverConfig = syncedWeather.resolverConfig || null;
-    let resolutionSource = r.resolution_source || 'Pronos auto-resolver';
-    if (requireRules) {
-      const rules = pendingApprovalResolutionRules({ ...r, outcomes, resolver_config: resolverConfig, source_data: sourceData });
-      if (opts.oneClickApprovalKey && opts.oneClickApprovalKey !== oneClickApprovalKey(r, rules, approvalChecks)) {
-        throw Object.assign(new Error('proposal_approval_changed'), {
-          status: 409,
-          detail: 'La propuesta cambió. Revisa la versión actual antes de publicarla.',
-        });
-      }
-      if (!rules) throw Object.assign(new Error('missing_criteria'), {
-        status: 409,
-        detail: 'Agrega criterios escritos de resolución antes de publicar en Arbitrum Sepolia.',
-      });
-      resolverConfig = { ...resolverConfig, criteria: rules.criteria };
-      if (rules.generated) {
-        resolverConfig.evidenceUrl ||= rules.sourceUrl;
-        sourceData = { ...sourceData, resolutionCriteria: rules.criteria };
-        resolutionSource = r.resolution_source || rules.sourceUrl;
-      }
-    }
-    const deadlineCheck = validateBeforeMonthDeadline({
-      question: r.question,
-      endTime: endDate.toISOString(),
-      resolverConfig,
-      sourceData,
-      startTime: startIso,
-      now: new Date(),
-    });
-    if (deadlineCheck) {
-      const err = new Error(deadlineCheck.error);
-      err.status = 400;
-      err.detail = deadlineCheck.detail;
-      throw err;
-    }
-    // Pointbreak approvals re-read Friday's official final lineup, including
-    // older provisional drafts that were generated before this guard existed.
-    if (!isOnchain) {
-      await assertGranjaVipFinalNominees(resolverConfig, outcomes);
-      await assertPointsAirportApproval(client, { ...r, resolver_config: resolverConfig });
-    }
-    const tagBundle = deriveMarketTags({
-      ...r,
-      source_data: sourceData,
-      resolver_config: resolverConfig || {},
-      category_tags: parseJsonb(r.category_tags, []),
-      geo_tags: parseJsonb(r.geo_tags, []),
-      topic_tags: parseJsonb(r.topic_tags, []),
-    });
-    const categoryTagsJson = JSON.stringify(tagBundle.categoryTags);
-    const geoTagsJson = JSON.stringify(tagBundle.geoTags);
-    const topicTagsJson = JSON.stringify(tagBundle.topicTags);
 
     // Auto-deploy step — runs BEFORE the INSERT so a failed deploy doesn't
     // leave a half-approved row pointing at no contract. Dispatches V1
@@ -1460,8 +1506,70 @@ async function listPendingRowsForBulk(filters = {}, db = readSql) {
   return filteredPendingRows(rows, filters);
 }
 
+function reviewedPendingId(value) {
+  const id = Number(value);
+  if (!['string', 'number'].includes(typeof value) || !/^\d+$/.test(String(value))
+    || !Number.isInteger(id) || id < 1 || id > 2147483647) {
+    throw reviewedCreationError('invalid_id', 'Provide a single pending market ID.', 400);
+  }
+  return id;
+}
+
+async function reviewedApproval(req, res, admin, { sepolia, advance = false }) {
+  const { id, note, oneClickApprovalKey: approvalKey } = req.body;
+  const pendingId = reviewedPendingId(id);
+  const { reviewedCreationConfig, queueReviewedCreation, runReviewedCreation, getReviewedCreation } =
+    await import('../../_lib/reviewed-market-creation.js');
+  const config = reviewedCreationConfig();
+  const { getIndexerConfig } = await import('../../_lib/protocol-event-indexer.js');
+  const { factories: indexedFactories } = getIndexerConfig();
+  await ensurePointsSchema(schemaSql);
+  await ensureReviewedCreationSchema(withTransaction);
+  const options = { pendingId, config, indexedFactories };
+  const creation = advance ? await getReviewedCreation(pendingId, withTransaction, config.chainId)
+    : await queueReviewedCreation({
+      ...options, reviewer: admin.username, note,
+      ...(sepolia ? { prepare: async (client, row, now) => {
+        const normalized = pendingRowWithOpeningLiquidity(row, { mode: 'onchain' });
+        const prepared = await preparePendingApproval(client, normalized, pendingId,
+          { isOnchain: true, requireRules: true, oneClickApprovalKey: approvalKey });
+        const { outcomes, endDate, rules, resolverConfig, marketSourceEventId } = prepared;
+        return {
+          ...prepared,
+          sourceEventId: marketSourceEventId,
+          rules: sepoliaReviewedRules({ row, outcomes, endDate, criteria: rules.criteria,
+            sourceUrl: rules.sourceUrl || publicResolutionEvidenceUrl(resolverConfig) }, now),
+        };
+      } } : {}),
+    });
+  if (sepolia && ['queued', 'signed'].includes(creation.status)) {
+    const step = await runReviewedCreation(options);
+    const current = await getReviewedCreation(pendingId, withTransaction, config.chainId);
+    const progress = step.id == null || Number(step.id) === pendingId ? step.status : 'waiting_for_creator';
+    return res.status(current.status === 'listed' ? 200 : 202)
+      .json({ ok: true, action: 'approve', creation: { ...current, progress } });
+  }
+  return res.status(['queued', 'signed'].includes(creation.status) ? 202 : 200)
+    .json({ ok: true, action: 'approve', creation });
+}
+
 async function review(req, res, admin) {
   const { id, action, note, patch, filters, preview, oneClickApprovalKey: approvalKey } = req.body || {};
+  if (req.body?.approvalDestination === 'reviewed') {
+    if (action !== 'approve' || ['mode', 'chainId', 'chainAddress', 'chainMarketId', 'autoDeploy',
+      'previewApprovalMode', 'oneClickApprovalKey'].some(key => Object.hasOwn(req.body, key))) {
+      throw reviewedCreationError('reviewed_single_approval_required',
+        'Reviewed creation accepts one pending market and server-configured factories only.', 400);
+    }
+    if (!reviewedCreationEnabled() || sepoliaReviewEnabled()) {
+      throw reviewedCreationError('reviewed_creation_disabled', 'Use the approval form for Sepolia reviewed markets.', 403);
+    }
+    return reviewedApproval(req, res, admin, { sepolia: false });
+  }
+  if (action === 'advance_reviewed_creation') {
+    if (!sepoliaReviewEnabled()) throw reviewedCreationError('reviewed_creation_disabled', null, 403);
+    return reviewedApproval(req, res, admin, { sepolia: true, advance: true });
+  }
   if ((action === 'approve_all' || action === 'refresh_pricing_all') && filters && 'ids' in Object(filters)) {
     if (!Array.isArray(filters.ids) || filters.ids.length < 1 || filters.ids.length > 2000
         || filters.ids.some(value => !Number.isInteger(value) || value <= 0 || value > 2147483647)) {
@@ -1479,6 +1587,14 @@ async function review(req, res, admin) {
       return res.status(400).json({ error: 'invalid_one_click_approval' });
     }
     approveOpts.oneClickApprovalKey = approvalKey;
+  }
+
+  if (action === 'approve' && approveOpts.mode === 'onchain' && sepoliaReviewedApprovalRequired()) {
+    if (['chainId', 'chainAddress', 'chainMarketId', 'autoDeploy'].some(key => Object.hasOwn(req.body, key))) {
+      throw reviewedCreationError('reviewed_single_approval_required',
+        'La aprobación usa solo las fábricas configuradas en el servidor.', 400);
+    }
+    return reviewedApproval(req, res, admin, { sepolia: true });
   }
 
   await ensurePointsSchema(schemaSql);

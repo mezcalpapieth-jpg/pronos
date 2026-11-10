@@ -74,7 +74,7 @@ test('Points admin can edit generated markets and per-option liquidity before ap
 
 test('Points pending queue persists taxonomy filters and sends only displayed IDs for bulk actions', () => {
   const pendingTableSource = sourceForFunction('PendingMarketsTable');
-  assert.match(pendingTableSource, /useAdminQueueFilters\(true\)/);
+  assert.match(pendingTableSource, /useAdminQueueFilters\(true, lastApprovalSettings\?\.reviewedSepolia\)/);
   assert.match(pendingTableSource, /<AdminQueueToolbar queue=\{queue\} proposal\s+searchAction=/);
   assert.match(pendingTableSource, /const ids = proposals\.map\(row => row\.id\)/);
   assert.match(pendingTableSource, /action: 'approve_all', filters: \{ ids \}, preview: true/);

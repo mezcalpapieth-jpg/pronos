@@ -242,9 +242,11 @@ const STATUS_TONES = {
   active: 'success', approved: 'success', pending: 'warning', rejected: 'danger', resolved: 'success',
 };
 
-export function useAdminQueueFilters(proposal = false) {
+export function useAdminQueueFilters(proposal = false, showPublishing = false) {
   const [params, setParams] = useSearchParams();
-  const statuses = proposal ? PROPOSAL_STATUSES : MARKET_STATUSES;
+  const statuses = proposal
+    ? (showPublishing ? [...PROPOSAL_STATUSES, ['creation_pending', 'Publicando']] : PROPOSAL_STATUSES)
+    : MARKET_STATUSES;
   const requestedStatus = params.get('status');
   const status = statuses.some(([key]) => key === requestedStatus) ? requestedStatus : statuses[0][0];
   const values = Object.fromEntries(FILTER_KEYS.map(key => [key, params.get(key) || 'all']));

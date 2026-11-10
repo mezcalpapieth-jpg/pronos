@@ -10,7 +10,8 @@ async function fixture(t) {
   t.after(() => db.close());
   await db.exec(`
     CREATE TABLE points_markets(id INT PRIMARY KEY,status TEXT,amm_mode TEXT,parent_id INT,
-      outcome INT,resolved_at TIMESTAMPTZ,resolved_by TEXT,final_score TEXT);
+      outcome INT,resolved_at TIMESTAMPTZ,resolved_by TEXT,final_score TEXT,
+      mode TEXT DEFAULT 'points',chain_id INT,resolution_src TEXT);
     INSERT INTO points_markets(id,status,amm_mode,parent_id) VALUES
       (1,'active','parallel',NULL),(2,'active','parallel',1),(3,'active','parallel',1),
       (4,'active','unified',NULL);
@@ -41,6 +42,11 @@ test('void refunds each composite-key position once and cancels only the selecte
   await assert.rejects(db.transaction(tx => voidOneMarket(tx,1,'Again','test-admin')), {message:'already_resolved'});
   assert.equal((await db.query("SELECT COUNT(*)::int AS n,SUM(amount)::text AS total FROM points_distributions WHERE kind='void_refund'")).rows[0].total,'165');
   assert.equal((await db.query('SELECT COUNT(*)::int AS n FROM points_distributions')).rows[0].n,3);
+  await db.exec(`UPDATE points_markets SET mode='onchain', chain_id=42161,
+    resolution_src='/api/points/resolution-review?document=0x01' WHERE id=4`);
+  await assert.rejects(db.transaction(tx => voidOneMarket(tx,4,'Outside review','test-admin')),
+    {message:'reviewed_market_requires_onchain_settlement'});
+  assert.equal((await db.query('SELECT status FROM points_markets WHERE id=4')).rows[0].status,'active');
 });
 
 test('failed refund rolls back cancellation, balances, and all earlier refund rows', async t => {

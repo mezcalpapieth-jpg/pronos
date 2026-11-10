@@ -12,16 +12,29 @@ import { ADMIN_SEARCH_MARKS, parseAdminMarketSearch } from '../../_lib/points-ad
 import { pendingApprovalResolutionRules, pendingResolutionCriteria } from '../../_lib/points-pending-resolution-rules.js';
 import { pointsResolverReadiness } from '../../_lib/points-resolver-readiness.js';
 import { pendingApprovalOptions, pendingApprovalSettings } from '../../_lib/onchain-preview-approval.js';
+import { reviewedCreationEnabled, reviewedCreationError } from '../../_lib/reviewed-market-settings.js';
+import { reviewedCreationConfig } from '../../_lib/reviewed-market-creation.js';
+import { sepoliaReviewedRules, supportsSepoliaReviewedShape } from '../../_lib/reviewed-market-rules.js';
+import { SEPOLIA_REVIEW_CHAIN, sepoliaReviewEnabled } from '../../_lib/sepolia-resolution-review.js';
 
 const source = await readFile(new URL('./pending-markets.js', import.meta.url), 'utf8');
 const previewEnv = {
   ONCHAIN_PREVIEW_APPROVALS_ENABLED: 'true', VERCEL_ENV: 'preview',
   VERCEL_GIT_COMMIT_REF: 'onchain-sepolia', ONCHAIN_CHAIN_ID: '421614',
 };
+const reviewedEnv = {
+  ...previewEnv, CHAIN_ID: '421614', ONCHAIN_SEPOLIA_REVIEW_ENABLED: 'true',
+  ONCHAIN_REVIEWED_CREATION_ENABLED: 'true',
+  DATABASE_URL: 'postgres://test:local@ep-delicate-glitter-amp7yrkv.c-5.us-east-1.aws.neon.tech/neondb',
+  ONCHAIN_RPC_URL: 'http://never-called', ONCHAIN_COLLATERAL_ADDRESS: '0x0000000000000000000000000000000000000500',
+  ONCHAIN_REVIEWED_CREATOR_ADDRESS: '0x0000000000000000000000000000000000000400',
+  ONCHAIN_REVIEWED_CREATOR_SUBORG_ID: 'test', ONCHAIN_REVIEWED_CREATION_MAX_SEED_MXNP: '5000',
+  ONCHAIN_REVIEWED_CREATION_MAX_GAS_ETH: '0.001',
+};
 
 // Run the actual route with isolated auth, DB and deployment boundaries.
 // No database credentials or chain transactions are used by these tests.
-function harness(env, { approvalError, authenticated = true, rows = [], executeApproval = false, duplicates = [] } = {}) {
+function harness(env, { approvalError, authenticated = true, rows = [], executeApproval = false, duplicates = [], reviewed = {} } = {}) {
   const calls = { schema: 0, sql: 0, approved: [] };
   const writes = [];
   const deploys = [];
@@ -77,8 +90,18 @@ function harness(env, { approvalError, authenticated = true, rows = [], executeA
     ensurePointsSchema: async () => { calls.schema++; },
     pendingApprovalOptions: body => pendingApprovalOptions(body, env),
     pendingApprovalSettings: () => pendingApprovalSettings(env),
+    SEPOLIA_REVIEW_CHAIN,
+    sepoliaReviewEnabled: () => sepoliaReviewEnabled(env),
+    sepoliaReviewedRules,
+    supportsSepoliaReviewedShape,
+    publicResolutionEvidenceUrl: config => config?.evidenceUrl,
+    ensureReviewedCreationSchema: async () => {},
+    reviewedCreationEnabled: () => reviewedCreationEnabled(env),
+    reviewedCreationError,
     LCDLF_SOURCE: 'lcdlf-official',
     mocks: {
+      reviewed: { reviewedCreationConfig: () => reviewedCreationConfig(env), ...reviewed },
+      indexer: { getIndexerConfig: () => ({ factories: [] }) },
       onchainTrader: {
         isOnchainReady: () => true,
         async deployMarketOnChain(options) {
@@ -96,6 +119,8 @@ function harness(env, { approvalError, authenticated = true, rows = [], executeA
   const executable = source.replace(/^import .*;\n/gm, '')
     .replace('export default async function handler', 'async function handler')
     .replace("await import('../../_lib/onchain-trader.js')", 'mocks.onchainTrader')
+    .replaceAll("await import('../../_lib/reviewed-market-creation.js')", 'mocks.reviewed')
+    .replace("await import('../../_lib/protocol-event-indexer.js')", 'mocks.indexer')
     .replace(/^export /gm, '');
   vm.runInNewContext(`${executable}\n${executeApproval ? '' : 'approveOne = mocks.approveOne;'} globalThis.handler = handler;`, context);
   return {
@@ -105,6 +130,7 @@ function harness(env, { approvalError, authenticated = true, rows = [], executeA
     async request(body, method = 'POST', query = {}) {
       const res = {
         statusCode: 200,
+        setHeader() {},
         status(code) { this.statusCode = code; return this; },
         json(value) { this.body = JSON.parse(JSON.stringify(value)); return this; },
       };
@@ -153,6 +179,24 @@ test('on-chain bulk approval returns 400 before touching the DB', async () => {
   const res = await api.request({ action: 'approve_all' });
   assert.equal(res.statusCode, 400);
   assert.equal(res.body.error, 'bulk_approve_onchain_unsupported');
+  assert.deepEqual(api.calls, { schema: 0, sql: 0, approved: [] });
+});
+
+test('explicit mainnet reviewed approval rejects bulk, caller-selected contracts and the Sepolia preview', async () => {
+  const api = harness({ ...previewEnv, ONCHAIN_MAINNET_REVIEW_ENABLED: 'true', ONCHAIN_REVIEWED_CREATION_ENABLED: 'true' });
+  const reviewed = { approvalDestination: 'reviewed' };
+  for (const body of [
+    { ...reviewed, action: 'approve_all' },
+    { ...reviewed, action: 'approve', id: 7, chainAddress: '0x0' },
+  ]) {
+    const res = await api.request(body);
+    assert.equal(res.statusCode, 400);
+    assert.equal(res.body.error, 'reviewed_single_approval_required');
+  }
+  const res = await api.request({ ...reviewed, action: 'approve', id: 7 });
+  assert.equal(res.statusCode, 403);
+  assert.equal(res.body.error, 'reviewed_creation_disabled');
+  assert.equal((await api.request(null, 'GET', { reviewedCreationId: '7' })).statusCode, 403);
   assert.deepEqual(api.calls, { schema: 0, sql: 0, approved: [] });
 });
 
@@ -221,6 +265,73 @@ function ncaafProposal() {
 }
 
 const configuredPreviewEnv = { ...previewEnv, ONCHAIN_DEPLOYER_SUBORG_ID: 'mock', ONCHAIN_DEPLOYER_ADDRESS: 'mock' };
+
+test('the Sepolia form commits its generated rules to the reviewed path and resumes the same job', async () => {
+  const row = ncaafProposal();
+  let job;
+  const steps = [];
+  const api = harness(reviewedEnv, { rows: [row], reviewed: {
+    queueReviewedCreation: async ({ pendingId, prepare, reviewer }) => {
+      assert.equal(pendingId, row.id);
+      assert.equal(reviewer, 'test-admin');
+      const draft = await prepare({ query: async () => ({ rows: [] }) }, row, Date.now());
+      assert.equal(draft.rules.version, 'v1');
+      assert.match(draft.rules.content, /401866475/);
+      assert.match(draft.rules.content, /Bowling Green Falcons/);
+      assert.match(draft.rules.content, /football\/college-football\/summary\?event=401866475/);
+      assert.match(draft.resolverConfig.criteria, /Massachusetts Minutemen/);
+      job = { id: pendingId, status: 'queued', rulesHash: draft.rules.rulesHash };
+      return job;
+    },
+    runReviewedCreation: async ({ pendingId, config }) => {
+      assert.equal(config.chainId, 421614);
+      assert.equal(config.broadcast, false);
+      steps.push(pendingId);
+      return { id: pendingId, status: 'broadcast_paused' };
+    },
+    getReviewedCreation: async (id, _, chainId) => {
+      assert.equal(chainId, 421614);
+      assert.equal(id, job.id);
+      return job;
+    },
+  } });
+  const precheck = await api.request(null, 'GET', { check_id: String(row.id), previewApprovalMode: 'onchain' });
+  const pending = await api.request(null, 'GET', { previewApprovalMode: 'onchain' });
+  assert.equal(pending.body.approvalSettings.reviewedSepolia, true);
+  assert.equal(pending.body.pending[0].oneClickApprovalKey, precheck.body.oneClickApprovalKey);
+  const request = { id: row.id, action: 'approve', previewApprovalMode: 'onchain',
+    oneClickApprovalKey: precheck.body.oneClickApprovalKey };
+  assert.match(request.oneClickApprovalKey, /^[a-f0-9]{64}$/);
+  row.seed_liquidity = 1200;
+  const stale = await api.request(request);
+  assert.equal(stale.body.error, 'proposal_approval_changed', JSON.stringify(stale.body));
+  row.seed_liquidity = 1000;
+  const approval = await api.request(request);
+  assert.equal(approval.statusCode, 202, JSON.stringify(approval.body));
+  assert.equal(approval.body.creation.progress, 'broadcast_paused');
+  assert.deepEqual((await api.request({ id: row.id, action: 'advance_reviewed_creation' })).body.creation,
+    approval.body.creation);
+  assert.deepEqual(steps, [row.id, row.id]);
+  assert.equal(api.deploys.length, 0);
+  assert.deepEqual(api.calls.approved, []);
+});
+
+test('reviewed preview blocks caller-selected contracts, unsupported pools and an unisolated database', async () => {
+  const row = { ...ncaafProposal(), amm_mode: 'parallel' };
+  const request = { id: row.id, action: 'approve', previewApprovalMode: 'onchain' };
+  const api = harness(reviewedEnv, { rows: [row] });
+  const precheck = await api.request(null, 'GET', { check_id: String(row.id), previewApprovalMode: 'onchain' });
+  assert.equal(precheck.body.oneClickApprovalKey, null);
+  assert.ok(precheck.body.checks.some(check => check.code === 'reviewed_market_shape_unsupported' && check.severity === 'block'));
+  const pending = await api.request(null, 'GET', { previewApprovalMode: 'onchain' });
+  assert.equal(pending.body.pending[0].oneClickApprovalKey, undefined);
+  assert.equal((await api.request({ ...request, chainMarketId: '9' })).body.error, 'reviewed_single_approval_required');
+  assert.equal((await api.request({ ...request, previewApprovalMode: 'points' })).statusCode, 200);
+  assert.equal(api.calls.approved[0].opts.mode, 'points');
+  const wrongDatabase = harness({ ...reviewedEnv, DATABASE_URL: 'postgres://localhost/wrong' });
+  assert.equal((await wrongDatabase.request(request)).body.error, 'reviewed_creation_disabled');
+  assert.deepEqual(wrongDatabase.calls.approved, []);
+});
 
 test('Sepolia precheck drafts ESPN criteria and approval persists them with the original resolver', async () => {
   const row = ncaafProposal();

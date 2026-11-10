@@ -22,6 +22,7 @@
  * a follow-up GET.
  */
 import { neon } from '@neondatabase/serverless';
+import { hasGeneratedReviewedRules } from '../../_lib/reviewed-market-settings.js';
 import { applyCors } from '../../_lib/cors.js';
 import { ensurePointsSchema } from '../../_lib/points-schema.js';
 import { requirePointsAdmin } from '../../_lib/points-admin.js';
@@ -177,7 +178,7 @@ export default async function handler(req, res) {
       SELECT id, question, category, start_time, end_time, sport, league,
              outcomes, image_url, outcome_images,
              resolver_type, resolver_config, category_tags, geo_tags, topic_tags,
-             status, amm_mode, parent_id, seed_liquidity
+             status, amm_mode, parent_id, seed_liquidity, mode, chain_id, resolution_src
       FROM points_markets
       WHERE id = ${mid}
       LIMIT 1
@@ -186,6 +187,13 @@ export default async function handler(req, res) {
       return res.status(404).json({ error: 'market_not_found' });
     }
     const existing = existingRows[0];
+    if (hasGeneratedReviewedRules(existing)) {
+      if ((nextQuestion && nextQuestion !== existing.question) || (nextCategory && nextCategory !== existing.category)
+        || (nextStartTime && Date.parse(nextStartTime) !== Date.parse(existing.start_time))
+        || (nextEndTime && Date.parse(nextEndTime) !== Date.parse(existing.end_time))
+        || hasFinalScorePatch) return res.status(409).json({ error: 'reviewed_market_terms_immutable' });
+      nextQuestion = nextCategory = nextStartTime = nextEndTime = null;
+    }
     const existingOutcomes = parseJsonb(existing.outcomes, ['Sí', 'No']);
     const existingResolverConfig = parseJsonb(existing.resolver_config, null);
     let nextOutcomeImages = null;

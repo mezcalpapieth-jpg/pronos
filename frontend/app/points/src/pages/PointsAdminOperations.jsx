@@ -30,6 +30,7 @@ export const approvalIssueLabels = {
   source_disabled: 'La fuente está suspendida',
   english_review: 'Revisar la pregunta y las opciones en inglés',
   missing_criteria: 'Faltan criterios escritos de resolución',
+  reviewed_market_shape_unsupported: 'La revisión de 24 horas requiere un solo pool de 2 a 8 opciones',
   manual_review: 'Falta un resolver. Revisa cómo se verificará el resultado',
   duplicate_market: 'Ya existe un mercado equivalente',
   similar_market: 'Hay un mercado parecido. Compara los criterios antes de aprobar',
@@ -228,7 +229,7 @@ export async function checkProposalApproval(id, { previewApprovalMode, signal } 
   return result;
 }
 
-export function ProposalApproval({ row, revision, disabled, onApprove, previewApprovalMode }) {
+export function ProposalApproval({ row, revision, disabled, onApprove, previewApprovalMode, reviewedSepolia }) {
   const [state, setState] = useState(null);
   const [attempt, setAttempt] = useState(0);
   const [confirm, setConfirm] = useState(false);
@@ -266,7 +267,8 @@ export function ProposalApproval({ row, revision, disabled, onApprove, previewAp
         {rules.sourceUrl && <a href={rules.sourceUrl} target="_blank" rel="noreferrer">Fuente en ESPN</a>}
       </>}
       {confirm && <p role="status">Se publicará la propuesta #{row.id} “{row.question}”
-        {previewApprovalMode === 'onchain' ? ' en Arbitrum Sepolia' : ''}.</p>}
+        {previewApprovalMode === 'onchain' ? ' en Arbitrum Sepolia' : ''}.
+        {reviewedSepolia && ' La revisión de 24 horas comienza cuando se propone un resultado.'}</p>}
       <div className="pb-admin-tools">
         <button className="pb-admin-button pb-admin-primary" type="button" disabled={!checks || blocked || disabled}
           onClick={() => (approvalKey || confirm) ? onApprove(approvalKey || undefined) : setConfirm(true)}>

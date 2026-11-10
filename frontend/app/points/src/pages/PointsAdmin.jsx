@@ -7045,10 +7045,33 @@ function MarketAutomationTools({ generator }) {
   );
 }
 
+function ReviewedCreationStatus({ creation, onAdvance, busy }) {
+  const status = {
+    queued: 'En cola', signed: 'Firmada. Esperando confirmación', broadcast_paused: 'Envío desactivado',
+    awaiting_receipt: 'Esperando confirmación', awaiting_finality: 'Esperando finalización en Arbitrum',
+    awaiting_index: 'Esperando al indexador', broadcast: 'Enviada a Arbitrum Sepolia',
+    broadcast_unconfirmed: 'Envío sin confirmar. Puedes volver a consultar la misma transacción.',
+    waiting_for_creator: 'Hay otra publicación en curso para la cuenta creadora',
+    busy: 'Hay una publicación en curso',
+    needs_review: 'Requiere revisión manual', expired: 'El mercado cerró antes de publicarse', reverted: 'La transacción revirtió',
+  };
+  const state = creation.progress === 'idle' ? creation.status : creation.progress || creation.status;
+  return <div>
+    <p role="status">{status[state] || status[creation.status]}</p>
+    {creation.lastError && <p><code>{creation.lastError}</code></p>}
+    {creation.rulesHash && <a href={`/api/points/resolution-review?document=${creation.rulesHash}`}
+      target="_blank" rel="noreferrer">Reglas publicadas</a>}
+    {creation.transactionHash && <> · <a href={`https://sepolia.arbiscan.io/tx/${creation.transactionHash}`}
+      target="_blank" rel="noreferrer">Ver transacción</a></>}
+    {['queued', 'signed'].includes(creation.status) && <button type="button" className="pb-admin-button"
+      disabled={busy} onClick={onAdvance}>Continuar publicación</button>}
+  </div>;
+}
+
 function PendingMarketsTable({ onQueueChange, generator }) {
-  const queue = useAdminQueueFilters(true);
-  const filter = queue.status;
   const [lastApprovalSettings, setLastApprovalSettings] = useState(null);
+  const queue = useAdminQueueFilters(true, lastApprovalSettings?.reviewedSepolia);
+  const filter = queue.status;
   const [approvalMode, setApprovalMode] = useState(null);
   const queueParams = marketQueueQuery(queue);
   if (approvalMode && lastApprovalSettings?.previewEnabled) queueParams.set('previewApprovalMode', approvalMode);
@@ -7061,6 +7084,7 @@ function PendingMarketsTable({ onQueueChange, generator }) {
     ? (approvalMode || approvalSettings.defaultMode)
     : undefined;
   const approvingOnchain = previewApprovalMode === 'onchain';
+  const reviewedSepolia = approvingOnchain && approvalSettings?.reviewedSepolia;
   useEffect(() => {
     if (data) setLastApprovalSettings(data.approvalSettings || null);
   }, [data]);
@@ -7087,13 +7111,24 @@ function PendingMarketsTable({ onQueueChange, generator }) {
           return;
         }
         const destination = approvingOnchain ? ' en Arbitrum Sepolia' : '';
+        const reviewWindow = reviewedSepolia ? '\n\nLa revisión de 24 horas comienza cuando se propone un resultado.' : '';
         const rules = resolutionRules ? `\n\nCriterios de resolución:\n${resolutionRules.criteria}` : '';
         const warnings = checks.length ? `\n\n${describe(checks)}` : '';
         if ((approvingOnchain || checks.length)
-          && !confirm(`¿Publicar la propuesta #${id}${destination}?\n${quickApproval.question}${rules}${warnings}`)) return;
+          && !confirm(`¿Publicar la propuesta #${id}${destination}?\n${quickApproval.question}${reviewWindow}${rules}${warnings}`)) return;
       }
-      await adminReviewPendingMarket(id, action, null,
+      const response = await adminReviewPendingMarket(id, action, null,
         action === 'approve' ? previewApprovalMode : undefined, oneClickApprovalKey);
+      if (response.creation) {
+        if (response.creation.status !== 'listed') {
+          queue.update('status', 'creation_pending');
+          if (filter === 'creation_pending') load();
+        } else {
+          load();
+        }
+        onQueueChange?.();
+        return;
+      }
       // Update the reviewed row locally after the server confirms the change.
       setRows(prev => {
         if (!Array.isArray(prev)) return prev;
@@ -7119,6 +7154,25 @@ function PendingMarketsTable({ onQueueChange, generator }) {
     } catch (e) {
       alert(`${action} falló: ${e.code || e.message}${e.detail ? `\n${e.detail}` : ''}`);
       if (oneClickApprovalKey) load();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function advanceCreation(id) {
+    if (bulkBusy || busyId != null) return;
+    setBusyId(id);
+    try {
+      const { creation } = await adminReviewPendingMarket(id, 'advance_reviewed_creation');
+      setRows(prev => (prev || []).flatMap(row => {
+        if (row.id !== id) return [row];
+        if (creation.status === 'listed' && filter === 'creation_pending') return [];
+        return [{ ...row, creation, ...(creation.status === 'listed'
+          ? { status: 'approved', approvedMarketId: creation.marketId } : {}) }];
+      }));
+      if (creation.status === 'listed') onQueueChange?.();
+    } catch (e) {
+      alert(`No se pudo continuar la publicación. ${e.detail || e.code || e.message}`);
     } finally {
       setBusyId(null);
     }
@@ -7276,7 +7330,9 @@ function PendingMarketsTable({ onQueueChange, generator }) {
           </label>
           <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
             {approvingOnchain
-              ? 'Cada aprobación desplegará un mercado en Arbitrum Sepolia. Aprueba uno por uno.'
+              ? (reviewedSepolia
+                ? 'Cada aprobación publica las reglas y crea un mercado con revisión de 24 horas. El mercado se lista al confirmar la indexación.'
+                : 'Cada aprobación desplegará un mercado en Arbitrum Sepolia. Aprueba uno por uno.')
               : 'Las aprobaciones crearán mercados Points.'}
           </p>
         </div>
@@ -7446,6 +7502,7 @@ function PendingMarketsTable({ onQueueChange, generator }) {
                   {isPending ? (
                     <div className="points-admin-pending-actions">
                       <ProposalApproval row={r} revision={r.sourceData} previewApprovalMode={previewApprovalMode}
+                        reviewedSepolia={reviewedSepolia}
                         disabled={bulkBusy || busyId != null || generator.busy}
                         onApprove={oneClickApprovalKey => review(r.id, 'approve', { oneClickApprovalKey })} />
                       <button className="pb-admin-button" type="button"
@@ -7470,9 +7527,13 @@ function PendingMarketsTable({ onQueueChange, generator }) {
                   }}>
                     {r.status === 'approved'
                       ? `✓ Aprobado · #${r.approvedMarketId}`
-                      : '✗ Rechazado'}
+                      : r.status === 'creation_pending' ? 'Publicación onchain' : '✗ Rechazado'}
                     {r.reviewer && <> · @{r.reviewer}</>}
                   </span>
+                  {r.status === 'creation_pending' && r.creation && (
+                    <ReviewedCreationStatus creation={r.creation} onAdvance={() => advanceCreation(r.id)}
+                      busy={bulkBusy || busyId != null} />
+                  )}
                   {isRejected && (
                     <button
                       onClick={() => review(r.id, 'readd')}
