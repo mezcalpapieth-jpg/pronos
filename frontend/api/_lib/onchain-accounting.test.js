@@ -159,10 +159,14 @@ test('movement pagination deduplicates tracked-to-tracked transfers and preserve
     wallets: new Map([[owner, { roles: [] }], [treasury, { roles: [] }]]),
     provider: {
       getTransactionReceipt: async () => ({ status: 1, logs: [] }),
-      getLogs: async ({ fromBlock, toBlock }) => logs.filter(log => log.blockNumber >= fromBlock && log.blockNumber <= toBlock),
+      getLogs: async ({ fromBlock, toBlock }) => {
+        assert.ok(toBlock - fromBlock + 1 <= 100000, 'stay within the preview RPC log range');
+        return logs.filter(log => log.blockNumber >= fromBlock && log.blockNumber <= toBlock);
+      },
     },
   };
   const first = await accountingMovements(context, accountingQuery({ kind: 'mxnp' }), null);
+  assert.equal(first.fromBlock, block - 99999);
   assert.equal(first.items.length, 20);
   assert.ok(first.items.every(item => item.category === 'internal' && item.amount === '0.5'));
   const cursor = Object.fromEntries(Object.entries(first.next).map(([key, value]) => [key, String(value)]));

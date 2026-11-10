@@ -5,7 +5,7 @@ import {
 } from './onchain-accounting.js';
 
 const PAGE_SIZE = 20;
-const BLOCK_WINDOW = 400000;
+const BLOCK_WINDOW = 100000;
 const transferTopic = transferEvents.getEventTopic('Transfer');
 const feeDistributionTopic = ethers.utils.id('FeesDistributed(uint256,uint256,uint256)');
 const validKinds = ['mxnp', 'eth', 'ethInternal', 'gasGrants'];
