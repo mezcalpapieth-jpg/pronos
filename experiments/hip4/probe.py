@@ -18,11 +18,13 @@ from hyperliquid.utils.signing import (
 )
 
 API = "https://api.hyperliquid-testnet.xyz"
+MAINNET_INFO = "https://api.hyperliquid.xyz/info"
 LOCAL = Path(__file__).resolve().parent / ".local-testnet"
 WALLETS = LOCAL / "wallets.json"
 FEE = 250  # 0.25%; units are tenths of a basis point.
 MIN_NOTIONAL = Decimal(10)  # Conservative probe floor, not a claim about venue minimum.
 MAX_NOTIONAL = Decimal(25)
+MAX_BOOK_AGE_MS = 15_000
 TERMINAL = ("filled", "iocCancel", "canceled")
 
 
@@ -50,22 +52,22 @@ def address(value):
     return value.lower()
 
 
-def post(path, payload):
+def post(url, payload):
     # Pin network and disallow proxy/environment overrides and redirects.
     with requests.Session() as session:
         session.trust_env = False
-        result = session.post(API + path, json=payload, timeout=12, allow_redirects=False)
-    require(result.status_code == 200, f"Testnet {path} returned HTTP {result.status_code}")
+        result = session.post(url, json=payload, timeout=12, allow_redirects=False)
+    require(result.status_code == 200, f"{url} returned HTTP {result.status_code}")
     return result.json()
 
 
-def info(kind, **fields):
-    return post("/info", {"type": kind, **fields})
+def info(kind, *, mainnet=False, **fields):
+    return post(MAINNET_INFO if mainnet else API + "/info", {"type": kind, **fields})
 
 
 def exchange(action, signature, nonce, expires=None):
-    return post("/exchange", {"action": action, "signature": signature,
-                             "nonce": nonce, "vaultAddress": None, "expiresAfter": expires})
+    return post(API + "/exchange", {"action": action, "signature": signature,
+                                  "nonce": nonce, "vaultAddress": None, "expiresAfter": expires})
 
 
 def asset(outcome, side):
@@ -74,8 +76,8 @@ def asset(outcome, side):
     return 100_000_000 + encoding, f"#{encoding}", f"+{encoding}"
 
 
-def market(outcome):
-    return next((m for m in info("outcomeMeta")["outcomes"] if m["outcome"] == outcome), None)
+def market(outcome, *, mainnet=False):
+    return next((m for m in info("outcomeMeta", mainnet=mainnet)["outcomes"] if m["outcome"] == outcome), None)
 
 
 def wallet_info(user, token):
@@ -202,8 +204,75 @@ def run_dir(run):
 
 
 def check_depth(book, direction, limit, size):
-    require(book and abs(now() - book["time"]) < 15_000, "No fresh order book")
+    require(book and abs(now() - book["time"]) < MAX_BOOK_AGE_MS, "No fresh order book")
     require(crossing_size(book, direction, limit) >= size, "Live book lacks enough depth inside the limit")
+
+
+def visible_execution(levels, fee_multiplier, requested_shares=None):
+    shares = notional = Decimal(0)
+    last_price = None
+    for price, available in levels:
+        amount = available if requested_shares is None else min(available, requested_shares - shares)
+        if not amount:
+            break
+        shares += amount
+        notional += price * amount
+        last_price = price
+    return {
+        "visibleShares": wire(shares),
+        "grossQuote": wire(notional),
+        "quoteAfterAssumedFees": wire(notional * fee_multiplier),
+        "vwap": wire(notional / shares) if shares else None,
+        "worstPrice": wire(last_price) if last_price is not None else None,
+    }
+
+
+def liquidity_snapshot(book, sizes, fee_bps, reference, observed_at):
+    """Estimate taker execution from visible L2 only, without sending an order."""
+    require(all(size > 0 for size in sizes), "Share sizes must be positive")
+    require(0 <= fee_bps < 10_000, "Assumed fee must be between 0 and 10,000 bps")
+    require(reference is None or 0 < reference < 1, "Reference price must be between 0 and 1")
+    age = observed_at - book["time"] if book else None
+    report = {"observedAtMs": observed_at, "bookTimeMs": book["time"] if book else None,
+              "bookAgeMs": age, "assumedTakerFeeBps": wire(fee_bps)}
+    if age is None or abs(age) >= MAX_BOOK_AGE_MS:
+        return {**report, "status": "unavailable" if age is None else "stale"}
+
+    bids, asks = [[(dec(level["px"]), dec(level["sz"])) for level in side] for side in book["levels"]]
+    require(all(0 < p < 1 and s > 0 for p, s in bids + asks), "Invalid outcome book level")
+    bids.sort(key=lambda level: level[0], reverse=True)
+    asks.sort(key=lambda level: level[0])
+    best_bid = bids[0][0] if bids else None
+    best_ask = asks[0][0] if asks else None
+    two_sided = best_bid is not None and best_ask is not None
+    if two_sided and best_bid >= best_ask:
+        return {**report, "status": "locked_or_crossed", "bestBid": wire(best_bid), "bestAsk": wire(best_ask)}
+    midpoint = (best_bid + best_ask) / 2 if two_sided else None
+    ref = reference if reference is not None else midpoint
+    sides = {}
+    for direction, levels, sign in (("buy", asks, 1), ("sell", bids, -1)):
+        multiplier = 1 + sign * fee_bps / 10_000
+        bands = {}
+        if ref is not None:
+            for points in (2, 5):
+                width = Decimal(points) / 100
+                in_band = [(p, s) for p, s in levels if sign * (p * multiplier - ref) <= width]
+                bands[str(points)] = visible_execution(in_band, multiplier)
+        quotes = []
+        for size in sizes:
+            quote = visible_execution(levels, multiplier, size)
+            shares = dec(quote["visibleShares"])
+            cost_vs_ref = sign * (dec(quote["vwap"]) * multiplier - ref) * 100 if shares and ref is not None else None
+            quotes.append({"requestedShares": size, "coveragePct": wire(shares * 100 / size), **quote,
+                           "costVsReferencePoints": wire(cost_vs_ref) if cost_vs_ref is not None else None})
+        sides[direction] = {"levelsSeen": len(levels), "depthWithinPoints": bands, "sizeEstimates": quotes}
+    return {**report, "status": "two_sided" if two_sided else "one_sided" if bids or asks else "empty",
+            "bestBid": wire(best_bid) if best_bid is not None else None,
+            "bestAsk": wire(best_ask) if best_ask is not None else None,
+            "spreadPoints": wire((best_ask - best_bid) * 100) if two_sided else None,
+            "referencePrice": wire(ref) if ref is not None else None,
+            "referenceSource": "supplied" if reference is not None else "book_midpoint" if two_sided else None,
+            **sides}
 
 
 def submit(run, direction, outcome, side, limit, size, exit_floor):
@@ -292,8 +361,14 @@ def main():
     cmd.add_parser("fund-builder-perps")
     cmd.add_parser("markets")
     book = cmd.add_parser("book")
-    book.add_argument("outcome", type=int)
-    book.add_argument("side", type=int)
+    liquidity = cmd.add_parser("liquidity", help="Estimate visible depth and execution without trading")
+    for command in (book, liquidity):
+        command.add_argument("outcome", type=int)
+        command.add_argument("side", type=int)
+    liquidity.add_argument("--shares", nargs="+", type=int, required=True)
+    liquidity.add_argument("--fee-bps", type=dec, default=Decimal(0))
+    liquidity.add_argument("--reference-price", type=dec)
+    liquidity.add_argument("--mainnet", action="store_true", help="Read public mainnet metadata and book only")
     order = cmd.add_parser("order")
     order.add_argument("run")
     order.add_argument("direction", choices=("buy", "sell"))
@@ -313,6 +388,13 @@ def main():
     elif args.cmd == "book":
         _, coin, _ = asset(args.outcome, args.side)
         result = {"network": "Testnet", "market": market(args.outcome), "book": info("l2Book", coin=coin)}
+    elif args.cmd == "liquidity":
+        _, coin, _ = asset(args.outcome, args.side)
+        m = market(args.outcome, mainnet=args.mainnet)
+        require(m and m.get("quoteToken") == "USDC", "Outcome must be listed and quoted in USDC")
+        book = info("l2Book", mainnet=args.mainnet, coin=coin)
+        result = {"network": "Mainnet" if args.mainnet else "Testnet", "coin": coin, "market": m,
+                  **liquidity_snapshot(book, args.shares, args.fee_bps, args.reference_price, now())}
     elif args.cmd == "order":
         result = submit(args.run, args.direction, args.outcome, args.side, args.limit, args.size, args.exit_floor)
     elif args.cmd == "audit":

@@ -1,6 +1,6 @@
 # Pronos HIP-4 testnet fee probe
 
-This standalone CLI routes one buy and one sell to an existing HyperCore testnet USDC market. It uses the official MIT Hyperliquid Python SDK for signatures and the documented numeric HIP-4 asset IDs. It has no connection to the Pronos Sepolia deployment or web app, and no mainnet endpoint or mode. A Pronos builder code is the address on the order plus the approved rate; no venue deployment or HYPE stake is needed to route.
+This standalone CLI measures HIP-4 book depth and can route one buy and one sell to an existing HyperCore testnet USDC market. It uses the official MIT Hyperliquid Python SDK for signatures and the documented numeric HIP-4 asset IDs. The liquidity report can read public mainnet books. All wallet actions use HyperCore testnet, separate from the Pronos Sepolia deployment and web app. A Pronos builder code is the address on the order plus the approved rate; no venue deployment or HYPE stake is needed to route.
 
 ## Install and fund
 
@@ -22,6 +22,17 @@ The current testnet builder is `0x040fe3673b6bded15d949eefccf3509a2284cd04`; the
 ```
 
 The builder needs Standard abstraction and 100 mock USDC in perps account value; `fund-builder-perps` moves 100 from the builder's spot balance. The trader holds USDC in spot and signs the builder fee approval from its main testnet wallet. Confirm `approvedTenthsOfBps` is `250`, meaning 25 bps (`0.25%`).
+
+## Screen retail depth without wallets
+
+```sh
+.venv/bin/python probe.py liquidity 26594 1 --shares 10 15 30 --fee-bps 25
+.venv/bin/python probe.py liquidity 27955 0 --mainnet --shares 17 42 165 --fee-bps 25
+```
+
+The outcome IDs are examples from November 10. Use `markets` for current testnet IDs and the public mainnet `outcomeMeta` response for current mainnet IDs. Convert intended retail amounts to comparable whole-share clips using the observed reference and a timestamped FX quote. Pass `--reference-price` for an independent reference when available. The report otherwise uses the two-sided book midpoint.
+
+The report walks the visible levels for each size and records coverage, average and worst prices, spread, and depth within two and five probability points. `--fee-bps` models a flat **total taker fee** for the estimate. Use a separately confirmed fee for each scenario. The default is zero, and FX, venue minimums and changes before submission are outside this estimate. Stale, missing and one-sided observations should count separately in the pilot. Record repeated samples and eventual order results. HyperCore exposes up to 20 levels per side, and the two tokens of the same binary outcome share a merged book. [Order-book endpoint](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/info-endpoint#l2-book-snapshot) · [Merged outcome book](https://hyperliquid.gitbook.io/hyperliquid-docs/hyperliquid-improvement-proposals-hips/hip-4-outcome-markets#mechanics)
 
 ## Take and reconcile two fills
 

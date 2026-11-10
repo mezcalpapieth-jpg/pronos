@@ -31,6 +31,35 @@ class ProbeTests(unittest.TestCase):
         del fills[0]["builderFee"]
         self.assertEqual(probe.summarize(fills)["fillsWithoutBuilderFeeField"], 1)
 
+    def test_liquidity_walks_multiple_levels_and_applies_the_fee_to_each_band(self):
+        book = {"time": 1000, "levels": [
+            [{"px": "0.48", "sz": "20"}, {"px": "0.49", "sz": "10"}, {"px": "0.46", "sz": "25"}],
+            [{"px": "0.51", "sz": "6"}, {"px": "0.52", "sz": "10"}, {"px": "0.54", "sz": "4"}],
+        ]}
+        report = probe.liquidity_snapshot(book, [12, 25], probe.dec(25), None, 1200)
+        self.assertEqual((report["status"], report["referencePrice"], report["spreadPoints"]), ("two_sided", "0.5", "2"))
+        buy, sell = report["buy"], report["sell"]
+        self.assertEqual(buy["depthWithinPoints"]["2"]["visibleShares"], "6")
+        self.assertEqual(sell["depthWithinPoints"]["2"]["visibleShares"], "10")
+        self.assertEqual(sell["depthWithinPoints"]["5"]["visibleShares"], "55")
+        self.assertEqual(buy["sizeEstimates"][0]["vwap"], "0.515")
+        self.assertEqual(buy["sizeEstimates"][0]["costVsReferencePoints"], "1.62875")
+        self.assertEqual(buy["sizeEstimates"][1]["coveragePct"], "80")
+        self.assertEqual(sell["sizeEstimates"][0]["quoteAfterAssumedFees"], "5.84535")
+
+    def test_liquidity_keeps_missing_and_stale_depth_distinct(self):
+        book = {"time": 1000, "levels": [[], [{"px": "0.52", "sz": "20"}]]}
+        report = probe.liquidity_snapshot(book, [10], probe.dec(0), None, 1200)
+        self.assertEqual(report["status"], "one_sided")
+        self.assertIsNone(report["referencePrice"])
+        self.assertEqual(report["sell"]["sizeEstimates"][0]["coveragePct"], "0")
+        self.assertEqual(report["buy"]["depthWithinPoints"], {})
+        independent = probe.liquidity_snapshot(book, [10], probe.dec(0), probe.dec("0.5"), 1200)
+        self.assertEqual(independent["buy"]["depthWithinPoints"]["2"]["visibleShares"], "20")
+        stale = probe.liquidity_snapshot(book, [10], probe.dec(0), None, 16_000)
+        self.assertEqual(stale["status"], "stale")
+        self.assertNotIn("buy", stale)
+
     def test_fill_lookup_filters_oid_and_rejects_duplicate_or_wrong_side(self):
         record = {"trader": "trader", "cloid": "client", "nonce": 4000, "coin": "#265930", "direction": "buy"}
         status = {"status": "order", "order": {"status": "filled", "order": {"coin": "#265930", "oid": 3}}}

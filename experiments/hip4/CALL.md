@@ -2,7 +2,27 @@
 
 ## Decision to make
 
-Can Pronos route selected HIP-4 markets with measurable builder revenue and reliable depth for its users? A separate decision is whether Outcome would list a Pronos-branded Liga MX pilot under its existing venue. Routing requires a qualified builder account. The 500,000 HYPE venue stake applies to operating a venue. [Builder requirements](https://hyperliquid.gitbook.io/hyperliquid-docs/trading/builder-codes) · [Venue activation and delegation](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/hip-4-deployer-actions)
+Pilot Pronos as a Mexican retail frontend for a small set of existing HIP-4 markets. Use one venue per trade and measure what customers can actually fill, what they pay to enter and exit, and what Pronos collects. In parallel, ask Outcome to list one Liga MX market with written terms for resolution, two-sided quoting and fees. Hyperliquid has enabled mainnet deployments under approved templates. A routing frontend needs a qualified builder account. Operating a venue requires the 500,000 HYPE stake. [Hyperliquid mainnet announcement](https://t.me/s/hyperliquid_announcements/581) · [Builder requirements](https://hyperliquid.gitbook.io/hyperliquid-docs/trading/builder-codes) · [Outcome architecture](https://github.com/Outcome-xyz/mintlify-docs/blob/main/outcome-architecture.mdx)
+
+| Launch path | What Pronos gains | What must be proven |
+| --- | --- | --- |
+| Route to one existing venue | Fastest test of demand using existing execution and settlement. Pronos can earn builder fees without funding a pool. | Depth and fees on the chosen markets, Mexican customer access, funding and cashout, plus clear support and incident responsibilities. |
+| Compare multiple venues, then route selectively | More catalog and potential improvements in cost and fills. | Compare identical resolution, cutoff, source, fallback and void rules. Deduplicate liquidity. Each position retains its own venue and settlement. Add split orders only after the extra fills or lower cost pay for additional funding, reconciliation and support. |
+| Operate a Pronos book and optional curve | Control over market selection, maker terms, fees and customer experience. | Independent makers, order admission and funding reservations, durable execution, settlement and positive contribution after incentives and any curve inventory losses. Keep the Sepolia hybrid as a separate rehearsal. |
+
+## What visible depth looks like
+
+Three snapshots of Outcome sports markets on November 10, 2026 at about 19:48 UTC. Figures are visible gross USDC from bids and asks within two points of the book midpoint, before fees. The samples showed enough visible size for roughly 10, 25 and 100 USDC in each direction. They establish what was displayed at that instant. They leave fill rate, uptime, depth near kickoff and Liga MX depth to be measured. [HyperCore order book](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/info-endpoint#l2-book-snapshot) · [Reproduce with the liquidity report](README.md#screen-retail-depth-without-wallets)
+
+| Market and book | Bid depth | Ask depth |
+| --- | ---: | ---: |
+| Suns vs. Clippers `#279550` | 4,294.58 | 5,480.79 |
+| Bucks vs. Lakers `#279720` | 357.00 | 528.07 |
+| Netherlands vs. Greece, Netherlands wins `#290870` | 3,054.09 | 4,511.48 |
+
+Measure three to five markets for 30 days, including less active hours and the run-up to kickoff. Use indicative MXN 100, 300 and 1,000 tickets translated to whole shares at a timestamped quote. Start with a provisional target of MXN 600 of depth in **each** direction within two probability points after trading fees during at least 90% of agreed quoting windows. Count missing, stale and one-sided snapshots in the denominator. Count the YES/NO book once. Report quote availability, average and worst price, actual filled fraction, quote-to-fill slippage, rejections and settlement discrepancies separately. Refit the thresholds once real order sizes are known. [Merged outcome books](https://hyperliquid.gitbook.io/hyperliquid-docs/hyperliquid-improvement-proposals-hips/hip-4-outcome-markets#mechanics)
+
+For a trading pilot, require a fresh, size-specific quote with an explicit price limit and disclose partial fills. Expire old quotes. If submission times out, resolve the original client order ID before allowing a retry. Rehearse a venue outage, market postponement and payout delay before paying for additional depth.
 
 ## Questions for Hyperliquid and Outcome.xyz
 
@@ -11,11 +31,21 @@ Can Pronos route selected HIP-4 markets with measurable builder revenue and reli
 3. **Executable depth and user access.** Which existing sports markets have dependable bid and ask depth within 1 and 2 percentage points, including near kickoff? Can you share snapshots and fill rates for 10, 25, and 100 USDC orders, and confirm what happens on partial fills and closes below the venue’s order minimum? What would the deposit, withdrawal, and wallet approval flows look like for a Mexico-based user? [Market data endpoints](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/info-endpoint#l2-book-snapshot) · [Order errors](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/error-responses)
 4. **Liga MX pilot.** Can we list one regular-time fixture under `out` with your approved sports template and an agreed official result source? Who lists, settles, supplies two-way quotes, and handles postponements, disputes, and operational incidents? What deployer fee scale and partner split would you offer, how would we verify the split, and what minimum volume or market-making commitments apply? Confirm production SDK licensing or use of the direct API. [Templates, fee scales, and sub-deployer permissions](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/hip-4-deployer-actions) · [Outcome SDK license](https://github.com/Outcome-xyz/hip4/blob/main/LICENSE)
 
+## MXN cash flow and maker commitments
+
+Start with a USDC book and settlement. Show customers a timestamped MXN estimate and quote the actual conversion separately. The cash path to validate is MXN deposit → executable MXN/USDC conversion → funded HyperCore account → trade and USDC settlement → off-ramp conversion → MXN payout. Ask Bitso for quotes and minimums at MXN 100, 300 and 1,000 both ways, with fees, settlement times, and failed or reversed transfer handling. Agree with Bitso, the venue and Mexican counsel who owns each balance, bears FX between deposit and cashout, and handles identity, access, custody and disputes. Confirm this flow before accepting cash. [Bitso RFQ](https://docs.bitso.com/bitso-api/docs/request-a-quote) · [Juno conversion examples](https://docs.bitso.com/juno/docs/conversions-between-mxnb-and-usd-stablecoins)
+
+At an illustrative 50 bps conversion each way plus MXN 1 on each leg, a MXN 300 funding round trip costs about MXN 5 at unchanged FX. If Pronos absorbs a 1% funding round-trip cost and fills twice the funded amount in trades, that alone costs about 50 bps of filled notional. Deduct subsidized cash costs from Pronos contribution. Show customer-paid costs in the customer's total instead. Meter cash conversions separately from trades.
+
+Start with written commitments from two independently funded makers for any Pronos-sponsored market. Run rewards in shadow first. Score the smaller side of funded depth during randomized samples, cap it at the agreed depth target, and weight by distance from a fresh reference price. Require a minimum order size and dwell time. Exclude related-party flow, stale orders and duplicated liquidity. Report daily accrual and settle weekly after reconciliation in the first trial. Compare against matched unrewarded windows and cap spending by measured improvement and incremental contribution. At 40 bps contribution, MXN 2,000 in rewards needs MXN 500,000 in incremental fills to pay for itself. Ask whether Outcome's existing rewards apply before Pronos funds any overlay. [Polymarket reward design](https://docs.polymarket.com/programs/liquidity-rewards) · [Outcome rewards](https://github.com/Outcome-xyz/mintlify-docs/blob/main/outcome-liquidity-rewards.mdx)
+
 ## Test acceptance
 
 Approve 25 bps from the trader’s main wallet (`maxFeeRate: "0.25%"`), confirm `maxBuilderFee` returns `250`, then run a price-bounded tagged buy and sell on HyperCore testnet with room above the quote minimum on both sides. Preserve the order and trade IDs, fill notional, `feeToken`, and `builderFee` from `userFillsByTime`. Compare the sum of builder fees with the isolated builder account’s `referral.builderRewards` and USDC `tokenToState` deltas. The total `fee` already includes `builderFee`. The reconciled builder balance is the acceptance criterion. [Order and approval API](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/exchange-endpoint) · [Fill and referral API](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/info-endpoint)
 
 Public third-party testnet fills show the mechanism on both sides. A buy of 22 shares at 0.505 on `#265930` recorded 0.0001111 mock USDC of builder fee (trade `742657672152812`, 0.1 bps). A sell of 23 shares at 0.45 on `#112400` recorded 0.0025875 mock USDC of builder fee (trade `825695623242810`, 2.5 bps). Pronos-tagged fills and the Pronos builder account’s corresponding fee accrual still need to be verified. [HyperCore testnet API](https://api.hyperliquid-testnet.xyz/info)
+
+Separately, public mainnet fills on November 10 showed total venue trading fees from about 5.5 to 12.8 bps on sampled Outcome sells, and zero on the sampled buys without a builder fee. These rates describe the sampled accounts and executions. Test each order side, liquidity role and fee class in a live quote before pricing the customer experience. [Outcome fee reference](https://github.com/Outcome-xyz/hip4/blob/main/src/deployer/fees.ts)
 
 ## Economics at MXN 1 million in matched volume
 
@@ -28,7 +58,7 @@ The native scenario assumes a 0.40% contribution after variable costs, less MXN 
 | HIP-4 at 22.5 bps effective (90% of 25) | MXN 2,250 | MXN 2,000 | MXN 1.78M |
 | HIP-4 at 25 bps effective | MXN 2,500 | MXN 2,250 | MXN 1.6M |
 
-Use `eligible Pronos-routed volume × observed effective builder rate − Pronos routing costs` for the pilot comparison. Apply any contracted deployer revenue share only to eligible fee-paying volume on partner-listed markets. Measure onboarding and funding costs, fills and slippage, plus maker commitments before evaluating profitability. [Deployer fee scale](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/hip-4-deployer-actions#deployer-fee-scale)
+For the pilot compare credited builder fees plus any contracted and paid deployer share, less Pronos-paid venue, conversion, funding, support, incentive and fixed costs. For example, 22.5 bps collected less 5 bps in variable cost leaves 17.5 bps, or MXN 1,750 at MXN 1 million in volume before fixed costs. Use the effective rate across all attributable fills, including fills with zero builder credit. Keep deployer and builder fees separate. [Deployer fee scale](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/hip-4-deployer-actions#deployer-fee-scale)
 
 At MXN 70,000, the native assumptions yield MXN 30 net and HIP-4 at 22.5 effective bps yields MXN 157.50 before routing costs. HIP-4 beats the native result at equal volume if its incremental costs are below MXN 127.50. Routing avoids funding a Pronos CPMM, but does not guarantee higher contribution. An independent-maker native CLOB also need not put Pronos treasury inventory at risk.
 
