@@ -90,7 +90,7 @@ export async function runProtocolAutoResolve({ dry = false, limit = 50 } = {}) {
          ORDER BY id DESC
          LIMIT 1
       ) pm ON true
-     WHERE m.status = 'active'
+     WHERE m.status = 'active' AND m.resolution_review IS NULL
        AND m.resolver_type IN ('chainlink_price', 'api_price', 'weather_api', 'api_chart', 'api_transcript', 'sports_api')
        AND m.end_time IS NOT NULL
        AND (

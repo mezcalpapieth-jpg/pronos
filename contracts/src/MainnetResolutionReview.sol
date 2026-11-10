@@ -9,7 +9,7 @@ interface IResolutionReviewPool {
     function RESOLUTION_CHALLENGE_PERIOD() external view returns (uint256);
 }
 
-/// @notice Independent review for outcome settlement on Arbitrum One.
+/// @notice Independent review for outcome settlement on Arbitrum One and Arbitrum Sepolia.
 abstract contract MainnetResolutionReview {
     error ReviewedResolutionRequired();
     error ReviewUnavailable();
@@ -37,7 +37,7 @@ abstract contract MainnetResolutionReview {
         bool approved;
     }
 
-    bool public immutable requiresResolutionReview = block.chainid == 42161;
+    bool public immutable requiresResolutionReview = block.chainid == 42161 || block.chainid == 421614;
     address public resolutionReviewer;
     mapping(uint256 => bytes32) public resolutionRulesHash;
     mapping(uint256 => ResolutionProposal) public resolutionProposals;

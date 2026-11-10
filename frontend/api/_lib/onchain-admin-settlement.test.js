@@ -4,13 +4,14 @@ import { PGlite } from '@electric-sql/pglite';
 import { ethers } from 'ethers';
 import { SETTLEMENT_MIGRATION, settlementSettings, settlementInput, assertSettlementMarket, settleOnchainMarket,
   loadSettlementMarket, loadPublishedResolution, settlementQueueReviewHash, settlementSourceHash } from './onchain-admin-settlement.js';
+import { REVIEW_EVENT_ABI } from './protocol-resolution-review.js';
 import { TRADE_REQUEST_SCHEMA } from './trade-request-store.js';
 import { tradePayloadHash } from './trade-requests.js';
 
 const wallet=new ethers.Wallet(`0x${'12'.repeat(32)}`),addr=n=>`0x${String(n).repeat(40)}`;
 import {preview} from './test-support/sepolia-settlement.mjs';
 
-const iface=new ethers.utils.Interface(['function resolveMarket(uint256,uint8)','function cancelMarket(uint256)',
+const iface=new ethers.utils.Interface([...REVIEW_EVENT_ABI, 'function proposeResolution(uint256,uint8,bytes32)','function resolveMarket(uint256,uint8)','function cancelMarket(uint256)',
   'function openResolutionDispute(uint256)','function clearResolutionDispute(uint256)','function correctResolution(uint256,uint8)',
   'event MarketResolved(uint256 indexed marketId,uint8 outcome)','event MarketCanceled(uint256 indexed marketId)',
   'event ResolutionDisputeOpened(uint256 indexed marketId)','event ResolutionDisputeCleared(uint256 indexed marketId)',
@@ -22,14 +23,14 @@ async function fixture(t,{variant='v1',timeout=false,status='active'}={}) {
   await db.exec(`CREATE TABLE points_markets(id int,mode text,chain_id int,chain_address text,chain_market_id text,parent_id int,amm_mode text,question text,
       resolver_type text,resolver_config jsonb,outcomes jsonb,start_time timestamptz,end_time timestamptz,sport text,league text,status text);
     CREATE TABLE points_pending_markets(id int,approved_market_id int,source_data jsonb);
-    CREATE TABLE protocol_markets(id int,chain_id int,factory_address text,pool_address text,market_id bigint,protocol_version text,outcome_count int,status text,outcome int,resolver_config jsonb,resolver_type text,outcomes jsonb,tx_hash text);
+    CREATE TABLE protocol_markets(id int,chain_id int,factory_address text,pool_address text,market_id bigint,protocol_version text,outcome_count int,status text,outcome int,resolver_config jsonb,resolver_type text,outcomes jsonb,tx_hash text, resolution_review jsonb);
     INSERT INTO points_markets VALUES(42,'onchain',421614,'${addr(4)}','0',null,'unified','Fixture',
       'sports_api','{}','["Yes","No"]',null,now()-interval '1 hour',null,null,'active');
-    INSERT INTO protocol_markets VALUES(99,421614,'${addr(variant==='v2'?2:1)}','${addr(4)}',0,'${variant}',${variant==='v2'?3:2},'${status}',null,'{}','sports_api','["Yes","No"]',null);`);
+    INSERT INTO protocol_markets VALUES(99,421614,'${addr(variant==='v2'?2:1)}','${addr(4)}',0,'${variant}',${variant==='v2'?3:2},'${status}',null,'{}','sports_api','["Yes","No"]',null,null);`);
   const sql=async(parts,...values)=>(await db.query(parts.reduce((s,p,i)=>s+(i?`$${i}`:'')+p,''),values)).rows;
   let nonce=0,receipt=null,receiptReady=!timeout,fee='10000000',balance=ethers.utils.parseEther('1'),chain=421614,binding=addr(4);
   const signed=[],sent=[];
-  const provider={getNetwork:async()=>({chainId:chain}),getGasPrice:async()=>ethers.BigNumber.from(fee),getBalance:async()=>balance,
+  const provider={call:async()=> '0x',getNetwork:async()=>({chainId:chain}),getGasPrice:async()=>ethers.BigNumber.from(fee),getBalance:async()=>balance,
     getTransactionCount:async(_wallet,tag)=>nonce+(tag==='pending'&&sent.length&&!receipt?1:0),
     getTransactionReceipt:async()=>receiptReady?receipt:null,
     waitForTransaction:async()=>receiptReady?receipt:null,
@@ -37,6 +38,10 @@ async function fixture(t,{variant='v1',timeout=false,status='active'}={}) {
       sent.push(raw);const tx=ethers.utils.parseTransaction(raw),decoded=iface.parseTransaction(tx);let name,args;
       const functions={resolveMarket:'MarketResolved',cancelMarket:'MarketCanceled',openResolutionDispute:'ResolutionDisputeOpened',clearResolutionDispute:'ResolutionDisputeCleared',correctResolution:'MarketResolutionCorrected'};
       name=functions[decoded.name];args=decoded.name==='correctResolution'?[decoded.args[0],1,decoded.args[1]]:[...decoded.args];
+      if (decoded.name === 'proposeResolution') {
+        name = 'ResolutionProposed';
+        args = [decoded.args[0], ethers.utils.id('proposal'), wallet.address, decoded.args[1], decoded.args[2], 1, 100000];
+      }
       const log=iface.encodeEventLog(iface.getEvent(name),args);
       receipt={transactionHash:tx.hash,status:1,blockNumber:10,logs:[{address:tx.to,...log}]};if(receiptReady)nonce=tx.nonce+1;
     }};
@@ -147,4 +152,39 @@ test('wrong chain/binding, low reserves, expensive fees and exhausted budget nev
   const f=await fixture(t);await f.db.exec(`INSERT INTO sepolia_trade_requests(id,chain_id,wallet_address,suborg_id,request_key,action,payload_hash,payload,plan,status)
     VALUES('11111111-1111-1111-1111-111111111111',421614,'${wallet.address.toLowerCase()}','ops','old_budget_request','admin_resolve','hash','{}','{"maxCostWei":"5000000000000000"}','confirmed')`);
   const result=await f.run();assert.equal(result.httpStatus,429);assert.equal(f.signed.length,0);
+});
+
+for (const variant of ['v1', 'v2']) test(`${variant} reviewed Sepolia resolver commits evidence and records a proposal with durable retries`, async t => {
+  const f = await fixture(t, { variant, timeout: true });
+  const env = { ...preview, ONCHAIN_SEPOLIA_REVIEW_ENABLED: 'true' };
+  await f.db.query('UPDATE protocol_markets SET resolution_review=$1', [{ state: 'open', rulesHash: ethers.utils.id('rules') }]);
+  await f.db.exec(`CREATE TABLE protocol_resolution_documents(hash text PRIMARY KEY, content text);
+    UPDATE points_markets SET outcomes='["Lakers","Hawks"${variant === 'v2' ? ',"Draw"' : ''}]',
+      resolver_config='{"source":"espn","leaguePath":"basketball/nba","eventId":"123"}'`);
+  f.provider.getBlock = async () => ({ number: 10, timestamp: 100, hash: ethers.utils.id('block') });
+  const read = value => async () => value;
+  const factory = addr(variant === 'v2' ? 2 : 1);
+  const contractAt = address => ({
+    [factory]: { getMarket: read([addr(4), 'Fixture', 'general', 99, '', ...(variant === 'v2' ? [3] : []), true]), collateral: read(addr(3)) },
+    [addr(3)]: { balanceOf: read(100n) },
+    [addr(4)]: { resolved: read(false), disputed: read(false), canceled: read(false), token: read(addr(5)), collateral: read(addr(3)) },
+    [addr(5)]: { yesTokenId: read(0), tokenId: read(0), totalSupply: read(10n), balanceOf: read(2n) },
+  })[address];
+  const options = { env, contractAt };
+  const pending = await f.run(options);
+  assert.equal(pending.httpStatus, 202, JSON.stringify(pending.body));
+  assert.equal(f.signed.length, 1);
+  const call = iface.parseTransaction(ethers.utils.parseTransaction(f.sent[0]));
+  assert.equal(call.name, 'proposeResolution');
+  assert.equal(call.args[1], variant === 'v1' ? 1 : 0);
+  const [document] = (await f.db.query('SELECT hash, content FROM protocol_resolution_documents')).rows;
+  assert.equal(call.args[2], ethers.utils.id(document.content));
+  assert.match(document.content, /Lakers/);
+  assert.match(document.content, /basketball\/nba/);
+  await f.db.exec("UPDATE protocol_markets SET status='under_review'");
+  f.set({ ready: true });
+  const confirmed = await f.run(options);
+  assert.equal(confirmed.body.proposalId, ethers.utils.id('proposal'));
+  assert.equal(confirmed.body.txHash, pending.body.txHash);
+  assert.equal(f.signed.length, 1);
 });

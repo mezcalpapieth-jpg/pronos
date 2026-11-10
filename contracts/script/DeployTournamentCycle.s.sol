@@ -9,7 +9,7 @@ import {MarketFactory} from "../src/MarketFactory.sol";
 import {MarketFactoryV2} from "../src/MarketFactoryV2.sol";
 import {PronosTradingRouter} from "../src/PronosTradingRouter.sol";
 
-/// @notice Optional future cycle. Deploys unchanged protocol contracts with a
+/// @notice Optional future cycle. Deploys reviewed protocol contracts with a
 /// fresh, zero-supply MXNP. Does not mint, reset users or change application env.
 /// Simulation by default; a future deployment requires explicit --broadcast.
 contract DeployTournamentCycle is Script {
@@ -17,6 +17,7 @@ contract DeployTournamentCycle is Script {
         address owner;
         address operations;
         address resolver;
+        address reviewer;
         address treasury;
         address liquidity;
         address emergency;
@@ -37,12 +38,18 @@ contract DeployTournamentCycle is Script {
             owner: vm.envAddress("CYCLE_OWNER_ADDRESS"),
             operations: vm.envAddress("CYCLE_OPERATIONS_ADDRESS"),
             resolver: vm.envAddress("CYCLE_RESOLVER_ADDRESS"),
+            reviewer: vm.envAddress("RESOLUTION_REVIEWER_ADDRESS"),
             treasury: vm.envAddress("TREASURY_ADDRESS"),
             liquidity: vm.envAddress("LIQUIDITY_RESERVE"),
             emergency: vm.envAddress("EMERGENCY_RESERVE")
         });
         require(r.owner != address(0) && r.operations != address(0) && r.resolver != address(0)
-            && r.treasury != address(0) && r.liquidity != address(0) && r.emergency != address(0), "Zero role");
+            && r.reviewer != address(0) && r.treasury != address(0) && r.liquidity != address(0)
+            && r.emergency != address(0), "Zero role");
+        address deployer = vm.addr(key);
+        require(r.resolver != deployer && r.resolver != r.owner && r.reviewer != deployer
+            && r.reviewer != r.owner && r.reviewer != r.resolver,
+            "Reviewed settlement requires distinct owner, resolver, and reviewer");
         vm.startBroadcast(key);
         d.token = address(new TournamentMXNP(r.owner));
         d.shareV1 = address(new PronosToken());
@@ -62,6 +69,8 @@ contract DeployTournamentCycle is Script {
         v2.setMarketCreator(r.operations);
         v1.setResolver(r.resolver);
         v2.setResolver(r.resolver);
+        v1.setResolutionReviewer(r.reviewer);
+        v2.setResolutionReviewer(r.reviewer);
         v1.transferOwnership(r.owner);
         v2.transferOwnership(r.owner);
         vm.stopBroadcast();

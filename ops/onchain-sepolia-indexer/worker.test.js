@@ -28,6 +28,16 @@ test('isolation pins project, chain, database role/branch, factories and signing
   assert.doesNotThrow(()=>validateWorker({...env,ONCHAIN_LEGACY_MARKET_FACTORY_ADDRESS:'0x69440742a168635d9fa7cc0cfb0935afffe79ad3',ONCHAIN_LEGACY_MARKET_FACTORY_V2_ADDRESS:'0xfcac9cfcf22df809ba365c85dd767c90bb260fd6'},source));
   assert.throws(()=>validateWorker({...env,ONCHAIN_LEGACY_MARKET_FACTORY_ADDRESS:`0x${'1'.repeat(40)}`},source));
 });
+test('reviewed factories require a distinct pair and an explicit backfill start', () => {
+  const reviewed = { SEPOLIA_REVIEW_FACTORY_V1_ADDRESS: `0x${'1'.repeat(40)}`,
+    SEPOLIA_REVIEW_FACTORY_V2_ADDRESS: `0x${'2'.repeat(40)}`, SEPOLIA_REVIEW_INDEXER_START_BLOCK: '100' };
+  assert.doesNotThrow(() => validateWorker({ ...env, ...reviewed }, source));
+  for (const patch of [{ SEPOLIA_REVIEW_INDEXER_START_BLOCK: '0' },
+    { SEPOLIA_REVIEW_FACTORY_V2_ADDRESS: '' }, { SEPOLIA_REVIEW_FACTORY_V2_ADDRESS: env.FACTORY_ADDRESS },
+    { SEPOLIA_REVIEW_FACTORY_V2_ADDRESS: reviewed.SEPOLIA_REVIEW_FACTORY_V1_ADDRESS }]) {
+    assert.throws(() => validateWorker({ ...env, ...reviewed, ...patch }, source));
+  }
+});
 test('unauthenticated requests and wrong methods never reach RPC, SQL or indexing',async()=>{
   for(const patch of [{headers:{}},{method:'POST'}]) {
     const s=setup();await s.worker({...request,...patch},s.res);assert.ok([401,405].includes(s.res.statusCode));assert.equal(s.queries.length,0);assert.equal(s.calls(),0);

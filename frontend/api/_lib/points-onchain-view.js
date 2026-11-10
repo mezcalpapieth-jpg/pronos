@@ -33,6 +33,7 @@ export function marketView(row) {
     chainId: Number(row.chain_id) || null, chainAddress: row.chain_address,
     chainMarketId: row.chain_market_id == null ? null : String(row.chain_market_id),
     protocolMarketId: linked ? Number(row.protocol_id) : null,
+    reviewedResolution: Boolean(linked && row.reviewed_resolution),
     factoryAddress: linked ? row.factory_address?.toLowerCase() || null : null,
     status: linked ? row.protocol_status : row.status,
     // V1 uses 0=unresolved, 1=YES, 2=NO. V2 and Points use zero-based indexes.

@@ -20,3 +20,8 @@ GRANT SELECT, INSERT, UPDATE ON protocol_markets, trades, positions, outcome_pos
   preview_indexer_lease, preview_indexer_runs TO sepolia_indexer;
 GRANT USAGE, SELECT ON SEQUENCE protocol_markets_id_seq, trades_id_seq, positions_id_seq,
   outcome_positions_id_seq, redemptions_id_seq, price_snapshots_id_seq TO sepolia_indexer;
+
+-- The worker records public onchain flags without reading private objection details.
+GRANT SELECT (market_id, proposal_id, source, source_key),
+  INSERT (market_id, proposal_id, source, source_key, reporter_address, objection_hash, tx_hash)
+  ON protocol_resolution_objections TO sepolia_indexer;

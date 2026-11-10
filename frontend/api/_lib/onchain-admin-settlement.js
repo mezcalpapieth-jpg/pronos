@@ -5,6 +5,9 @@ import { runDurableTrade, tradeError, tradePayloadHash } from './trade-requests.
 import { tradeRequestStore } from './trade-request-store.js';
 import { onchainFeeData } from './onchain-fees.js';
 import { resolveMarketOnChain, lifecycleMarketOnChain } from './onchain-trader.js';
+import { REVIEW_EVENT_ABI } from './protocol-resolution-review.js';
+import { proposalInterface, sepoliaReviewEnabled } from './sepolia-resolution-review.js';
+import { simulateContractCall } from './onchain-simulation.js';
 import { previewResolutionPayouts } from './onchain-resolution-payouts.js';
 
 export const SETTLEMENT_ACTIONS = ['resolve', 'cancel', 'dispute', 'clear_dispute', 'correct_resolution'];
@@ -15,6 +18,7 @@ export const SETTLEMENT_MIGRATION = [
 ];
 const address = a => ethers.utils.isAddress(a || '') && a.toLowerCase() !== ethers.constants.AddressZero ? a.toLowerCase() : null;
 const events = new ethers.utils.Interface([
+  ...REVIEW_EVENT_ABI,
   'event MarketResolved(uint256 indexed marketId, uint8 outcome)',
   'event MarketCanceled(uint256 indexed marketId)',
   'event ResolutionDisputeOpened(uint256 indexed marketId)',
@@ -66,7 +70,7 @@ export async function loadSettlementMarket(sql, id, env) {
       p.chain_address, p.chain_market_id, p.parent_id, p.amm_mode, p.question,
       m.id AS protocol_id, m.chain_id, m.factory_address, m.pool_address, m.market_id AS contract_id,
       m.protocol_version, m.outcome_count, m.status, m.outcome, m.resolver_type, m.resolver_config, m.outcomes,
-      m.tx_hash AS creation_tx_hash
+      m.tx_hash AS creation_tx_hash, m.resolution_review
     FROM points_markets p LEFT JOIN protocol_markets m
       ON m.chain_id = p.chain_id AND LOWER(m.pool_address) = LOWER(p.chain_address)
       AND m.market_id::text = p.chain_market_id::text
@@ -84,29 +88,35 @@ export function settlementSigner(action, env) {
   if ([env.ONCHAIN_GAS_FUNDER_ADDRESS, '0x0Caa37c077924038e14e9D8dE46B5208788e52CF'].some(a => address(a) === wallet)) throw tradeError('settlement_signer_not_isolated', 503);
   return { wallet, suborg };
 }
-function validateAction(m, input) {
+function validateAction(m, input, env) {
+  if (m.resolution_review && (!sepoliaReviewEnabled(env) || !['resolve', 'cancel'].includes(input.action))) {
+    throw tradeError('settlement_use_review_queue', 409);
+  }
   const states = { resolve: ['active'], cancel: ['active','disputed'], dispute: ['resolved'], clear_dispute: ['disputed'], correct_resolution: ['disputed'] };
   if (!states[input.action].includes(m.status)) throw tradeError('settlement_market_state_changed', 409);
   const count = Number(m.outcome_count);
   if (input.outcome != null && (!Number.isInteger(count) || input.outcome >= count || (m.protocol_version === 'v1' && input.outcome > 1))) throw tradeError('invalid_outcome', 400);
 }
-export function assertSettlementReceipt(m, input, receipt) {
+export function assertSettlementReceipt(m, input, receipt, evidenceHash) {
   const rawOutcome = input.outcome == null ? null : input.outcome + (m.protocol_version === 'v1' ? 1 : 0);
-  const match = receipt.status === 1 && (receipt.logs || []).some(log => {
+  const log = receipt.status === 1 && (receipt.logs || []).find(log => {
     if (address(log.address) !== address(m.factory_address)) return false;
     try {
       const e = events.parseLog(log);
-      return e.name === eventNames[input.action] && e.args.marketId.toString() === String(m.contract_id)
+      const expected = evidenceHash ? 'ResolutionProposed' : eventNames[input.action];
+      return e.name === expected && (!evidenceHash || e.args.evidenceHash === evidenceHash) && e.args.marketId.toString() === String(m.contract_id)
         && (rawOutcome == null || Number(e.args.newOutcome ?? e.args.outcome) === rawOutcome);
     } catch { return false; }
   });
-  if (!match) throw tradeError('settlement_receipt_requires_review', 202);
+  if (!log) throw tradeError('settlement_receipt_requires_review', 202);
+  return events.parseLog(log).args;
 }
 export const settlementSourceHash = m => tradePayloadHash([m.resolver_type, m.resolver_config, m.outcomes]);
 export function settlementQueueReviewHash(m, published) {
   return tradePayloadHash([
     Number(m.points_id), String(m.protocol_id), m.factory_address, m.pool_address, String(m.contract_id),
     m.protocol_version, Number(m.outcome_count), settlementSourceHash(m),
+    ...(m.resolution_review ? [m.resolution_review.rulesHash] : []),
     { ...published, start_time: published.start_time == null ? null : new Date(published.start_time).toISOString(),
       end_time: new Date(published.end_time).toISOString() },
   ]);
@@ -144,28 +154,53 @@ export async function settleOnchainMarket({ sql, provider, env, input, key, acto
     payload: { ...input, origin: acceptedOrigin, ...(review ? {review} : {}) },
     prepare: async () => {
       const market = await loadSettlementMarket(sql, input.marketId, env);
-      validateAction(market, input);
+      validateAction(market, input, env);
       await assertQueueReview(sql, market, input);
       if (review && settlementSourceHash(market) !== review.expectedSourceHash) throw tradeError('settlement_source_changed', 409);
-      const gasLimit = input.action === 'cancel' ? 350000 : 250000;
+      let evidenceHash = null;
+      if (market.resolution_review && input.action === 'resolve') {
+        const published = await loadPublishedResolution(sql, input.marketId);
+        const cfg = published.resolver_config || {};
+        const labels = published.outcomes;
+        if (!Array.isArray(labels) || typeof labels[input.outcome] !== 'string') {
+          throw tradeError('settlement_invalid_outcomes', 409);
+        }
+        const url = publicResolutionEvidenceUrl(cfg);
+        const content = [
+          `Pronos · Propuesta de resolución · Arbitrum Sepolia · #${input.marketId}`,
+          market.question, `Fábrica: ${market.factory_address} · Mercado: ${market.contract_id}`,
+          `Reglas: ${market.resolution_review.rulesHash}`,
+          `Resultado propuesto: ${labels[input.outcome]}`, `Motivo: ${input.reason}`,
+          ...(url ? [`Fuente pública: ${url}`] : []),
+          ...(typeof review?.evidence?.finalScore === 'string' && /^[\d: .–-]{1,40}$/.test(review.evidence.finalScore)
+            ? [`Marcador: ${review.evidence.finalScore}`] : []),
+        ].join('\n');
+        evidenceHash = ethers.utils.id(content);
+        await sql`INSERT INTO protocol_resolution_documents(hash, content) VALUES (${evidenceHash}, ${content})
+          ON CONFLICT (hash) DO NOTHING`;
+      }
+      const gasLimit = input.action === 'cancel' || evidenceHash ? 350000 : 250000;
       const maxCostWei = BigInt(gasLimit) * BigInt(SETTLEMENT_LIMITS.maxFeePerGas);
       const budget = await sql`SELECT COALESCE(SUM((plan->>'maxCostWei')::numeric),0)::text AS used
         FROM sepolia_trade_requests WHERE chain_id=421614 AND wallet_address=${wallet}
           AND action LIKE 'admin_%' AND status <> 'rejected'
           AND (updated_at >= now()-interval '24 hours' OR status IN ('validated','pending','needs_reconciliation'))`;
       if (BigInt(budget[0].used) + maxCostWei > BigInt(SETTLEMENT_LIMITS.walletDailyWei)) throw tradeError('settlement_daily_budget_exceeded', 429);
-      return { market, input, actor, gasLimit, maxCostWei: String(maxCostWei),
+      return { market, input, actor, gasLimit, evidenceHash, maxCostWei: String(maxCostWei),
         expectedSourceHash: review?.expectedSourceHash || null, evidence: review?.evidence || null };
     },
     validate: async plan => {
       const current = await loadSettlementMarket(sql, input.marketId, env);
       if (tradePayloadHash([current.factory_address, current.pool_address, current.contract_id, current.protocol_version, current.outcome_count])
         !== tradePayloadHash([plan.market.factory_address, plan.market.pool_address, plan.market.contract_id, plan.market.protocol_version, plan.market.outcome_count])) throw tradeError('settlement_market_mapping_changed', 409);
-      validateAction(current, input);
+      if ((current.resolution_review?.rulesHash || null) !== (plan.market.resolution_review?.rulesHash || null)) {
+        throw tradeError('settlement_source_changed', 409);
+      }
+      validateAction(current, input, env);
       await assertQueueReview(sql, current, input);
       if (plan.expectedSourceHash && settlementSourceHash(current) !== plan.expectedSourceHash) throw tradeError('settlement_source_changed', 409);
       if (Number((await provider.getNetwork()).chainId) !== 421614) throw tradeError('settlement_wrong_chain', 503);
-      if (input.reviewHash) {
+      if (input.reviewHash || plan.evidenceHash) {
         const { payouts } = await previewResolutionPayouts({ market: current, provider, env, outcome: input.outcome, contractAt });
         if (BigInt(payouts[0].shortfallUnits) > 0n) throw tradeError('settlement_resolution_pool_shortfall', 409);
       }
@@ -174,6 +209,12 @@ export async function settleOnchainMarket({ sql, provider, env, input, key, acto
         `function getMarket(uint256) view returns(address,string,string,uint256,string,${m.protocol_version === 'v2' ? 'uint8,' : ''}bool)`]);
       const [chainMarket, collateral, balance] = await Promise.all([factory.getMarket(m.contract_id), factory.collateral(), provider.getBalance(wallet)]);
       if (address(chainMarket[0]) !== address(m.pool_address) || address(collateral) !== address(env.ONCHAIN_COLLATERAL_ADDRESS)) throw tradeError('settlement_contract_binding_mismatch', 409);
+      if (plan.evidenceHash) {
+        try {
+          await simulateContractCall(provider, { from: wallet, to: m.factory_address, data: proposalData(plan) },
+            proposalInterface, 'proposeResolution');
+        } catch { throw tradeError('settlement_proposal_simulation_failed', 409); }
+      }
       if (balance.lt(ethers.BigNumber.from(plan.maxCostWei).add(SETTLEMENT_LIMITS.reserveWei))) throw tradeError('settlement_signer_reserve_low', 503);
     },
     feeQuote: async (p, chain) => {
@@ -186,9 +227,17 @@ export async function settleOnchainMarket({ sql, provider, env, input, key, acto
       const m = plan.market;
       const checked = { ...execution, send: async call => {
         const receipt = await execution.send(call);
-        assertSettlementReceipt(m, input, receipt);
+        assertSettlementReceipt(m, input, receipt, plan.evidenceHash);
         return receipt;
       } };
+      if (plan.evidenceHash) {
+        const receipt = execution.receipt || await execution.send({ step: 'trade', suborgId: suborg, from: wallet,
+          to: m.factory_address, data: proposalData(plan), gasLimit: plan.gasLimit });
+        const { proposalId } = assertSettlementReceipt(m, input, receipt, plan.evidenceHash);
+        return { ok: true, marketId: Number(m.points_id), protocolMarketId: Number(m.protocol_id), action: input.action,
+          outcome: input.outcome, txHash: receipt.transactionHash, blockNumber: receipt.blockNumber, chainId: 421614,
+          proposalId, indexingStatus: 'pending', refundsPaid: false };
+      }
       if (execution.receipt) assertSettlementReceipt(m, input, execution.receipt);
       const args = { factoryAddress: m.factory_address, factoryVariant: m.protocol_version,
         marketId: m.contract_id, outcome: input.outcome, execution: checked };
@@ -200,4 +249,23 @@ export async function settleOnchainMarket({ sql, provider, env, input, key, acto
         indexingStatus: 'pending', refundsPaid: false };
     },
   });
+}
+
+function proposalData({ market, input, evidenceHash }) {
+  return proposalInterface.encodeFunctionData('proposeResolution', [market.contract_id,
+    input.outcome + (market.protocol_version === 'v1' ? 1 : 0), evidenceHash]);
+}
+
+export function publicResolutionEvidenceUrl(cfg) {
+  if (cfg.source === 'espn' && /^\d+$/.test(String(cfg.eventId))
+    && /^[a-z-]+\/[a-z0-9.-]+$/i.test(cfg.leaguePath || '')) {
+    return `https://site.api.espn.com/apis/site/v2/sports/${cfg.leaguePath}/summary?event=${cfg.eventId}`;
+  }
+  // Resolver request URLs can contain private provider tokens. Only surface
+  // URLs explicitly identified in the market config as public evidence.
+  try {
+    const url = new URL(cfg.evidenceUrl || cfg.publicSourceUrl);
+    if (url.protocol === 'https:' && !url.username && !url.password) return url.href;
+  } catch { /* No public source link. */ }
+  return null;
 }

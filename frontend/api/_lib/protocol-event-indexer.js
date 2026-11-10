@@ -90,8 +90,19 @@ function getFactoryConfigs() {
     'PRONOS_FACTORY_V2_ADDRESS',
     CHAIN_ID === 421614 ? 'VITE_PRONOS_ARB_SEPOLIA_FACTORY_V2' : 'VITE_PRONOS_ARBITRUM_FACTORY_V2',
   ]);
+  const reviewedV1 = CHAIN_ID === 421614 && process.env.SEPOLIA_REVIEW_FACTORY_V1_ADDRESS;
+  const reviewedV2 = CHAIN_ID === 421614 && process.env.SEPOLIA_REVIEW_FACTORY_V2_ADDRESS;
+  const reviewStart = Number(process.env.SEPOLIA_REVIEW_INDEXER_START_BLOCK);
+  if ((reviewedV1 || reviewedV2) && (!reviewedV1 || !reviewedV2
+    || !ethers.utils.isAddress(reviewedV1) || !ethers.utils.isAddress(reviewedV2)
+    || reviewedV1.toLowerCase() === reviewedV2.toLowerCase()
+    || !Number.isSafeInteger(reviewStart) || reviewStart < 1)) {
+    throw new Error('Reviewed Sepolia indexer configuration is invalid');
+  }
   const seen = new Set();
   return [
+    reviewedV1 ? { version: 'v1', address: reviewedV1.toLowerCase(), abi: FACTORY_ABI, reviewStart } : null,
+    reviewedV2 ? { version: 'v2', address: reviewedV2.toLowerCase(), abi: FACTORY_V2_ABI, reviewStart } : null,
     v1Factory ? { version: 'v1', address: v1Factory.toLowerCase(), abi: FACTORY_ABI } : null,
     v2Factory ? { version: 'v2', address: v2Factory.toLowerCase(), abi: FACTORY_V2_ABI } : null,
     CHAIN_ID === 421614 && process.env.ONCHAIN_LEGACY_MARKET_FACTORY_ADDRESS
@@ -139,6 +150,7 @@ export async function runProtocolIndexer({ query = {}, isManual = false, setupSc
 
   for (const config of factories) {
     const reviewed = await isReviewedFactory(provider, CHAIN_ID, config.address);
+    if (config.reviewStart && !reviewed) throw new Error('Configured Sepolia factory does not enforce review');
     const factoryConfig = reviewed ? { ...config, reviewed, abi: [...config.abi, ...REVIEW_EVENT_ABI] } : config;
     if (reviewed && finalizedBlock == null) {
       const block = await provider.send('eth_getBlockByNumber', ['finalized', false]);
@@ -147,7 +159,7 @@ export async function runProtocolIndexer({ query = {}, isManual = false, setupSc
         throw new Error('Reviewed factory requires a finalized chain head');
       }
     }
-    let fromBlock = manualFromBlock ?? await getFactoryFromBlock(factoryConfig.address, startBlock, currentBlock, lookbackBlocks);
+    let fromBlock = manualFromBlock ?? await getFactoryFromBlock(factoryConfig.address, factoryConfig.reviewStart ?? startBlock, currentBlock, lookbackBlocks);
     const targetBlock = Math.min(manualToBlock ?? currentBlock, reviewed ? finalizedBlock : currentBlock, currentBlock);
     let batches = 0;
 

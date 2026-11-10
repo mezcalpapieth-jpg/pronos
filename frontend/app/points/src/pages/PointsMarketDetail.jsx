@@ -2668,8 +2668,9 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
   const isMobile = useIsMobile();
 
   const [market, setMarket] = useState(null);
-  const reviewedMainnet = market?.mode === 'onchain' && Number(market.chainId) === 42161;
-  const reviewMarketId = reviewedMainnet && Number(market.id) === Number(id) ? Number(market.id) : null;
+  const reviewedSettlement = market?.mode === 'onchain'
+    && (Number(market.chainId) === 42161 || market.reviewedResolution === true);
+  const reviewMarketId = reviewedSettlement && Number(market.id) === Number(id) ? Number(market.id) : null;
   const { review, refreshReview } = useResolutionReview(reviewMarketId);
   const [leagueTableState, setLeagueTableState] = useState({
     loading: false,
@@ -3399,12 +3400,12 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
       : displayActivityByOutcome,
   );
   const latestTradeAt = unixSecondsFromDateLike(market.lastTradeAt) || activitySummary.lastAt;
-  const settlementStatus = reviewedMainnet
+  const settlementStatus = reviewedSettlement
     ? ({ open: 'active', finalized: 'resolved' }[review?.state] ?? review?.state ?? 'unavailable')
     : market.status;
-  const settlementOutcome = reviewedMainnet ? review?.outcome : market.outcome;
+  const settlementOutcome = reviewedSettlement ? review?.outcome : market.outcome;
   const isCanceled = settlementStatus === 'canceled';
-  const parallelResolved = !reviewedMainnet && !isCanceled
+  const parallelResolved = !reviewedSettlement && !isCanceled
     && settlementStatus === 'resolved'
     && market.ammMode === 'parallel'
     && Array.isArray(parallelDisplayLegs)
@@ -3801,7 +3802,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
               </div>
             )}
 
-            {reviewedMainnet && <ResolutionReview marketId={reviewMarketId}
+            {reviewedSettlement && <ResolutionReview marketId={reviewMarketId}
               {...{ review, authenticated, onOpenLogin, refreshReview }} />}
 
             {/* Final-score strip — shown right below the question on resolved
@@ -4422,7 +4423,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
                           </button>
                         </div>
                       )}
-                      {isResolved && p.canRedeem && (!reviewedMainnet || market.executionReady === true) && (
+                      {isResolved && p.canRedeem && (!reviewedSettlement || market.executionReady === true) && (
                         <button
                           onClick={() => handleRedeemPosition(p)}
                           className="btn-primary"

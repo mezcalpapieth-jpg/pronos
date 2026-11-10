@@ -11,7 +11,7 @@ export const REVIEW_EVENT_ABI = [
 const capability = new ethers.utils.Interface(['function requiresResolutionReview() view returns (bool)']);
 
 export async function isReviewedFactory(provider, chainId, address) {
-  if (chainId !== 42161) return false;
+  if (chainId !== 42161 && chainId !== 421614) return false;
   let result;
   try {
     result = await provider.call({ to: address, data: capability.encodeFunctionData('requiresResolutionReview') });

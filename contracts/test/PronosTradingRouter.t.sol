@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import "forge-std/Test.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "../src/PronosTradingRouter.sol";
+import {MainnetResolutionReview} from "../src/MainnetResolutionReview.sol";
 
 contract RouterMXNP is ERC20 {
     constructor() ERC20("Test MXNP", "MXNP") {}
@@ -27,6 +28,8 @@ contract PronosTradingRouterTest is Test {
     address alice = address(0xA11CE);
     address bob = address(0xB0B);
     address treasury = address(0x123);
+    address resolver = makeAddr("resolver");
+    address reviewer = makeAddr("reviewer");
 
     function setUp() public {
         vm.chainId(421614);
@@ -35,6 +38,10 @@ contract PronosTradingRouterTest is Test {
         multi = new PronosTokenV2();
         v1 = new MarketFactory(address(yesNo), address(mxnp), treasury, treasury, treasury);
         v2 = new MarketFactoryV2(address(multi), address(mxnp), treasury, treasury, treasury);
+        v1.setResolver(resolver);
+        v2.setResolver(resolver);
+        v1.setResolutionReviewer(reviewer);
+        v2.setResolutionReviewer(reviewer);
         yesNo.setMinter(address(v1), true);
         yesNo.transferOwnership(address(v1));
         multi.setMinter(address(v2), true);
@@ -56,13 +63,31 @@ contract PronosTradingRouterTest is Test {
 
     function pool(bool binary) internal returns (address result, uint256 id) {
         if (binary) {
-            id = v1.createMarket("Technical test", "test", block.timestamp + 1 days, "Manual test", 1_000e6);
+            id = v1.createReviewedMarket(reviewedInput());
             (result, , , , , ) = v1.getMarket(id);
         } else {
             string[] memory outcomes = new string[](3);
             outcomes[0] = "A"; outcomes[1] = "B"; outcomes[2] = "C";
-            id = v2.createMarket("Technical test", "test", block.timestamp + 1 days, "Manual test", outcomes, 1_000e6);
+            id = v2.createReviewedMarket(reviewedInput(), outcomes);
             (result, , , , , , ) = v2.getMarket(id);
+        }
+    }
+
+    function reviewedInput() internal view returns (MainnetResolutionReview.ReviewedMarketInput memory) {
+        return MainnetResolutionReview.ReviewedMarketInput(
+            "Technical test", "test", block.timestamp + 1 days, "Manual test", 1_000e6, keccak256("Test criteria")
+        );
+    }
+
+    function propose(bool binary, uint256 id) internal returns (bytes32 proposal) {
+        vm.warp(vm.getBlockTimestamp() + 1 days);
+        vm.prank(resolver);
+        if (binary) {
+            v1.proposeResolution(id, 1, keccak256("Final results"));
+            (proposal, , , , , ) = v1.resolutionProposals(id);
+        } else {
+            v2.proposeResolution(id, 0, keccak256("Final results"));
+            (proposal, , , , , ) = v2.resolutionProposals(id);
         }
     }
 
@@ -105,9 +130,7 @@ contract PronosTradingRouterTest is Test {
             (address p, uint256 id) = pool(binary);
             vm.prank(alice);
             uint256 bought = router.buy(p, 0, 10e6, 1);
-            if (binary) v1.resolveMarket(id, 1);
-            else v2.resolveMarket(id, 0);
-            vm.warp(block.timestamp + 2 days); // redeem even after market close
+            finalizeAndSweep(binary, p, id, bought);
             uint256 beforeBalance = mxnp.balanceOf(alice);
             vm.recordLogs();
             vm.prank(alice);
@@ -126,6 +149,66 @@ contract PronosTradingRouterTest is Test {
             assertEq(binary ? yesNo.balanceOf(alice, id * 2) : multi.balanceOf(alice, id * 256), 0);
         }
         assertEq(mxnp.balanceOf(address(router)), 0);
+    }
+
+    function finalizeAndSweep(bool binary, address p, uint256 id, uint256 bought) internal {
+        bytes32 proposal = propose(binary, id);
+        uint256 reviewEndsAt = vm.getBlockTimestamp() + 1 days;
+        string memory poolName = binary ? "PronosAMM: " : "PronosAMMMulti: ";
+        vm.expectRevert(bytes(string.concat(poolName, "not finalized")));
+        if (binary) v1.sweepDust(id, treasury);
+        else v2.sweepDust(id, treasury);
+        vm.prank(alice);
+        vm.expectRevert(bytes(string.concat(poolName, "not finalized")));
+        router.redeem(p, bought);
+
+        vm.expectRevert(MainnetResolutionReview.ResolutionApprovalRequired.selector);
+        if (binary) v1.finalizeResolution(id, proposal);
+        else v2.finalizeResolution(id, proposal);
+
+        vm.prank(reviewer);
+        if (binary) v1.approveResolution(id, proposal);
+        else v2.approveResolution(id, proposal);
+        vm.warp(reviewEndsAt - 1);
+        vm.expectRevert(bytes(string.concat(poolName, "challenge period")));
+        if (binary) v1.finalizeResolution(id, proposal);
+        else v2.finalizeResolution(id, proposal);
+
+        vm.warp(reviewEndsAt);
+        if (binary) v1.finalizeResolution(id, proposal);
+        else v2.finalizeResolution(id, proposal);
+        uint256 poolBalance = mxnp.balanceOf(p);
+        uint256 treasuryBalance = mxnp.balanceOf(treasury);
+        if (binary) v1.sweepDust(id, treasury);
+        else v2.sweepDust(id, treasury);
+        assertGt(mxnp.balanceOf(treasury), treasuryBalance);
+        assertEq(mxnp.balanceOf(treasury) - treasuryBalance, poolBalance - bought);
+        assertEq(mxnp.balanceOf(p), bought, "unclaimed winning position stays fully backed");
+    }
+
+    function test_disputeActionsBindExactProposalAndRestartReview() public {
+        for (uint256 i; i < 2; i++) {
+            bool binary = i == 0;
+            (, uint256 id) = pool(binary);
+            bytes32 first = propose(binary, id);
+            vm.prank(alice);
+            vm.expectRevert(MainnetResolutionReview.InvalidReviewRole.selector);
+            if (binary) v1.openReviewedResolutionDispute(id, first);
+            else v2.openReviewedResolutionDispute(id, first);
+
+            vm.startPrank(reviewer);
+            if (binary) {
+                v1.openReviewedResolutionDispute(id, first);
+                v1.clearReviewedResolutionDispute(id, first);
+            } else {
+                v2.openReviewedResolutionDispute(id, first);
+                v2.clearReviewedResolutionDispute(id, first);
+            }
+            vm.expectRevert(MainnetResolutionReview.StaleResolutionProposal.selector);
+            if (binary) v1.openReviewedResolutionDispute(id, first);
+            else v2.openReviewedResolutionDispute(id, first);
+            vm.stopPrank();
+        }
     }
 
     function test_slippageFailureRollsBackPrepaidTokens() public {
@@ -209,7 +292,7 @@ contract PronosTradingRouterTest is Test {
         PronosAMMMulti(p).sellRouted(alice, 0, 10e6, 1);
         vm.prank(bob); vm.expectRevert("PronosAMMMulti: not router");
         PronosAMMMulti(p).redeemRouted(alice, 1);
-        v2.resolveMarket(id, 0);
+        propose(false, id);
         vm.prank(alice); vm.expectRevert("Router: market closed"); router.buy(p, 0, 10e6, 1);
     }
 
@@ -221,7 +304,7 @@ contract PronosTradingRouterTest is Test {
     function test_eightOutcomeTradesFitDelegatedGasBudget() public {
         string[] memory outcomes = new string[](8);
         for (uint256 i; i < 8; i++) outcomes[i] = "Outcome";
-        uint256 id = v2.createMarket("8 outcomes", "test", block.timestamp + 1 days, "manual", outcomes, 1000e6);
+        uint256 id = v2.createReviewedMarket(reviewedInput(), outcomes);
         (address p, , , , , , ) = v2.getMarket(id);
         coolRoute(p);
         vm.prank(alice);

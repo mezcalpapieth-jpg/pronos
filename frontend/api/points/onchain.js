@@ -33,6 +33,7 @@ async function mappings(settings, ids = null) {
            m.id AS protocol_id, m.market_id AS contract_market_id,
            m.chain_id AS protocol_chain_id, m.pool_address, m.factory_address,
            m.outcomes AS protocol_outcomes, m.protocol_version, m.status AS protocol_status,
+           (m.resolution_review IS NOT NULL) AS reviewed_resolution,
            m.outcome AS protocol_outcome, m.end_time AS protocol_end_time,
            s.prices, s.yes_price, s.no_price, s.volume_24h, s.liquidity, s.snapshot_at
       FROM points_markets pm

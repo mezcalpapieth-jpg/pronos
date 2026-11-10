@@ -31,6 +31,7 @@ import {MarketFactory} from "../src/MarketFactory.sol";
  *   ADMIN_SAFE_ADDRESS    - Mainnet-safe alias for ADMIN_ADDRESS; must be deployed
  *   RESOLVER_SAFE_ADDRESS - Mainnet-safe alias for RESOLVER_ADDRESS; must be deployed
  *   RESOLUTION_REVIEWER_SAFE_ADDRESS - Required independent reviewer on Arbitrum One
+ *   RESOLUTION_REVIEWER_ADDRESS - Required independent reviewer on Arbitrum Sepolia
  */
 contract DeployProtocol is Script {
     function run() external {
@@ -59,7 +60,7 @@ contract DeployProtocol is Script {
             resolverAddress = resolverSafe;
         }
 
-        address reviewer = mainnetReviewer(vm.addr(deployerKey), adminAddress, resolverAddress);
+        address reviewer = resolutionReviewer(vm.addr(deployerKey), adminAddress, resolverAddress);
 
         console.log("=== Deploying Pronos Protocol ===");
         console.log("Collateral:", collateral);
@@ -129,17 +130,26 @@ contract DeployProtocol is Script {
         console.log("Next steps:");
         console.log("  1. Add the Vercel env vars above");
         console.log("  2. Run /api/migrate if needed");
-        console.log("  3. Create first market with seed liquidity from /mvp/admin");
+        console.log(
+            reviewer == address(0)
+                ? "  3. Create first market with seed liquidity from /mvp/admin"
+                : "  3. Create first market with createReviewedMarket and a rules hash"
+        );
     }
 
-    function mainnetReviewer(address deployer, address admin, address resolver) private view returns (address reviewer) {
-        if (block.chainid != 42161) return address(0);
-        reviewer = vm.envAddress("RESOLUTION_REVIEWER_SAFE_ADDRESS");
-        requireDeployed("RESOLUTION_REVIEWER_SAFE_ADDRESS", reviewer);
+    function resolutionReviewer(address deployer, address admin, address resolver) private view returns (address reviewer) {
+        if (block.chainid == 42161) {
+            reviewer = vm.envAddress("RESOLUTION_REVIEWER_SAFE_ADDRESS");
+            requireDeployed("RESOLUTION_REVIEWER_SAFE_ADDRESS", reviewer);
+        } else if (block.chainid == 421614) {
+            reviewer = vm.envAddress("RESOLUTION_REVIEWER_ADDRESS");
+        } else {
+            return address(0);
+        }
         require(
             resolver != address(0) && resolver != deployer && resolver != admin
-                && reviewer != deployer && reviewer != admin && reviewer != resolver,
-            "Arbitrum One requires distinct owner, resolver, and reviewer"
+                && reviewer != address(0) && reviewer != deployer && reviewer != admin && reviewer != resolver,
+            "Reviewed settlement requires distinct owner, resolver, and reviewer"
         );
     }
 

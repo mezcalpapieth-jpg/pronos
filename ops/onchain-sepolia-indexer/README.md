@@ -11,7 +11,8 @@ factories and isolated database endpoint/role before writes. Query parameters
 cannot override its scan range or enable unrelated jobs.
 
 Provision the `sepolia_indexer` login role on the isolated Neon branch, then
-apply `schema.sql` there as the existing schema owner. The role can read, insert
+apply `schema.sql` as the existing schema owner after the protocol schema has
+created `protocol_resolution_objections`. The role can read, insert
 and update only protocol/indexer tables; it cannot alter schema, delete rows or
 access Points user/balance/trade tables. Do not grant it Neon administrative
 membership. Configure only these project environment variables:
@@ -21,8 +22,10 @@ membership. Configure only these project environment variables:
 - `PREVIEW_INDEXER_PROJECT_ID` — the dedicated scheduler project ID.
 - `CHAIN_ID=421614`, `PROTOCOL_CHAIN_ID=421614`.
 - `ARB_RPC_URL` — Arbitrum Sepolia RPC.
-- `FACTORY_ADDRESS=0x69440742a168635d9fa7cc0cfb0935afffe79ad3`.
-- `FACTORY_V2_ADDRESS=0xfcac9cfcf22df809ba365c85dd767c90bb260fd6`.
+- `FACTORY_ADDRESS=0xb6cf9f65ab82c17c8e9d58d06073ca3af3e5443d`.
+- `FACTORY_V2_ADDRESS=0x33c1cdd4e22a9732ad808f2ad7efe82211b65c6a`.
+- `ONCHAIN_LEGACY_MARKET_FACTORY_ADDRESS=0x69440742a168635d9fa7cc0cfb0935afffe79ad3`.
+- `ONCHAIN_LEGACY_MARKET_FACTORY_V2_ADDRESS=0xfcac9cfcf22df809ba365c85dd767c90bb260fd6`.
 - `INDEXER_MAX_BATCHES=2` — at most 4,000 blocks per factory each minute.
 
 Use sensitive variables for the database URL and cron secret. They never belong
@@ -54,3 +57,28 @@ without manually calling `/api/indexer` or `/api/tick`. In particular, resolve
 and index a market before redeeming so the later scheduled scan proves that
 closed pools remain watched. Compare receipts, run ranges, immutable event
 counts and adapter reads, then observe another idle pass for duplicates.
+
+## Reviewed markets
+
+Once the reviewed factories are deployed, add
+`SEPOLIA_REVIEW_FACTORY_V1_ADDRESS`, `SEPOLIA_REVIEW_FACTORY_V2_ADDRESS` and
+`SEPOLIA_REVIEW_INDEXER_START_BLOCK` (the earlier of their deployment blocks)
+to the worker. Keep the existing factory variables and their checkpoints. The
+worker verifies the new factories enforce review and reads their events only
+through the finalized head. Apply the protocol schema and worker grants
+before starting that backfill.
+
+The isolated app preview uses `ONCHAIN_SEPOLIA_REVIEW_ENABLED=true` alongside
+its existing preview and settlement gates. When rehearsing a reviewed market,
+point settlement to the reviewed factories and use a Points market linked to
+a pool created with `createReviewedMarket`. The existing legacy creation form
+uses the original factory call. Publish the exact rules document against the
+indexed hash in **Revisión de liquidaciones**.
+
+In **Por resolver**, the resolver proposes the outcome and commits the evidence.
+In **Revisión de liquidaciones**, the reviewer can approve or open a dispute.
+Lifting a dispute restarts the 24-hour window and requires fresh approval.
+After the window ends, the owner can finalize and then recover excess
+collateral to treasury. Admin prepares these transactions for the respective
+wallets. The finalized event enables indexed claims, and recovery preserves
+the collateral owed to winning holders.

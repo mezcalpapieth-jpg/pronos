@@ -55,10 +55,11 @@ contract PronosAMM is ERC1155Holder, ReentrancyGuard {
     uint256 public totalRedeemed;
     uint256 public totalRecovered;
     bool public finalized;
-    bool private immutable requiresFinalization = block.chainid == 42161;
+    bool private immutable requiresFinalization = block.chainid == 42161 || block.chainid == 421614;
+    bool private immutable fixedFeeCollector = block.chainid == 42161;
     uint256 public constant RESOLUTION_CHALLENGE_PERIOD = 1 days;
 
-    /// @notice Legacy recovery delay for pools outside Arbitrum One.
+    /// @notice Recovery delay for pools that do not require finalization.
     uint256 public constant RECOVER_GRACE_PERIOD = 30 days;
 
     // ─── Events ──────────────────────────────────────────────────────────────
@@ -456,7 +457,7 @@ contract PronosAMM is ERC1155Holder, ReentrancyGuard {
         emit MarketResolved(marketId, _outcome);
     }
 
-    /// @notice Sweep the AMM's leftover collateral after mainnet finalization
+    /// @notice Sweep the AMM's leftover collateral after reviewed finalization
     /// or the legacy grace period. Designed for the protocol to recover the seed
     /// liquidity it provided at market creation, minus whatever
     /// convexity drag trading inflicted.
@@ -611,9 +612,9 @@ contract PronosAMM is ERC1155Holder, ReentrancyGuard {
         emit ResolutionDisputeCleared(marketId, outcome);
     }
 
-    /// @notice Lock an undisputed mainnet outcome after its challenge period.
+    /// @notice Lock an undisputed outcome after its challenge period.
     function finalizeResolution() external onlyFactory {
-        require(requiresFinalization, "PronosAMM: mainnet only");
+        require(requiresFinalization, "PronosAMM: review unavailable");
         require(resolved && !canceled && !disputed, "PronosAMM: resolution unavailable");
         require(!finalized, "PronosAMM: finalized");
         require(block.timestamp >= resolvedAt + RESOLUTION_CHALLENGE_PERIOD, "PronosAMM: challenge period");
@@ -665,7 +666,7 @@ contract PronosAMM is ERC1155Holder, ReentrancyGuard {
     }
 
     function setFeeCollector(address _feeCollector) external onlyFactory {
-        require(!requiresFinalization, "PronosAMM: fixed fee collector");
+        require(!fixedFeeCollector, "PronosAMM: fixed fee collector");
         require(_feeCollector != address(0), "PronosAMM: zero address");
         feeCollector = _feeCollector;
     }

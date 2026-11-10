@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { parseAutoResolverJsonb, resolveAutoResolverCandidate } from './auto-resolver-core.js';
 import { loadPublishedResolution, loadSettlementMarket, settlementSettings, settlementSigner, settleOnchainMarket,
-  settlementQueueReviewHash, settlementSourceHash } from './onchain-admin-settlement.js';
+  publicResolutionEvidenceUrl, settlementQueueReviewHash, settlementSourceHash } from './onchain-admin-settlement.js';
 import { previewResolutionPayouts } from './onchain-resolution-payouts.js';
 import { pendingResolutionCriteria } from './points-pending-resolution-rules.js';
+import { sepoliaReviewEnabled } from './sepolia-resolution-review.js';
 import { tradeError, tradePayloadHash } from './trade-requests.js';
 
 export const RESOLVER_MIGRATION = [
@@ -35,24 +36,12 @@ async function resolutionCandidates(sql,env,cursor=null) {
         FROM protocol_markets m JOIN points_markets p ON p.chain_id=m.chain_id AND p.mode='onchain'
           AND LOWER(p.chain_address)=LOWER(m.pool_address) AND p.chain_market_id::text=m.market_id::text
         WHERE m.chain_id=421614 AND m.status='active' AND p.parent_id IS NULL
+          AND (m.resolution_review IS NULL OR ${sepoliaReviewEnabled(env)})
           AND p.status='active' AND p.end_time<=now()
           AND LOWER(m.factory_address)=ANY(${settlementSettings(env).factories}::text[])
           AND m.end_time IS NOT NULL AND m.end_time<now()
         AND (${cursor?.endTime || null}::timestamptz IS NULL OR (m.end_time,m.id)>(${cursor?.endTime || null}::timestamptz,${cursor?.marketId || 0}))
         ORDER BY m.end_time,m.id LIMIT 25`;
-}
-function resolutionEvidenceUrl(cfg) {
-  if (cfg.source === 'espn' && /^\d+$/.test(String(cfg.eventId))
-    && /^[a-z-]+\/[a-z0-9.-]+$/i.test(cfg.leaguePath || '')) {
-    return `https://site.api.espn.com/apis/site/v2/sports/${cfg.leaguePath}/summary?event=${cfg.eventId}`;
-  }
-  // Resolver request URLs can contain private provider tokens. Only surface
-  // URLs explicitly identified in the market config as public evidence.
-  try {
-    const url = new URL(cfg.evidenceUrl || cfg.publicSourceUrl);
-    if (url.protocol === 'https:' && !url.username && !url.password) return url.href;
-  } catch { /* No public source link. */ }
-  return null;
 }
 
 function publishedResolutionCandidate(market, published) {
@@ -82,11 +71,12 @@ export async function reviewSepoliaResolution({ sql, provider, env, marketId, de
   const cfg = parseAutoResolverJsonb(candidate.resolver_config, {}) || {};
   return {
     marketId, chainId: 421614, status: decision.status, outcomes: candidate.outcomes,
+    reviewed: Boolean(market.resolution_review),
     criteria: pendingResolutionCriteria(cfg, parseAutoResolverJsonb(published.pending_source_data, {})),
     suggestedOutcome: decision.input?.outcome ?? null,
     evidence: {
       provider: cfg.source || cfg.resolutionSource || candidate.resolver_type || null,
-      url: resolutionEvidenceUrl(cfg),
+      url: publicResolutionEvidenceUrl(cfg),
       score: decision.evidence?.finalScore ?? null,
       observedAt: decision.evidence?.observedAt ?? null,
     },
@@ -164,7 +154,9 @@ export async function runSepoliaResolver({ sql, provider, env, sign, now = () =>
       attempts++;
       const result = await settle({ sql,provider,env,input,key,sign,origin:'scheduler',actor:'scheduled-resolver',...review });
       const row = { marketId:input.marketId,requestId:key,txHash:result.body.txHash || null };
-      if (result.httpStatus === 200) report.resolved.push(row);
+      if (result.httpStatus === 200 && result.body.proposalId) {
+        (report.proposed ||= []).push({ ...row, proposalId: result.body.proposalId });
+      } else if (result.httpStatus === 200) report.resolved.push(row);
       else if (result.httpStatus === 202) report.pending.push(row);
       else report.errors.push({ ...row,error:'settlement_rejected' });
       return result;

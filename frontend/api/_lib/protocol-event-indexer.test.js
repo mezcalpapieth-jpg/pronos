@@ -6,13 +6,13 @@ const start = source.indexOf('export async function runProtocolIndexer(');
 const end = source.indexOf('async function ensureFactoryStateTable()', start);
 const runSource = source.slice(start,end).replace('export async','async');
 
-function fixture({ reviewed = false, finalized = { number: '0xc8' } } = {}) {
+function fixture({ reviewed = false, reviewStart, finalized = { number: '0xc8' } } = {}) {
   const ranges=[], states=[], schemas=[];
   const bindings={
     CHAIN_ID:421614,BLOCK_BATCH:2000,
     isReviewedFactory:async(_provider,_chain,address)=>reviewed && address === 'v1',
     REVIEW_EVENT_ABI:[],
-    getIndexerConfig:()=>({factories:[{address:'v1',abi:[]},{address:'v2',abi:[]}],rpcUrl:'synthetic',startBlock:10,lookbackBlocks:100,maxBatches:2}),
+    getIndexerConfig:()=>({factories:[{address:'v1',abi:[],reviewStart},{address:'v2',abi:[]}],rpcUrl:'synthetic',startBlock:10,lookbackBlocks:100,maxBatches:2}),
     ethers:{providers:{StaticJsonRpcProvider:class {
       async getBlockNumber(){return 8000;}
       async send(method, params) {
@@ -21,7 +21,7 @@ function fixture({ reviewed = false, finalized = { number: '0xc8' } } = {}) {
       }
     }}},
     parseInteger:value=>{const parsed=Number.parseInt(value,10);return Number.isFinite(parsed)?parsed:null;},
-    getFactoryFromBlock:async()=>100,
+    getFactoryFromBlock:async(_address,start)=>start === reviewStart && reviewStart ? reviewStart : 100,
     ensureProtocolSchema:async()=>schemas.push('protocol'),ensureFactoryStateTable:async()=>schemas.push('state'),
     indexFactoryRange:async(_p,f,from,to,processed)=>{ranges.push([f.address,from,to]);processed.trades++;},
     updateFactoryState:async(f,to)=>states.push([f,to]),sql:async()=>[],
@@ -44,6 +44,14 @@ test('reviewed factories stop at the finalized head, including manual scans', as
   const unavailable = fixture({ reviewed: true, finalized: null });
   await assert.rejects(unavailable.run(), /requires a finalized chain head/);
   assert.deepEqual(unavailable.states, []);
+});
+test('an explicitly configured review factory starts at deployment and must advertise review', async () => {
+  const f = fixture({ reviewed: true, reviewStart: 150 });
+  await f.run({ setupSchema: false });
+  assert.deepEqual(f.ranges[0], ['v1', 150, 200]);
+  const legacy = fixture({ reviewStart: 150 });
+  await assert.rejects(legacy.run(), /does not enforce review/);
+  assert.deepEqual(legacy.states, []);
 });
 test('existing manual handler retains explicit ranges and schema setup',async()=>{
   const f=fixture();await f.run({isManual:true,query:{fromBlock:'200',toBlock:'210'}});

@@ -3,16 +3,20 @@ pragma solidity ^0.8.24;
 
 import "forge-std/Test.sol";
 import "../script/DeployTournamentCycle.s.sol";
+import {MainnetResolutionReview} from "../src/MainnetResolutionReview.sol";
 
 contract TournamentCycleTest is Test {
     address alice = address(0xA11CE);
+    address resolver = makeAddr("resolver");
+    address reviewer = makeAddr("reviewer");
 
     function configure() internal {
         vm.chainId(421614);
         vm.setEnv("DEPLOYER_PRIVATE_KEY", "12345"); // Local test key only.
         vm.setEnv("CYCLE_OWNER_ADDRESS", vm.toString(address(this)));
         vm.setEnv("CYCLE_OPERATIONS_ADDRESS", vm.toString(address(this)));
-        vm.setEnv("CYCLE_RESOLVER_ADDRESS", vm.toString(address(this)));
+        vm.setEnv("CYCLE_RESOLVER_ADDRESS", vm.toString(resolver));
+        vm.setEnv("RESOLUTION_REVIEWER_ADDRESS", vm.toString(reviewer));
         vm.setEnv("TREASURY_ADDRESS", vm.toString(address(0x100)));
         vm.setEnv("LIQUIDITY_RESERVE", vm.toString(address(0x200)));
         vm.setEnv("EMERGENCY_RESERVE", vm.toString(address(0x300)));
@@ -28,7 +32,9 @@ contract TournamentCycleTest is Test {
         oldToken.mint(address(this), 10_000e6);
         oldToken.mint(alice, 1_000e6);
         oldToken.approve(old.factoryV1, type(uint256).max);
-        uint256 id = oldFactory.createMarket("Old tournament", "test", block.timestamp + 1 days, "Manual", 1_000e6);
+        uint256 id = oldFactory.createReviewedMarket(MainnetResolutionReview.ReviewedMarketInput(
+            "Old tournament", "test", block.timestamp + 1 days, "Manual", 1_000e6, keccak256("Test criteria")
+        ));
         (address pool, , , , , ) = oldFactory.getMarket(id);
         vm.startPrank(alice);
         oldToken.approve(old.router, type(uint256).max);
@@ -58,8 +64,14 @@ contract TournamentCycleTest is Test {
         assertEq(oldToken.balanceOf(pool), oldPoolCollateral, "Old claims stay collateralized");
         assertEq(nextToken.allowance(alice, next.router), 0, "New router needs owner consent");
 
-        vm.warp(block.timestamp + 2 days);
-        oldFactory.resolveMarket(id, 1);
+        vm.warp(vm.getBlockTimestamp() + 1 days);
+        vm.prank(resolver);
+        oldFactory.proposeResolution(id, 1, keccak256("Final results"));
+        (bytes32 proposal, , , , , ) = oldFactory.resolutionProposals(id);
+        vm.prank(reviewer);
+        oldFactory.approveResolution(id, proposal);
+        vm.warp(vm.getBlockTimestamp() + 1 days);
+        oldFactory.finalizeResolution(id, proposal);
         vm.startPrank(alice);
         PronosToken(old.shareV1).setApprovalForAll(old.router, true);
         oldRouter.redeem(pool, shares);

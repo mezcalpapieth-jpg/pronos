@@ -224,6 +224,16 @@ contract MarketFactoryV2 is MainnetResolutionReview {
     function openResolutionDispute(uint256 marketId) external {
         if (!requiresResolutionReview) require(msg.sender == owner, "MarketFactoryV2: not owner");
         else if (msg.sender != owner) _requireReviewer();
+        _openResolutionDispute(marketId);
+    }
+
+    function openReviewedResolutionDispute(uint256 marketId, bytes32 expectedProposalId) external {
+        _requireReviewer();
+        _requireCurrentProposal(marketId, expectedProposalId);
+        _openResolutionDispute(marketId);
+    }
+
+    function _openResolutionDispute(uint256 marketId) internal {
         require(marketId < markets.length, "MarketFactoryV2: invalid market");
         PronosAMMMulti(markets[marketId].pool).openResolutionDispute();
         if (requiresResolutionReview) resolutionProposals[marketId].approved = false;
@@ -233,6 +243,16 @@ contract MarketFactoryV2 is MainnetResolutionReview {
     function clearResolutionDispute(uint256 marketId) external {
         if (requiresResolutionReview) _requireReviewer();
         else require(msg.sender == owner, "MarketFactoryV2: not owner");
+        _clearResolutionDispute(marketId);
+    }
+
+    function clearReviewedResolutionDispute(uint256 marketId, bytes32 expectedProposalId) external {
+        _requireReviewer();
+        _requireCurrentProposal(marketId, expectedProposalId);
+        _clearResolutionDispute(marketId);
+    }
+
+    function _clearResolutionDispute(uint256 marketId) internal {
         require(marketId < markets.length, "MarketFactoryV2: invalid market");
         PronosAMMMulti(markets[marketId].pool).clearResolutionDispute();
         if (requiresResolutionReview) _restartResolutionReview(marketId);
@@ -278,7 +298,7 @@ contract MarketFactoryV2 is MainnetResolutionReview {
     /**
      * @notice Sweep a resolved market's leftover collateral to the
      *         given recipient. Mirrors MarketFactory (V1): must wait
-     *         explicit finalization on Arbitrum One or the legacy 30-day delay;
+     *         explicit finalization on reviewed pools or the legacy 30-day delay;
      *         idempotent after the AMM's winning reserve is drained.
      */
     function sweepDust(uint256 marketId, address recipient) external onlyOwner {

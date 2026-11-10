@@ -11,7 +11,14 @@ const legacyFactories = [
 ];
 export function validateWorker(env, source) {
   const db = new URL(env.DATABASE_URL);
-  if (env.VERCEL_ENV !== 'production'
+  const reviewed = [env.SEPOLIA_REVIEW_FACTORY_V1_ADDRESS, env.SEPOLIA_REVIEW_FACTORY_V2_ADDRESS];
+  const reviewStart = Number(env.SEPOLIA_REVIEW_INDEXER_START_BLOCK);
+  const known = [...factories, ...legacyFactories, '0x0000000000000000000000000000000000000000'];
+  const reviewedInvalid = reviewed.some(Boolean) && (!reviewed.every(address => /^0x[a-f0-9]{40}$/i.test(address || '')
+    && !known.includes(address.toLowerCase()))
+    || reviewed[0].toLowerCase() === reviewed[1].toLowerCase()
+    || !Number.isSafeInteger(reviewStart) || reviewStart < 1);
+  if (reviewedInvalid || env.VERCEL_ENV !== 'production'
     || !env.PREVIEW_INDEXER_PROJECT_ID || env.VERCEL_PROJECT_ID !== env.PREVIEW_INDEXER_PROJECT_ID
     || source.branch !== 'onchain-sepolia' || !/^[a-f0-9]{40}$/.test(source.sha)
     || Number(env.CHAIN_ID) !== 421614 || Number(env.PROTOCOL_CHAIN_ID) !== 421614

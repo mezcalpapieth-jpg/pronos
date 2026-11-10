@@ -51,10 +51,11 @@ contract PronosAMMMulti is ERC1155Holder, ReentrancyGuard {
     uint256 public totalRedeemed;
     uint256 public totalRecovered;
     bool public finalized;
-    bool private immutable requiresFinalization = block.chainid == 42161;
+    bool private immutable requiresFinalization = block.chainid == 42161 || block.chainid == 421614;
+    bool private immutable fixedFeeCollector = block.chainid == 42161;
     uint256 public constant RESOLUTION_CHALLENGE_PERIOD = 1 days;
 
-    /// @notice Legacy recovery delay for pools outside Arbitrum One.
+    /// @notice Recovery delay for pools that do not require finalization.
     uint256 public constant RECOVER_GRACE_PERIOD = 30 days;
 
     event LiquidityAdded(address indexed provider, uint256 amount);
@@ -332,7 +333,7 @@ contract PronosAMMMulti is ERC1155Holder, ReentrancyGuard {
         emit MarketResolved(marketId, outcomeIndex);
     }
 
-    /// @notice Sweep the AMM's leftover collateral after mainnet finalization
+    /// @notice Sweep the AMM's leftover collateral after reviewed finalization
     /// or the legacy grace period. Mirrors the binary pool: burns
     /// the AMM's own winning-outcome tokens and transfers an equal
     /// amount of collateral to `recipient`. User-held positions stay
@@ -456,9 +457,9 @@ contract PronosAMMMulti is ERC1155Holder, ReentrancyGuard {
         emit ResolutionDisputeCleared(marketId, outcome);
     }
 
-    /// @notice Lock an undisputed mainnet outcome after its challenge period.
+    /// @notice Lock an undisputed outcome after its challenge period.
     function finalizeResolution() external onlyFactory {
-        require(requiresFinalization, "PronosAMMMulti: mainnet only");
+        require(requiresFinalization, "PronosAMMMulti: review unavailable");
         require(resolved && !canceled && !disputed, "PronosAMMMulti: resolution unavailable");
         require(!finalized, "PronosAMMMulti: finalized");
         require(block.timestamp >= resolvedAt + RESOLUTION_CHALLENGE_PERIOD, "PronosAMMMulti: challenge period");
@@ -514,7 +515,7 @@ contract PronosAMMMulti is ERC1155Holder, ReentrancyGuard {
     }
 
     function setFeeCollector(address _feeCollector) external onlyFactory {
-        require(!requiresFinalization, "PronosAMMMulti: fixed fee collector");
+        require(!fixedFeeCollector, "PronosAMMMulti: fixed fee collector");
         require(_feeCollector != address(0), "PronosAMMMulti: zero address");
         feeCollector = _feeCollector;
     }

@@ -33,7 +33,8 @@ export function createSettlementHandler({ env = process.env, sqlFor = neon,
       const rows = await sql`SELECT p.id AS points_id, p.mode, p.chain_id AS points_chain_id,
           p.chain_address, p.chain_market_id, p.parent_id, p.amm_mode, p.question,
           m.id AS protocol_id, m.chain_id, m.factory_address, m.pool_address, m.market_id AS contract_id,
-          m.protocol_version, m.outcome_count, m.outcomes, m.status, m.outcome,
+          m.protocol_version, m.outcome_count, p.outcomes, m.status, m.outcome,
+          (m.resolution_review IS NOT NULL) AS reviewed, m.resolution_review->>'proposalId' AS proposal_id,
           c.last_block::text AS indexed_block
         FROM points_markets p LEFT JOIN protocol_markets m ON m.chain_id=p.chain_id
           AND LOWER(m.pool_address)=LOWER(p.chain_address) AND m.market_id::text=p.chain_market_id::text
@@ -48,7 +49,7 @@ export function createSettlementHandler({ env = process.env, sqlFor = neon,
         return { id: Number(m.points_id), question: m.question, status: ready ? m.status : 'unavailable',
           outcomes: Array.isArray(m.outcomes) ? m.outcomes : [],
           outcome: ready && m.outcome != null ? Number(m.outcome)-(m.protocol_version === 'v1' ? 1 : 0) : null,
-          settlementReady: ready, factory: m.factory_address, indexedBlock: m.indexed_block };
+          reviewed: m.reviewed, proposalId: m.proposal_id, settlementReady: ready, factory: m.factory_address, indexedBlock: m.indexed_block };
       });
       const runs = await sql`SELECT status,started_at,completed_at,report FROM sepolia_resolver_runs ORDER BY started_at DESC LIMIT 1`;
       const requests = await sql`SELECT r.request_key, r.action, r.status, r.payload->>'marketId' AS market_id,
@@ -68,16 +69,16 @@ export function createSettlementHandler({ env = process.env, sqlFor = neon,
         requestsTruncated: requests.length>50, requests: requests.slice(0,50).map(r => {
           const m = markets.find(m => m.id === Number(r.market_id)), result = r.result;
           const expected = { resolve:'resolved',correct_resolution:'resolved',cancel:'canceled',dispute:'disputed',clear_dispute:'resolved',cancel_refund:'canceled' }[r.action.slice(6)];
-          const indexed = r.status === 'confirmed' && m?.settlementReady && m.status === expected
+          const indexed = r.status === 'confirmed' && m?.settlementReady && (result?.proposalId ? m.proposalId === result.proposalId : m.status === expected)
             && r.block_number != null && Number(m.indexedBlock) >= Number(r.block_number)
-            && (!['resolve','correct_resolution'].includes(r.action.slice(6)) || m.outcome === result?.outcome)
+            && (result?.proposalId || !['resolve','correct_resolution'].includes(r.action.slice(6)) || m.outcome === result?.outcome)
             && (r.action!=='admin_cancel_refund' || r.refunds_indexed===true);
           return { requestId:r.request_key, marketId:Number(r.market_id), action:r.action.slice(6), status:r.status,
             input:r.action==='admin_cancel_refund'?{marketId:Number(r.market_id),action:'cancel_refund',holders:r.request_payload?.holders,
               blockNumber:r.request_payload?.blockNumber,blockHash:r.request_payload?.blockHash,planHash:r.request_payload?.planHash,reason:r.reason}
               :{ marketId:Number(r.market_id),action:r.action.slice(6),outcome:r.requested_outcome,reason:r.reason,
                 ...(r.request_payload?.reviewHash ? { reviewHash:r.request_payload.reviewHash } : {}) },
-            origin:r.origin, actor:r.actor, updatedAt:r.updated_at, txHash:r.tx_hash, blockNumber:r.block_number,
+            proposalId:result?.proposalId || null, origin:r.origin, actor:r.actor, updatedAt:r.updated_at, txHash:r.tx_hash, blockNumber:r.block_number,
             awaitingIndexing:r.status==='confirmed' && (!m?.settlementReady || r.block_number==null
               || m.indexedBlock==null || Number(m.indexedBlock)<Number(r.block_number)
               || (r.action==='admin_cancel_refund' && r.refunds_indexed!==true)),

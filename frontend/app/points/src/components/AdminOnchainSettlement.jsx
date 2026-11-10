@@ -34,7 +34,7 @@ export function clearSettlement(storage, key, requestId) {
 }
 
 function MarketAction({market,busy,onSubmit}) {
-  const options=actions[market.status]||[];
+  const options=(actions[market.status]||[]).filter(action => !market.reviewed || action === 'cancel');
   const [action,setAction]=useState(options[0]||'resolve'),[outcome,setOutcome]=useState(0),[reason,setReason]=useState('');
   const selected=options.includes(action)?action:options[0];
   if(!market.settlementReady)return <p>Revisar el vínculo de este mercado o su configuración paralela antes de liquidar.</p>;
@@ -137,7 +137,7 @@ export function SettlementPanel({owner,api={getJson,postJson},storage=globalThis
       <p>Resolver automático: {report.scheduler?.enabled?'habilitado':'desactivado'} · Último resultado: {report.scheduler?.latest?.status||'sin evidencia'}</p>
       {report.scheduler?.latest?.startedAt&&<p>Última ejecución: {report.scheduler.latest.startedAt}</p>}
       {report.requests.map(r=><div key={r.requestId}>
-        <p>#{r.marketId} · {labels[r.action]} · {r.status} · índice: {r.indexingStatus}</p>
+        <p>#{r.marketId} · {r.proposalId ? 'Proponer resultado' : labels[r.action]} · {r.status} · índice: {r.indexingStatus}</p>
         {r.txHash&&<a href={`https://sepolia.arbiscan.io/tx/${r.txHash}`} target="_blank" rel="noreferrer">Ver transacción</a>}
         {pending(r)&&<button type="button" disabled={busy||Boolean(saved&&saved.requestId!==r.requestId)} onClick={()=>submit(r.input,r.requestId)}>Continuar {r.requestId}</button>}
         {saved?.requestId===r.requestId&&['confirmed','rejected','reverted'].includes(r.status)&&<button type="button" disabled={busy} onClick={()=>{clearSettlement(storage,storageKey,r.requestId);setSaved(null);}}>Reconocer resultado guardado</button>}
@@ -145,6 +145,7 @@ export function SettlementPanel({owner,api={getJson,postJson},storage=globalThis
       {(report.marketsTruncated||report.requestsTruncated)&&<p>Lista parcial; las solicitudes pendientes tienen prioridad.</p>}
       {report.markets.map(m=><article key={m.id} style={{borderTop:'1px solid var(--border)',paddingTop:12,marginTop:12}}>
         <h3>#{m.id} · {m.question}</h3><p>{m.status}</p>
+        {m.reviewed && <p>Propón el resultado en Por resolver. Revisa la propuesta en Revisión de liquidaciones.</p>}
         {m.status==='canceled'&&m.settlementReady&&<RefundReview market={m} api={api} busy={busy||Boolean(saved)||report.requests.some(r=>r.marketId===m.id&&(pending(r)||r.awaitingIndexing))} onSubmit={submit}/>}
         <MarketAction market={m} busy={busy||Boolean(saved)||report.requests.some(r=>r.marketId===m.id&&(pending(r)||r.awaitingIndexing))} onSubmit={submit}/>
       </article>)}

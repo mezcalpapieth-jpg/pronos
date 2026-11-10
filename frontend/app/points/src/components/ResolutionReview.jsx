@@ -115,6 +115,70 @@ export function ResolutionReview({ marketId, review, authenticated, onOpenLogin,
   </section>;
 }
 
+const operationLabels = {
+  approve: 'Aprobar propuesta', dispute: 'Abrir disputa', clear_dispute: 'Levantar disputa y reiniciar revisión',
+  correct: 'Preparar corrección', finalize: 'Finalizar resolución', recover: 'Recuperar reserva para tesorería',
+};
+
+function SepoliaReviewActions({ market }) {
+  const { review } = market;
+  const [transaction, setTransaction] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [outcome, setOutcome] = useState('');
+  const [content, setContent] = useState('');
+  const [message, setMessage] = useState('');
+  const actions = review.state === 'finalized' ? ['recover'] : review.state === 'disputed' ? ['clear_dispute']
+    : [review.approved ? 'finalize' : 'approve', 'dispute'];
+
+  async function prepare(operation) {
+    setBusy(true);
+    setTransaction(null);
+    setMessage('');
+    try {
+      const result = await postJson(endpoint, { action: 'prepare', operation, marketId: market.marketId, proposalId: review.proposalId,
+        ...(operation === 'correct' ? { outcome: Number(outcome), content } : {}) });
+      setTransaction({ operation, ...result.transaction });
+    } catch (error) {
+      const errors = {
+        proposal_changed: 'La propuesta cambió. Actualiza la cola.',
+        review_window_open: 'El periodo de revisión de 24 horas sigue abierto.',
+        review_documents_missing: 'Publica las reglas y la evidencia antes de aprobar.',
+        review_approval_changed: 'La aprobación cambió. Actualiza la cola.',
+      };
+      setMessage(errors[error.code] || 'La transacción no pasó la verificación del contrato.');
+    } finally { setBusy(false); }
+  }
+
+  return <>
+    <p>{review.approved ? 'Revisor aprobó' : 'Falta aprobación del revisor'}
+      {review.state === 'under_review' && review.reviewEndsAt && <> · Fin de revisión <time dateTime={review.reviewEndsAt}>
+        {new Date(review.reviewEndsAt).toLocaleString('es-MX', { timeZone: 'America/Mexico_City' })} CDMX
+      </time></>}
+    </p>
+    <Document title={text.es.rules} hash={review.rulesHash} published={review.rulesDocument} awaiting={text.es.awaiting} />
+    <Document title={text.es.evidence} hash={review.evidenceHash} published={review.evidenceDocument} awaiting={text.es.awaiting} />
+    {actions.map(action => <button key={action} type="button" onClick={() => prepare(action)}
+      disabled={busy}>{operationLabels[action]}</button>)}
+    {review.state === 'disputed' && <form onSubmit={event => { event.preventDefault(); void prepare('correct'); }}>
+      <label>Resultado corregido <select required value={outcome} onChange={event => setOutcome(event.target.value)}>
+        <option value="">Seleccionar…</option>
+        {review.outcomes?.map((label, index) => <option key={index} value={index}>{label}</option>)}
+      </select></label>
+      <label>Evidencia pública de la corrección <textarea required rows={3} maxLength={5000} value={content}
+        onChange={event => setContent(event.target.value)} /></label>
+      <button type="submit" disabled={busy || outcome === '' || !content.trim()}>{operationLabels.correct}</button>
+    </form>}
+    {transaction && <div>
+      <p>{operationLabels[transaction.operation]} · Firma con la cuenta {{ reviewer: 'del revisor', resolver: 'del resolvedor', owner: 'propietaria' }[transaction.role]} en Arbitrum Sepolia.</p>
+      <p>Cuenta <code>{transaction.from}</code> · Destino <code>{transaction.to}</code> · Valor {transaction.value} ETH</p>
+      {transaction.recipient && <p>Tesorería <code>{transaction.recipient}</code></p>}
+      <label>Datos de la transacción<br /><textarea readOnly rows={3} value={transaction.data}
+        onFocus={event => event.target.select()} /></label>
+    </div>}
+    {message && <p role="status">{message}</p>}
+  </>;
+}
+
 export function AdminResolutionReview() {
   const [queue, setQueue] = useState(null);
   const [message, setMessage] = useState('');
@@ -149,8 +213,8 @@ export function AdminResolutionReview() {
   }
   if (!queue && !message) return null;
   return <section style={panel} aria-label="Revisión de liquidaciones">
-    <h2>Revisión de liquidaciones · Arbitrum One</h2>
-    <p>Verifica la evidencia y la propuesta exacta. El revisor firma las acciones de contrato en su Safe.</p>
+    <h2>Revisión de liquidaciones · {queue?.chainId === 421614 ? 'Arbitrum Sepolia' : 'Arbitrum One'}</h2>
+    <p>Verifica la evidencia y la propuesta exacta. Cada acción se firma con la cuenta autorizada del contrato.</p>
     <button type="button" onClick={() => load()}>Actualizar cola</button>
     {queue?.truncated && <p>La cola muestra un subconjunto de las revisiones y objeciones.</p>}
     {queue?.markets?.map(market => <article key={market.marketId}>
@@ -158,6 +222,8 @@ export function AdminResolutionReview() {
         {' · '}{text.es[market.review.state]}{' · '}{market.review.outcomes?.[market.review.outcome]}</p>
       <p>Contrato <code>{market.factoryAddress}</code> · Mercado {market.contractMarketId}
         {' · '}Propuesta <code>{market.review.proposalId}</code></p>
+      {queue.chainId === 421614 && <SepoliaReviewActions
+        key={`${market.review.proposalId}:${market.review.state}:${market.review.approved}`} market={market} />}
     </article>)}
     {queue && <>
       <h3>Objeciones</h3>
@@ -166,7 +232,7 @@ export function AdminResolutionReview() {
         <p><a href={`/points/market?id=${objection.marketId}`}>#{objection.marketId} · {objection.question}</a>
           {' · '}{objection.current ? text.es[objection.state] : 'Propuesta anterior'}</p>
         <p>{objection.detail || <code>{objection.objectionHash}</code>}</p>
-        {objection.txHash && <p><a href={`https://arbiscan.io/tx/${objection.txHash}`} target="_blank" rel="noreferrer">Objeción on-chain</a></p>}
+        {objection.txHash && <p><a href={`https://${queue.chainId === 421614 ? 'sepolia.' : ''}arbiscan.io/tx/${objection.txHash}`} target="_blank" rel="noreferrer">Objeción on-chain</a></p>}
         <p>Propuesta <code>{objection.proposalId}</code></p>
       </article>)}
       <form onSubmit={publish}>

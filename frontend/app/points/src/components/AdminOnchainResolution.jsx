@@ -67,7 +67,7 @@ export function OnchainResolutionReview({ market, owner, onSettled, api = { getJ
   async function submit() {
     if (operation.current || result?.confirmed || (!resumeHere && (saved || !canSubmit))) return;
     if (!resumeHere && !confirm(
-      `¿Resolver #${market.id} en Arbitrum Sepolia con “${review.outcomes[outcome]}”?\n\nCobros estimados: ${mxnp(payout.payoutUnits)} MXNP.\nMotivo: ${reason.trim()}`,
+      `¿${review.reviewed ? 'Proponer el resultado de' : 'Resolver'} #${market.id} en Arbitrum Sepolia con “${review.outcomes[outcome]}”?\n\nCobros estimados: ${mxnp(payout.payoutUnits)} MXNP.\nMotivo: ${reason.trim()}`,
     )) return;
     const controller = new AbortController();
     operation.current = controller;
@@ -86,7 +86,7 @@ export function OnchainResolutionReview({ market, owner, onSettled, api = { getJ
       const confirmed = settlementConfirmed(response);
       if (confirmed) clearSettlement(storage, key, record.requestId);
       if (!mounted.current) return;
-      setResult({ confirmed, txHash: response.txHash });
+      setResult({ confirmed, txHash: response.txHash, reviewed: Boolean(response.proposalId || review?.reviewed) });
       if (confirmed) {
         setSaved(null);
         onSettled?.(market.id);
@@ -105,7 +105,10 @@ export function OnchainResolutionReview({ market, owner, onSettled, api = { getJ
       {errorMessages[error] || 'No se pudo completar la operación. Si hay una solicitud guardada, continúa con la misma.'}
     </p>}
     {result && <p role="status">
-      {result.confirmed ? 'Resolución confirmada. Esperando al indexador.' : 'Solicitud pendiente. Continúa con la misma solicitud.'}
+      {result.confirmed
+        ? (result.reviewed ? 'Propuesta confirmada. Aparecerá en Revisión de liquidaciones tras la indexación.'
+          : 'Resolución confirmada. Esperando al indexador.')
+        : 'Solicitud pendiente. Continúa con la misma solicitud.'}
       {/^0x[\da-f]{64}$/i.test(result.txHash || '') && <> · <a href={`https://sepolia.arbiscan.io/tx/${result.txHash}`} target="_blank" rel="noreferrer">Ver transacción</a></>}
     </p>}
     {saved && <p>Solicitud guardada para el mercado #{saved.marketId} · <a href="?tab=launch">Ver liquidación en Sistema</a></p>}
@@ -134,7 +137,10 @@ export function OnchainResolutionReview({ market, owner, onSettled, api = { getJ
         {review.status !== 'deferred' && <form onSubmit={event => { event.preventDefault(); submit(); }}>
           <label>Motivo de la resolución <input maxLength={240} required value={reason} disabled={busy}
             onChange={e => setReason(e.target.value)} /></label>{' '}
-          <button type="submit" className="pb-admin-button" disabled={busy || !canSubmit}>Confirmar resolución en Arbitrum Sepolia</button>
+          {review.reviewed && <p>Los cobros se habilitan tras 24 horas, la aprobación del revisor y la finalización por el propietario.</p>}
+          <button type="submit" className="pb-admin-button" disabled={busy || !canSubmit}>
+            {review.reviewed ? 'Proponer resultado en Arbitrum Sepolia' : 'Confirmar resolución en Arbitrum Sepolia'}
+          </button>
         </form>}
       </>}
     </>}

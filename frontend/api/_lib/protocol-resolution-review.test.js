@@ -18,11 +18,14 @@ const deadline = 1800000000;
 const abi = new ethers.utils.Interface([...REVIEW_EVENT_ABI,
   'event ResolutionDisputeOpened(uint256 indexed marketId)']);
 
-test('review capability stays scoped to mainnet and RPC failures propagate', async () => {
+test('review capability is detected on both Arbitrum chains and RPC failures propagate', async () => {
   const rpc = { call: async () => ethers.utils.defaultAbiCoder.encode(['bool'], [true]) };
   assert.equal(await isReviewedFactory(rpc, 42161, factory), true);
-  assert.equal(await isReviewedFactory({}, 421614, factory), false);
-  assert.equal(await isReviewedFactory({ call: async () => '0x' }, 42161, factory), false);
+  assert.equal(await isReviewedFactory(rpc, 421614, factory), true);
+  assert.equal(await isReviewedFactory({}, 84532, factory), false);
+  assert.equal(await isReviewedFactory({ call: async () => '0x' }, 421614, factory), false);
+  const legacy = { call: async () => ethers.utils.defaultAbiCoder.encode(['bool'], [false]) };
+  assert.equal(await isReviewedFactory(legacy, 421614, factory), false);
   const error = new Error('timeout');
   await assert.rejects(isReviewedFactory({ call: async () => { throw error; } }, 42161, factory), error);
 });
@@ -36,13 +39,13 @@ test('indexed reviews, published documents and Points objections follow the exac
   await ensureProtocolSchema(sql);
   await db.exec(`
     CREATE TABLE points_markets (id integer PRIMARY KEY, question text, mode text, chain_id int,
-      chain_address text, chain_market_id text);
+      chain_address text, chain_market_id text, outcomes jsonb);
     INSERT INTO protocol_markets (chain_id, factory_address, pool_address, market_id, question, end_time,
       outcomes, protocol_version)
       VALUES (42161, '${factory}', 'pool', 0, 'Fixture?', NOW(), '["Yes","No"]', 'v1'),
              (421614, '${factory}', 'pool', 0, 'Sepolia?', NOW(), '["Yes","No"]', 'v1');
-    INSERT INTO points_markets VALUES (123,'Fixture?','onchain',42161,'POOL','0'),
-      (124,'Sepolia?','onchain',421614,'pool','0');
+    INSERT INTO points_markets VALUES (123,'Fixture?','onchain',42161,'POOL','0','["Yes","No"]'),
+      (124,'Sepolia?','onchain',421614,'pool','0','["Lakers","Hawks"]');
   `);
 
   const auth = (kind, status) => (req, res) => {
@@ -134,4 +137,29 @@ test('indexed reviews, published documents and Points objections follow the exac
   for (const entry of [rulesEvent, first, firstApproval, dispute, revision, flagged, approval, finalized]) await apply(entry);
   assert.deepEqual(await market(), { status: 'resolved', outcome: 1 });
   assert.equal((await sql`SELECT count(*)::int AS count FROM protocol_resolution_objections`)[0].count, 2);
+
+  const sepoliaEnv = { VERCEL_ENV: 'preview', VERCEL_GIT_COMMIT_REF: 'onchain-sepolia',
+    ONCHAIN_CHAIN_ID: '421614', ONCHAIN_PREVIEW_APPROVALS_ENABLED: 'true', ONCHAIN_SEPOLIA_REVIEW_ENABLED: 'true',
+    DATABASE_URL: 'postgres://test:local@ep-delicate-glitter-amp7yrkv.c-5.us-east-1.aws.neon.tech/neondb' };
+  const route = createResolutionReviewHandler({ ...options, env: sepoliaEnv,
+    providerFor: () => ({}), prepare: async ({ market: row, action, proposalId }) => {
+      assert.equal(action, 'approve');
+      assert.equal(row.review.proposalId, proposalId);
+      return { chainId: 421614 };
+    } });
+  const applySepolia = entry => indexReviewedResolution(sql, 421614, factory, entry);
+  await applySepolia(rulesEvent);
+  await applySepolia(first);
+  const query = { marketId: '124' };
+  const sepolia = (await request({ route, query })).body.review;
+  assert.deepEqual([sepolia.chainId, sepolia.state, sepolia.outcomes[sepolia.outcome]], [421614, 'under_review', 'Hawks']);
+  assert.equal((await request({ route, query: { marketId: '123' } })).status, 404);
+  const prepareRequest = { route, method: 'POST', body: { action: 'prepare', operation: 'approve', marketId: 124, proposalId: proposal } };
+  assert.equal((await request({ ...prepareRequest, actor: 'user' })).status, 403);
+  assert.equal((await request({ ...prepareRequest, actor: 'admin' })).body.transaction.chainId, 421614);
+  const sepoliaMarket = async () => (await sql`SELECT status, outcome FROM protocol_markets WHERE chain_id=421614`)[0];
+  await applySepolia(firstApproval);
+  assert.deepEqual(await sepoliaMarket(), { status: 'under_review', outcome: null });
+  await applySepolia(log('ResolutionReviewFinalized', [proposal], 3));
+  assert.deepEqual(await sepoliaMarket(), { status: 'resolved', outcome: 2 });
 });

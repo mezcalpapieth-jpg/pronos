@@ -248,6 +248,16 @@ contract MarketFactory is ReentrancyGuard, MainnetResolutionReview {
     function openResolutionDispute(uint256 marketId) external {
         if (!requiresResolutionReview) require(msg.sender == owner, "MarketFactory: not owner");
         else if (msg.sender != owner) _requireReviewer();
+        _openResolutionDispute(marketId);
+    }
+
+    function openReviewedResolutionDispute(uint256 marketId, bytes32 expectedProposalId) external {
+        _requireReviewer();
+        _requireCurrentProposal(marketId, expectedProposalId);
+        _openResolutionDispute(marketId);
+    }
+
+    function _openResolutionDispute(uint256 marketId) internal {
         require(marketId < markets.length, "MarketFactory: invalid market");
         PronosAMM(markets[marketId].pool).openResolutionDispute();
         if (requiresResolutionReview) resolutionProposals[marketId].approved = false;
@@ -257,6 +267,16 @@ contract MarketFactory is ReentrancyGuard, MainnetResolutionReview {
     function clearResolutionDispute(uint256 marketId) external {
         if (requiresResolutionReview) _requireReviewer();
         else require(msg.sender == owner, "MarketFactory: not owner");
+        _clearResolutionDispute(marketId);
+    }
+
+    function clearReviewedResolutionDispute(uint256 marketId, bytes32 expectedProposalId) external {
+        _requireReviewer();
+        _requireCurrentProposal(marketId, expectedProposalId);
+        _clearResolutionDispute(marketId);
+    }
+
+    function _clearResolutionDispute(uint256 marketId) internal {
         require(marketId < markets.length, "MarketFactory: invalid market");
         PronosAMM(markets[marketId].pool).clearResolutionDispute();
         if (requiresResolutionReview) _restartResolutionReview(marketId);
@@ -303,7 +323,7 @@ contract MarketFactory is ReentrancyGuard, MainnetResolutionReview {
      * @notice Sweep a resolved market's leftover collateral to the
      *         given recipient (typically treasury or liquidity reserve).
      *
-     * Arbitrum One pools require explicit finalization and retain full backing
+     * Reviewed pools require explicit finalization and retain full backing
      * for holders. Other pools keep the 30-day recovery delay.
      *
      * Idempotent: a second call after the AMM's reserve is drained
