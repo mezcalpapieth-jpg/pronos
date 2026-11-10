@@ -13,5 +13,10 @@
   "devDependencies": {
     "@electric-sql/pglite": "0.5.9",
     "@vercel/nft": "1.10.0"
+  },
+  "overrides": {
+    "@ethersproject/providers": {
+      "ws": "8.21.0"
+    }
   }
 }

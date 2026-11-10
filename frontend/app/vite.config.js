@@ -43,10 +43,16 @@ function matchesNodeModule(id, names) {
 function manualChunks(id) {
   if (!id.includes(nodeModuleSegment)) return null;
 
+  // Both lazy 3D routes use the renderer, but only the News map needs the globe.
+  if (matchesNodeModule(id, ['@react-three/fiber', 'three'])) {
+    return 'three-vendor';
+  }
+
+  // Keep shared helpers such as tslib out of the globe chunk so authentication
+  // cannot pull it into the main bundle.
   if (matchesNodeModule(id, [
     'react-globe.gl',
     'globe.gl',
-    'three',
     'three-globe',
     'three-render-objects',
     'three-conic-polygon-geometry',
@@ -89,7 +95,6 @@ function manualChunks(id) {
     'react-is',
     'tinycolor2',
     'topojson-client',
-    'tslib',
     'world-atlas',
     '@turf/helpers',
     '@turf/invariant',
@@ -995,6 +1000,8 @@ export default defineConfig({
     'import.meta.env.VITE_VERCEL_ENV': JSON.stringify(process.env.VERCEL_ENV || process.env.VITE_VERCEL_ENV || ''),
   },
   build: {
+    // Preserve the Vite 5 browser targets after upgrading Vite.
+    target: ['es2020', 'edge88', 'firefox78', 'chrome87', 'safari14'],
     outDir: isPoints
       ? path.resolve(__dirname, '../points')   // → frontend/points/
       : path.resolve(__dirname, '../mvp'),     // → frontend/mvp/
