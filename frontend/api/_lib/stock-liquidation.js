@@ -13,13 +13,13 @@ export async function liquidateStockCyclePositions(db, cycle, { now = new Date()
   const cutoffAt = new Date(Math.min(Date.parse(window.rankingCutoffAt), new Date(now).getTime())).toISOString();
   await freezeStockCycleMarks(db, cycle, { now, ...(data ? { data } : {}) });
   const wallets = await rows(db, `SELECT username,balance FROM points_balances WHERE username IN
-    (SELECT username FROM points_stock_positions WHERE cycle_id=$1 AND quantity>0)
+    (SELECT username FROM points_stock_positions WHERE cycle_id=$1 AND NOT post_cutoff AND quantity>0)
     ORDER BY username FOR UPDATE`, [cycle.id]);
   const balances = new Map(wallets.map(wallet => [wallet.username, fixed(wallet.balance)]));
   const positions = await rows(db, `SELECT p.*,m.price_usd,m.fx_rate,m.fx_date,m.priced_at,m.source,m.terminal
     FROM points_stock_positions p LEFT JOIN points_stock_cycle_marks m
-      ON m.cycle_id=p.cycle_id AND m.ticker=p.ticker
-    WHERE p.cycle_id=$1 AND p.quantity>0 ORDER BY p.username,p.ticker FOR UPDATE OF p`, [cycle.id]);
+      ON m.cycle_id=p.cycle_id AND m.ticker=p.ticker AND m.post_cutoff=p.post_cutoff
+    WHERE p.cycle_id=$1 AND NOT p.post_cutoff AND p.quantity>0 ORDER BY p.username,p.ticker FOR UPDATE OF p`, [cycle.id]);
   for (const position of positions) {
     if (!position.terminal || !balances.has(position.username)) throw stockError('stock_cutoff_price_unavailable', 503);
     const fill = buildStockClosingFill(position.quantity, position);
@@ -43,7 +43,7 @@ export async function liquidateStockCyclePositions(db, cycle, { now = new Date()
     result.tradeId = trade.id;
     await db.query('UPDATE points_stock_trades SET result=$1 WHERE id=$2', [JSON.stringify(result), trade.id]);
     await db.query(`UPDATE points_stock_positions SET quantity=0,cost_basis=0,current_value=0,realized_pnl=$1,updated_at=NOW()
-      WHERE username=$2 AND cycle_id=$3 AND ticker=$4`, [updated.realizedPnl, position.username, cycle.id, position.ticker]);
+      WHERE username=$2 AND cycle_id=$3 AND ticker=$4 AND NOT post_cutoff`, [updated.realizedPnl, position.username, cycle.id, position.ticker]);
     await db.query(`INSERT INTO points_distributions(username,amount,kind,reference_id,reason)
       VALUES($1,$2,'stock_tournament_close',$3,$4)`, [position.username, fill.total, trade.id,
       `Simulated tournament closing sale ${position.ticker} at ${cutoffAt}`]);

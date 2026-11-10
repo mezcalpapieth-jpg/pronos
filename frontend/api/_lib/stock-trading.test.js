@@ -16,6 +16,7 @@ async function setup(t) {
   await db.exec(`CREATE TABLE points_cycles(id SERIAL PRIMARY KEY,label TEXT,started_at TIMESTAMPTZ,
     ends_at TIMESTAMPTZ,status TEXT,closed_at TIMESTAMPTZ);
     CREATE TABLE points_app_settings(key TEXT PRIMARY KEY,value JSONB);
+    CREATE TABLE points_cycle_snapshots(cycle_id INTEGER,username TEXT, PRIMARY KEY(cycle_id,username));
     CREATE TABLE points_balances(username TEXT PRIMARY KEY,balance NUMERIC(20,6),updated_at TIMESTAMPTZ);
     CREATE TABLE points_distributions(id SERIAL PRIMARY KEY,username TEXT,amount NUMERIC(20,6),kind TEXT,reference_id INTEGER,reason TEXT);
     INSERT INTO points_cycles(label,started_at,ends_at,status) VALUES('Test',NOW()-INTERVAL '60 days',NOW()+INTERVAL '1 day','active');
@@ -116,6 +117,16 @@ test('pause and operation cutoff block quotes and confirmed trades', async t => 
   await db.query("UPDATE points_app_settings SET value='false'");
   await db.query("UPDATE points_cycles SET ends_at=NOW()-INTERVAL '1 minute'");
   await assert.rejects(trade(q), { code: 'stock_cycle_closed' });
+  await assert.rejects(quote({ side: 'buy', amount: '500' }), { code: 'stock_cycle_closed' });
+  await db.query("INSERT INTO points_cycle_snapshots(cycle_id,username) VALUES(1,'fran')");
+  await assert.rejects(quote({ side: 'buy', amount: '500' }), { code: 'stock_cycle_closed' });
+  await db.query("UPDATE points_cycle_snapshots SET stock_pnl=0");
+  await assert.rejects(trade(q), { code: 'invalid_quote' });
+  const liveQuote = await quote({ side: 'buy', amount: '500' });
+  await db.query("UPDATE points_app_settings SET value='true'");
+  await assert.rejects(trade(liveQuote), { code: 'stock_cycle_closed' });
+  await db.query("UPDATE points_app_settings SET value='false'");
+  assert.equal((await trade(liveQuote)).balance, '9501.502');
 });
 test('unavailable marks preserve holdings and flag the previous valuation as stale', async t => {
   const { db, quote, trade } = await setup(t);

@@ -132,8 +132,12 @@ test('a missing cutoff price aborts without freezing prices or losing open holdi
   assert.equal((await db.query('SELECT quantity FROM points_stock_positions')).rows[0].quantity,'0.249000000000000000');
 });
 
-test('the tournament photo saves stock breakdowns once and reuses them after holdings change', async t => {
-  const {db,cycle,fx,trade}=await setup(t); await trade({side:'buy',amount:'500'});
+test('stocks resume after the cutoff photo while tournament marks, scores and activity stay frozen', async t => {
+  const {db,cycle,fx,market,trade}=await setup(t);
+  await trade({side:'buy',amount:'500'});
+  const at=Date.now();
+  await db.query('UPDATE points_cycles SET ends_at=$1', [new Date(at).toISOString()]);
+  cycle.ends_at = new Date(at).toISOString();
   await db.exec(`CREATE TABLE points_cycle_snapshots (
     cycle_id INTEGER,username TEXT,final_balance NUMERIC,final_pnl NUMERIC,rank INTEGER,
     tournament_score NUMERIC,market_pnl NUMERIC,current_position_value NUMERIC,hold_bonus NUMERIC,
@@ -142,7 +146,7 @@ test('the tournament photo saves stock breakdowns once and reuses them after hol
     conviction_markets INTEGER,conviction_lots INTEGER,inactivity_penalty NUMERIC,inactive_days INTEGER,
     active_days INTEGER,qualifying_markets INTEGER,qualified BOOLEAN,PRIMARY KEY(cycle_id,username));`);
   for(const statement of STOCK_SCHEMA_MIGRATIONS.filter(s=>s.startsWith('ALTER TABLE')))await db.exec(statement);
-  const at=Date.now();
+  await assert.rejects(trade({side:'buy',amount:'500'}), {code:'stock_cycle_closed'});
   await db.transaction(tx=>freezeStockCycleMarks(tx,cycle,{now:new Date(at),data:{cutoff:async()=>({
     assets:[{ticker:'AAPL',available:true,priceUsd:'120',pricedAt:at-1}],fx,stale:false,fetchedAt:at,
   })}}));
@@ -153,7 +157,31 @@ test('the tournament photo saves stock breakdowns once and reuses them after hol
   const holder=first.find(row=>row.username==='holder');
   assert.equal(holder.stockPnl,98.5);assert.equal(holder.stockPositionValue,0);
   assert.equal(holder.stockStale,false);assert.equal(holder.tradingPnl,98.5);
-  await db.query("UPDATE points_stock_positions SET quantity=0,cost_basis=0,realized_pnl=0 WHERE username='holder'");
+  const cutoffValuation = (await db.query("SELECT * FROM points_stock_valuations WHERE sampled_at=$1", [cycle.ends_at])).rows;
+  await trade({side:'buy',amount:'500'},'125');
+  assert.equal((await db.transaction(tx=>liquidateStockCyclePositions(tx,cycle))).closedPositions,0);
+  await db.transaction(tx=>snapshotStockValuations(tx,{market:market('130')}));
+  const positions = await db.transaction(tx=>readStockPortfolio(tx,{username:'holder',market:market('130')}));
+  assert.equal(positions.positions.length,1);
+  assert.equal(positions.positions[0].archived,false);
+  assert.equal(positions.positions[0].terminal,false);
+  assert.equal(positions.positions[0].priceUsd,'130.00000000');
+  const wallet = (await buildWalletLeaderboardRows(db,{stockCycleId:cycle.id})).find(row=>row.username==='holder');
+  assert.equal(wallet.stockPositionValue, positions.summary.currentValue);
+  const sale = await trade({side:'sell',sellAll:true},'130');
+  assert.equal(sale.position.quantity,'0');
+  const portfolio = await db.transaction(tx=>readStockPortfolio(tx,{username:'holder'}));
+  assert.ok(portfolio.summary.realizedPnl>portfolio.summary.tournamentPnl);
+  assert.deepEqual(portfolio.trades.map(row=>row.post_cutoff),[true,true,false,false]);
+  const score = await readStockTournamentRows(db,{window:configuredCycleWindowFromRow(cycle)});
+  assert.equal(score.scores.get('holder').pnl,98.5044);
+  assert.equal(score.activity.get('holder').total_actions,1);
+  const marks = (await db.query('SELECT post_cutoff,price_usd,terminal FROM points_stock_cycle_marks ORDER BY post_cutoff')).rows;
+  assert.deepEqual(marks, [
+    {post_cutoff:false,price_usd:'120.00000000',terminal:true},
+    {post_cutoff:true,price_usd:'130.00000000',terminal:false},
+  ]);
+  assert.deepEqual((await db.query("SELECT * FROM points_stock_valuations WHERE sampled_at=$1", [cycle.ends_at])).rows,cutoffValuation);
   const second=await db.transaction(tx=>snapshotCycleLeaderboard(adapter(tx),cycle));
   assert.deepEqual(second,first);
 });

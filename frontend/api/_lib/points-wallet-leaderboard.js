@@ -53,7 +53,7 @@ export async function buildWalletLeaderboardRows(db, { limit = 5000, stockCycleI
         WHEN m.price_usd IS NOT NULL THEN TRUNC(p.quantity*m.price_usd*m.fx_rate,6)
         ELSE p.current_value END) AS value
       FROM points_stock_positions p LEFT JOIN points_stock_cycle_marks m
-        ON m.cycle_id=p.cycle_id AND m.ticker=p.ticker
+        ON m.cycle_id=p.cycle_id AND m.ticker=p.ticker AND m.post_cutoff=p.post_cutoff
       WHERE p.cycle_id=$2 GROUP BY p.username
     ) s ON s.username=b.username` : ''}
     WHERE b.username IS NOT NULL

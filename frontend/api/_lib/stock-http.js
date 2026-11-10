@@ -8,6 +8,7 @@ import { ensureStockSchema } from './stock-schema.js';
 import { createStockData } from './stock-data.js';
 import { createStockQuote, executeStockTrade, stockOrderRequest } from './stock-trading.js';
 import { readStockPortfolio } from './stock-portfolio.js';
+import { readStockCycle, readStockCyclePhase, stockTradingIsPaused } from './stock-cycle.js';
 import { capturePointsRiskEvent } from './points-risk.js';
 
 let sql;
@@ -31,19 +32,23 @@ export function stockHandler(action) {
       await ensurePointsSchema(sql);
       await ensureStockSchema(withTransaction);
       let result;
-      if (action === 'assets') {
-        const [market, book] = await Promise.all([data.assets(false, req.query.ticker),
-          req.query.ticker ? data.book(req.query.ticker) : null]);
-        result = { ...market, ...(book ? { book } : {}) };
-        result.tradingEnabled = process.env.POINTS_STOCKS_TRADING_ENABLED !== 'false';
-      }
-      else if (action === 'health') {
-        const market = await data.assets();
-        result = { ok: true, schemaVersion: 3, tradingEnabled: process.env.POINTS_STOCKS_TRADING_ENABLED !== 'false',
-          source: market.source, fetchedAt: market.fetchedAt, fxDate: market.fx.date, availableAssets: market.assets.filter(asset => asset.available).length,
-          tradableAssets: market.assets.filter(asset => asset.available).length };
-      }
-      else if (action === 'candles') result = await data.candles(req.query.ticker, req.query.range || '7D');
+      if (action === 'assets' || action === 'health') {
+        const [market, book, phase, paused] = await Promise.all([
+          data.assets(false, action === 'assets' ? req.query.ticker : undefined),
+          action === 'assets' && req.query.ticker ? data.book(req.query.ticker) : null,
+          readStockCycle(sql).then(cycle => readStockCyclePhase(sql, cycle, Date.now())),
+          stockTradingIsPaused(sql),
+        ]);
+        const tradingEnabled = process.env.POINTS_STOCKS_TRADING_ENABLED !== 'false'
+          && Boolean(phase) && !paused;
+        if (action === 'assets') {
+          result = { ...market, ...(book ? { book } : {}), tradingEnabled, tradingPhase: phase };
+        } else {
+          const availableAssets = market.assets.filter(asset => asset.available).length;
+          result = { ok: true, schemaVersion: 3, tradingEnabled, tradingPhase: phase, source: market.source,
+            fetchedAt: market.fetchedAt, fxDate: market.fx.date, availableAssets, tradableAssets: availableAssets };
+        }
+      } else if (action === 'candles') result = await data.candles(req.query.ticker, req.query.range || '7D');
       else if (action === 'quote') {
         const request = stockOrderRequest(req.body);
         // A confirmation quote needs the newest book, rather than spending

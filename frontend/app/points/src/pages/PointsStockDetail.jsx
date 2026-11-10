@@ -208,6 +208,9 @@ export default function PointsStockDetail({ onOpenLogin }) {
     {!stocksEnabled && <p className="stock-alert">{en ? 'Stocks will be available soon.' : 'Acciones estará disponible pronto.'}</p>}
     {marketError && <p className="stock-alert" role="status">{marketError}</p>}
     {data?.tradingEnabled === false && <p className="stock-alert" role="status">{en ? 'Trading is temporarily paused. Your holdings and tournament PnL remain visible.' : 'Las operaciones están pausadas temporalmente. Tus posiciones y PnL del torneo siguen disponibles.'}</p>}
+    {data?.tradingPhase === 'post_cutoff' && data.tradingEnabled && <p className="stock-note">{en
+      ? 'Trading is open outside the tournament. New trades use your points balance and do not count toward tournament standings.'
+      : 'Puedes operar fuera del torneo con tu saldo en puntos. Las nuevas operaciones no cuentan para la clasificación del torneo.'}</p>}
     {data?.demo && <p className="stock-alert">DEMO · {en ? 'Synthetic prices for preview.' : 'Precios sintéticos para la vista previa.'}</p>}
     <p className="stock-note">{en ? 'Stock PnL counts when you sell, after fees. Open PnL remains unrealized until sale. At tournament close, all holdings are sold automatically. Prices reference perpetuals; purchases use MXNP points.' : 'El PnL de acciones cuenta al vender, después de comisiones. El PnL abierto no está realizado hasta la venta. Al cierre del torneo todas las posiciones se venden automáticamente. Precios de referencia de perpetuos; compras con puntos MXNP.'}</p>
     <div className="stock-detail-grid"><section className="stock-chart-card">

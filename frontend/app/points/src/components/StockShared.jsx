@@ -97,7 +97,7 @@ export function StockPositions({ data }) {
       </article>)}
     <details className="stock-monitor-rules">
       <summary>{lang === 'en' ? 'Tournament rules' : 'Reglas del torneo'}</summary>
-      <p className="stock-note">{lang === 'en' ? 'Sales realize PnL after fees. All holdings close automatically at tournament end, and nothing carries into the next cycle. Buying or selling counts as activity; holding or automatic closing does not. Holding values exclude selling fees.' : 'Al vender, el PnL se realiza después de comisiones. Todas las posiciones se cierran al terminar el torneo y nada pasa al siguiente ciclo. Comprar o vender cuenta como actividad; mantener posiciones o el cierre automático no. Los valores mostrados no incluyen la comisión de venta.'}</p>
+      <p className="stock-note">{lang === 'en' ? 'Sales realize PnL after fees. All holdings close automatically at tournament end, and nothing carries into the next cycle. Only buys and sells during the tournament count toward tournament activity. Holding values exclude selling fees.' : 'Al vender, el PnL se realiza después de comisiones. Todas las posiciones se cierran al terminar el torneo y nada pasa al siguiente ciclo. Solo las compras y ventas durante el torneo cuentan como actividad del torneo. Los valores mostrados no incluyen la comisión de venta.'}</p>
     </details>
   </section>;
 }
