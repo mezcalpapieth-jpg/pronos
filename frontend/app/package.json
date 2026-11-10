@@ -27,6 +27,11 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",
-    "vite": "^5.4.2"
+    "vite": "7.3.8"
+  },
+  "overrides": {
+    "@ethersproject/providers": {
+      "ws": "8.21.0"
+    }
   }
 }
