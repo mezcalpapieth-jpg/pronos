@@ -14,6 +14,7 @@ const SECTIONS = [
     ['markets', 'Mercados', 'Revisa mercados activos, pendientes de resolución e históricos.'],
     ['pending', 'Por aprobar', 'Revisa las propuestas antes de publicarlas.'],
     ['resolution', 'Por resolver', 'Revisa resultados propuestos y mercados que ya cerraron.'],
+    ['accounting', 'Contabilidad', 'Consulta saldos, movimientos, comisiones y resultados de liquidez de Pronos.'],
   ]],
   ['Usuarios', [
     ['support', 'Soporte', 'Lee las conversaciones y da seguimiento a tickets abiertos y cerrados.'],
@@ -49,7 +50,7 @@ function adminHref(tab) {
   return `/admin?tab=${tab}`;
 }
 
-export function AdminWorkspace({ tab, username, children }) {
+export function AdminWorkspace({ tab, username, onchainAccounting, children }) {
   const main = useRef(null);
   const [moreSections, setMoreSections] = useState(() =>
     SECTIONS.slice(1).some(([, items]) => items.some(([id]) => id === tab)));
@@ -91,7 +92,7 @@ export function AdminWorkspace({ tab, username, children }) {
           {username && <span className="pb-admin-user">@{username}</span>}
         </header>
         <nav className="pb-admin-sidebar" aria-label="Secciones de administración">
-          <AdminNavGroup section={SECTIONS[0]} tone={SECTION_TONES[0]} tab={tab} />
+          <AdminNavGroup section={SECTIONS[0]} tone={SECTION_TONES[0]} tab={tab} onchainAccounting={onchainAccounting} />
           <button type="button" className="pb-admin-more" aria-controls="pb-admin-secondary-sections" aria-expanded={moreSections}
             onClick={() => setMoreSections(value => !value)}>
             Usuarios y administración <span aria-hidden="true">{moreSections ? '−' : '+'}</span>
@@ -122,12 +123,12 @@ export function AdminWorkspace({ tab, username, children }) {
   );
 }
 
-function AdminNavGroup({ section: [group, items], tone, tab }) {
+function AdminNavGroup({ section: [group, items], tone, tab, onchainAccounting }) {
   return (
     <div className="pb-admin-nav-group" data-tone={tone}>
       <span>{group}</span>
       <div className="pb-admin-nav-links">
-        {items.map(([id, label]) => (
+        {items.filter(([id]) => id !== 'accounting' || onchainAccounting).map(([id, label]) => (
           <Link key={id} to={adminHref(id)} aria-current={id === tab ? 'page' : undefined}>{label}</Link>
         ))}
       </div>

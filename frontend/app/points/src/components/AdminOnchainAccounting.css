@@ -1,0 +1,27 @@
+.accounting { display: grid; gap: 14px; min-width: 0; }
+.accounting h2 { margin: 0; font: 700 16px/1.3 var(--font-body, system-ui, sans-serif); }
+.accounting p { margin: 8px 0; color: var(--admin-muted); }
+.accounting a { color: var(--text-primary); text-underline-offset: 3px; }
+.accounting-section { padding: 14px; min-width: 0; }
+.accounting-intro, .accounting-actions { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+.accounting-intro { justify-content: space-between; }
+.accounting-intro > div { flex: 1 1 420px; }
+.accounting-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 225px), 1fr)); gap: 10px; }
+.accounting-metric { display: grid; gap: 6px; align-content: start; border: 1px solid var(--admin-line); border-radius: 10px; padding: 12px; background: var(--admin-panel); }
+.accounting-metric strong { font-size: 19px; overflow-wrap: anywhere; }
+.accounting-metric small, .accounting-table small, .accounting-muted { color: var(--admin-muted); }
+.accounting-amount { font-variant-numeric: tabular-nums; }
+.accounting-scroll { overflow: auto; max-height: 62vh; }
+.accounting-table { border-collapse: collapse; width: 100%; min-width: 590px; text-align: left; font-size: 13px; }
+.accounting-table caption { padding: 8px 0; color: var(--admin-muted); text-align: left; }
+.accounting-table th, .accounting-table td { padding: 8px 10px; border-bottom: 1px solid var(--admin-line); vertical-align: top; }
+.accounting-table th { min-width: 95px; }
+.accounting-table th[scope="row"] { min-width: 180px; }
+.accounting-table thead { position: sticky; top: 0; background: var(--admin-panel); z-index: 1; }
+.accounting-table small { display: block; margin-top: 4px; }
+.accounting-table button { margin-top: 5px; }
+.accounting-filters { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; margin-top: 8px; }
+.accounting-filters label { display: grid; gap: 4px; min-width: 0; max-width: 100%; color: var(--admin-muted); }
+.accounting-filters input, .accounting-filters select { box-sizing: border-box; max-width: 100%; width: 210px; }
+.accounting-actions { margin-top: 10px; }
+.accounting-warning { padding: 10px 12px 10px 30px; margin: 0; border: 1px solid var(--admin-line); border-radius: 10px; }

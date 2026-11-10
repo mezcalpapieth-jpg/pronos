@@ -1,6 +1,7 @@
 import RiskPanel from '../components/AdminRiskPanel.jsx';
 import AdminOnchainOperations from '../components/AdminOnchainOperations.jsx';
 import AdminOnchainTransactions from '../components/AdminOnchainTransactions.jsx';
+import AdminOnchainAccounting from '../components/AdminOnchainAccounting.jsx';
 import AdminOnchainSettlement from '../components/AdminOnchainSettlement.jsx';
 import AdminOnchainResolution from '../components/AdminOnchainResolution.jsx';
 import { AdminResolutionReview } from '../components/ResolutionReview.jsx';
@@ -437,6 +438,7 @@ export default function PointsAdmin({ isAdmin }) {
   } : null;
   const navigate = useNavigate();
   const { authenticated, user, loading: authLoading } = usePointsAuth();
+  const execution = usePointsExecution();
   const [adminTaskCounts, setAdminTaskCounts] = useState(null);
   const [overviewLoading, setOverviewLoading] = useState(true);
   const [taskRefreshKey, setTaskRefreshKey] = useState(0);
@@ -504,7 +506,7 @@ export default function PointsAdmin({ isAdmin }) {
   const generator = { busy: generatingNow, run: runGenerators, revision: generationRevision };
 
   return (
-    <AdminWorkspace tab={tab} username={user?.username}>
+    <AdminWorkspace tab={tab} username={user?.username} onchainAccounting={execution.enabled}>
       {tab === 'overview' && <AdminOverview counts={adminTaskCounts} loading={overviewLoading} onRefresh={refreshAdminTaskCounts} />}
       {tab === 'create' && <CreateMarketForm prefill={createPrefill} />}
       {tab === 'pending' && <PendingMarketsTable onQueueChange={refreshAdminTaskCounts} generator={generator} />}
@@ -516,6 +518,8 @@ export default function PointsAdmin({ isAdmin }) {
       {tab === 'support' && <SupportTicketsQueue onQueueChange={refreshAdminTaskCounts} />}
       {tab === 'deck' && <DeckAdminPanel />}
       {tab === 'cycles' && <CyclesPanel />}
+      {tab === 'accounting' && (execution.enabled ? <AdminOnchainAccounting key={user?.suborgId || user?.username} />
+        : <p>Contabilidad disponible en el preview de Arbitrum Sepolia.</p>)}
       {tab === 'launch' && (
         <>
           <MarketAutomationTools generator={generator} />
