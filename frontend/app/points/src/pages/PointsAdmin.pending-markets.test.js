@@ -98,6 +98,13 @@ test('Sepolia quick approval confirms the deployment destination and keeps bulk 
   assert.match(pending, /async function approveAll\(\) \{\s*if \(approvingOnchain\) return/);
 });
 
+test('reviewed Sepolia proposals with generated criteria still show the final confirmation', async () => {
+  const operations = await readFile(new URL('./PointsAdminOperations.jsx', import.meta.url), 'utf8');
+  assert.match(operations, /const needsConfirmation = reviewedSepolia \|\| !approvalKey/);
+  assert.match(operations, /\(!needsConfirmation \|\| confirm\) \? onApprove\(approvalKey \|\| undefined\) : setConfirm\(true\)/);
+  assert.match(operations, /La revisión de 24 horas comienza cuando se propone un resultado/);
+});
+
 test('Points admin shares the generator between Sistema and Por aprobar and reloads proposals after it runs', () => {
   const tools = sourceForFunction('MarketAutomationTools');
   const pending = sourceForFunction('PendingMarketsTable');

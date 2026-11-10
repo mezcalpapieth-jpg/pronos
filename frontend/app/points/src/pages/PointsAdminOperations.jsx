@@ -242,11 +242,12 @@ export function ProposalApproval({ row, revision, disabled, onApprove, previewAp
       .then(result => { if (!controller.signal.aborted) setState(result); })
       .catch(() => { if (!controller.signal.aborted) setState(false); });
     return () => controller.abort();
-  }, [row.id, revision, attempt, previewApprovalMode]);
+  }, [row.id, revision, attempt, previewApprovalMode, reviewedSepolia]);
 
   const checks = state?.checks;
   const rules = state?.resolutionRules;
   const approvalKey = previewApprovalMode === 'onchain' ? state?.oneClickApprovalKey : null;
+  const needsConfirmation = reviewedSepolia || !approvalKey;
   const blocked = checks?.some(issue => issue.severity === 'block');
   return (
     <section className="pb-admin-operation pb-admin-approval" aria-label="Verificación de la propuesta">
@@ -271,8 +272,8 @@ export function ProposalApproval({ row, revision, disabled, onApprove, previewAp
         {reviewedSepolia && ' La revisión de 24 horas comienza cuando se propone un resultado.'}</p>}
       <div className="pb-admin-tools">
         <button className="pb-admin-button pb-admin-primary" type="button" disabled={!checks || blocked || disabled}
-          onClick={() => (approvalKey || confirm) ? onApprove(approvalKey || undefined) : setConfirm(true)}>
-          {approvalKey ? 'Publicar en Arbitrum Sepolia' : confirm ? 'Confirmar publicación' : 'Aprobar propuesta'}
+          onClick={() => (!needsConfirmation || confirm) ? onApprove(approvalKey || undefined) : setConfirm(true)}>
+          {confirm ? 'Confirmar publicación' : approvalKey ? 'Publicar en Arbitrum Sepolia' : 'Aprobar propuesta'}
         </button>
         {confirm && <button type="button" className="pb-admin-button" disabled={disabled} onClick={() => setConfirm(false)}>Volver</button>}
       </div>
