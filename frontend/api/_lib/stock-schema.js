@@ -43,6 +43,23 @@ export const STOCK_SCHEMA_MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS idx_stock_trades_user_cycle ON points_stock_trades(username, cycle_id, created_at)`,
   `ALTER TABLE points_stock_trades ADD COLUMN IF NOT EXISTS origin TEXT NOT NULL DEFAULT 'user'
     CHECK (origin IN ('user','tournament_close'))`,
+  `ALTER TABLE points_stock_cycle_marks ADD COLUMN IF NOT EXISTS post_cutoff BOOLEAN NOT NULL DEFAULT FALSE`,
+  `ALTER TABLE points_stock_positions ADD COLUMN IF NOT EXISTS post_cutoff BOOLEAN NOT NULL DEFAULT FALSE`,
+  `ALTER TABLE points_stock_trades ADD COLUMN IF NOT EXISTS post_cutoff BOOLEAN NOT NULL DEFAULT FALSE`,
+  `DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='points_stock_cycle_marks'::regclass
+      AND contype='p' AND cardinality(conkey)=2) THEN
+      ALTER TABLE points_stock_cycle_marks DROP CONSTRAINT points_stock_cycle_marks_pkey,
+        ADD PRIMARY KEY (cycle_id,ticker,post_cutoff);
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='points_stock_positions'::regclass
+      AND contype='p' AND cardinality(conkey)=3) THEN
+      ALTER TABLE points_stock_positions DROP CONSTRAINT points_stock_positions_pkey,
+        ADD PRIMARY KEY (username,cycle_id,ticker,post_cutoff);
+    END IF;
+  END $$`,
+  `CREATE INDEX IF NOT EXISTS idx_stock_positions_open_tournament ON points_stock_positions(cycle_id)
+    WHERE NOT post_cutoff AND quantity>0`,
   `CREATE TABLE IF NOT EXISTS points_stock_valuations (
     username TEXT NOT NULL, cycle_id INTEGER NOT NULL REFERENCES points_cycles(id),
     sampled_at TIMESTAMPTZ NOT NULL, current_value NUMERIC(20,6) NOT NULL,
