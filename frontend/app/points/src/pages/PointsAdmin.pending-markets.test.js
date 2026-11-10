@@ -99,7 +99,10 @@ test('Sepolia quick approval confirms the deployment destination and keeps bulk 
 });
 
 test('reviewed Sepolia proposals with generated criteria still show the final confirmation', async () => {
+  const pending = sourceForFunction('PendingMarketsTable');
   const operations = await readFile(new URL('./PointsAdminOperations.jsx', import.meta.url), 'utf8');
+  assert.match(pending, /quickApproval: reviewedSepolia \? row : undefined,\s*oneClickApprovalKey: row.oneClickApprovalKey/);
+  assert.match(pending, /\$\{reviewWindow\}\$\{rules\}/);
   assert.match(operations, /const needsConfirmation = reviewedSepolia \|\| !approvalKey/);
   assert.match(operations, /\(!needsConfirmation \|\| confirm\) \? onApprove\(approvalKey \|\| undefined\) : setConfirm\(true\)/);
   assert.match(operations, /La revisión de 24 horas comienza cuando se propone un resultado/);

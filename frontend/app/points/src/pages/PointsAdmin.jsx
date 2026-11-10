@@ -7395,7 +7395,10 @@ function PendingMarketsTable({ onQueueChange, generator }) {
             {row.oneClickApprovalKey && (
               <button type="button" className="pb-admin-button pb-admin-primary"
                 disabled={bulkBusy || busyId != null || generator.busy}
-                onClick={() => review(row.id, 'approve', { oneClickApprovalKey: row.oneClickApprovalKey })}>
+                onClick={() => review(row.id, 'approve', {
+                  quickApproval: reviewedSepolia ? row : undefined,
+                  oneClickApprovalKey: row.oneClickApprovalKey,
+                })}>
                 Publicar en Arbitrum Sepolia
               </button>
             )}
