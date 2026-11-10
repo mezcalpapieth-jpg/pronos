@@ -26,6 +26,9 @@ const Home = lazy(() => import('./pages/Home.jsx'));
 const MarketDetail = lazy(() => import('./pages/MarketDetail.jsx'));
 const Portfolio = lazy(() => import('./pages/Portfolio.jsx'));
 const FundingPage = lazy(() => import('./pages/FundingPage.jsx'));
+const Hip4PilotPage = import.meta.env.VITE_HIP4_TESTNET_ENABLED === 'true'
+  ? lazy(() => import('./pages/Hip4PilotPage.jsx'))
+  : null;
 const MvpUserProfile = lazy(() => import('./pages/MvpUserProfile.jsx'));
 const Admin = lazy(() => import('./pages/Admin.jsx'));
 const WorldCupPage = lazy(() => import('./pages/WorldCupPage.jsx'));
@@ -80,6 +83,7 @@ export default function App() {
   // Modal opens automatically when the user is signed in but missing a
   // username (first login path). Also opens on manual click from Nav.
   const showLogin = loginOpen || (authenticated && needsUsername && !checkingUsername);
+  const isHip4Path = Hip4PilotPage && typeof window !== 'undefined' && /^\/mvp\/hip4\/?$/.test(window.location.pathname);
 
   return (
     <BrowserRouter basename="/mvp">
@@ -88,7 +92,7 @@ export default function App() {
           open={showLogin}
           onClose={() => setLoginOpen(false)}
           initialStep={authenticated && needsUsername ? 'username' : 'email'}
-          enableDelegationStep
+          enableDelegationStep={!isHip4Path}
         />
       )}
 
@@ -143,6 +147,9 @@ export default function App() {
             path="/funding"
             element={<FundingPage onOpenLogin={() => setLoginOpen(true)} />}
           />
+          {Hip4PilotPage && (
+            <Route path="/hip4" element={<Hip4PilotPage onOpenLogin={() => setLoginOpen(true)} />} />
+          )}
           <Route
             path="/u/:username"
             element={<MvpUserProfile onOpenLogin={() => setLoginOpen(true)} />}

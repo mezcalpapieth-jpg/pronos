@@ -1,6 +1,6 @@
 # Pronos HIP-4 testnet fee probe
 
-This standalone CLI measures HIP-4 book depth and can route one buy and one sell to an existing HyperCore testnet USDC market. It uses the official MIT Hyperliquid Python SDK for signatures and the documented numeric HIP-4 asset IDs. The liquidity report can read public mainnet books. All wallet actions use HyperCore testnet, separate from the Pronos Sepolia deployment and web app. A Pronos builder code is the address on the order plus the approved rate; no venue deployment or HYPE stake is needed to route.
+This standalone CLI measures HIP-4 book depth and can route one buy and one sell to an existing HyperCore testnet USDC market. It uses the official MIT Hyperliquid Python SDK for signatures and the documented numeric HIP-4 asset IDs. The liquidity report can read public mainnet books. All signed actions use HyperCore testnet. The embedded-wallet pilot runs on the separate HIP-4 branch. A Pronos builder code is the address on the order plus the approved rate; no venue deployment or HYPE stake is needed to route.
 
 ## Install and fund
 
@@ -13,7 +13,7 @@ python3 -m venv .venv
 
 Run `probe.py init-wallets` on a new checkout to create a fresh testnet-only pair. It prints only the addresses, writes private keys to a Git-ignored local file with mode `0600`, and never overwrites it. The original pair is available only in the original worktree. Save that file in private storage if you need the same addresses after removing the worktree. Do not reuse mainnet keys or transfer real funds to these addresses.
 
-The current testnet builder is `0x040fe3673b6bded15d949eefccf3509a2284cd04`; the test trader is `0x53454f7449d447067663c3e2bc21b027b277d71c`. On November 10, 2026, the public API reported zero balances and zero fee approval. Ask a funded testnet operator to transfer 110 mock USDC to the builder and 30 mock USDC to the trader, both as HyperCore testnet spot USDC. The extra builder balance is a buffer; a new account may incur activation cost. The [official testnet faucet](https://hyperliquid.gitbook.io/hyperliquid-docs/onboarding/testnet-faucet) requires prior mainnet deposit on the same address.
+The current testnet builder is `0x040fe3673b6bded15d949eefccf3509a2284cd04`; the test trader is `0x53454f7449d447067663c3e2bc21b027b277d71c`. On November 10, 2026, the public API reported zero balances and zero fee approval. Use a funded HyperCore testnet operator to transfer 110 mock spot USDC to the builder and 30 to the trader. For the browser pilot, use the Turnkey address displayed in the app as the trader. A fresh recipient adds a one-time 1 test USDC activation fee to the sender’s cost. The [official testnet faucet](https://hyperliquid.gitbook.io/hyperliquid-docs/onboarding/testnet-faucet) requires prior mainnet deposit on the same address.
 
 ```sh
 .venv/bin/python probe.py fund-builder-perps
@@ -22,6 +22,52 @@ The current testnet builder is `0x040fe3673b6bded15d949eefccf3509a2284cd04`; the
 ```
 
 The builder needs Standard abstraction and 100 mock USDC in perps account value; `fund-builder-perps` moves 100 from the builder's spot balance. The trader holds USDC in spot and signs the builder fee approval from its main testnet wallet. Confirm `approvedTenthsOfBps` is `250`, meaning 25 bps (`0.25%`).
+
+## Run the Turnkey pilot
+
+Set `VITE_HIP4_TESTNET_ENABLED=true` on the HIP-4 build and open `/mvp/hip4`. Sign in with the existing Pronos email OTP using a dedicated test account. The page reads HyperCore testnet balances for that user's embedded wallet. The original CLI trader uses a separate key and cannot stand in for the embedded-wallet test.
+
+After a sponsor funds the wallet, refresh and choose **Autorizar trading**. The browser asks Turnkey to sign the named 30-minute agent approval and then the 25 bps builder approval. It keeps the agent key in page memory and submits USDC binary-outcome orders as immediate-or-cancel with a client order ID. Reloading generates a replacement agent at the next authorization. Use a fresh two-sided book and sell only the confirmed fill size from the buy.
+
+The withdrawal asks Turnkey to sign a `sendAsset` from HyperCore spot to the USDC system address. It returns native test USDC to the same embedded wallet on HyperEVM testnet. Record the nonce and confirm destination credit separately from the exchange acknowledgement. [Circle's HyperEVM withdrawal guide](https://developers.circle.com/cctp/howtos/withdraw-usdc-from-hypercore-to-hyperevm)
+
+## Fund and audit a Turnkey wallet
+
+Use the embedded EOA displayed by the pilot and a separate operator-controlled, funded HyperCore testnet spot sponsor. Supply a private regular file containing only the sponsor's testnet private key. The operator must retain at least 1 mock USDC of preflight headroom and may send up to 30 mock USDC per run. The CLI journals the unsigned intent before submission. If a result is ambiguous, look up the transfer before taking another action.
+
+```sh
+.venv/bin/python probe.py fund-embedded RUN --sponsor "$SPONSOR" --trader "$TRADER" \
+  --amount 30 --sponsor-key-file "$SPONSOR_KEY_FILE"
+.venv/bin/python probe.py audit-transfer --source "$SPONSOR" --destination "$TRADER" \
+  --start-time "$FUNDING_NONCE_MS" --amount 30
+```
+
+The nonce is in the funding output and in `.local-testnet/RUN/embedded-funding.json`. The audit lists transfers with the same hash, time and amount in both HyperCore spot ledgers and shows the current free USDC balances. Pass `--hash` to reconcile a known transfer. This command is for transfers between HyperCore spot wallets.
+
+Before each browser order, save a baseline for the designated builder. Keep that builder idle apart from the order under test until the audit reconciles.
+
+```sh
+.venv/bin/python probe.py builder-rewards --builder "$BUILDER" > "$BASELINE_FILE"
+# Submit the browser order and record the client order ID and submission time.
+.venv/bin/python probe.py audit-order --trader "$TRADER" --builder "$BUILDER" --cloid "$CLOID" \
+  --outcome "$OUTCOME" --side "$SIDE" --direction buy --start-time "$ORDER_NONCE_MS" \
+  --rewards-before "$BASELINE_FILE"
+```
+
+Check the raw order time-in-force, terminal status and actual filled shares, plus the fill hashes and `builderFeeMatches25Bps`. `builderCreditMatches25BpsFill` compares the observed fees with the builder's USDC reward delta in that isolated window. It is available when you provide the pre-order baseline. Take a fresh snapshot before testing the sell. The command also reports the current approval as a separate observation. [Core spot transfers](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/exchange-endpoint#core-spot-transfer) · [Order status by client ID](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/info-endpoint#query-order-status-by-oid-or-cloid)
+
+### Reconcile the HyperEVM withdrawal
+
+After the sell, save a new balance baseline before submitting the browser withdrawal. The Circle route credits native USDC to the same embedded address on HyperEVM testnet. Keep this address idle during reconciliation. [Circle withdrawal guide](https://developers.circle.com/cctp/howtos/withdraw-usdc-from-hypercore-to-hyperevm)
+
+```sh
+.venv/bin/python probe.py withdrawal-baseline --trader "$TRADER" > "$WITHDRAWAL_BASELINE"
+# Submit the testnet withdrawal in the browser, then look for its confirmed credit.
+.venv/bin/python probe.py audit-withdrawal --trader "$TRADER" --amount "$AMOUNT" \
+  --baseline "$WITHDRAWAL_BASELINE"
+```
+
+The audit checks chain 998 and the Circle USDC contract at `0x2B3370eE501B4a559b57D449569354196457D8Ab`. Confirmation requires a Core spot debit of at least the requested amount, an exact increase in the EVM balance, and one matching pair of `Withdraw` and ERC-20 `Transfer` events in the same EVM transaction. For a known HyperEVM hash, pass `--hash` to use its receipt. The log search is bounded to 500 blocks after the baseline by default. For an older baseline with a known event window, pass `--from-block` within 500 blocks of the latest block. [Circle bridge contract](https://github.com/circlefin/hyperevm-circle-contracts/blob/master/src/CoreDepositWallet.sol) · [HyperEVM RPC limits](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/hyperevm/json-rpc)
 
 ## Screen retail depth without wallets
 

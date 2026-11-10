@@ -1,0 +1,105 @@
+.hip4-pilot {
+  max-width: 1080px;
+  min-height: 55vh;
+  margin-inline: auto;
+  padding: 40px clamp(16px, 4vw, 48px) 64px;
+}
+
+.hip4-pilot h1 {
+  margin: 8px 0 20px;
+  font-size: clamp(32px, 5vw, 48px);
+}
+
+.hip4-pilot h2 {
+  margin: 0 0 12px;
+  font-size: 21px;
+}
+
+.hip4-pilot p,
+.hip4-pilot li {
+  margin: 0 0 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.hip4-pilot .hip4-pilot-eyebrow {
+  color: var(--orange);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.hip4-pilot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  gap: 16px;
+}
+
+.hip4-pilot-card {
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface1);
+}
+
+.hip4-pilot-card ol {
+  margin: 0;
+  padding-inline-start: 1.3em;
+}
+
+.hip4-pilot code {
+  overflow-wrap: anywhere;
+}
+
+.hip4-pilot-address {
+  display: block;
+  margin: 6px 0 12px;
+  padding: 8px;
+  border-radius: 6px;
+  background: var(--surface2);
+}
+
+.hip4-pilot fieldset {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.hip4-pilot label {
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
+}
+
+.hip4-pilot input,
+.hip4-pilot select {
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface2);
+  color: inherit;
+  font: inherit;
+}
+
+.hip4-pilot button {
+  justify-self: start;
+}
+
+.hip4-pilot button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.hip4-pilot-status [role='alert'] {
+  color: var(--no);
+}
+
+.hip4-pilot-confirm > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

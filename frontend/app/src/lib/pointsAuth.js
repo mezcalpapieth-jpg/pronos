@@ -198,6 +198,26 @@ const delegationClient = createDelegationClient({
 export const authorizeDelegation = () => delegationClient.authorize();
 export const revokeDelegation = () => delegationClient.revoke();
 
+export async function signPointsWalletTypedData({ address, suborgId, payload }) {
+  const client = await delegationOwnerClient({
+    browser: getBrowser(), client: await getIdbClient(), organizationId: suborgId,
+  });
+  const { activity, r, s, v } = await client.signRawPayload({
+    organizationId: suborgId,
+    signWith: address,
+    payload: JSON.stringify(payload),
+    encoding: 'PAYLOAD_ENCODING_EIP712',
+    hashFunction: 'HASH_FUNCTION_NO_OP',
+  });
+  if (activity?.status !== 'ACTIVITY_STATUS_COMPLETED' || !r || !s || !v) {
+    throw new Error('Turnkey wallet signature was not completed.');
+  }
+  const recovery = Number.parseInt(v, 16);
+  if (![0, 1, 27, 28].includes(recovery)) throw new Error('Invalid Turnkey recovery ID.');
+  return '0x' + r.replace(/^0x/, '').padStart(64, '0') + s.replace(/^0x/, '').padStart(64, '0')
+    + (recovery < 27 ? recovery + 27 : recovery).toString(16);
+}
+
 // ─── React context ──────────────────────────────────────────────────────────
 const AuthContext = createContext(null);
 

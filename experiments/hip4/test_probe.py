@@ -11,6 +11,149 @@ import probe
 
 
 class ProbeTests(unittest.TestCase):
+    def test_embedded_funding_journals_spot_send_before_using_sponsor(self):
+        sponsor, trader = Account.create(), Account.create()
+        token_id = "0x" + "2" * 32
+        with tempfile.TemporaryDirectory() as root, patch.object(probe, "LOCAL", Path(root)), \
+             patch.object(probe, "wallet_info", side_effect=[probe.dec(31), probe.dec(0)]), \
+             patch.object(probe, "now", return_value=4000), \
+             patch.object(probe, "info", return_value={"tokens": [{"name": "USDC", "tokenId": token_id}]}), \
+             patch.object(probe, "exchange", side_effect=TimeoutError("request timed out")) as send:
+            key_path = Path(root) / "sponsor"
+            key_path.write_text(sponsor.key.hex())
+            key_path.chmod(0o600)
+            journal = Path(root) / "fund" / "embedded-funding.json"
+
+            def check_journal(wallet, action, mainnet):
+                self.assertEqual(wallet.address, sponsor.address)
+                self.assertFalse(mainnet)
+                record = json.loads(journal.read_text())
+                self.assertEqual(record["action"], action)
+                self.assertNotIn(sponsor.key.hex(), journal.read_text())
+                return {"r": "mocked"}
+
+            with patch.object(probe, "sign_spot_transfer_action", side_effect=check_journal):
+                with self.assertRaises(TimeoutError):
+                    probe.fund_embedded("fund", sponsor.address, trader.address, probe.dec(30), key_path)
+                with self.assertRaisesRegex(ValueError, "Funding slot used"):
+                    probe.fund_embedded("fund", sponsor.address, trader.address, probe.dec(30), key_path)
+            send.assert_called_once_with({"type": "spotSend", "destination": trader.address.lower(),
+                                          "token": f"USDC:{token_id}", "amount": "30", "time": 4000},
+                                         {"r": "mocked"}, 4000)
+
+    def test_funding_requires_matching_private_sponsor_and_caps_amount(self):
+        sponsor, trader, wrong = Account.create(), Account.create(), Account.create()
+        with tempfile.TemporaryDirectory() as root, patch.object(probe, "LOCAL", Path(root)), \
+             patch.object(probe, "info") as info, patch.object(probe, "exchange") as send:
+            path = Path(root) / "sponsor"
+            path.write_text(wrong.key.hex())
+            path.chmod(0o644)
+            with self.assertRaisesRegex(ValueError, "regular and private"):
+                probe.fund_embedded("fund", sponsor.address, trader.address, probe.dec(30), path)
+            path.chmod(0o600)
+            with self.assertRaisesRegex(ValueError, "does not match"):
+                probe.fund_embedded("fund", sponsor.address, trader.address, probe.dec(30), path)
+            with self.assertRaisesRegex(ValueError, "up to 30"):
+                probe.fund_embedded("fund", sponsor.address, trader.address, probe.dec("30.000001"), path)
+            info.assert_not_called()
+            send.assert_not_called()
+
+    def test_spot_transfer_audit_requires_both_ledgers_and_expected_amount(self):
+        source, destination = "0x" + "1" * 40, "0x" + "2" * 40
+        tx = "0x" + "3" * 64
+        delta = {"type": "spotTransfer", "token": "USDC", "amount": "30", "fee": "1",
+                 "user": source, "destination": destination}
+        transfer = {"hash": tx, "time": 4000, "delta": delta}
+        other = {**transfer, "hash": "0x" + "4" * 64}
+        meta = {"tokens": [{"name": "USDC", "tokenId": "0x" + "5" * 32}]}
+        with patch.object(probe, "info", side_effect=[meta, [transfer, other], [transfer]]) as info, \
+             patch.object(probe, "wallet_info", side_effect=[probe.dec(70), probe.dec(30)]), \
+             patch.object(probe, "exchange") as send:
+            report = probe.audit_transfer(source, destination, 3900, expected_amount=probe.dec(30))
+            self.assertEqual(report["destinationFreeSpotUSDC"], "30")
+            self.assertEqual([t["hash"] for t in report["confirmedTransfers"]], [tx])
+            self.assertEqual(report["confirmedTransfers"][0]["amountUSDC"], "30")
+            self.assertTrue(all(not call.kwargs.get("mainnet") for call in info.call_args_list))
+            send.assert_not_called()
+        with patch.object(probe, "info", side_effect=[meta, [transfer], [{**transfer, "delta": {**delta, "amount": "29"}}]]), \
+             patch.object(probe, "wallet_info", return_value=probe.dec(0)):
+            self.assertEqual(probe.audit_transfer(source, destination, 3900, tx)["confirmedTransfers"], [])
+
+    def test_embedded_order_matches_ioc_fill_and_observed_builder_credit(self):
+        trader, builder = "0x" + "1" * 40, "0x" + "2" * 40
+        cloid = "0x" + "3" * 32
+        fill_hash = "0x" + "4" * 64
+        order = {"coin": "#265930", "oid": 3, "side": "B", "tif": "Ioc", "cloid": cloid, "timestamp": 4000}
+        status = {"status": "order", "order": {"status": "filled", "order": order, "statusTimestamp": 4001}}
+        fill = {"oid": 3, "tid": 4, "coin": "#265930", "side": "B", "hash": fill_hash, "sz": "22",
+                "px": "0.505", "fee": "0.028775", "builderFee": "0.027775", "feeToken": "USDC"}
+        baseline = {"network": "Testnet", "builder": builder, "observedAtMs": 3900,
+                    "rewards": {"builderRewards": "0", "unclaimedRewards": "0", "tokenToState": []}}
+        after = {"builderRewards": "0.027775", "unclaimedRewards": "0.027775", "tokenToState": []}
+        with patch.object(probe, "info", side_effect=[status, [fill], 250]), \
+             patch.object(probe, "rewards", return_value=after):
+            report = probe.audit_order(trader, builder, cloid, 26593, 0, "buy", 4000, baseline)
+        self.assertEqual(report["orderStatus"], "filled")
+        self.assertEqual(report["fillTxHashes"], [fill_hash])
+        self.assertEqual(report["notionalUSDC"], "11.11")
+        self.assertTrue(report["isIoc"])
+        self.assertTrue(report["builderFeeMatches25Bps"])
+        self.assertTrue(report["builderCreditMatches25BpsFill"])
+        with patch.object(probe, "info", side_effect=[status, [fill], 250]), \
+             patch.object(probe, "rewards", return_value=baseline["rewards"]):
+            self.assertFalse(probe.audit_order(trader, builder, cloid, 26593, 0, "buy", 4000, baseline)
+                             ["builderCreditMatches25BpsFill"])
+
+    def test_withdrawal_audit_matches_bridge_and_usdc_logs_plus_balance_change(self):
+        trader = "0x" + "1" * 40
+        tx = "0x" + "2" * 64
+        recipient = "0x" + trader[2:].rjust(64, "0")
+        sender = "0x" + probe.CORE_DEPOSIT_WALLET[2:].rjust(64, "0")
+        baseline = {"network": "Testnet", "chainId": 998, "trader": trader, "usdcToken": probe.HYPEREVM_USDC,
+                    "block": 500, "coreFreeUSDC": "12", "evmUSDCUnits": 1_000_000}
+        after = {**baseline, "block": 560, "coreFreeUSDC": "2", "evmUSDCUnits": 11_000_000}
+        event = {"transactionHash": tx, "blockNumber": hex(552), "data": hex(10_000_000)}
+        withdraw = {**event, "address": probe.CORE_DEPOSIT_WALLET, "topics": [probe.WITHDRAW_TOPIC, recipient]}
+        transfer = {**event, "address": probe.HYPEREVM_USDC, "topics": [probe.TRANSFER_TOPIC, sender, recipient]}
+        with patch.object(probe, "withdrawal_state", return_value=after), \
+             patch.object(probe, "evm_rpc", side_effect=[[], [withdraw, transfer]]) as rpc:
+            result = probe.audit_withdrawal(trader, probe.dec(10), baseline)
+        self.assertTrue(result["withdrawalConfirmed"])
+        self.assertEqual(result["matchingCredits"][0]["hash"], tx)
+        self.assertEqual(result["evmCreditUSDC"], "10")
+        self.assertEqual([(c.args[1]["fromBlock"], c.args[1]["toBlock"]) for c in rpc.call_args_list],
+                         [(hex(501), hex(550)), (hex(551), hex(560))])
+        with patch.object(probe, "withdrawal_state", return_value=after), \
+             patch.object(probe, "evm_rpc", return_value={"status": "0x1", "logs": [withdraw, transfer]}) as rpc:
+            self.assertTrue(probe.audit_withdrawal(trader, probe.dec(10), baseline, tx)["withdrawalConfirmed"])
+            rpc.assert_called_once_with("eth_getTransactionReceipt", tx)
+        for status, logs in [("0x0", [withdraw, transfer]),
+                             ("0x1", [withdraw, {**transfer, "transactionHash": "0x" + "3" * 64}]),
+                             ("0x1", [withdraw, {**transfer, "removed": True}])]:
+            with patch.object(probe, "withdrawal_state", return_value=after), \
+                 patch.object(probe, "evm_rpc", return_value={"status": status, "logs": logs}):
+                self.assertFalse(probe.audit_withdrawal(trader, probe.dec(10), baseline, tx)["withdrawalConfirmed"])
+        with patch.object(probe, "withdrawal_state", return_value={**after, "evmUSDCUnits": 10_000_000}), \
+             patch.object(probe, "evm_rpc", return_value={"status": "0x1", "logs": [withdraw, transfer]}):
+            self.assertFalse(probe.audit_withdrawal(trader, probe.dec(10), baseline, tx)["withdrawalConfirmed"])
+
+    def test_withdrawal_baseline_fails_closed_on_wrong_chain(self):
+        with patch.object(probe, "evm_rpc", return_value="0x3e7") as rpc, patch.object(probe, "wallet_info") as wallet:
+            with self.assertRaisesRegex(ValueError, "chain 998"):
+                probe.withdrawal_state("0x" + "1" * 40)
+            rpc.assert_called_once_with("eth_chainId")
+            wallet.assert_not_called()
+
+    def test_withdrawal_baseline_reads_usdc_at_the_captured_block(self):
+        trader = "0x" + "1" * 40
+        with patch.object(probe, "evm_rpc", side_effect=["0x3e6", "0x100", hex(1_000_000)]) as rpc, \
+             patch.object(probe, "wallet_info", return_value=probe.dec(5)):
+            result = probe.withdrawal_state(trader)
+        self.assertEqual((result["block"], result["evmUSDCUnits"], result["coreFreeUSDC"]), (256, 1_000_000, "5"))
+        self.assertEqual(rpc.call_args.args, ("eth_call", {
+            "to": probe.HYPEREVM_USDC, "data": "0x70a08231" + trader[2:].rjust(64, "0"),
+        }, "0x100"))
+
     def test_testnet_order_signature_cannot_recover_signer_on_mainnet(self):
         signer = Account.create()
         action = probe.order_wire(26593, 1, "buy", probe.dec(22), probe.dec("0.505"),
@@ -27,6 +170,7 @@ class ProbeTests(unittest.TestCase):
                  {"sz": "23", "px": "0.45", "fee": "0.0035875", "builderFee": "0.0025875", "feeToken": "USDC"}]
         self.assertEqual(probe.summarize(fills[:1])["effectiveBuilderBps"], "0.1")
         self.assertEqual(probe.summarize(fills[1:])["effectiveBuilderBps"], "2.5")
+        self.assertFalse(probe.summarize(fills)["builderFeeMatches25Bps"])
         self.assertEqual(probe.summarize(fills)["nonBuilderFeesUSDC"], "0.001")
         del fills[0]["builderFee"]
         self.assertEqual(probe.summarize(fills)["fillsWithoutBuilderFeeField"], 1)
