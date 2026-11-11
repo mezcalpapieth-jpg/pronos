@@ -17,6 +17,7 @@
  * provides .category-bar, .markets-grid, .section-header, etc.
  */
 import React, { useEffect, useMemo, useState } from 'react';
+import { FESTIVAL_SCHEDULE, FESTIVAL_SOURCE } from '../../../../shared/trading-festival.js';
 import { matchesMarketSearch, normalizeSearchText } from '../lib/marketSearch.js';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
@@ -204,6 +205,34 @@ export default function PointsHome({ onOpenLogin }) {
     load();
     return () => { cancelled = true; };
   }, [authenticated]);
+
+  useEffect(() => {
+    const firstStart = Date.parse(FESTIVAL_SCHEDULE[0].startTime);
+    const lastEnd = Date.parse(FESTIVAL_SCHEDULE.at(-1).endTime);
+    const now = Date.now();
+    if (now >= lastEnd || now < firstStart - 24 * 60 * 60_000) return undefined;
+
+    let canceled = false;
+    let timer;
+    async function refreshFestival() {
+      if (Date.now() >= firstStart && document.visibilityState === 'visible') {
+        try {
+          const festival = await fetchMarkets({ category: 'tradingfestival', limit: 10 });
+          if (!canceled) setMarkets(previous => [
+            ...previous.filter(market => market.source !== FESTIVAL_SOURCE),
+            ...festival.filter(market => market.source === FESTIVAL_SOURCE),
+          ]);
+        } catch { /* Keep the previous snapshot until the next refresh. */ }
+      }
+      if (!canceled && Date.now() < lastEnd) timer = setTimeout(refreshFestival, 30_000);
+    }
+
+    timer = setTimeout(refreshFestival, Math.max(0, firstStart - now) + 5000);
+    return () => {
+      canceled = true;
+      clearTimeout(timer);
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;

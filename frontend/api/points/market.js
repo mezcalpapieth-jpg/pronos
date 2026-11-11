@@ -6,6 +6,7 @@
  */
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
+import { festivalMarketMeta } from '../_lib/trading-festival.js';
 import { ensurePointsSchema } from '../_lib/points-schema.js';
 import { binaryPrices } from '../_lib/amm-math.js';
 import {
@@ -867,6 +868,7 @@ export default async function handler(req, res) {
           transcriptEvidence,
           liveScoreConfig,
           cryptoMeta,
+          festivalMeta: festivalMarketMeta(r, resolverCfg),
           tokenMeta,
           soccerMatchMeta,
           seriesMeta,

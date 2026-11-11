@@ -24,6 +24,7 @@ import PointsWelcomeModal, { hasBeenWelcomed } from './components/PointsWelcomeM
 import PointsIntroModal, { hasSeenIntro } from './components/PointsIntroModal.jsx';
 import { trackPublicityConversion, trackPublicityLanding } from './lib/pointsApi.js';
 import { isVideoDemoActive } from './demo/demoFlag.js';
+import { isFestivalDashboard } from '../../../shared/trading-festival.js';
 
 const PointsHome = lazy(() => import('./pages/PointsHome.jsx'));
 const PointsMarketDetail = lazy(() => import('./pages/PointsMarketDetail.jsx'));
@@ -49,6 +50,7 @@ const PointsReferralLanding = lazy(() => import('./pages/PointsReferralLanding.j
 const PointsUserProfile = lazy(() => import('./pages/PointsUserProfile.jsx'));
 const InvestorDeck = lazy(() => import('./pages/InvestorDeck.jsx'));
 const InvestorDashboard = lazy(() => import('./pages/InvestorDashboard.jsx'));
+const TradingFestival = lazy(() => import('./pages/TradingFestival.jsx'));
 const Ris26Page = lazy(() => import('./pages/Ris26Page.jsx'));
 
 // Video-recording demo. Both of these live in lazily-loaded chunks that a
@@ -224,6 +226,10 @@ export default function App() {
   const basename = pathname === '/points' || pathname.startsWith('/points/')
     ? '/points'
     : '/';
+
+  if (typeof window !== 'undefined' && isFestivalDashboard(window.location)) {
+    return <Suspense fallback={<RouteFallback />}><TradingFestival dashboard /></Suspense>;
+  }
 
   if (IS_RIS26_ROUTE) {
     return (
@@ -418,6 +424,7 @@ function Shell({ onOpenLogin, isAdmin }) {
               specialized layout wins over the standard category grid.
               adminPath='/admin' targets the points-app's own admin. */}
           <Route path="/c/noticias" element={<NewsPage isAdmin={isAdmin} adminPath="/admin" />} />
+          <Route path="/c/tradingfestival" element={<TradingFestival onOpenLogin={onOpenLogin} />} />
           <Route path="/c/:slug" element={<PointsCategoryPage />} />
           <Route path="/market" element={<PointsMarketDetail onOpenLogin={onOpenLogin} isAdmin={isAdmin} />} />
           <Route path="/portfolio" element={<PointsPortfolio />} />

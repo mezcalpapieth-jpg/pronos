@@ -3,6 +3,7 @@ import { ethers } from 'ethers';
 import { ensureProtocolSchema } from './_lib/protocol-schema.js';
 import { ensurePointsSchema } from './_lib/points-schema.js';
 import { runCrypto5MinTick } from './_lib/crypto-5min.js';
+import { runTradingFestivalTick } from './_lib/trading-festival.js';
 import { shouldRunMinuteInterval } from './_lib/cron-multiplex.js';
 import { runAutoResolve } from './cron/points-auto-resolve.js';
 import { runTokenMcapSnapshots } from './cron/points-token-mcap-snapshots.js';
@@ -179,6 +180,14 @@ export default async function handler(req, res) {
     crypto5MinReport = { error: e?.message || 'crypto_5min_failed' };
   }
 
+  let tradingFestivalReport = null;
+  try {
+    tradingFestivalReport = await runTradingFestivalTick({ sql });
+  } catch (error) {
+    console.error('[indexer] Trading Festival tick failed', { message: error.message });
+    tradingFestivalReport = { error: 'trading_festival_tick_failed' };
+  }
+
   // ── Token market-cap oracle snapshot fallback ─────────────────────
   // DOGGY-style markets resolve from stored close-time CoinGecko snapshots.
   // The dedicated snapshot cron is still registered, but this keeps evidence
@@ -283,6 +292,7 @@ export default async function handler(req, res) {
       status: 'skipped',
       reason: 'MarketFactory address or Arbitrum RPC URL not configured',
       crypto5Min: crypto5MinReport,
+      tradingFestival: tradingFestivalReport,
       tokenMcapSnapshots: tokenMcapSnapshotsReport,
       pointsAutoResolve: pointsAutoResolveReport,
       protocolAutoResolve: protocolAutoResolveReport,
@@ -356,6 +366,7 @@ export default async function handler(req, res) {
       factories: factoryRuns,
       processed,
       crypto5Min: crypto5MinReport,
+      tradingFestival: tradingFestivalReport,
       tokenMcapSnapshots: tokenMcapSnapshotsReport,
       pointsAutoResolve: pointsAutoResolveReport,
       protocolAutoResolve: protocolAutoResolveReport,

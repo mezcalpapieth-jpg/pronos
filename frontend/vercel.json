@@ -51,6 +51,7 @@
     { "source": "/c/:slug",    "destination": "/points/c/:slug",    "permanent": true }
   ],
   "rewrites": [
+    { "source": "/tradingfestival",     "destination": "/points/" },
     { "source": "/r/:username",        "destination": "/api/share/referral?username=:username" },
     { "source": "/que-es-el-libro-de-ordenes",  "destination": "/que-es-el-libro-de-ordenes.html" },
     { "source": "/que-es-el-libro-de-ordenes/", "destination": "/que-es-el-libro-de-ordenes.html" },

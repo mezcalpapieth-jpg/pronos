@@ -53,6 +53,8 @@ import PointsActivityTape from '../components/PointsActivityTape.jsx';
 import PriceHistoryNotice from '../components/PriceHistoryNotice.jsx';
 import MarketComments from '../components/MarketComments.jsx';
 import Crypto5MinDetail from '../components/Crypto5MinDetail.jsx';
+import TradingFestivalChart from '../components/TradingFestivalChart.jsx';
+import { FESTIVAL_SCHEDULE } from '../../../../shared/trading-festival.js';
 import TopHolders from '../components/TopHolders.jsx';
 import MarketNews from '../components/MarketNews.jsx';
 import CombinadaSlipPanel from '../components/CombinadaSlipPanel.jsx';
@@ -3294,6 +3296,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
     );
   }
 
+  const festivalSlot = FESTIVAL_SCHEDULE.find(slot => slot.key === market.festivalMeta?.key);
   const rawOutcomes = Array.isArray(market.outcomes) ? market.outcomes : ['Sí', 'No'];
   const localizedOutcomes = localizedOutcomeLabels({ ...market, outcomes: rawOutcomes }, lang);
   const outcomes = localizedOutcomes.length === rawOutcomes.length ? localizedOutcomes : rawOutcomes;
@@ -3831,6 +3834,15 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
                   {t('points.detail.redeemInstructions')}
                 </p>
               </div>
+            )}
+
+            {festivalSlot && (
+              <TradingFestivalChart key={market.id} market={market.festivalMeta} slot={{
+                ...festivalSlot,
+                startTime: market.startTime,
+                endTime: market.endTime,
+                requiresReschedule: false,
+              }} />
             )}
 
             {/* Price history chart — shows real probability snapshots
