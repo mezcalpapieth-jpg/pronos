@@ -10,7 +10,7 @@ import { readFestivalMarkets, runTradingFestivalTick } from './trading-festival.
 const production = { VERCEL_ENV: 'production', TRADING_FESTIVAL_ENABLED: '1' };
 const licensed = {
   ...production,
-  TRADING_FESTIVAL_MASSIVE_API_KEY: 'test-key',
+  MASSIVE_API_KEY: 'test-key',
   TRADING_FESTIVAL_MASSIVE_SYMBOLS: 'usdmxn,ndx',
 };
 
@@ -23,6 +23,11 @@ test('the Nasdaq cash index requires a full 30-minute regular session window', (
   assert.equal(moved.requiresReschedule, false);
   assert.equal(moved.endTime, '2026-11-13T21:00:00.000Z');
   assert.equal(festivalChartRange(ndx(licensed), Date.parse(ndx(licensed).endTime)).to, Date.parse(moved.endTime));
+  const beforeFriday = Date.parse('2026-11-11T16:20:00Z');
+  assert.deepEqual(festivalChartRange(ndx(licensed), beforeFriday), {
+    from: beforeFriday - 12 * FESTIVAL_MINUTE,
+    to: beforeFriday,
+  });
 });
 
 test('the same exact-minute bar is required for both Coinbase and Massive boundaries', async () => {
@@ -45,6 +50,11 @@ test('the same exact-minute bar is required for both Coinbase and Massive bounda
     return response({ status: 'OK', results: [{ t: at - FESTIVAL_MINUTE, c: 18.32 }, { t: at, c: 18.44 }] });
   };
   assert.deepEqual(await readFestivalBoundary(fx, { at, fetchImpl: massive, env: licensed }), { t: at, price: 18.32 });
+  assert.deepEqual(await readFestivalBoundary(fx, {
+    at, fetchImpl: massive, env: { ...licensed, MASSIVE_API_KEY: '', TRADING_FESTIVAL_MASSIVE_API_KEY: 'test-key' },
+  }), { t: at, price: 18.32 });
+  const delayed = async () => response({ status: 'DELAYED', results: [{ t: at - FESTIVAL_MINUTE, c: 18.32 }] });
+  await assert.rejects(readFestivalBoundary(fx, { at, fetchImpl: delayed, env: licensed }), /festival_feed_delayed/);
 });
 
 test('festival seed, activation, lock, settlement and tie refund use the Points schema', async t => {
