@@ -48,6 +48,10 @@ export default function LivePriceChart({
   xEnd,
   highlightStart,
   highlightEnd,
+  formatPrice,
+  formatTime = formatTrackerTime,
+  interpolate = true,
+  label = 'Gráfica de precio en vivo',
 }) {
   const [trackerX, setTrackerX] = useState(null);
   const frame = useMemo(
@@ -59,8 +63,8 @@ export default function LivePriceChart({
     [history, frame]
   );
   const chartPoints = useMemo(
-    () => densifyPoints(visible, { intervalMs: 1_000 }),
-    [visible]
+    () => interpolate ? densifyPoints(visible, { intervalMs: 1_000 }) : visible,
+    [visible, interpolate]
   );
 
   if (!Array.isArray(history) || history.length === 0) {
@@ -126,13 +130,13 @@ export default function LivePriceChart({
   const hasThreshold = typeof threshold === 'number' && Number.isFinite(threshold);
   const above = hasThreshold && lastPrice > threshold;
   const below = hasThreshold && lastPrice < threshold;
-  const lineColor = !hasThreshold ? '#888888'
+  const lineColor = !hasThreshold ? 'var(--live-chart-neutral, #888888)'
     : above ? 'var(--yes, #00C96B)'
     : below ? 'var(--red, #FF4545)'
     : 'var(--text-secondary)';
-  const fillColor = !hasThreshold ? 'rgba(136,136,136,0.08)'
-    : above ? 'rgba(0,201,107,0.10)'
-    : 'rgba(255,69,69,0.10)';
+  const fillColor = !hasThreshold ? 'var(--live-chart-neutral-fill, rgba(136,136,136,0.08))'
+    : above ? 'var(--live-chart-up-fill, rgba(0,201,107,0.10))'
+    : 'var(--live-chart-down-fill, rgba(255,69,69,0.10))';
 
   const baseY = yAt(yMin);
   let areaD = d;
@@ -143,9 +147,9 @@ export default function LivePriceChart({
 
   const thresholdY = hasThreshold ? yAt(threshold) : null;
   const thresholdLabel = hasThreshold
-    ? '$' + Number(threshold).toLocaleString('en-US', { maximumFractionDigits: 0 })
+    ? formatPrice?.(threshold) ?? '$' + Number(threshold).toLocaleString('en-US', { maximumFractionDigits: 0 })
     : '';
-  const currentLabel = formatAxisPrice(lastPrice);
+  const currentLabel = (formatPrice ?? formatAxisPrice)(lastPrice);
   const currentLabelWidth = Math.max(52, currentLabel.length * 6.6 + 14);
   const currentLabelX = width - currentLabelWidth - 4;
   const currentLabelY = Math.min(
@@ -169,8 +173,8 @@ export default function LivePriceChart({
       });
   const trackerPoint = tracker?.point || null;
   const trackerY = trackerPoint ? yAt(trackerPoint.price) : null;
-  const trackerLabel = trackerPoint ? formatTrackerPrice(trackerPoint.price) : '';
-  const trackerTime = trackerPoint ? formatTrackerTime(trackerPoint.t) : '';
+  const trackerLabel = trackerPoint ? (formatPrice ?? formatTrackerPrice)(trackerPoint.price) : '';
+  const trackerTime = trackerPoint ? formatTime(trackerPoint.t) : '';
   const trackerLabelWidth = Math.max(70, trackerLabel.length * 7.2 + 16);
   const trackerLabelX = tracker
     ? Math.min(Math.max(tracker.x + 8, PADDING.left), width - PADDING.right - trackerLabelWidth)
@@ -192,13 +196,13 @@ export default function LivePriceChart({
       preserveAspectRatio="none"
       style={{
         width: '100%',
-        height,
+        height: `var(--live-chart-height, ${height}px)`,
         display: 'block',
         cursor: 'crosshair',
         touchAction: 'none',
       }}
       role="img"
-      aria-label="Gráfica de precio en vivo"
+      aria-label={label}
       onPointerMove={handlePointerMove}
       onPointerLeave={() => setTrackerX(null)}
       onPointerCancel={() => setTrackerX(null)}
@@ -219,10 +223,10 @@ export default function LivePriceChart({
               x={plotRight + 8}
               y={Math.min(Math.max(tick.y + 3, PADDING.top + 9), height - PADDING.bottom)}
               fontFamily="var(--font-mono, monospace)"
-              fontSize="9"
+              fontSize="var(--live-chart-axis-size, 9px)"
               fill="var(--text-muted)"
             >
-              {formatAxisPrice(tick.price)}
+              {(formatPrice ?? formatAxisPrice)(tick.price)}
             </text>
           </g>
         ))}
@@ -251,7 +255,7 @@ export default function LivePriceChart({
             x2={plotRight}
             y1={thresholdY}
             y2={thresholdY}
-            stroke="var(--text-muted)"
+            stroke="var(--live-chart-threshold, var(--text-muted))"
             strokeWidth="1"
             strokeDasharray="4 4"
             opacity="0.6"
@@ -262,7 +266,7 @@ export default function LivePriceChart({
             textAnchor="end"
             fontFamily="var(--font-mono, monospace)"
             fontSize="10"
-            fill="var(--text-muted)"
+            fill="var(--live-chart-threshold, var(--text-muted))"
           >
             {thresholdLabel}
           </text>

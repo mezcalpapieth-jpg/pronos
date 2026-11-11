@@ -4,6 +4,7 @@ export const FESTIVAL_DASHBOARD_PATH = '/tradingfestival';
 export const FESTIVAL_SIGNUP_URL = 'https://pronos.io/points/c/tradingfestival?signup=1';
 export const FESTIVAL_TIME_ZONE = 'America/Mexico_City';
 export const FESTIVAL_MINUTE = 60_000;
+export const FESTIVAL_CHART_LEAD_MS = 12 * FESTIVAL_MINUTE;
 
 // These are the event's confirmed wall-clock times in Mexico City (UTC−06).
 export const FESTIVAL_SCHEDULE = [

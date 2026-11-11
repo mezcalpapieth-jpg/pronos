@@ -9,6 +9,18 @@ function rowsFromQuery(result) {
   return [];
 }
 
+export async function readCryptoTicks(sql, { asset, from, to }) {
+  const rows = await sql`
+    SELECT captured_at, price
+    FROM crypto_ticks
+    WHERE asset = ${asset}
+      AND captured_at >= ${from}::timestamptz
+      AND captured_at <= ${to}::timestamptz
+    ORDER BY captured_at ASC
+  `;
+  return rowsFromQuery(rows).map(row => ({ t: new Date(row.captured_at).getTime(), price: Number(row.price) }));
+}
+
 export function cryptoTickBucketIso(capturedAt = Date.now(), bucketMs = CRYPTO_TICK_BUCKET_MS) {
   const ms = capturedAt instanceof Date
     ? capturedAt.getTime()

@@ -5,12 +5,19 @@ const ENDPOINT = '/api/points/trading-festival';
 const timeFormat = new Intl.DateTimeFormat('es-MX', {
   timeZone: FESTIVAL_TIME_ZONE, hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
 });
+const tickTimeFormat = new Intl.DateTimeFormat('es-MX', {
+  timeZone: FESTIVAL_TIME_ZONE, hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+});
 const dateFormat = new Intl.DateTimeFormat('es-MX', {
   timeZone: FESTIVAL_TIME_ZONE, weekday: 'short', day: 'numeric', month: 'short',
 });
 
 export function festivalTime(time) {
   return timeFormat.format(new Date(time));
+}
+
+export function festivalTickTime(time) {
+  return tickTimeFormat.format(new Date(time));
 }
 
 export function festivalDate(time) {
@@ -63,7 +70,7 @@ function useFestivalPoll(url, interval, initial) {
 }
 
 const initialSchedule = { slots: FESTIVAL_SCHEDULE };
-const initialBars = { bars: [], status: 'loading' };
+const initialBars = { bars: [], ticks: [], status: 'loading' };
 
 export function useFestivalSchedule() {
   const { data, error } = useFestivalPoll(ENDPOINT, 10_000, initialSchedule);
