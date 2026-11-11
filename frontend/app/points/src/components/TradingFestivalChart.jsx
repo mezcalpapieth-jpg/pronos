@@ -1,5 +1,5 @@
 import React, { useId, useMemo } from 'react';
-import { FESTIVAL_CHART_LEAD_MS, FESTIVAL_MINUTE } from '../../../../shared/trading-festival.js';
+import { FESTIVAL_CHART_LEAD_MS, FESTIVAL_MINUTE, isFestivalBitcoin } from '../../../../shared/trading-festival.js';
 import { buildFestivalPriceHistory } from '../lib/festivalChartHistory.js';
 import { useCryptoTicker } from '../lib/useCryptoTicker.js';
 import { useFestivalBitcoinTicks } from '../lib/useFestivalBitcoinTicks.js';
@@ -86,7 +86,7 @@ export default function TradingFestivalChart({ slot, market = slot.market }) {
   const now = useFestivalClock();
   const start = Date.parse(slot.startTime);
   const end = Date.parse(slot.endTime);
-  const bitcoin = slot.key === 'btc';
+  const bitcoin = isFestivalBitcoin(slot);
   const ticker = useFestivalBitcoinTicks(bitcoin ? slot.ticker : null, start, end);
   const { data, error } = useFestivalBars(slot.key);
   const threshold = market?.threshold ?? null;

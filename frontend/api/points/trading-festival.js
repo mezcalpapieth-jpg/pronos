@@ -1,5 +1,5 @@
 import { neon } from '@neondatabase/serverless';
-import { FESTIVAL_MINUTE } from '../../shared/trading-festival.js';
+import { FESTIVAL_MINUTE, isFestivalBitcoin } from '../../shared/trading-festival.js';
 import { applyCors } from '../_lib/cors.js';
 import { readCryptoTicks } from '../_lib/crypto-ticks.js';
 import { clientIp, rateLimit } from '../_lib/rate-limit.js';
@@ -28,7 +28,7 @@ export default async function handler(req, res) {
     try {
       const now = Date.now();
       const { from, to } = festivalChartRange(slot, now);
-      const ticksRequest = slot.key === 'btc'
+      const ticksRequest = isFestivalBitcoin(slot)
         ? readCryptoTicks(neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL), {
             asset: 'btc', from: new Date(from).toISOString(), to: new Date(to).toISOString(),
           })

@@ -4,7 +4,7 @@ import { preloadCryptoTicker, readCryptoTickerSnapshot } from './useCryptoTicker
 
 const EMPTY = { history: [], status: 'connecting' };
 const REFRESH_MS = 250;
-let session;
+const sessions = new Map();
 
 function captureTicks(capture) {
   const now = Date.now();
@@ -52,14 +52,14 @@ export function useFestivalBitcoinTicks(productId, start, end) {
 
   useEffect(() => {
     if (!key) return undefined;
-    if (session?.key !== key) {
-      clearInterval(session?.timer);
-      session = {
-        key, productId, start, end, seconds: new Map(), lastSeen: -Infinity,
+    let capture = sessions.get(key);
+    if (!capture) {
+      capture = {
+        productId, start, end, seconds: new Map(), lastSeen: -Infinity,
         snapshot: EMPTY, timer: null, subscribers: new Set(),
       };
+      sessions.set(key, capture);
     }
-    const capture = session;
     const notify = snapshot => setValue({ key, snapshot });
     capture.subscribers.add(notify);
     if (!capture.timer && Date.now() < end) {

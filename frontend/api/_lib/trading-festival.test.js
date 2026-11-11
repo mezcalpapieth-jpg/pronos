@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
-import { FESTIVAL_MINUTE, FESTIVAL_SCHEDULE } from '../../shared/trading-festival.js';
+import { FESTIVAL_MINUTE, FESTIVAL_SCHEDULE, isFestivalBitcoin } from '../../shared/trading-festival.js';
 import { cryptoTradeLock } from './points-crypto-trade-guard.js';
 import { ensurePointsSchema } from './points-schema.js';
-import { festivalChartRange, festivalSchedule, readFestivalBoundary } from './trading-festival-feed.js';
+import { festivalChartRange, festivalFeedEnabled, festivalSchedule, readFestivalBoundary } from './trading-festival-feed.js';
 import { readFestivalMarkets, runTradingFestivalTick } from './trading-festival.js';
 
 const production = { VERCEL_ENV: 'production', TRADING_FESTIVAL_ENABLED: '1' };
@@ -32,6 +32,7 @@ test('the Nasdaq cash index requires a full 30-minute regular session window', (
 
 test('the same exact-minute bar is required for both Coinbase and Massive boundaries', async () => {
   const [btc, fx] = FESTIVAL_SCHEDULE;
+  const fridayBtc = FESTIVAL_SCHEDULE.find(slot => slot.key === 'btc-fri');
   const at = Date.parse(btc.startTime);
   const response = data => ({ ok: true, json: async () => data });
   const noMatchingCandle = async () => response([
@@ -42,6 +43,15 @@ test('the same exact-minute bar is required for both Coinbase and Massive bounda
 
   const candle = async () => response([[(at - FESTIVAL_MINUTE) / 1000, 0, 0, 0, 101]]);
   assert.deepEqual(await readFestivalBoundary(btc, { at, fetchImpl: candle }), { t: at, price: 101 });
+  assert.ok(isFestivalBitcoin(fridayBtc));
+  const fridayStart = Date.parse(fridayBtc.startTime);
+  assert.deepEqual(await readFestivalBoundary(fridayBtc, {
+    at: fridayStart,
+    fetchImpl: async url => {
+      assert.equal(url.pathname, '/products/BTC-USD/candles');
+      return response([[(fridayStart - FESTIVAL_MINUTE) / 1000, 0, 0, 0, 102]]);
+    },
+  }), { t: fridayStart, price: 102 });
 
   const massive = async (url, { headers }) => {
     assert.equal(url.hostname, 'api.massive.com');
@@ -57,6 +67,12 @@ test('the same exact-minute bar is required for both Coinbase and Massive bounda
   await assert.rejects(readFestivalBoundary(fx, { at, fetchImpl: delayed, env: licensed }), /festival_feed_delayed/);
 });
 
+test('the S&P 500 presentation never enables a settlement feed', () => {
+  const spx = FESTIVAL_SCHEDULE.find(slot => slot.key === 'spx');
+  assert.equal(spx.ticker, 'SP:SPX');
+  assert.equal(festivalFeedEnabled(spx, { ...licensed, TRADING_FESTIVAL_MASSIVE_SYMBOLS: 'spx' }), false);
+});
+
 test('festival seed, activation, lock, settlement and tie refund use the Points schema', async t => {
   const db = new PGlite();
   t.after(() => db.close());
@@ -67,6 +83,7 @@ test('festival seed, activation, lock, settlement and tie refund use the Points 
     return (await db.query(query, values)).rows;
   };
   const [btc, fx] = FESTIVAL_SCHEDULE;
+  const fridayBtc = FESTIVAL_SCHEDULE.find(slot => slot.key === 'btc-fri');
   const boundary = (slot, field) => Date.parse(slot[field]);
   const btcStart = boundary(btc, 'startTime');
   const btcClose = boundary(btc, 'endTime');
@@ -74,8 +91,8 @@ test('festival seed, activation, lock, settlement and tie refund use the Points 
   const fxClose = boundary(fx, 'endTime');
   const run = (now, env = licensed) => runTradingFestivalTick({
     sql, env, clock: () => now, transaction: cb => db.transaction(cb),
-    readBoundary: async (slot, { at }) => slot.key === 'btc'
-      ? { t: at, price: at === btcStart ? 74000 : 74001 }
+    readBoundary: async (slot, { at }) => isFestivalBitcoin(slot)
+      ? { t: at, price: at === boundary(slot, 'startTime') ? 74000 : 74001 }
       : { t: at, price: 18.92 },
   });
 
@@ -84,7 +101,7 @@ test('festival seed, activation, lock, settlement and tie refund use the Points 
   await run(btcStart - FESTIVAL_MINUTE);
   await run(btcStart - FESTIVAL_MINUTE);
   const seeded = await readFestivalMarkets(sql);
-  assert.equal(seeded.length, 2);
+  assert.deepEqual(seeded.map(row => row.source_event_id).sort(), ['btc', 'btc-fri', 'usdmxn']);
   assert.ok(seeded.every(row => row.status === 'pending'));
   const get = async key => (await readFestivalMarkets(sql)).find(row => row.source_event_id === key);
 
@@ -112,4 +129,13 @@ test('festival seed, activation, lock, settlement and tie refund use the Points 
   assert.equal(canceled.resolver_config.cancelReason, 'festival_tie');
   const { rows } = await db.query("SELECT balance FROM points_balances WHERE username = 'attendee'");
   assert.equal(Number(rows[0].balance), 25);
+
+  await run(boundary(fridayBtc, 'startTime'));
+  const openFridayBtc = await get(fridayBtc.key);
+  assert.notEqual(openFridayBtc.id, openBtc.id);
+  assert.equal(openFridayBtc.status, 'active');
+  assert.equal(openFridayBtc.resolver_config.threshold, 74000);
+  await run(boundary(fridayBtc, 'endTime'));
+  assert.equal((await get(fridayBtc.key)).outcome, 0);
+  assert.deepEqual(await get(btc.key), resolvedBtc);
 });

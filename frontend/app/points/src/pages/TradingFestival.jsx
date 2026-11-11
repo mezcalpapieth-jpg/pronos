@@ -18,7 +18,7 @@ function marketUrl(slot) {
 }
 
 function isPresentation(slot) {
-  return (slot.key === 'ndx' && slot.requiresReschedule)
+  return slot.presentationOnly || (slot.key === 'ndx' && slot.requiresReschedule)
     || (slot.key === 'usdmxn' && slot.feedEnabled === false && !slot.market);
 }
 
@@ -76,7 +76,7 @@ function FestivalPresentationChart({ slot }) {
       {status === 'unavailable' && (
         <div className="tf-presentation-fallback">
           <button type="button" className="tf-cta" onClick={retry}>Volver a cargar la gráfica</button>
-          <a className="tf-presentation-external tf-caption" href={`https://vunelix.com/chart?symbol=${encodeURIComponent(PRESENTATION_SYMBOLS[slot.key])}`} target="_blank" rel="noopener noreferrer">
+          <a className="tf-presentation-external tf-caption" href={`https://vunelix.com/chart?symbol=${encodeURIComponent(PRESENTATION_SYMBOLS[slot.key] ?? slot.ticker)}`} target="_blank" rel="noopener noreferrer">
             Abrir en Vunelix ↗
           </a>
         </div>
@@ -122,7 +122,6 @@ function FestivalSchedule({ slots, now, selected, onSelect }) {
           <SlotInfo slot={slot} now={now} />
         </button>
       ))}
-      <p className="tf-agenda-note">Dos mercados más por anunciar.</p>
     </section>
   );
 }
