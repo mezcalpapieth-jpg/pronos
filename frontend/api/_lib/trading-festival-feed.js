@@ -1,31 +1,9 @@
-import { FESTIVAL_CHART_LEAD_MS, FESTIVAL_MINUTE, FESTIVAL_SCHEDULE } from '../../shared/trading-festival.js';
-
-const NDX_SESSION_START = Date.parse('2026-11-13T14:30:00Z');
-const NDX_SESSION_END = Date.parse('2026-11-13T21:00:00Z');
-const SLOT_DURATION = 30 * FESTIVAL_MINUTE;
-
-export function festivalSchedule(env = process.env) {
-  const override = env.TRADING_FESTIVAL_NDX_START || '';
-  const ndxStart = /(?:Z|[+-]\d{2}:\d{2})$/.test(override) ? Date.parse(override) : NaN;
-  const validNdxStart = ndxStart % FESTIVAL_MINUTE === 0
-    && ndxStart >= NDX_SESSION_START + FESTIVAL_MINUTE
-    && ndxStart + SLOT_DURATION <= NDX_SESSION_END;
-  return FESTIVAL_SCHEDULE.map(slot => (
-    slot.key === 'ndx' && validNdxStart
-      ? {
-          ...slot,
-          startTime: new Date(ndxStart).toISOString(),
-          endTime: new Date(ndxStart + SLOT_DURATION).toISOString(),
-          requiresReschedule: false,
-        }
-      : slot
-  ));
-}
+import { FESTIVAL_CHART_LEAD_MS, FESTIVAL_MINUTE } from '../../shared/trading-festival.js';
 
 export function festivalFeedEnabled(slot, env = process.env) {
-  if (slot.presentationOnly) return false;
+  if (slot.replay) return false;
   return slot.provider === 'Coinbase' || (
-    Boolean(massiveApiKey(env))
+    slot.provider === 'Massive' && Boolean(massiveApiKey(env))
     && (env.TRADING_FESTIVAL_MASSIVE_SYMBOLS || '').split(',').map(value => value.trim()).includes(slot.key)
   );
 }
@@ -35,12 +13,6 @@ function massiveApiKey(env) {
 }
 
 export function festivalChartRange(slot, now) {
-  if (slot.requiresReschedule) {
-    // Display the actual regular session separately from the proposed slot.
-    if (now < NDX_SESSION_START) return { from: now - FESTIVAL_CHART_LEAD_MS, to: now };
-    const to = Math.min(now, NDX_SESSION_END);
-    return { from: Math.max(NDX_SESSION_START, to - FESTIVAL_CHART_LEAD_MS), to };
-  }
   const start = Date.parse(slot.startTime);
   return { from: Math.min(start, now) - FESTIVAL_CHART_LEAD_MS, to: Math.min(now, Date.parse(slot.endTime)) };
 }

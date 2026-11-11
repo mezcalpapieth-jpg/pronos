@@ -1,7 +1,7 @@
 import React, { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
-import { FESTIVAL_SIGNUP_URL } from '../../../../shared/trading-festival.js';
+import { FESTIVAL_MINUTE, FESTIVAL_SIGNUP_URL } from '../../../../shared/trading-festival.js';
 import { FESTIVAL_JAR_EVENT } from '../../../../shared/jar-events.js';
 import TradingFestivalChart from '../components/TradingFestivalChart.jsx';
 import { festivalDate, festivalStatus, festivalTime, useFestivalClock, useFestivalSchedule } from '../lib/tradingFestival.js';
@@ -18,8 +18,7 @@ function marketUrl(slot) {
 }
 
 function isPresentation(slot) {
-  return slot.presentationOnly || (slot.key === 'ndx' && slot.requiresReschedule)
-    || (slot.key === 'usdmxn' && slot.feedEnabled === false && !slot.market);
+  return Boolean(slot.replay || (slot.presentationTicker && slot.feedEnabled !== true && !slot.market));
 }
 
 function displayStatus(slot, now) {
@@ -27,13 +26,19 @@ function displayStatus(slot, now) {
 }
 
 const FESTIVAL_CHART_ORIGIN = 'https://pronos-chi.vercel.app';
-const PRESENTATION_SYMBOLS = { ndx: 'NASDAQ:NDX', usdmxn: 'FX:USDMXN' };
 
-function FestivalPresentationChart({ slot }) {
+function FestivalPresentationChart({ slot, dashboard }) {
   const frame = useRef(null);
   const [status, setStatus] = useState('loading');
   const [attempt, setAttempt] = useState(0);
   const ready = status === 'ready';
+  const params = new URLSearchParams({ asset: slot.key });
+  if (dashboard && slot.replay) {
+    params.set('showStart', slot.startTime);
+    params.set('showEnd', slot.endTime);
+    params.set('recordingStart', slot.replay.startTime);
+    params.set('recordingEnd', slot.replay.endTime);
+  }
 
   useEffect(() => {
     const timeout = setTimeout(() => setStatus('unavailable'), 15000);
@@ -63,7 +68,7 @@ function FestivalPresentationChart({ slot }) {
         key={attempt}
         ref={frame}
         className="tf-presentation-frame"
-        src={`${FESTIVAL_CHART_ORIGIN}/festival-nasdaq-chart?asset=${slot.key}`}
+        src={`${FESTIVAL_CHART_ORIGIN}/festival-nasdaq-chart?${params}`}
         title={`Gráfica de ${slot.symbol}`}
         sandbox="allow-scripts allow-same-origin"
         credentialless=""
@@ -76,7 +81,7 @@ function FestivalPresentationChart({ slot }) {
       {status === 'unavailable' && (
         <div className="tf-presentation-fallback">
           <button type="button" className="tf-cta" onClick={retry}>Volver a cargar la gráfica</button>
-          <a className="tf-presentation-external tf-caption" href={`https://vunelix.com/chart?symbol=${encodeURIComponent(PRESENTATION_SYMBOLS[slot.key] ?? slot.ticker)}`} target="_blank" rel="noopener noreferrer">
+          <a className="tf-presentation-external tf-caption" href={`https://vunelix.com/chart?symbol=${encodeURIComponent(slot.presentationTicker)}`} target="_blank" rel="noopener noreferrer">
             Abrir en Vunelix ↗
           </a>
         </div>
@@ -138,14 +143,17 @@ export default function TradingFestival({ dashboard = false, onOpenLogin }) {
   const [selection, setSelection] = useState(null);
   const [displayMode, setDisplayMode] = useState('auto');
   const scheduled = slots.find(slot => (
-    (!slot.requiresReschedule || isPresentation(slot))
-    && Date.parse(slot.startTime) <= now && now < Date.parse(slot.endTime)
+    Date.parse(slot.startTime) <= now && now < Date.parse(slot.endTime)
   ));
-  const current = scheduled || slots.find(slot => Date.parse(slot.startTime) > now) || slots.at(-1);
+  const closingReplay = slots.find(slot => {
+    const end = Date.parse(slot.endTime);
+    return slot.replay && end <= now && now < end + FESTIVAL_MINUTE;
+  });
+  const current = scheduled || closingReplay || slots.find(slot => Date.parse(slot.startTime) > now) || slots.at(-1);
   const slot = slots.find(item => item.key === selection) || current;
   const tradeUrl = marketUrl(slot);
   const showPresentationChart = isPresentation(slot);
-  const showJar = dashboard && (displayMode === 'jar' || (displayMode === 'auto' && !scheduled));
+  const showJar = dashboard && (displayMode === 'jar' || (displayMode === 'auto' && !scheduled && !closingReplay));
 
   function selectMode(mode) {
     if (mode === 'auto') setSelection(null);
@@ -186,8 +194,13 @@ export default function TradingFestival({ dashboard = false, onOpenLogin }) {
             {error && <p className="tf-notice" role="status">El estado de los mercados se actualizará al reconectar.</p>}
             <article className="tf-feature">
               <SlotTitle slot={slot} now={now} />
-              {showPresentationChart ? <FestivalPresentationChart key={slot.key} slot={slot} /> : (
+              {showPresentationChart ? <FestivalPresentationChart key={slot.key} slot={slot} dashboard={dashboard} /> : (
                 <TradingFestivalChart key={slot.key} slot={slot} />
+              )}
+              {slot.replay && (
+                <div className="tf-replay-caption tf-caption">
+                  Replay · {festivalTime(slot.replay.startTime)}–{festivalTime(slot.replay.endTime)} CDMX
+                </div>
               )}
               <div className="tf-directions">
                 <span><b><span aria-hidden="true">↗</span> Sube</b><small>Cierra por encima de la apertura</small></span>

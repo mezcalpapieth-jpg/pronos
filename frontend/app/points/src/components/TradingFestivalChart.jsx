@@ -91,9 +91,7 @@ export default function TradingFestivalChart({ slot, market = slot.market }) {
   const { data, error } = useFestivalBars(slot.key);
   const threshold = market?.threshold ?? null;
   const finalPrice = market?.closePrice ?? null;
-  const from = slot.requiresReschedule && data.bars.length
-    ? data.bars[0].t
-    : Math.min(now, start) - FESTIVAL_CHART_LEAD_MS;
+  const from = Math.min(now, start) - FESTIVAL_CHART_LEAD_MS;
   const to = Math.min(end, Math.max(now, ticker.history.at(-1)?.t ?? 0));
   const points = useMemo(() => buildFestivalPriceHistory({
     bars: data.bars,
@@ -133,7 +131,7 @@ export default function TradingFestivalChart({ slot, market = slot.market }) {
       )}
       <div className="tf-chart-status">
         {last && <span className={fresh && (!error || streaming) ? 'tf-signal is-live' : 'tf-signal'}>{status}</span>}
-        <span className="tf-chart-source">{slot.provider}{slot.requiresReschedule && ' · Sesión regular'}</span>
+        <span className="tf-chart-source">{slot.provider}</span>
       </div>
     </section>
   );

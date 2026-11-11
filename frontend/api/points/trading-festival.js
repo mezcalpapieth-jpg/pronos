@@ -1,9 +1,9 @@
 import { neon } from '@neondatabase/serverless';
-import { FESTIVAL_MINUTE, isFestivalBitcoin } from '../../shared/trading-festival.js';
+import { FESTIVAL_MINUTE, FESTIVAL_SCHEDULE, isFestivalBitcoin } from '../../shared/trading-festival.js';
 import { applyCors } from '../_lib/cors.js';
 import { readCryptoTicks } from '../_lib/crypto-ticks.js';
 import { clientIp, rateLimit } from '../_lib/rate-limit.js';
-import { festivalChartRange, festivalFeedEnabled, festivalSchedule, readFestivalBars } from '../_lib/trading-festival-feed.js';
+import { festivalChartRange, festivalFeedEnabled, readFestivalBars } from '../_lib/trading-festival-feed.js';
 import { festivalMarketMeta, readFestivalMarkets } from '../_lib/trading-festival.js';
 
 function setCache(res, seconds) {
@@ -17,9 +17,8 @@ export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'method_not_allowed' });
   if (rateLimit(req, res, { key: `festival:${clientIp(req)}`, limit: 240, windowMs: FESTIVAL_MINUTE })) return;
 
-  const slots = festivalSchedule();
   if (req.query.slot !== undefined) {
-    const slot = slots.find(item => item.key === req.query.slot);
+    const slot = FESTIVAL_SCHEDULE.find(item => item.key === req.query.slot);
     if (!slot) return res.status(400).json({ error: 'invalid_slot' });
     if (!festivalFeedEnabled(slot)) {
       setCache(res, 15);
@@ -50,9 +49,9 @@ export default async function handler(req, res) {
     const byKey = new Map(rows.map(row => [row.source_event_id, row]));
     setCache(res, 5);
     return res.status(200).json({
-      slots: slots.map(slot => {
+      slots: FESTIVAL_SCHEDULE.map(slot => {
         const feedEnabled = festivalFeedEnabled(slot);
-        const row = byKey.get(slot.key);
+        const row = slot.replay ? null : byKey.get(slot.key);
         const meta = row && festivalMarketMeta(row);
         const market = meta ? {
           id: row.id,
@@ -64,7 +63,7 @@ export default async function handler(req, res) {
         // Once a market has opened, show its stored times even if the
         // provisional schedule is subsequently changed.
         return market && row.status !== 'pending'
-          ? { ...slot, feedEnabled, startTime: row.start_time, endTime: row.end_time, requiresReschedule: false, market }
+          ? { ...slot, feedEnabled, startTime: row.start_time, endTime: row.end_time, market }
           : { ...slot, feedEnabled, market };
       }),
     });

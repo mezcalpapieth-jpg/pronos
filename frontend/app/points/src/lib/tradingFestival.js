@@ -27,7 +27,6 @@ export function festivalPrice(slot, value) {
 
 export function festivalStatus(slot, now) {
   const market = slot.market;
-  if (slot.requiresReschedule) return 'Horario tentativo';
   if (market?.status === 'resolved') return market.outcome === 0 ? 'Subió' : 'Bajó';
   if (market?.status === 'canceled') return 'Cancelado';
   if (!market && slot.feedEnabled === false) return 'Datos por confirmar';

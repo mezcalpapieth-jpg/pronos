@@ -15,7 +15,7 @@ export const FESTIVAL_SCHEDULE = [
   },
   {
     key: 'usdmxn', name: 'Dólar / peso', symbol: 'USD/MXN', currency: 'MXN', decimals: 5,
-    category: 'finanzas', provider: 'Massive', ticker: 'C:USDMXN',
+    category: 'finanzas', provider: 'Massive', ticker: 'C:USDMXN', presentationTicker: 'FX:USDMXN',
     startTime: '2026-11-12T22:35:00.000Z', endTime: '2026-11-12T23:05:00.000Z',
   },
   {
@@ -25,14 +25,14 @@ export const FESTIVAL_SCHEDULE = [
   },
   {
     key: 'spx', name: 'S&P 500', symbol: 'SPX', currency: null, decimals: 2,
-    category: 'finanzas', provider: 'Vunelix', ticker: 'SP:SPX', presentationOnly: true,
+    category: 'finanzas', provider: 'Massive', ticker: 'I:SPX', presentationTicker: 'SP:SPX',
     startTime: '2026-11-13T20:15:00.000Z', endTime: '2026-11-13T20:45:00.000Z',
   },
   {
     key: 'ndx', name: 'Nasdaq-100', symbol: 'NDX', currency: null, decimals: 2,
-    category: 'finanzas', provider: 'Massive', ticker: 'I:NDX',
+    category: 'finanzas', provider: 'Massive', ticker: 'I:NDX', presentationTicker: 'NASDAQ:NDX',
     startTime: '2026-11-13T22:05:00.000Z', endTime: '2026-11-13T22:35:00.000Z',
-    requiresReschedule: true,
+    replay: { startTime: '2026-11-13T20:29:00.000Z', endTime: '2026-11-13T20:59:00.000Z' },
   },
 ];
 
