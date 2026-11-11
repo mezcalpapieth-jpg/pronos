@@ -15,7 +15,7 @@ const FIELDS = [
 ];
 const MAX_RESPONSE = 1_048_576;
 
-async function publicJson(fetchImpl, url, body) {
+export async function publicJson(fetchImpl, url, body) {
   const options = { redirect: 'error', credentials: 'omit', signal: AbortSignal.timeout(4500) };
   if (body) Object.assign(options, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),

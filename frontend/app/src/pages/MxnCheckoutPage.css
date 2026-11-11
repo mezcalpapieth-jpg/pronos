@@ -25,7 +25,7 @@
 .mxn-checkout-segments input:checked + span { border-color: var(--orange); color: var(--orange); }
 .mxn-checkout-terms { display: grid; gap: 6px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); font-size: 13px; }
 .mxn-checkout-result-head { display: flex; flex-wrap: wrap; align-items: start; justify-content: space-between; gap: 12px; }
-.mxn-checkout-result-head h2 { margin: 0 0 4px; }
+.mxn-checkout-result-head h2, .mxn-checkout-result-head h3 { margin: 0 0 4px; font-size: 21px; }
 .mxn-checkout-result-head p { font-size: 14px; }
 .mxn-checkout-flag { padding: 5px 9px; border: 1px solid currentColor; border-radius: 999px; color: var(--yes, var(--green)); font-size: 12px; }
 .mxn-checkout-flag-alert, .mxn-checkout p[role='alert'] { color: var(--red); }

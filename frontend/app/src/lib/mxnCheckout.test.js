@@ -52,3 +52,60 @@ test('expires precisely at the quote deadline', () => {
   assert.equal(checkoutQuoteExpired(quote, expiry), true);
   assert.equal(checkoutQuoteExpired({}, expiry), true);
 });
+
+function fundingQuote({ venue, direction, amountMxn }) {
+  const collateral = venue === 'hip4' ? 'USDC' : 'pUSD';
+  const deposit = direction === 'deposit';
+  return {
+    venue, direction, ticketMxn: amountMxn, status: 'indicative', executable: false, reason: null,
+    route: deposit ? ['SPEI', 'Bitso', venue] : [venue, 'Bitso', 'SPEI'],
+    debit: deposit ? { asset: 'MXN', amount: String(amountMxn) } : { asset: collateral, amount: String(amountMxn / 20) },
+    estimatedReceive: deposit ? { asset: collateral, amount: String(amountMxn / 20 - 0.25) }
+      : { asset: 'MXN', amount: String(amountMxn - 5) },
+    minimumReceive: null,
+    fees: [{ type: 'network', amount: null, asset: 'USDC', status: 'unavailable', includedInEstimate: false }],
+    fxRate: '20', expiresAt: quote.expiresAt, estimatedSeconds: null,
+    pronosFeeMxn: '0', pronosSubsidyMxn: '0', costPayer: 'customer',
+  };
+}
+
+test('requests read-only customer-paid funding quotes on both venues for all three tickets', async () => {
+  const requests = [];
+  const client = createMxnCheckoutClient({ fetchImpl: async (url, options) => {
+    const { action, venue, direction, amountMxn } = Object.fromEntries(new URL(url, 'https://pronos.example').searchParams);
+    assert.equal(action, 'funding');
+    assert.equal(options.method, 'GET');
+    assert.equal(options.body, undefined);
+    const input = { venue, direction, amountMxn: Number(amountMxn) };
+    requests.push(input);
+    return respond({ quote: fundingQuote(input) });
+  } });
+  for (const venue of ['hip4', 'polymarket']) {
+    for (const direction of ['deposit', 'withdrawal']) {
+      for (const amountMxn of [100, 300, 1000]) {
+        const input = { venue, direction, amountMxn };
+        assert.deepEqual(await client.getFundingQuote(input), fundingQuote(input));
+        assert.deepEqual(requests.at(-1), input);
+      }
+    }
+  }
+  assert.equal(requests.length, 12);
+});
+
+test('preserves missing funding costs and rejects a quote with an inconsistent subsidy, asset, or ticket', async () => {
+  const input = { venue: 'hip4', direction: 'withdrawal', amountMxn: 100 };
+  const indicative = fundingQuote(input);
+  const unavailable = {
+    ...indicative, status: 'unavailable', reason: 'upstream_unavailable', estimatedReceive: null, expiresAt: null,
+  };
+  const makeClient = quote => createMxnCheckoutClient({ fetchImpl: async () => respond({ quote }) });
+  assert.deepEqual(await makeClient(unavailable).getFundingQuote(input), unavailable);
+  for (const quote of [
+    { ...indicative, pronosSubsidyMxn: '1' },
+    { ...indicative, debit: { asset: 'pUSD', amount: '5' } },
+    { ...indicative, ticketMxn: 300 },
+    { ...indicative, executable: true },
+  ]) {
+    await assert.rejects(makeClient(quote).getFundingQuote(input), /verificar la cotización de fondeo/);
+  }
+});

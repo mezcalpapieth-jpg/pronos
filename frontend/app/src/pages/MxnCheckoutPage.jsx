@@ -4,7 +4,7 @@ import Nav from '../components/Nav.jsx';
 import Footer from '../components/Footer.jsx';
 import {
   checkoutMarketKey, checkoutQuoteExpired, createMxnCheckoutClient,
-  QUOTE_STATUS, TICKETS_MXN, VENUES,
+  FUNDING_QUOTE_STATUS, QUOTE_STATUS, TICKETS_MXN, VENUES,
 } from '../lib/mxnCheckout.js';
 import './MxnCheckoutPage.css';
 
@@ -39,6 +39,12 @@ function amountLabel(value) {
 function dateLabel(value) {
   const time = Date.parse(value);
   return Number.isFinite(time) ? mexicoCity.format(time) : 'Sin verificar';
+}
+
+function fundingAmount(value) {
+  if (!value) return 'Sin confirmar';
+  const formatted = value.asset === 'MXN' ? money(value.amount) : amountLabel(value.amount);
+  return `${formatted} ${value.asset}`;
 }
 
 function percentBps(bps) {
@@ -89,20 +95,24 @@ function MarketTerms({ market }) {
   );
 }
 
-function QuoteResult({ quote, market, side }) {
+function useQuoteExpired(expiresAt) {
   const [clock, setClock] = useState(Date.now);
-  const expired = checkoutQuoteExpired(quote, clock);
+  useEffect(() => {
+    if (!expiresAt) return;
+    const now = Date.now();
+    setClock(now);
+    const delay = Math.max(0, Date.parse(expiresAt) - now);
+    const timeout = setTimeout(() => setClock(Date.now()), delay);
+    return () => clearTimeout(timeout);
+  }, [expiresAt]);
+  return expiresAt != null && checkoutQuoteExpired({ expiresAt }, clock);
+}
+
+function QuoteResult({ quote, market, side }) {
+  const expired = useQuoteExpired(quote.expiresAt);
   const isBuy = side === 'buy';
   const venueEstimate = quote.venueFeeStatus === 'scenario';
   const builderEstimate = quote.builderFeeStatus === 'scenario';
-
-  useEffect(() => {
-    const now = Date.now();
-    setClock(now);
-    const delay = Math.max(0, Date.parse(quote.expiresAt) - now);
-    const timeout = setTimeout(() => setClock(Date.now()), delay);
-    return () => clearTimeout(timeout);
-  }, [quote]);
 
   const status = expired ? 'Cotización caducada' : QUOTE_STATUS[quote.status];
   const statusStyle = expired || !quote.eligible ? ' mxn-checkout-flag-alert' : '';
@@ -141,10 +151,172 @@ function QuoteResult({ quote, market, side }) {
         <div><dt>Vigencia</dt><dd>{dateLabel(quote.expiresAt)} CDMX</dd></div>
       </dl>
       <p className="mxn-checkout-help">
-        La simulación parte de un saldo existente en {market.collateral}. Si necesitas fondear o retirar, esos costos se cotizan aparte y corren por tu cuenta.
+        La simulación parte de un saldo existente en {market.collateral}. Puedes <a href="#mxn-checkout-funding">cotizar un depósito o retiro</a> por separado.
       </p>
       {expired && <p role="status">Solicita una nueva cotización para consultar el libro actual.</p>}
     </section>
+  );
+}
+
+const FUNDING_FEE_LABELS = {
+  bitso_conversion: 'Conversión de Bitso',
+  bitso_polygon_payout: 'Envío de USDC de Bitso',
+  spei_in: 'Depósito por SPEI',
+  spei_out: 'Retiro por SPEI',
+  polygon_source_gas: 'Comisión de red en Polygon',
+  cctp_protocol: 'Comisión del puente Circle',
+  cctp_forwarding: 'Envío a HyperCore',
+  cctp_withdrawal_max: 'Cargo máximo del puente Circle',
+  hypercore_withdrawal: 'Retiro desde HyperCore',
+  hypercore_activation: 'Activación de HyperCore en la primera salida',
+  polymarket_bridge_cost: 'Comisión del puente de Polymarket',
+  polymarket_bridge_gas: 'Comisión de red de Polymarket',
+};
+
+const FUNDING_REASON_LABELS = {
+  partner_quote_required: 'Los importes finales dependen de la cotización de los proveedores.',
+  provider_quote_unavailable: 'El proveedor de la ruta no devolvió una cotización vigente.',
+  fx_unavailable: 'El tipo de cambio no está disponible.',
+  below_provider_minimum: 'El monto queda por debajo del mínimo de la ruta.',
+};
+
+function FundingResult({ quote }) {
+  const expired = useQuoteExpired(quote.expiresAt);
+  const status = expired ? 'Cotización caducada' : FUNDING_QUOTE_STATUS[quote.status];
+  const deposit = quote.direction === 'deposit';
+  const separateFees = quote.fees.some(fee => !fee.includedInEstimate && fee.type !== 'hypercore_activation');
+  const receiveLabel = separateFees ? 'Recepción estimada antes de costos adicionales' : 'Recepción estimada';
+  const reason = Object.hasOwn(FUNDING_REASON_LABELS, quote.reason) ? FUNDING_REASON_LABELS[quote.reason] : null;
+  const statusStyle = expired || quote.status !== 'indicative' ? ' mxn-checkout-flag-alert' : '';
+  const eta = quote.estimatedSeconds;
+  return (
+    <section className="mxn-checkout-card mxn-checkout-result" aria-labelledby="mxn-funding-summary">
+      <div className="mxn-checkout-result-head">
+        <div>
+          <h3 id="mxn-funding-summary">{deposit ? 'Depósito simulado' : 'Retiro simulado'}</h3>
+          <p>{quote.route.join(' → ')}</p>
+        </div>
+        <span className={`mxn-checkout-flag${statusStyle}`} role="status">{status}</span>
+      </div>
+      <dl className="mxn-checkout-total">
+        <div>
+          <dt>{deposit ? 'Presupuesto de depósito' : 'Saldo estimado a debitar'}</dt>
+          <dd>{fundingAmount(quote.debit)}</dd>
+        </div>
+        <div>
+          <dt>{receiveLabel}{quote.estimatedFirstWithdrawalReceive && ' · cuenta activa'}</dt>
+          <dd>{fundingAmount(quote.estimatedReceive)}</dd>
+        </div>
+      </dl>
+      <dl className="mxn-checkout-costs">
+        <div><dt>Mínimo a recibir</dt><dd>{quote.minimumReceive ? fundingAmount(quote.minimumReceive) : 'Sin garantía'}</dd></div>
+        {quote.providerMinimum && (
+          <div>
+            <dt>Mínimo del puente</dt>
+            <dd>{quote.providerMinimum.comparison === 'greater_than' ? 'Más de' : 'Desde'} {fundingAmount(quote.providerMinimum)}</dd>
+          </div>
+        )}
+        {quote.estimatedFirstWithdrawalReceive && (
+          <div>
+            <dt>{receiveLabel} en la primera salida</dt>
+            <dd>{fundingAmount(quote.estimatedFirstWithdrawalReceive)}</dd>
+          </div>
+        )}
+        {quote.fxRate && <div><dt>Tipo de cambio indicativo de Bitso</dt><dd>{amountLabel(quote.fxRate)} MXN/USD</dd></div>}
+        {quote.fxSpreadMxn != null && <div><dt>Diferencial cambiario incluido</dt><dd>{money(quote.fxSpreadMxn)} MXN</dd></div>}
+        {quote.fees.map(fee => (
+          <div key={`${fee.type}:${fee.asset}`}>
+            <dt>
+              {Object.hasOwn(FUNDING_FEE_LABELS, fee.type) ? FUNDING_FEE_LABELS[fee.type] : 'Cargo del proveedor'}
+              {fee.status === 'indicative' && ' · estimado'}
+              {fee.amount != null && fee.type !== 'hypercore_activation' && (fee.includedInEstimate ? ' · incluido' : ' · por separado')}
+            </dt>
+            <dd>{fundingAmount(fee.amount == null ? null : fee)}</dd>
+          </div>
+        ))}
+        <div><dt>Comisión Pronos por el movimiento</dt><dd>{money(quote.pronosFeeMxn)} MXN</dd></div>
+        <div><dt>Vigencia</dt><dd>{quote.expiresAt ? `${dateLabel(quote.expiresAt)} CDMX` : 'Sin confirmar'}</dd></div>
+        <div>
+          <dt>{quote.estimatedSecondsScope === 'provider_leg' ? 'Tiempo estimado del puente' : 'Tiempo estimado'}</dt>
+          <dd>{eta == null ? 'Sin confirmar' : eta < 60 ? `${eta} s` : `${Math.ceil(eta / 60)} min`}</dd>
+        </div>
+      </dl>
+      {reason && <p className="mxn-checkout-help">{reason}</p>}
+      <p className="mxn-checkout-help">Los costos de conversión, red y proveedores corren por tu cuenta.</p>
+      {expired && <p role="status">Solicita una nueva cotización para actualizar los importes.</p>}
+    </section>
+  );
+}
+
+function FundingCheckout({ client, preferredVenue }) {
+  const request = useRef(null);
+  const [venue, setVenue] = useState(Object.hasOwn(VENUES, preferredVenue) ? preferredVenue : 'hip4');
+  const [direction, setDirection] = useState('deposit');
+  const [ticket, setTicket] = useState(300);
+  const [quote, setQuote] = useState(null);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => () => {
+    request.current?.abort();
+    request.current = null;
+  }, []);
+
+  function change(setter, value) {
+    request.current?.abort();
+    request.current = null;
+    setQuote(null);
+    setError('');
+    setPending(false);
+    setter(value);
+  }
+
+  async function estimate(event) {
+    event.preventDefault();
+    if (request.current) return;
+    const controller = new AbortController();
+    request.current = controller;
+    setQuote(null);
+    setError('');
+    setPending(true);
+    try {
+      const result = await client.getFundingQuote({ venue, direction, amountMxn: ticket }, { signal: controller.signal });
+      if (request.current === controller) setQuote(result);
+    } catch (error) {
+      if (request.current === controller) setError(error.message);
+    } finally {
+      if (request.current === controller) {
+        request.current = null;
+        setPending(false);
+      }
+    }
+  }
+
+  return (
+    <div className="mxn-checkout-layout" id="mxn-checkout-funding">
+      <section className="mxn-checkout-card" aria-labelledby="mxn-funding-heading">
+        <h2 id="mxn-funding-heading">Depósitos y retiros</h2>
+        <form onSubmit={estimate} aria-busy={pending}>
+          <SegmentedOptions label="Plataforma" name="mxn-funding-venue" value={venue}
+            options={Object.entries(VENUES).map(([value, label]) => ({ value, label }))}
+            onChange={value => change(setVenue, value)} />
+          <SegmentedOptions label="Movimiento" name="mxn-funding-direction" value={direction}
+            options={[{ value: 'deposit', label: 'Depositar' }, { value: 'withdrawal', label: 'Retirar' }]}
+            onChange={value => change(setDirection, value)} />
+          <SegmentedOptions label={direction === 'deposit' ? 'Presupuesto en MXN' : 'Valor de referencia en MXN'}
+            name="mxn-funding-ticket" value={ticket} options={TICKETS_MXN.map(value => ({ value, label: `$${quantity.format(value)}` }))}
+            onChange={value => change(setTicket, value)} />
+          <p className="mxn-checkout-help">{direction === 'deposit'
+            ? 'Consulta cuánto saldo recibirías con un depósito por SPEI.'
+            : 'El monto en pesos determina cuánto saldo se simula retirar. El importe recibido depende de las comisiones.'}</p>
+          <button className="btn-primary" type="submit" disabled={pending}>
+            {pending ? 'Consultando la ruta…' : direction === 'deposit' ? 'Cotizar depósito' : 'Cotizar retiro'}
+          </button>
+          {error && <p role="alert">{error}</p>}
+        </form>
+      </section>
+      {quote && <FundingResult quote={quote} />}
+    </div>
   );
 }
 
@@ -239,7 +411,7 @@ export default function MxnCheckoutPage({ onOpenLogin }) {
       <main className="mxn-checkout">
         <header>
           <h1>Cotiza en pesos mexicanos</h1>
-          <p>Simula compras y ventas en los libros públicos de HIP-4 y Polymarket.</p>
+          <p>Simula compras y ventas en HIP-4 y Polymarket. <a href="#mxn-checkout-funding">Cotiza un depósito o retiro.</a></p>
         </header>
         <div className="mxn-checkout-layout">
           <section className="mxn-checkout-card" aria-labelledby="mxn-checkout-order">
@@ -292,8 +464,9 @@ export default function MxnCheckoutPage({ onOpenLogin }) {
           </section>
           {quote && market && <QuoteResult key={quote.expiresAt} quote={quote} market={market} side={side} />}
         </div>
+        <FundingCheckout key={preferredVenue} client={client} preferredVenue={preferredVenue} />
         <p className="mxn-checkout-help mxn-checkout-disclosure">
-          Las cotizaciones son indicativas. Cada plataforma tiene su propio saldo y cada mercado sus reglas. Esta pantalla no envía órdenes.
+          Pantalla de consulta. Cada plataforma tiene su propio saldo y cada mercado sus reglas.
         </p>
       </main>
       <Footer />

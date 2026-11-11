@@ -120,3 +120,41 @@ test('only valid enabled GETs can read venue and FX data', async () => {
     venue: 'hip4', marketId: '27986', outcomeIndex: 0, side: 'buy', ticketMxn: 300,
   }, 'fx']);
 });
+
+test('funding quotes use the read-only gate and accept the three peso tickets on both venues', async () => {
+  const calls = [];
+  const funding = {
+    async quote(input) {
+      calls.push(input);
+      return { ...input, executable: false, pronosSubsidyMxn: '0' };
+    },
+  };
+  const disabled = createMxnCheckoutHandler({ funding, env: { MXN_CHECKOUT_ENABLED: 'false' } });
+  const handler = createMxnCheckoutHandler({ funding, env: { MXN_CHECKOUT_ENABLED: 'true' } });
+  const url = `${path}?action=funding&venue=hip4&direction=deposit&amountMxn=100`;
+
+  assert.equal((await request(disabled, url)).code, 404);
+  assert.equal((await request(handler, url, 'POST')).code, 405);
+  for (const invalid of [url + '&wallet=abc', url + '&amountMxn=300', url.replace('100', '200'),
+    url.replace('deposit', 'buy'), url.replace('hip4', 'native')]) {
+    assert.equal((await request(handler, invalid)).code, 400);
+  }
+  assert.deepEqual(calls, []);
+
+  for (const venue of ['hip4', 'polymarket']) {
+    for (const direction of ['deposit', 'withdrawal']) {
+      for (const ticketMxn of [100, 300, 1000]) {
+        const input = { venue, direction, ticketMxn };
+        const result = await request(handler,
+          `${path}?action=funding&venue=${venue}&direction=${direction}&amountMxn=${ticketMxn}`);
+        assert.equal(result.code, 200);
+        assert.equal(result.headers['Cache-Control'], 'no-store');
+        assert.equal(result.body.policy.fundingEnabled, false);
+        assert.equal(result.body.policy.subsidizesFunding, false);
+        assert.deepEqual(calls.at(-1), input);
+        assert.deepEqual(result.body.quote, { ...input, executable: false, pronosSubsidyMxn: '0' });
+      }
+    }
+  }
+  assert.equal(calls.length, 12);
+});

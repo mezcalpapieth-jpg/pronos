@@ -9,6 +9,11 @@ export const QUOTE_STATUS = {
   below_minimum: 'Por debajo del mínimo del mercado',
   below_one_share: 'El monto no alcanza una participación',
 };
+export const FUNDING_QUOTE_STATUS = {
+  indicative: 'Cotización indicativa',
+  below_minimum: 'Monto menor al mínimo',
+  unavailable: 'Ruta sin cotización',
+};
 
 const API_ERRORS = {
   mxn_checkout_disabled: 'La cotización en pesos no está habilitada en este entorno.',
@@ -29,6 +34,37 @@ const validMarket = market => validVenue(market?.venue) && validId(market.id)
   && Array.isArray(market.outcomes) && market.outcomes.length === 2
   && new Set(market.outcomes.map(outcome => outcome?.index)).size === 2
   && market.outcomes.every(outcome => [0, 1].includes(outcome?.index) && typeof outcome.label === 'string' && outcome.label.trim());
+
+const validDecimal = value => typeof value === 'string' && /^\d{1,12}(?:\.\d{1,18})?$/.test(value);
+const validAmount = (value, asset) => value === null || (value?.asset === asset && validDecimal(value.amount));
+const validFundingAsset = value => ['MXN', 'USD', 'USDC', 'pUSD'].includes(value);
+
+function validFundingQuote(quote, venue, direction, amountMxn) {
+  const venueAsset = venue === 'hip4' ? 'USDC' : 'pUSD';
+  const deposit = direction === 'deposit';
+  const receiveAsset = deposit ? venueAsset : 'MXN';
+  return quote && quote.venue === venue && quote.direction === direction && quote.ticketMxn === amountMxn
+    && Object.hasOwn(FUNDING_QUOTE_STATUS, quote.status) && quote.executable === false
+    && quote.costPayer === 'customer' && quote.pronosFeeMxn === '0' && quote.pronosSubsidyMxn === '0'
+    && (quote.reason === null || typeof quote.reason === 'string')
+    && Array.isArray(quote.route) && quote.route.length > 0
+    && quote.route.every(leg => typeof leg === 'string' && leg.trim().length > 0)
+    && validAmount(quote.debit, deposit ? 'MXN' : venueAsset)
+    && (!deposit || quote.debit === null || Number(quote.debit.amount) === amountMxn)
+    && validAmount(quote.estimatedReceive, receiveAsset) && validAmount(quote.minimumReceive, receiveAsset)
+    && (quote.estimatedFirstWithdrawalReceive == null
+      || (!deposit && venue === 'hip4' && validAmount(quote.estimatedFirstWithdrawalReceive, 'MXN')))
+    && (quote.providerMinimum == null || (validFundingAsset(quote.providerMinimum.asset)
+      && validDecimal(quote.providerMinimum.amount) && ['at_least', 'greater_than'].includes(quote.providerMinimum.comparison)))
+    && (quote.fxRate === null || (validDecimal(quote.fxRate) && Number(quote.fxRate) > 0))
+    && (quote.fxSpreadMxn == null || validDecimal(quote.fxSpreadMxn))
+    && (quote.expiresAt === null || (typeof quote.expiresAt === 'string' && Number.isFinite(Date.parse(quote.expiresAt))))
+    && (quote.estimatedSeconds === null || (Number.isSafeInteger(quote.estimatedSeconds) && quote.estimatedSeconds >= 0))
+    && Array.isArray(quote.fees) && quote.fees.every(fee => typeof fee?.type === 'string'
+      && validFundingAsset(fee.asset) && typeof fee.includedInEstimate === 'boolean'
+      && (fee.status === 'unavailable' ? fee.amount === null && fee.includedInEstimate === false
+        : ['indicative', 'documented'].includes(fee.status) && validDecimal(fee.amount)));
+}
 
 export const checkoutMarketKey = market => `${market.venue}:${market.id}`;
 
@@ -93,6 +129,16 @@ export function createMxnCheckoutClient({ fetchImpl = globalThis.fetch, timeoutM
         throw new Error('No se pudo verificar la cotización. Solicita una nueva.');
       }
       return { market: refreshed, quote };
+    },
+    async getFundingQuote({ venue, direction, amountMxn }, { signal } = {}) {
+      if (!validVenue(venue) || !['deposit', 'withdrawal'].includes(direction) || !TICKETS_MXN.includes(amountMxn)) {
+        throw new Error('Selecciona una plataforma, un movimiento y un monto válido.');
+      }
+      const { quote } = await request({ action: 'funding', venue, direction, amountMxn }, signal);
+      if (!validFundingQuote(quote, venue, direction, amountMxn)) {
+        throw new Error('No se pudo verificar la cotización de fondeo. Solicita una nueva.');
+      }
+      return quote;
     },
   };
 }

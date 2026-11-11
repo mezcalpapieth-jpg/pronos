@@ -1,11 +1,15 @@
 import { applyCors } from './_lib/cors.js';
 import { checkoutData } from './_lib/mxn-checkout-data.js';
 import { checkoutError, FEE_CAP_BPS, quoteMxn, TICKETS_MXN } from './_lib/mxn-checkout-quote.js';
+import { createMxnFundingQuoteService } from './_lib/mxn-funding-quote.js';
 
 const POLICY = Object.freeze({
   mode: 'read_only', tradingEnabled: false, feeCapBps: FEE_CAP_BPS,
-  subsidizesVenueFees: false, subsidizesFunding: false,
+  fundingEnabled: false, subsidizesVenueFees: false, subsidizesFunding: false,
 });
+
+const venueOptions = ['hip4', 'polymarket'];
+const amountOptions = TICKETS_MXN.map(String);
 
 function params(req) {
   if (req.query != null) return req.query;
@@ -16,16 +20,26 @@ function params(req) {
 
 function readQuoteQuery(query) {
   const { venue, marketId, outcomeIndex, side, amountMxn } = query;
-  if (Object.keys(query).length !== 6 || !['hip4', 'polymarket'].includes(venue)
+  if (Object.keys(query).length !== 6 || !venueOptions.includes(venue)
     || !/^[1-9]\d{0,17}$/.test(marketId ?? '') || !['0', '1'].includes(outcomeIndex)
-    || !['buy', 'sell'].includes(side) || !TICKETS_MXN.map(String).includes(amountMxn)) {
+    || !['buy', 'sell'].includes(side) || !amountOptions.includes(amountMxn)) {
     throw checkoutError('invalid_query');
   }
   return { venue, marketId, outcomeIndex: Number(outcomeIndex), side, ticketMxn: Number(amountMxn) };
 }
 
+function readFundingQuery(query) {
+  const { venue, direction, amountMxn } = query;
+  if (Object.keys(query).length !== 4 || !venueOptions.includes(venue)
+    || !['deposit', 'withdrawal'].includes(direction) || !amountOptions.includes(amountMxn)) {
+    throw checkoutError('invalid_query');
+  }
+  return { venue, direction, ticketMxn: Number(amountMxn) };
+}
+
 export function createMxnCheckoutHandler({
   env = process.env, now = Date.now, data = checkoutData({ now }),
+  funding = createMxnFundingQuoteService({ now, fx: () => data.fx() }),
 } = {}) {
   return async function handler(req, res) {
     res.setHeader('Cache-Control', 'no-store');
@@ -47,6 +61,10 @@ export function createMxnCheckoutHandler({
       if (query.action === 'markets' && Object.keys(query).length === 1) {
         const result = await data.markets();
         return res.status(200).json({ ok: true, ...result, policy: POLICY });
+      }
+      if (query.action === 'funding') {
+        const quote = await funding.quote(readFundingQuery(query));
+        return res.status(200).json({ ok: true, quote, policy: POLICY });
       }
       if (query.action !== 'quote') throw checkoutError('invalid_query');
       const input = readQuoteQuery(query);

@@ -205,6 +205,39 @@ python3 experiments/hip4/replay_checkout.py \
 
 The replay independently re-prices each venue book at 0, 50 and 100 builder bps. Missing or stale observations remain in the denominator. Its revenue is the sum of modeled builder fees on passing simulations, converted at the shared FX midpoint. Every ticket and side is an independent hypothetical trade. The sum gives equal weight to those scenarios and does not estimate customer volume, builder credit, operating contribution or profit. See the [dated replay](checkout-replay-2026-11-10.md) for the cutoff, results and command to reproduce them.
 
+### Deposit and cash-out quotes
+
+On the same checkout page, choose HIP-4 or Polymarket, deposit or cash-out, and MXN 100, 300, or 1,000. The form works independently of the market catalog. The API uses the existing checkout flag and accepts only `GET` for these quotes.
+
+```text
+/api/mxn-checkout?action=funding&venue=hip4&direction=deposit&amountMxn=300
+/api/mxn-checkout?action=funding&venue=polymarket&direction=withdrawal&amountMxn=1000
+```
+
+A deposit uses the ticket as the MXN budget. A cash-out uses it to size the USDC or pUSD debit at the public Bitso bid before fees. Quotes show the route, debit, indicative receipt, known and pending costs, expiry, and an ETA for the quoted leg when available. Pronos charges zero for funding and covers zero of the provider costs. The 5% trading-fee cap still applies to trading quotes separately.
+
+Public rates and bridge estimates price the observable legs. A guaranteed minimum receipt and full SPEI delivery time require account-specific Bitso conversion and payout quotes. The current prototype has neither an execution button nor provider credentials. [Bitso conversion quotes](https://docs.bitso.com/bitso-api/docs/request-a-conversion-quote-1) · [Circle HyperCore transfers](https://developers.circle.com/cctp/concepts/cctp-on-hypercore) · [Polymarket Bridge quote](https://docs.polymarket.com/trading/bridge/quote)
+
+### Receipt ledger
+
+The Postgres ledger records deposits, withdrawals, individual fills, and builder payouts. Use one canonical source and reference for each movement, with a distinct event ID for each status observation. Link the bank and bridge evidence to that same operation before import. Use provider timestamps and exact decimal strings. Testnet and mainnet, venues, user accounts, and builder accounts have separate totals. Pending or failed transfers stay in the history. Only confirmed amounts count in totals, and only a confirmed builder receipt counts as a payout. Fill-reported builder fees are a separate figure.
+
+The operator import accepts normalized JSON Lines from verified provider records. For a transfer, `amount` is the credited venue collateral on deposit or the debited venue collateral on cash-out. `mxnAmount` is the actual bank debit or credit when known. For a fill, include its `marketId`, `orderId`, `side`, `shares` and gross `amount`, plus any observed fee fields. Use the stable fill ID in `reference`, even if an order has multiple fills. For a builder payout, use the payout transfer or onchain log as the reference and the confirmed amount credited to the builder. A quote or an accrued fee by itself is insufficient evidence of a payout.
+
+```json
+{"environment":"testnet","venue":"hip4","accountId":"fixture-user","source":"fixture","reference":"deposit-100","eventId":"deposit-100-confirmed","occurredAt":"2026-11-11T03:00:00Z","kind":"deposit","status":"confirmed","asset":"USDC","amount":"5.25","mxnAmount":"100"}
+```
+
+```sh
+# Validate and reconcile locally in temporary Postgres without a remote connection.
+node frontend/ops/mxn-checkout-ledger.mjs receipts.jsonl
+
+# Print the DDL for review and application to an isolated ledger database.
+node frontend/ops/mxn-checkout-ledger.mjs --schema
+```
+
+After applying that DDL to an isolated database, the operator can import with `node frontend/ops/mxn-checkout-ledger.mjs --apply receipts.jsonl` and a separately configured `MXN_LEDGER_DATABASE_URL`. Each import is atomic. Identical events replay without duplication and conflicts roll the batch back. The quote endpoint never writes receipts. Provider receipt collection and verification remain operator-driven for this prototype.
+
 ### Funding and cash-out economics
 
 Show a peso equivalent for each user-owned venue balance. Use available collateral for subsequent orders and keep sale and settlement proceeds on the venue where the position was opened. When the user needs to add funds, quote only the destination they choose. An executable top-up or cash-out quote should show the exact debit, minimum receive amount, route, all charges, expiry and estimated time. Keep separate amounts for pending and confirmed transfers. This avoids paying conversion and network fees on each order and avoids using the Pronos treasury to back customer balances.
