@@ -32,7 +32,7 @@ async function fixture(t) {
       realized_pnl NUMERIC DEFAULT 0,updated_at TIMESTAMPTZ,dismissed_at TIMESTAMPTZ,PRIMARY KEY(market_id,username,outcome_index));
     INSERT INTO points_positions(market_id,username,outcome_index,shares,cost_basis) VALUES(1,'ana',0,200,100),(1,'ben',1,100,100);
     CREATE TABLE points_trades(id SERIAL PRIMARY KEY,market_id INT,username TEXT,side TEXT,outcome_index INT,shares NUMERIC,
-      collateral NUMERIC,fee NUMERIC DEFAULT 0,price_at_trade NUMERIC,source TEXT DEFAULT 'web',created_at TIMESTAMPTZ DEFAULT NOW());
+      collateral NUMERIC,fee NUMERIC DEFAULT 0,price_at_trade NUMERIC,source TEXT DEFAULT 'web',api_key_id BIGINT,created_at TIMESTAMPTZ DEFAULT NOW());
     INSERT INTO points_trades(market_id,username,side,outcome_index,shares,collateral,price_at_trade,created_at) VALUES
       (1,'ana','buy',0,200,100,0.5,'2026-10-02T06:00Z'),(1,'ben','buy',1,100,100,1,'2026-10-02T06:00Z');
     CREATE TABLE points_parlay_tickets(id INT PRIMARY KEY,username TEXT,cycle_id INT DEFAULT 5,stake NUMERIC,multiplier NUMERIC DEFAULT 5,

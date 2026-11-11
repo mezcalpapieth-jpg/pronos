@@ -23,7 +23,7 @@ async function setup(t) {
       PRIMARY KEY (market_id, username, outcome_index));
     CREATE TABLE points_trades (id SERIAL PRIMARY KEY, market_id INT, username TEXT,
       side TEXT, outcome_index INT, shares NUMERIC(20,6), collateral NUMERIC(20,6) DEFAULT 0,
-      fee NUMERIC(20,6) DEFAULT 0, price_at_trade NUMERIC, source TEXT,
+      fee NUMERIC(20,6) DEFAULT 0, price_at_trade NUMERIC, source TEXT, api_key_id BIGINT,
       created_at TIMESTAMPTZ DEFAULT NOW());
     CREATE TABLE points_balances (username TEXT PRIMARY KEY, balance NUMERIC(20,6),
       updated_at TIMESTAMPTZ);

@@ -8,7 +8,7 @@ function fail(message, status = 400) {
 }
 
 export async function redeemWinningPosition(client, {
-  username, marketId, outcomeIndex, window = null, automatic = false,
+  username, marketId, outcomeIndex, window = null, automatic = false, source = 'web', apiKeyId = null,
 }) {
   // Share the cycle lock with rollover and the cutoff snapshot before wallet locks.
   const activeWindow = window || await readActiveCycleWindow(client, { forUpdate: true });
@@ -70,9 +70,10 @@ export async function redeemWinningPosition(client, {
     remainingShares <= SHARE_EPSILON || staleRemainder, marketId, username, outcomeIndex]);
   await client.query(`
     INSERT INTO points_trades (market_id, username, side, outcome_index,
-      shares, collateral, fee, price_at_trade, source)
-    VALUES ($1, $2, 'redeem', $3, $4, $5, 0, 1, $6)
-  `, [marketId, username, outcomeIndex, redeemShares, payout, automatic ? 'tournament_auto_claim' : 'web']);
+      shares, collateral, fee, price_at_trade, source, api_key_id)
+    VALUES ($1, $2, 'redeem', $3, $4, $5, 0, 1, $6, $7)
+  `, [marketId, username, outcomeIndex, redeemShares, payout, automatic ? 'tournament_auto_claim' : source === 'api' ? 'api' : 'web',
+    !automatic && source === 'api' ? apiKeyId : null]);
   await client.query(`
     INSERT INTO points_distributions (username, amount, kind, reference_id, reason)
     VALUES ($1, $2, 'redemption', $3, $4)
