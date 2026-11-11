@@ -156,12 +156,10 @@ export default function TradingFestival({ dashboard = false, onOpenLogin }) {
           {showPresentationChart ? <FestivalPresentationChart key={slot.key} slot={slot} /> : (
             <TradingFestivalChart key={slot.key} slot={slot} />
           )}
-          {!showPresentationChart && (
-            <div className="tf-directions">
-              <span><b><span aria-hidden="true">↗</span> Sube</b><small>Cierra por encima de la apertura</small></span>
-              <span><b><span aria-hidden="true">↘</span> Baja</b><small>Cierra por debajo de la apertura</small></span>
-            </div>
-          )}
+          <div className="tf-directions">
+            <span><b><span aria-hidden="true">↗</span> Sube</b><small>Cierra por encima de la apertura</small></span>
+            <span><b><span aria-hidden="true">↘</span> Baja</b><small>Cierra por debajo de la apertura</small></span>
+          </div>
           {!dashboard && !showPresentationChart && tradeUrl && (
             <Link className="tf-cta" to={tradeUrl}>
               {festivalStatus(slot, now) === 'Abierto' ? 'Operar con puntos' : 'Ver mercado'} →
