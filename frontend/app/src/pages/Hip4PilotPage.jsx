@@ -162,9 +162,11 @@ function PilotAccount({ address, suborgId }) {
           <h2 id="hip4-order">Comprar o vender</h2>
           <p>Orden límite inmediata (IOC). HyperCore cancela la parte sin cruce. Comisión Pronos de 25 pb (0.25%) en las ejecuciones donde HyperCore la cobre.</p>
           <p>Hasta 250 participaciones por orden y 25 USDC de prueba por compra.</p>
+          <p>Las compras requieren un mercado NFL de Flip con reglas 50/50 verificadas.</p>
+          <p><strong>Cancelación definitiva sin resultado oficial.</strong> Si HyperCore liquida 50/50, cada participación paga 0.50 USDC de prueba antes de la comisión de liquidación. Los aplazamientos y resultados oficiales siguen las reglas de cada mercado.</p>
           <form onSubmit={submitOrder}>
             <fieldset disabled={Boolean(busy) || !canTrade} aria-label="Datos de la orden">
-              <label>ID del activo en testnet <input name="coin" placeholder="#265941" pattern="#[1-9][0-9]{0,7}[01]" required /></label>
+              <label>ID del activo en testnet <input name="coin" pattern="#[1-9][0-9]{0,7}[01]" required /></label>
               <label>Operación <select name="side"><option value="buy">Comprar</option><option value="sell">Vender</option></select></label>
               <label>Precio límite (USDC) <input name="price" type="number" min="0.00001" max="0.99999" step="0.00001" required /></label>
               <label>Participaciones <input name="size" type="number" min="1" max="250" step="1" required /></label>

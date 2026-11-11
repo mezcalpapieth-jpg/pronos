@@ -45,14 +45,14 @@ function MarketRules({ market }) {
       <h2 id="polymarket-market-rules">Reglas y resolución</h2>
       <p className="polymarket-pilot-market-title">{market.title}</p>
       <dl className="polymarket-pilot-facts">
-        <div><dt>Plazo publicado · Ciudad de México</dt><dd>{date(market.endDate)}</dd></div>
+        {market.cancellationDeadline && <div><dt>Plazo por falta de resultado</dt><dd lang="en">{market.cancellationDeadline}</dd></div>}
         <div><dt>Versión del mercado</dt><dd>{market.version || 'Sin verificar'}</dd></div>
         <div><dt>Fuente de resolución</dt><dd>{source
           ? <a href={source} target="_blank" rel="noopener noreferrer">Ver fuente publicada</a>
           : market.resolutionSource || 'Consulta las reglas publicadas abajo.'}</dd></div>
       </dl>
       <p>El plazo publicado no garantiza el momento del pago. La resolución y cualquier disputa siguen las reglas de este mercado en Polymarket.</p>
-      <details open>
+      <details>
         <summary>Leer las reglas completas</summary>
         {rules.length ? rules.map((rule, index) => <p className="polymarket-pilot-rules" key={index}>{String(rule)}</p>)
           : <p className="polymarket-pilot-rules">{market.description || 'El proveedor no devolvió reglas para este mercado.'}</p>}
@@ -118,7 +118,8 @@ export default function PolymarketPilotPage({ onOpenLogin }) {
   const quoteGeneration = useRef(0);
   const market = markets.find(item => String(item.id) === marketId);
   const expired = quote ? polymarketQuoteExpired(quote, clock) : false;
-  const canQuote = market && market.active && !market.closed && market.acceptingOrders
+  const hasVerifiedCancellation = market?.cancellationPayoutPerShare === '0.50';
+  const canQuote = hasVerifiedCancellation && market.active && !market.closed && market.acceptingOrders
     && Array.isArray(market.outcomes) && market.outcomes.length === 2;
 
   const resetQuote = useCallback(() => {
@@ -166,6 +167,13 @@ export default function PolymarketPilotPage({ onOpenLogin }) {
     try {
       const result = await session.getQuote({ marketId, outcomeIndex, side, amount });
       if (generation !== quoteGeneration.current) return;
+      const freshMarket = result.market;
+      if (String(freshMarket?.id) !== marketId || freshMarket.cancellationPayoutPerShare !== '0.50'
+        || freshMarket.conditionId !== market.conditionId
+        || freshMarket.outcomes?.[outcomeIndex]?.tokenId !== market.outcomes[outcomeIndex].tokenId) {
+        throw new Error('Los datos del mercado cambiaron. Actualiza la lista y vuelve a simular.');
+      }
+      setMarkets(items => items.map(item => String(item.id) === marketId ? freshMarket : item));
       setClock(Date.now());
       setQuote(result.quote);
     } catch (error) {
@@ -203,8 +211,17 @@ export default function PolymarketPilotPage({ onOpenLogin }) {
         <div className="polymarket-pilot-status" aria-live="polite">
           {marketsLoading && <p role="status">Consultando los mercados deportivos…</p>}
           {marketsError && <p role="alert">{marketsError}</p>}
-          {!marketsLoading && !marketsError && markets.length === 0 && <p role="status">No hay mercados disponibles para este piloto en este momento.</p>}
+          {!marketsLoading && !marketsError && markets.length === 0 && (
+            <p role="status">Por ahora no hay mercados deportivos con reglas de cancelación compatibles con el piloto.</p>
+          )}
         </div>
+
+        {hasVerifiedCancellation && !marketsLoading && (
+          <p className="polymarket-pilot-notice">
+            <strong>Cancelación definitiva sin resultado oficial.</strong> Cada participación de cualquiera de los dos resultados paga 0.50 pUSD.
+            Si el evento se aplaza, el mercado puede seguir pendiente hasta el plazo publicado.
+          </p>
+        )}
 
         <div className="polymarket-pilot-grid">
           <section className="polymarket-pilot-card" aria-labelledby="polymarket-simulate">

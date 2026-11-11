@@ -14,7 +14,12 @@ const rejectsCode = (fn, code) => assert.rejects(fn, (error) => error.code === c
 
 function fixtures() {
   const market = {
-    id: '123', question: 'Heat vs. Jazz', description: 'Final official game result, including overtime.',
+    id: '123', question: 'Heat vs. Jazz',
+    description: `In the upcoming NBA game between Heat and Jazz, originally scheduled for Tuesday, November 10, 2026 at 9:00 PM ET (as of creation of the first market related to the event):
+If the Heat win, the market will resolve to "Heat".
+If the Jazz win, the market will resolve to "Jazz".
+If this market's outcome was definitively determined under its rules by the listed resolution sources before abandonment, that outcome will stand. Otherwise, the following no-result provisions apply. If the game is canceled, does not start by Thursday, November 12, 2026, 11:59 PM ET, or is abandoned with no official result by that time, this market will resolve 50-50.
+The result will be determined based on the final score including any overtime periods.`,
     resolutionSource: 'https://www.nba.com/', endDate: '2026-11-11T02:00:00Z',
     version: 'v1', conditionId: CONDITION, clobTokenIds: '["101","102"]',
     positionIds: ['201', '202'], outcomes: '["Heat","Jazz"]',
@@ -64,6 +69,8 @@ test('normalization preserves rules, resolution source and unverified restricted
   const { market } = fixtures();
   const result = normalizePolymarketMarket(market);
   assert.equal(result.rules, market.description);
+  assert.equal(result.cancellationPayoutPerShare, '0.50');
+  assert.equal(result.cancellationDeadline, 'Thursday, November 12, 2026, 11:59 PM ET');
   assert.equal(result.resolutionSource, 'https://www.nba.com/');
   assert.equal(result.restricted, true);
   assert.equal(result.accessEligibility, 'unverified');
@@ -76,21 +83,50 @@ test('normalization preserves rules, resolution source and unverified restricted
   }
   const nonsports = { ...market, sportsMarketType: null };
   throwsCode(() => normalizePolymarketMarket(nonsports), 'UNSUPPORTED_MARKET');
-  assert.equal(normalizePolymarketMarket(nonsports, { sportsEvent: true }).id, '123');
+  throwsCode(() => normalizePolymarketMarket(nonsports, { sportsEvent: true }), 'UNSUPPORTED_CANCELLATION');
 });
 
-test('discovery returns no more than five active binary sports markets and rejects silent empty results', async () => {
+test('discovery returns up to five eligible moneylines and an empty list when none qualify', async () => {
   const f = fixtures();
   f.event.markets = Array.from({ length: 9 }, (_, i) => ({ ...f.market, id: String(100 + i) }));
   assert.equal((await discoverSportsMarkets({ fetchImpl: f.fetchImpl, now: () => NOW })).length, 5);
   const requested = new URL(f.calls[0].url);
-  assert.equal(requested.searchParams.get('tag_id'), '1');
+  assert.equal(requested.searchParams.get('tag_id'), '745');
+  assert.equal(requested.searchParams.get('sports_market_types'), 'moneyline');
   assert.equal(requested.searchParams.get('limit'), '20');
   assert.equal(requested.searchParams.get('end_date_min'), new Date(NOW).toISOString());
   assert.equal(requested.searchParams.get('end_date_max'), new Date(NOW + 7 * 86_400_000).toISOString());
   await rejectsCode(() => discoverSportsMarkets({ limit: 6 }), 'INVALID_LIMIT');
   f.event.markets = [{ ...f.market, outcomes: '["A","B","C"]' }, { ...f.market, version: null }];
-  await rejectsCode(() => discoverSportsMarkets({ fetchImpl: f.fetchImpl, now: () => NOW }), 'NO_SUPPORTED_MARKETS');
+  assert.deepEqual(await discoverSportsMarkets({ fetchImpl: f.fetchImpl, now: () => NOW }), []);
+});
+
+test('cancellation eligibility requires the entire rule to match the outcomes of the standalone contract', () => {
+  const { market } = fixtures();
+  assert.equal(normalizePolymarketMarket({ ...market, rules: market.description.replaceAll('\n', '\r\n\r\n') })
+    .cancellationPayoutPerShare, '0.50');
+  for (const overrides of [
+    { description: 'If the teams tie, this market will resolve 50-50.' },
+    { description: market.description.replace('will resolve 50-50', 'will resolve to Jazz') },
+    { description: market.description + '\nIn the event of cancellation, Jazz wins.' },
+    { description: market.description + ' '.repeat(16_000) + 'Cancellation resolves to Jazz.' },
+    { rules: 'If the game is canceled, resolve to Jazz.' },
+    { description: null, rules: market.description },
+    { outcomes: ['Yes', 'No'] },
+    { negRisk: true },
+    { sportsMarketType: 'spreads' },
+  ]) {
+    throwsCode(() => normalizePolymarketMarket({ ...market, ...overrides }), 'UNSUPPORTED_CANCELLATION');
+  }
+});
+
+test('direct quote reload rejects a market with changed cancellation rules before fetching its book', async () => {
+  const f = fixtures();
+  const listed = await discoverSportsMarkets({ fetchImpl: f.fetchImpl, now: () => NOW });
+  assert.equal(listed[0].id, '123');
+  f.market.description = f.market.description.replace('will resolve 50-50', 'will resolve to Jazz');
+  await rejectsCode(() => f.load(), 'UNSUPPORTED_CANCELLATION');
+  assert.deepEqual(f.calls.map(({ url }) => new URL(url).pathname), ['/markets', '/markets/123']);
 });
 
 test('snapshot uses only fixed official GETs and fresh live curve, minimum and tick parameters', async () => {

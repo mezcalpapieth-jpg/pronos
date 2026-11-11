@@ -7,6 +7,15 @@ const FEE_TENTHS_BPS = 250;
 const AGENT_TTL_MS = 30 * 60 * 1000;
 const ZERO = '0x0000000000000000000000000000000000000000';
 const USDC_SYSTEM_ADDRESS = '0x2000000000000000000000000000000000000000';
+// Reviewed against testnet's public outcomeTemplates on 2026-11-11 UTC.
+const SPORTS_TEMPLATE = 'sportsContestWinner7';
+const SPORTS_TEMPLATE_DIGEST = '0x8989fbc9e7689a417347305f62e6b0de374e8211ecc69dd630844fb46dba0306';
+const SPORTS_SIDES = ['{shortNameA}', '{shortNameB}'];
+const SPORTS_FIELDS = [
+  'competition', 'contestType', 'officialSource', 'participantA', 'participantB', 'resolutionDeadline',
+  'scheduledStart', 'season', 'shortNameA', 'shortNameB', 'sport', 'stage',
+];
+const UNSUPPORTED_BUY = 'Solo se pueden comprar mercados NFL de Flip en testnet con una regla de liquidación 50/50 verificada y vigente. Revisa el ID del activo.';
 const USER_DOMAIN = {
   name: 'HyperliquidSignTransaction', version: '1', chainId: 421614, verifyingContract: ZERO,
 };
@@ -37,6 +46,69 @@ function decimal(value, precision, label) {
   const trailing = fraction.replace(/0+$/, '');
   if (trailing.length > precision || Number(raw) <= 0) throw new Error(`Invalid ${label}.`);
   return String(Number(whole)) + (trailing ? `.${trailing}` : '');
+}
+
+function parseSportsMetadata(description) {
+  if (typeof description !== 'string' || description.length > 2000) return null;
+  const parts = description.split('|');
+  if (parts.length !== SPORTS_FIELDS.length) return null;
+  const fields = {};
+  for (const [index, key] of SPORTS_FIELDS.entries()) {
+    const prefix = `${key}:`;
+    if (!parts[index].startsWith(prefix)) return null;
+    const value = parts[index].slice(prefix.length);
+    if (!value || value !== value.trim() || value.length > 100 || /[{}\u0000-\u001f\u007f]/.test(value)) return null;
+    fields[key] = value;
+  }
+  return fields;
+}
+
+function utcMinute(value) {
+  const match = /^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})$/.exec(value);
+  if (!match) return NaN;
+  const [, year, month, day, hour, minute] = match;
+  const iso = `${year}-${month}-${day}T${hour}:${minute}:00.000Z`;
+  const time = Date.parse(iso);
+  return Number.isFinite(time) && new Date(time).toISOString() === iso ? time : NaN;
+}
+
+function verifyCancellationPayout(market, meta, templates, currentTime) {
+  if (market.name !== `template:${SPORTS_TEMPLATE}` || market.venue !== 'flip') throw new Error(UNSUPPORTED_BUY);
+  if (!Array.isArray(templates) || !Array.isArray(meta.questions)) {
+    throw new Error('No pudimos verificar las reglas de liquidación de HyperCore testnet. Intenta de nuevo antes de comprar.');
+  }
+  const matchingTemplates = templates.filter(template => template?.id === SPORTS_TEMPLATE);
+  const [template] = matchingTemplates;
+  const templateSides = template?.role?.standaloneOutcome?.sideNames;
+  if (matchingTemplates.length !== 1 || !Array.isArray(templateSides) || templateSides.length !== 2
+    || SPORTS_SIDES.some((name, i) => templateSides[i] !== name || market.sideSpecs[i]?.name !== `template:${name}`)
+    || typeof template.description !== 'string' || template.description.length > 4000
+    || utils.sha256(utils.toUtf8Bytes(template.description)) !== SPORTS_TEMPLATE_DIGEST) {
+    throw new Error(UNSUPPORTED_BUY);
+  }
+
+  // All markets have two tokens, including question members. Only standalone outcomes permit 0.5.
+  for (const question of meta.questions) {
+    const { fallbackOutcome, namedOutcomes, settledNamedOutcomes } = question ?? {};
+    if (!Number.isSafeInteger(fallbackOutcome) || !Array.isArray(namedOutcomes) || !Array.isArray(settledNamedOutcomes)
+      || !namedOutcomes.every(Number.isSafeInteger) || !settledNamedOutcomes.every(Number.isSafeInteger)
+      || fallbackOutcome === market.outcome || namedOutcomes.includes(market.outcome) || settledNamedOutcomes.includes(market.outcome)) {
+      throw new Error(UNSUPPORTED_BUY);
+    }
+  }
+
+  const fields = parseSportsMetadata(market.description);
+  if (meta.outcomes.filter(outcome => outcome?.outcome === market.outcome).length !== 1
+    || !fields || fields.sport !== 'American football' || fields.competition !== 'NFL'
+    || fields.contestType !== 'game' || fields.officialSource !== 'NFL'
+    || fields.participantA.toLowerCase() === fields.participantB.toLowerCase()
+    || fields.shortNameA === fields.shortNameB
+    || ![fields.shortNameA, fields.shortNameB].every(name => /^[A-Z0-9]{2,10}$/.test(name))) {
+    throw new Error(UNSUPPORTED_BUY);
+  }
+  const start = utcMinute(fields.scheduledStart);
+  const deadline = utcMinute(fields.resolutionDeadline);
+  if (!(deadline > start && deadline > currentTime)) throw new Error(UNSUPPORTED_BUY);
 }
 
 async function post(path, body) {
@@ -167,18 +239,20 @@ export function createHip4Pilot({ address, suborgId }, {
         throw new Error('The pilot accepts prices below 1, up to 250 shares and up to 25 test USDC per buy.');
       }
       const encoding = Number(coin.slice(1));
-      const [approved, fee, meta, perps, abstraction] = await Promise.all([
+      const [approved, fee, meta, perps, abstraction, templates] = await Promise.all([
         hasAgent(), cap(), info('outcomeMeta'), info('clearinghouseState', { user: BUILDER }),
         info('userAbstraction', { user: BUILDER }),
+        side === 'buy' ? info('outcomeTemplates').catch(() => null) : null,
       ]);
       if (!approved || Number(fee) < FEE_TENTHS_BPS) throw new Error('Complete both approvals first.');
       if (!['default', 'disabled'].includes(abstraction) || Number(perps.marginSummary.accountValue) < 100) {
         throw new Error('The Pronos testnet builder needs at least 100 test USDC of Standard perps account value.');
       }
-      const market = meta.outcomes.find(item => item.outcome === Math.floor(encoding / 10));
-      if (market?.quoteToken !== 'USDC' || market.sideSpecs?.length !== 2) {
+      const market = Array.isArray(meta?.outcomes) && meta.outcomes.find(item => item?.outcome === Math.floor(encoding / 10));
+      if (market?.quoteToken !== 'USDC' || !Array.isArray(market.sideSpecs) || market.sideSpecs.length !== 2) {
         throw new Error('Choose a listed binary testnet HIP-4 market quoted in USDC.');
       }
+      if (side === 'buy') verifyCancellationPayout(market, meta, templates, now());
       const cloid = utils.hexlify(utils.randomBytes(16));
       const action = {
         type: 'order',

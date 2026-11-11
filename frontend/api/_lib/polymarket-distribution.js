@@ -12,6 +12,8 @@ const BUILDER_BPS = BigInt(POLYMARKET_BUILDER_PROFILE.takerFeeBps);
 const MAX_LEVELS = 1000;
 const MAX_RESPONSE_BYTES = 1_048_576;
 const UINT256 = (1n << 256n) - 1n;
+const NBA_TAG_ID = '745';
+const NBA_RULE_DATE = /((?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday), (?:January|February|March|April|May|June|July|August|September|October|November|December) (?:[1-9]|[12]\d|3[01]), 20\d\d)/;
 
 function fail(code, message) {
   const error = new Error(message);
@@ -72,6 +74,30 @@ function text(value, max = 16_000) {
   return typeof value === 'string' ? value.slice(0, max) : '';
 }
 
+function normalizedRules(value) {
+  return typeof value === 'string' && value.length <= 16_000 ? value.trim().replace(/\s+/g, ' ') : '';
+}
+
+function verifyCancellation(raw, [first, second]) {
+  // Match the complete reviewed Gamma NBA moneyline template. A mention of 50-50
+  // elsewhere in the rules, or in a different market on the event, is insufficient.
+  const rules = normalizedRules(raw.description);
+  const parts = rules.split(NBA_RULE_DATE);
+  const [prefix, , betweenDates, deadline, suffix] = parts;
+  const expectedPrefix = `In the upcoming NBA game between ${first} and ${second}, originally scheduled for `;
+  const winnerRules = `If the ${first} win, the market will resolve to "${first}". If the ${second} win, the market will resolve to "${second}".`;
+  const noResultRule = "If this market's outcome was definitively determined under its rules by the listed resolution sources before abandonment, that outcome will stand. Otherwise, the following no-result provisions apply. If the game is canceled, does not start by ";
+  const scheduledStart = /^ at (?:[1-9]|1[0-2]):[0-5]\d [AP]M ET \(as of creation of the first market related to the event\): /;
+  const expectedSuffix = ', 11:59 PM ET, or is abandoned with no official result by that time, this market will resolve 50-50. The result will be determined based on the final score including any overtime periods.';
+  if (raw.sportsMarketType !== 'moneyline' || raw.negRisk !== false || raw.resolutionSource !== 'https://www.nba.com/'
+    || (raw.rules != null && raw.rules !== '' && normalizedRules(raw.rules) !== rules)
+    || parts.length !== 5 || prefix !== expectedPrefix || !scheduledStart.test(betweenDates)
+    || betweenDates.replace(scheduledStart, '') !== `${winnerRules} ${noResultRule}` || suffix !== expectedSuffix) {
+    fail('UNSUPPORTED_CANCELLATION', 'This market does not match the verified 50/50 cancellation rules');
+  }
+  return `${deadline}, 11:59 PM ET`;
+}
+
 export function normalizePolymarketMarket(raw, { sportsEvent = false } = {}) {
   if (!raw || typeof raw !== 'object') fail('INVALID_MARKET', 'Missing Gamma market');
   if (raw.version !== 'v1' && raw.version !== 'v2') fail('UNSUPPORTED_VERSION', 'Explicit market version v1 or v2 is required');
@@ -90,6 +116,7 @@ export function normalizePolymarketMarket(raw, { sportsEvent = false } = {}) {
   }
   const title = text(raw.question, 500);
   if (!title) fail('INVALID_MARKET', 'A market title is required');
+  const cancellationDeadline = verifyCancellation(raw, labels);
   const description = text(raw.description);
   return {
     id: marketId(String(raw.id)), title, description, rules: text(raw.rules) || description,
@@ -98,7 +125,7 @@ export function normalizePolymarketMarket(raw, { sportsEvent = false } = {}) {
     outcomes: labels.map((label, i) => ({ label, tokenId: ids[i] })),
     active: true, closed: false, acceptingOrders: true, enableOrderBook: true,
     sportsMarketType, negRisk: raw.negRisk === true, restricted: raw.restricted === true,
-    accessEligibility: 'unverified',
+    accessEligibility: 'unverified', cancellationPayoutPerShare: '0.50', cancellationDeadline,
   };
 }
 
@@ -151,7 +178,8 @@ export async function discoverSportsMarkets({ fetchImpl = globalThis.fetch, now 
   // Full event objects can recursively include megabytes of related markets. Query a bounded
   // market list directly, with documented date/tag filters, and validate every row locally.
   const params = new URLSearchParams({
-    closed: 'false', tag_id: '1', include_tag: 'true', limit: '20', order: 'volume24hr', ascending: 'false',
+    closed: 'false', tag_id: NBA_TAG_ID, sports_market_types: 'moneyline', include_tag: 'true',
+    limit: '20', order: 'volume24hr', ascending: 'false',
     end_date_min: new Date(current).toISOString(), end_date_max: new Date(current + 7 * 86_400_000).toISOString(),
   });
   const markets = await getJson(fetchImpl, `${GAMMA}/markets?${params}`);
@@ -169,7 +197,6 @@ export async function discoverSportsMarkets({ fetchImpl = globalThis.fetch, now 
       if (!error.code) throw error;
     }
   }
-  if (!found.length) fail('NO_SUPPORTED_MARKETS', 'No explicitly supported active binary sports markets were found in this bounded sample');
   return found;
 }
 

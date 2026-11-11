@@ -94,6 +94,7 @@ export function createPolymarketPilotHandler({
     } catch (error) {
       const code = typeof error?.code === 'string' && /^[a-z_]{1,80}$/i.test(error.code)
         ? error.code.toLowerCase() : 'market_data_unavailable';
+      if (code === 'unsupported_cancellation') return res.status(422).json({ ok: false, error: code });
       return res.status(error?.status === 400 ? 400 : 502).json({ ok: false, error: code });
     }
   };

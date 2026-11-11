@@ -114,6 +114,16 @@ test('upstream uppercase connector errors normalize without exposing exception d
   assert.equal(JSON.stringify(result).includes('private internal detail'), false);
 });
 
+test('a direct quote for an incompatible cancellation policy is rejected before calculation', async () => {
+  const h = harness({
+    loadSnapshot: async () => { throw Object.assign(new Error('rule mismatch'), { code: 'UNSUPPORTED_CANCELLATION' }); },
+  });
+  const result = await h.request({ action: 'quote', marketId: '123', outcomeIndex: '0', side: 'buy', amount: '100' });
+  assert.equal(result.status, 422);
+  assert.deepEqual(result.body, { ok: false, error: 'unsupported_cancellation' });
+  assert.deepEqual(h.calls, []);
+});
+
 test('CORS preflight does not request venue data', async () => {
   const h = harness();
   const result = await h.request({}, 'OPTIONS');
