@@ -1,0 +1,62 @@
+{
+  "as_of_local_date": "2026-11-10",
+  "currency": "MXN",
+  "period": "month",
+  "status": "illustrative sensitivities; not observed operating results or a forecast",
+  "volume_definition": "Aggregate monthly Pronos-attributed executed cash notional across the portfolio. Count each customer buy or sell once, without adding counterparty volume. Deposits and claims are excluded.",
+  "assumption_notes": [
+    "Collection fractions, venue mix, operating costs, funding costs and native volume retention are explicit scenarios, not measured Pronos results.",
+    "Base distribution contribution assumes customers pay venue fees and funding costs, with no Pronos inventory or treasury float. Float financing, FX stress and subsidies are separate scenarios.",
+    "Native CLOB fee is proposed; the current BinaryCLOB contract implements no platform trading fee. Independent makers supply inventory in this CLOB scenario.",
+    "Native V2 pool assumes Pronos owns the modeled seed and retains all modeled fee streams once. Seed is committed principal; only financing and inventory losses are expenses.",
+    "Seed size is an uncalibrated sensitivity and does not establish executable depth. An FX shock is a separate event, not an expected monthly loss.",
+    "Native comparison applies build-cost recovery to the incremental cost difference; the base contribution table excludes unpriced development."
+  ],
+  "volumes": ["100000", "1000000", "10000000", "25000000"],
+  "venues": [
+    {"name": "HIP-4", "volume_share": "0.5", "builder_fee_bps": "25", "collection_fraction": "0.90", "taker_fraction": "1", "venue_fee_bps_scenario": "10"},
+    {"name": "Polymarket sports", "volume_share": "0.5", "builder_fee_bps": "25", "collection_fraction": "0.98", "taker_fraction": "1", "sports_fee_parameter": "0.05", "reference_price": "0.50"}
+  ],
+  "distribution": {
+    "variable_bps": "5",
+    "fixed_mxn": "5000",
+    "incremental_build_cost_mxn": "0"
+  },
+  "funding": {
+    "conversion_bps_each_way": "50",
+    "fixed_round_trip_mxn": "2",
+    "average_funded_amount_mxn": "300",
+    "filled_notional_per_funded_peso": "2",
+    "treasury_float_fraction_of_volume": "0.10",
+    "annual_capital_rate": "0.12",
+    "adverse_fx_move": "0.02"
+  },
+  "native_clob": {
+    "proposed_fee_bps": "50",
+    "variable_bps_including_maker_incentives": "20",
+    "fixed_mxn": "10000",
+    "incremental_build_cost_mxn": "0",
+    "build_cost_recovery_months": "6",
+    "fee_retention_fraction": "1"
+  },
+  "native_v2_pool": {
+    "buy_fee_bps": "200",
+    "sell_fee_bps": "0",
+    "buy_fraction_of_filled_notional": "0.5",
+    "fee_retention_fraction": "1",
+    "variable_bps": "20",
+    "fixed_mxn": "12000",
+    "seed_floor_mxn": "20000",
+    "seed_fraction_of_volume": "0.10",
+    "annual_capital_rate": "0.12",
+    "inventory_loss_bps_sensitivities": ["25", "100", "200"]
+  },
+  "volume_retention_sensitivities": ["0.50", "0.75", "1"],
+  "excluded": [
+    "salaries, marketing, corporate legal/compliance, taxes and full company overhead",
+    "unpriced initial development costs, unless entered explicitly",
+    "uncontracted partner payments, grants, maker rebates or Worm distribution income",
+    "assumed spread income, user deposits, recovered principal and customer winnings",
+    "probability forecasts for inventory losses or FX shocks"
+  ]
+}

@@ -126,3 +126,113 @@ See the [live wallet preflight](pronos-preflight.json). On the initial live chec
 ```
 
 [Asset IDs](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/asset-ids) · [Builder requirements](https://hyperliquid.gitbook.io/hyperliquid-docs/trading/builder-codes) · [HIP-4 buy-side fees](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/hip-4-deployer-actions#builder-codes) · [Orders and approvals](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/exchange-endpoint)
+
+## HIP-4, Polymarket and native-market economics — November 10, 2026
+
+Recommendation: develop direct HIP-4 and Polymarket distribution first, measure repeat trading and actual fee credits, then launch selected native CLOB markets where independent makers commit executable depth. Keep the treasury CPMM behind its separate inventory-risk switch. Kalshi is outside this scope. Worm is a later partnership or unique-market option, pending its distribution terms and the extra Solana integration.
+
+This section is an integration assessment and a reproducible sensitivity analysis. It does not activate a Polymarket connector or establish real-money readiness. Pronos builder receipts have not yet been verified on either venue. The funded HIP-4 acceptance test remains pending.
+
+### What is buildable
+
+| Venue | Existing evidence | Work and dependencies |
+| --- | --- | --- |
+| HIP-4 | Turnkey testnet pilot, bounded order/audit tools and a public sports-book recorder exist on this branch. | Finish funding, approvals, buy/sell, withdrawal and actual builder-credit reconciliation; then obtain the appropriate production arrangements. Buy-side builder fees are documented as best-effort. |
+| Polymarket | Public metadata, book and fee endpoints were checked successfully. Current official client supports an Ethers v5 signer adapter compatible with our existing Turnkey signing mechanism. | Build a new venue adapter: the old Pronos Polymarket helpers are disabled. Register the builder profile/code; implement venue-specific authentication, wallet/funding, approvals, quotes, orders and reconciliation. Confirm commercial data/distribution rights and end-user eligibility. |
+| Worm | Public API and an official Python SDK exist. Markets can use Worm's own order book or import Polymarket/Hyperliquid. | Adds Solana USDC funding and a Solana signing/account path; the current Pronos implementation signs EVM transactions. Imported books do not establish independent liquidity. No distributor commission for Pronos routing other creators' markets was verified. |
+
+Polymarket's current default for new users is a user-controlled Deposit Wallet, with pUSD collateral. The existing Turnkey owner can remain the signer; no user private-key export is required. The gasless relay has server-only builder credentials. A staging hostname is documented, but a publicly available faucet-funded trading sandbox was not verified. Do not assume the HIP-4 testnet funding procedure works for Polymarket. [Wallets/authentication](https://docs.polymarket.com/trading/wallets-auth), [current TypeScript client](https://docs.polymarket.com/getting-started/typescript), [pUSD](https://docs.polymarket.com/concepts/pusd).
+
+The shared Pronos interface should use venue adapters with explicit capabilities and maintain separate per-user balances and positions for HyperCore USDC, Polygon pUSD and native MXNB. Quotes must disclose venue, exact rules, net spend/proceeds, all fees, FX, minimum size, depth and expiry before signing. Match outcome rules, overtime, cancellation and dispute provisions before comparing prices; a similar title does not make claims interchangeable. Keep orders and claims on their original venue. A future native market offers a new order destination rather than migrating existing positions.
+
+Third-party resolution removes the need for Pronos to resolve those positions. Funding, wallet security, venue outages, customer eligibility, FX guarantees and distribution obligations remain Pronos concerns. Commercial data access needs a partner agreement: review the current [Polymarket Terms](https://polymarket.com/tos), not only whether an endpoint is public. Mexico's absence from a blocked-country list alone does not establish Pronos's local authorization. [Geoblock API](https://docs.polymarket.com/api-reference/geoblock).
+
+### Public Polymarket check and customer fees
+
+At **19:05 CDMX on November 10** (01:05 UTC November 11), about 55 minutes before Heat–Jazz kickoff, the active Heat moneyline book showed a best bid of $0.76 and ask of $0.77, with 54,878.95 shares at the ask: approximately **$42,256.79 displayed ask notional**. Minimum order was five shares, tick $0.01. These observations establish one public integration path and one moment of displayed depth; they do not establish sustained depth or executable fills. Raw responses are retained locally in ignored `.local-orderbooks/polymarket-feasibility-2026-11-10.json`. [Market metadata](https://gamma-api.polymarket.com/markets/6428654), [selected CLOB parameters](https://clob.polymarket.com/clob-markets/0xec8bca230a30557ec12761af6cf5d1bf20a71bb3be7ae91f98179d3f280433c3).
+
+The sampled market reported `fd = {r: 0.05, e: 1, to: true}`. For that sports fee curve:
+
+`venue fee = shares × 0.05 × p × (1 − p)`
+
+| Share price | Venue fee / cash notional | Including a proposed 25 bps Pronos fee |
+| --- | ---: | ---: |
+| $0.10 | 4.50% | 4.75% |
+| $0.50 | 2.50% | 2.75% |
+| $0.77, observed ask | 1.15% | 1.40% |
+| $0.90 | 0.50% | 0.75% |
+
+The fee is symmetric in dollars for a fixed number of shares, but its percentage of cash notional is not symmetric. Query each market's current parameters; the `base_fee:1000` compatibility response is not a flat 10% price quote. Makers pay no platform fee under the published schedule, though a builder maker fee can apply. Venue fees are paid by customers in the base model; they become a Pronos expense if Pronos subsidizes them. [Platform fees](https://docs.polymarket.com/trading/fees).
+
+Polymarket documents an additive builder fee, configurable up to 100 bps taker / 50 bps maker, with signed `bytes32` attribution and daily prior-UTC-day payouts subject to its minimum and program terms. A 25 bps fee is a proposed configuration, not a verified Pronos entitlement or receipt. [Builder fees](https://docs.polymarket.com/programs/builders/fees).
+
+### Reproduce and change assumptions
+
+```sh
+cd experiments/hip4
+python3 economics.py --output economics-results-2026-11-10.json
+python3 -m unittest test_economics -v
+```
+
+Inputs: [economics-assumptions.json](economics-assumptions.json). Model: [economics.py](economics.py). Generated results: [economics-results-2026-11-10.json](economics-results-2026-11-10.json). No wallets, network requests or signing are used by the model.
+
+Volume means **aggregate monthly Pronos-attributed executed cash notional across the portfolio**, counting each customer's buy or sell once. Do not add the counterparty again or count deposits, claims, notional payout value or venue-wide volume. The numbers below are MXN, not USD, and are not per-market launch thresholds.
+
+All operating costs and collection haircuts below are illustrative inputs, not invoices, estimates from Sepolia gas, or measured Pronos conversion rates. This is operating contribution before salaries, acquisition, corporate legal/compliance, taxes, unpriced development and full company overhead; it is not company net profit or a forecast.
+
+| Input | Base scenario |
+| --- | --- |
+| Routing mix | 50% HIP-4 / 50% Polymarket sports |
+| Pronos builder fee | 25 bps on each venue |
+| Builder fee collection | 90% HIP-4 / 98% Polymarket; sensitivity assumptions, not observed success rates |
+| Effective credited builder revenue | 23.5 bps of filled notional |
+| Distribution variable costs | 5 bps |
+| Distribution monthly fixed cost | MXN 5,000 |
+| Proposed native CLOB | 50 bps fee; 20 bps variable costs including maker incentives; MXN 10,000 monthly fixed cost |
+| Base inventory/funding | Users pay venue and funding fees; independent makers fund native CLOB inventory; Pronos supplies no treasury float |
+| Initial development | Unpriced, excluded from the base table; enter actual incremental build costs in the inputs |
+
+### Monthly operating contribution
+
+| Filled notional | Direct HIP-4 + Polymarket | Same routing, Pronos absorbs funding | Proposed native CLOB, same filled volume |
+| --- | ---: | ---: | ---: |
+| MXN 100,000 | −4,815 | −5,648 | −9,700 |
+| MXN 1,000,000 | −3,150 | −11,483 | −7,000 |
+| MXN 10,000,000 | +13,500 | −69,833 | +20,000 |
+| MXN 25,000,000 | +41,250 | −167,083 | +65,000 |
+
+At MXN 1 million, the 25 bps advertised fee is MXN 2,500 gross at perfect collection; the modeled collection haircuts reduce it to MXN 2,350. Subtract MXN 500 variable costs and MXN 5,000 fixed costs to obtain −MXN 3,150. Distribution breaks even at approximately **MXN 2.70 million monthly filled notional** under these assumptions.
+
+For the funding-subsidy column, each funding cycle is MXN 300, conversion costs 50 bps each way plus MXN 2 round trip, and every funded peso produces MXN 2 of aggregate buy-and-sell notional before withdrawal. That costs **83.33 bps of filled notional**, against only 18.5 bps contribution before fixed costs. More volume cannot fix that negative variable margin. Greater reuse lowers the cost per trade; a MXN 100 fully recycled deposit behaves differently from repeated MXN 100 deposits and withdrawals.
+
+Funding subsidies exclude trading fees. The conversion and fixed round-trip inputs also need actual partner quotes, including any Pronos-paid account activation, relay, gas and bridge costs; costs above those inputs further reduce contribution. If Pronos also pays venue fees, the selected 50/50 venue scenario adds another **130 bps** expense: 10 bps HIP-4 scenario, and Polymarket sports at a 50¢ reference with its 250 bps fee. At MXN 1 million, subsidizing venue fees alone changes contribution to **−MXN 16,150**. The HIP-4 rate here is a scenario, not a verified flat venue rate. Its published outcome rules distinguish opening from closing/settlement fees, so quote the actual action rather than copying a generic spot rate. [HIP-4 fee treatment](https://hyperliquid.gitbook.io/hyperliquid-docs/trading/fees#outcome-tokens).
+
+For MXNB-facing balances backed by Pronos USDC, account for treasury float separately. A float equal to 10% of monthly filled volume, financed at 12% annually, costs MXN 1,000 per month at MXN 1 million volume. If Pronos guarantees MXN value and retains the unhedged exposure, a separate adverse 2% FX event on that MXN 100,000 equivalent float costs another MXN 2,000. This is an event stress, not an expected recurring loss. Capital recovered and user collateral are not revenue.
+
+### What are we giving up by not creating native markets?
+
+The current `clob-cpmm` BinaryCLOB contract has **no platform trading fee**: its fill transfers buyer collateral directly to the seller. The native fee in this model would require implementation. The V1 AMM has a probability-dependent fee; the [V2 multi-outcome AMM](../../contracts/src/PronosAMMMulti.sol) currently charges 200 bps on buys and zero on sells. A 50/50 buy/sell cash-notional mix therefore earns 100 bps blended gross, before losses and costs. Count the platform's fee streams once; a 70/20/10 split does not create extra revenue.
+
+For the proposed 50 bps native CLOB, the gross fee difference versus modeled distribution is **26.5 bps, or MXN 2,650 per MXN 1 million**. That gross difference is not missed profit. After the modeled costs:
+
+- At MXN 1 million monthly volume, native contribution is MXN 3,850 worse. Choosing external distribution avoids that extra modeled loss.
+- At MXN 10 million, native contribution is MXN 6,500 better **if all the filled volume is retained**. Retaining 75% produces MXN 12,500 versus external MXN 13,500, so native is MXN 1,000 worse.
+- The equal-volume comparison crosses at approximately **MXN 4.35 million/month**, before additional development costs. At MXN 10 million, native must retain at least **78.3%** of external filled volume to match its contribution.
+- An extra MXN 100,000 native build cost recovered over six months raises that illustrative equal-volume crossover to approximately **MXN 18.84 million/month**. Replace this example with a real implementation budget.
+
+Independent-maker CLOB markets do not require Pronos to be the inventory provider. A treasury CPMM adds a separate risk. The V2 pool sensitivities below assume all modeled fees accrue to Pronos, variable costs of 20 bps, fixed costs of MXN 12,000, and seed `max(MXN 20,000, 10% of monthly volume)` financed at 12% annually. That seed formula is uncalibrated and does not prove depth. Inventory losses are marked-to-settlement losses **before fee income**, expressed against filled notional; they have no assigned probabilities.
+
+| Native pool filled notional | Inventory loss 25 bps | Inventory loss 100 bps | Inventory loss 200 bps |
+| --- | ---: | ---: | ---: |
+| MXN 1,000,000 | −7,500 | −15,000 | −25,000 |
+| MXN 10,000,000 | +33,000 | −42,000 | −142,000 |
+
+Sepolia rehearsals prove mechanics, not expected real-money returns. The binary hybrid rehearsal filled 7.705 mock MXNB and left ordinary book fills/claims working after the maker switch was disabled. Its chosen winning outcome produced a 4.875 mock MXNB treasury-maker loss on a 100 mock MXNB seed, before gas. That single path is not an estimated loss rate. The shared vault's full backing protects claims; it does not guarantee the treasury's inventory will be profitable.
+
+### Worm and the rollout decision
+
+Worm's documented **50% share of collected trading fees belongs to creators of their own markets**, excluding curated leveraged markets. It is not a verified builder commission on other people's markets. User-created markets start with independent empty books, so free creation does not solve liquidity. The referral program was documented as planned at review time. Do not put Worm distribution revenue into the base case until a commercial agreement and actual credits establish it. [Creator earnings](https://docs.worm.wtf/creating-markets/market-earnings), [market creation](https://docs.worm.wtf/creating-markets/creating-a-market), [referral program](https://docs.worm.wtf/faq/support-community/referral-program), [API](https://docs.worm.wtf/api-reference/introduction), [official SDK](https://github.com/wormwtf/worm-sdk).
+
+Start with direct HIP-4 and Polymarket adapters, spot outcomes only. Expand the same MXN 100/300/1,000 depth simulation using each venue's actual fee curve and minimums. Compare all-in customer execution, not builder revenue alone; the sports fee curve can materially change customer retention. Confirm each venue's actual Pronos builder payout with bounded buys and sells before budgeting revenue.
+
+Use the recorder to select native-market candidates with repeat demand and reliable maker commitments. Forecast incremental filled volume, fee retention, maker incentives, resolution/operations cost and build recovery per cohort. Launch a small independent-maker native CLOB cohort only when conservative incremental contribution is positive. Keep external positions and withdrawal paths working. Enable the treasury CPMM only after its own depth and inventory-loss budget passes, with exposure limits and a kill switch. A single gross-volume milestone does not establish either gate.

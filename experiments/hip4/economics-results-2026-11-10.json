@@ -1,0 +1,441 @@
+{
+  "assumptions": {
+    "as_of_local_date": "2026-11-10",
+    "currency": "MXN",
+    "period": "month",
+    "status": "illustrative sensitivities; not observed operating results or a forecast",
+    "volume_definition": "Aggregate monthly Pronos-attributed executed cash notional across the portfolio. Count each customer buy or sell once, without adding counterparty volume. Deposits and claims are excluded.",
+    "assumption_notes": [
+      "Collection fractions, venue mix, operating costs, funding costs and native volume retention are explicit scenarios, not measured Pronos results.",
+      "Base distribution contribution assumes customers pay venue fees and funding costs, with no Pronos inventory or treasury float. Float financing, FX stress and subsidies are separate scenarios.",
+      "Native CLOB fee is proposed; the current BinaryCLOB contract implements no platform trading fee. Independent makers supply inventory in this CLOB scenario.",
+      "Native V2 pool assumes Pronos owns the modeled seed and retains all modeled fee streams once. Seed is committed principal; only financing and inventory losses are expenses.",
+      "Seed size is an uncalibrated sensitivity and does not establish executable depth. An FX shock is a separate event, not an expected monthly loss.",
+      "Native comparison applies build-cost recovery to the incremental cost difference; the base contribution table excludes unpriced development."
+    ],
+    "volumes": [
+      "100000",
+      "1000000",
+      "10000000",
+      "25000000"
+    ],
+    "venues": [
+      {
+        "name": "HIP-4",
+        "volume_share": "0.5",
+        "builder_fee_bps": "25",
+        "collection_fraction": "0.90",
+        "taker_fraction": "1",
+        "venue_fee_bps_scenario": "10"
+      },
+      {
+        "name": "Polymarket sports",
+        "volume_share": "0.5",
+        "builder_fee_bps": "25",
+        "collection_fraction": "0.98",
+        "taker_fraction": "1",
+        "sports_fee_parameter": "0.05",
+        "reference_price": "0.50"
+      }
+    ],
+    "distribution": {
+      "variable_bps": "5",
+      "fixed_mxn": "5000",
+      "incremental_build_cost_mxn": "0"
+    },
+    "funding": {
+      "conversion_bps_each_way": "50",
+      "fixed_round_trip_mxn": "2",
+      "average_funded_amount_mxn": "300",
+      "filled_notional_per_funded_peso": "2",
+      "treasury_float_fraction_of_volume": "0.10",
+      "annual_capital_rate": "0.12",
+      "adverse_fx_move": "0.02"
+    },
+    "native_clob": {
+      "proposed_fee_bps": "50",
+      "variable_bps_including_maker_incentives": "20",
+      "fixed_mxn": "10000",
+      "incremental_build_cost_mxn": "0",
+      "build_cost_recovery_months": "6",
+      "fee_retention_fraction": "1"
+    },
+    "native_v2_pool": {
+      "buy_fee_bps": "200",
+      "sell_fee_bps": "0",
+      "buy_fraction_of_filled_notional": "0.5",
+      "fee_retention_fraction": "1",
+      "variable_bps": "20",
+      "fixed_mxn": "12000",
+      "seed_floor_mxn": "20000",
+      "seed_fraction_of_volume": "0.10",
+      "annual_capital_rate": "0.12",
+      "inventory_loss_bps_sensitivities": [
+        "25",
+        "100",
+        "200"
+      ]
+    },
+    "volume_retention_sensitivities": [
+      "0.50",
+      "0.75",
+      "1"
+    ],
+    "excluded": [
+      "salaries, marketing, corporate legal/compliance, taxes and full company overhead",
+      "unpriced initial development costs, unless entered explicitly",
+      "uncontracted partner payments, grants, maker rebates or Worm distribution income",
+      "assumed spread income, user deposits, recovered principal and customer winnings",
+      "probability forecasts for inventory losses or FX shocks"
+    ]
+  },
+  "effective_builder_fee_bps": "23.5",
+  "distribution_variable_margin_bps": "18.5",
+  "full_funding_subsidy_bps": "83.33333333",
+  "weighted_venue_fee_scenario_bps": "130",
+  "distribution_break_even_volume_mxn": "2702702.70",
+  "funding_subsidy_break_even_volume_mxn": null,
+  "polymarket_sports_taker_fee_examples": [
+    {
+      "price": "0.1",
+      "venue_fee_bps_of_cash_notional": "450",
+      "with_25bps_builder_total_bps": "475"
+    },
+    {
+      "price": "0.5",
+      "venue_fee_bps_of_cash_notional": "250",
+      "with_25bps_builder_total_bps": "275"
+    },
+    {
+      "price": "0.9",
+      "venue_fee_bps_of_cash_notional": "50",
+      "with_25bps_builder_total_bps": "75"
+    }
+  ],
+  "rows": [
+    {
+      "filled_notional_mxn": "100000.00",
+      "gross_credited_builder_fees_mxn": "235.00",
+      "distribution_customer_pays_funding_mxn": "-4815.00",
+      "distribution_subsidizes_funding_mxn": "-5648.33",
+      "distribution_subsidizes_venue_fees_mxn": "-6115.00",
+      "distribution_subsidizes_both_mxn": "-6948.33",
+      "treasury_float_mxn": "10000.00",
+      "monthly_float_financing_cost_mxn": "100.00",
+      "distribution_with_treasury_float_mxn": "-4915.00",
+      "separate_adverse_fx_event_loss_mxn": "200.00",
+      "distribution_after_financing_and_fx_stress_mxn": "-5115.00",
+      "current_zero_fee_native_clob_mxn": "-10200.00",
+      "proposed_native_comparisons": [
+        {
+          "native_volume_retention": "0.5",
+          "native_filled_mxn": "50000.00",
+          "distribution_contribution_mxn": "-4815.00",
+          "proposed_native_clob_contribution_mxn": "-9850.00",
+          "native_minus_distribution_mxn": "-5035.00",
+          "native_minus_distribution_after_build_recovery_mxn": "-5035.00",
+          "gross_native_fee_gap_at_equal_volume_mxn": "265.00",
+          "native_required_volume_retention": "17.28333333",
+          "equal_volume_native_crossover_mxn": "4347826.09",
+          "equal_volume_comparison_mode": "native_wins_above_threshold"
+        },
+        {
+          "native_volume_retention": "0.75",
+          "native_filled_mxn": "75000.00",
+          "distribution_contribution_mxn": "-4815.00",
+          "proposed_native_clob_contribution_mxn": "-9775.00",
+          "native_minus_distribution_mxn": "-4960.00",
+          "native_minus_distribution_after_build_recovery_mxn": "-4960.00",
+          "gross_native_fee_gap_at_equal_volume_mxn": "265.00",
+          "native_required_volume_retention": "17.28333333",
+          "equal_volume_native_crossover_mxn": "4347826.09",
+          "equal_volume_comparison_mode": "native_wins_above_threshold"
+        },
+        {
+          "native_volume_retention": "1",
+          "native_filled_mxn": "100000.00",
+          "distribution_contribution_mxn": "-4815.00",
+          "proposed_native_clob_contribution_mxn": "-9700.00",
+          "native_minus_distribution_mxn": "-4885.00",
+          "native_minus_distribution_after_build_recovery_mxn": "-4885.00",
+          "gross_native_fee_gap_at_equal_volume_mxn": "265.00",
+          "native_required_volume_retention": "17.28333333",
+          "equal_volume_native_crossover_mxn": "4347826.09",
+          "equal_volume_comparison_mode": "native_wins_above_threshold"
+        }
+      ],
+      "native_v2_pool_sensitivities": [
+        {
+          "inventory_loss_bps": "25",
+          "blended_gross_fee_bps": "100",
+          "seed_committed_mxn": "20000.00",
+          "monthly_capital_cost_mxn": "200.00",
+          "inventory_loss_before_fees_mxn": "250.00",
+          "inventory_loss_exceeds_initial_seed": false,
+          "contribution_mxn": "-11650.00"
+        },
+        {
+          "inventory_loss_bps": "100",
+          "blended_gross_fee_bps": "100",
+          "seed_committed_mxn": "20000.00",
+          "monthly_capital_cost_mxn": "200.00",
+          "inventory_loss_before_fees_mxn": "1000.00",
+          "inventory_loss_exceeds_initial_seed": false,
+          "contribution_mxn": "-12400.00"
+        },
+        {
+          "inventory_loss_bps": "200",
+          "blended_gross_fee_bps": "100",
+          "seed_committed_mxn": "20000.00",
+          "monthly_capital_cost_mxn": "200.00",
+          "inventory_loss_before_fees_mxn": "2000.00",
+          "inventory_loss_exceeds_initial_seed": false,
+          "contribution_mxn": "-13400.00"
+        }
+      ]
+    },
+    {
+      "filled_notional_mxn": "1000000.00",
+      "gross_credited_builder_fees_mxn": "2350.00",
+      "distribution_customer_pays_funding_mxn": "-3150.00",
+      "distribution_subsidizes_funding_mxn": "-11483.33",
+      "distribution_subsidizes_venue_fees_mxn": "-16150.00",
+      "distribution_subsidizes_both_mxn": "-24483.33",
+      "treasury_float_mxn": "100000.00",
+      "monthly_float_financing_cost_mxn": "1000.00",
+      "distribution_with_treasury_float_mxn": "-4150.00",
+      "separate_adverse_fx_event_loss_mxn": "2000.00",
+      "distribution_after_financing_and_fx_stress_mxn": "-6150.00",
+      "current_zero_fee_native_clob_mxn": "-12000.00",
+      "proposed_native_comparisons": [
+        {
+          "native_volume_retention": "0.5",
+          "native_filled_mxn": "500000.00",
+          "distribution_contribution_mxn": "-3150.00",
+          "proposed_native_clob_contribution_mxn": "-8500.00",
+          "native_minus_distribution_mxn": "-5350.00",
+          "native_minus_distribution_after_build_recovery_mxn": "-5350.00",
+          "gross_native_fee_gap_at_equal_volume_mxn": "2650.00",
+          "native_required_volume_retention": "2.28333333",
+          "equal_volume_native_crossover_mxn": "4347826.09",
+          "equal_volume_comparison_mode": "native_wins_above_threshold"
+        },
+        {
+          "native_volume_retention": "0.75",
+          "native_filled_mxn": "750000.00",
+          "distribution_contribution_mxn": "-3150.00",
+          "proposed_native_clob_contribution_mxn": "-7750.00",
+          "native_minus_distribution_mxn": "-4600.00",
+          "native_minus_distribution_after_build_recovery_mxn": "-4600.00",
+          "gross_native_fee_gap_at_equal_volume_mxn": "2650.00",
+          "native_required_volume_retention": "2.28333333",
+          "equal_volume_native_crossover_mxn": "4347826.09",
+          "equal_volume_comparison_mode": "native_wins_above_threshold"
+        },
+        {
+          "native_volume_retention": "1",
+          "native_filled_mxn": "1000000.00",
+          "distribution_contribution_mxn": "-3150.00",
+          "proposed_native_clob_contribution_mxn": "-7000.00",
+          "native_minus_distribution_mxn": "-3850.00",
+          "native_minus_distribution_after_build_recovery_mxn": "-3850.00",
+          "gross_native_fee_gap_at_equal_volume_mxn": "2650.00",
+          "native_required_volume_retention": "2.28333333",
+          "equal_volume_native_crossover_mxn": "4347826.09",
+          "equal_volume_comparison_mode": "native_wins_above_threshold"
+        }
+      ],
+      "native_v2_pool_sensitivities": [
+        {
+          "inventory_loss_bps": "25",
+          "blended_gross_fee_bps": "100",
+          "seed_committed_mxn": "100000.00",
+          "monthly_capital_cost_mxn": "1000.00",
+          "inventory_loss_before_fees_mxn": "2500.00",
+          "inventory_loss_exceeds_initial_seed": false,
+          "contribution_mxn": "-7500.00"
+        },
+        {
+          "inventory_loss_bps": "100",
+          "blended_gross_fee_bps": "100",
+          "seed_committed_mxn": "100000.00",
+          "monthly_capital_cost_mxn": "1000.00",
+          "inventory_loss_before_fees_mxn": "10000.00",
+          "inventory_loss_exceeds_initial_seed": false,
+          "contribution_mxn": "-15000.00"
+        },
+        {
+          "inventory_loss_bps": "200",
+          "blended_gross_fee_bps": "100",
+          "seed_committed_mxn": "100000.00",
+          "monthly_capital_cost_mxn": "1000.00",
+          "inventory_loss_before_fees_mxn": "20000.00",
+          "inventory_loss_exceeds_initial_seed": false,
+          "contribution_mxn": "-25000.00"
+        }
+      ]
+    },
+    {
+      "filled_notional_mxn": "10000000.00",
+      "gross_credited_builder_fees_mxn": "23500.00",
+      "distribution_customer_pays_funding_mxn": "13500.00",
+      "distribution_subsidizes_funding_mxn": "-69833.33",
+      "distribution_subsidizes_venue_fees_mxn": "-116500.00",
+      "distribution_subsidizes_both_mxn": "-199833.33",
+      "treasury_float_mxn": "1000000.00",
+      "monthly_float_financing_cost_mxn": "10000.00",
+      "distribution_with_treasury_float_mxn": "3500.00",
+      "separate_adverse_fx_event_loss_mxn": "20000.00",
+      "distribution_after_financing_and_fx_stress_mxn": "-16500.00",
+      "current_zero_fee_native_clob_mxn": "-30000.00",
+      "proposed_native_comparisons": [
+        {
+          "native_volume_retention": "0.5",
+          "native_filled_mxn": "5000000.00",
+          "distribution_contribution_mxn": "13500.00",
+          "proposed_native_clob_contribution_mxn": "5000.00",
+          "native_minus_distribution_mxn": "-8500.00",
+          "native_minus_distribution_after_build_recovery_mxn": "-8500.00",
+          "gross_native_fee_gap_at_equal_volume_mxn": "26500.00",
+          "native_required_volume_retention": "0.78333333",
+          "equal_volume_native_crossover_mxn": "4347826.09",
+          "equal_volume_comparison_mode": "native_wins_above_threshold"
+        },
+        {
+          "native_volume_retention": "0.75",
+          "native_filled_mxn": "7500000.00",
+          "distribution_contribution_mxn": "13500.00",
+          "proposed_native_clob_contribution_mxn": "12500.00",
+          "native_minus_distribution_mxn": "-1000.00",
+          "native_minus_distribution_after_build_recovery_mxn": "-1000.00",
+          "gross_native_fee_gap_at_equal_volume_mxn": "26500.00",
+          "native_required_volume_retention": "0.78333333",
+          "equal_volume_native_crossover_mxn": "4347826.09",
+          "equal_volume_comparison_mode": "native_wins_above_threshold"
+        },
+        {
+          "native_volume_retention": "1",
+          "native_filled_mxn": "10000000.00",
+          "distribution_contribution_mxn": "13500.00",
+          "proposed_native_clob_contribution_mxn": "20000.00",
+          "native_minus_distribution_mxn": "6500.00",
+          "native_minus_distribution_after_build_recovery_mxn": "6500.00",
+          "gross_native_fee_gap_at_equal_volume_mxn": "26500.00",
+          "native_required_volume_retention": "0.78333333",
+          "equal_volume_native_crossover_mxn": "4347826.09",
+          "equal_volume_comparison_mode": "native_wins_above_threshold"
+        }
+      ],
+      "native_v2_pool_sensitivities": [
+        {
+          "inventory_loss_bps": "25",
+          "blended_gross_fee_bps": "100",
+          "seed_committed_mxn": "1000000.00",
+          "monthly_capital_cost_mxn": "10000.00",
+          "inventory_loss_before_fees_mxn": "25000.00",
+          "inventory_loss_exceeds_initial_seed": false,
+          "contribution_mxn": "33000.00"
+        },
+        {
+          "inventory_loss_bps": "100",
+          "blended_gross_fee_bps": "100",
+          "seed_committed_mxn": "1000000.00",
+          "monthly_capital_cost_mxn": "10000.00",
+          "inventory_loss_before_fees_mxn": "100000.00",
+          "inventory_loss_exceeds_initial_seed": false,
+          "contribution_mxn": "-42000.00"
+        },
+        {
+          "inventory_loss_bps": "200",
+          "blended_gross_fee_bps": "100",
+          "seed_committed_mxn": "1000000.00",
+          "monthly_capital_cost_mxn": "10000.00",
+          "inventory_loss_before_fees_mxn": "200000.00",
+          "inventory_loss_exceeds_initial_seed": false,
+          "contribution_mxn": "-142000.00"
+        }
+      ]
+    },
+    {
+      "filled_notional_mxn": "25000000.00",
+      "gross_credited_builder_fees_mxn": "58750.00",
+      "distribution_customer_pays_funding_mxn": "41250.00",
+      "distribution_subsidizes_funding_mxn": "-167083.33",
+      "distribution_subsidizes_venue_fees_mxn": "-283750.00",
+      "distribution_subsidizes_both_mxn": "-492083.33",
+      "treasury_float_mxn": "2500000.00",
+      "monthly_float_financing_cost_mxn": "25000.00",
+      "distribution_with_treasury_float_mxn": "16250.00",
+      "separate_adverse_fx_event_loss_mxn": "50000.00",
+      "distribution_after_financing_and_fx_stress_mxn": "-33750.00",
+      "current_zero_fee_native_clob_mxn": "-60000.00",
+      "proposed_native_comparisons": [
+        {
+          "native_volume_retention": "0.5",
+          "native_filled_mxn": "12500000.00",
+          "distribution_contribution_mxn": "41250.00",
+          "proposed_native_clob_contribution_mxn": "27500.00",
+          "native_minus_distribution_mxn": "-13750.00",
+          "native_minus_distribution_after_build_recovery_mxn": "-13750.00",
+          "gross_native_fee_gap_at_equal_volume_mxn": "66250.00",
+          "native_required_volume_retention": "0.68333333",
+          "equal_volume_native_crossover_mxn": "4347826.09",
+          "equal_volume_comparison_mode": "native_wins_above_threshold"
+        },
+        {
+          "native_volume_retention": "0.75",
+          "native_filled_mxn": "18750000.00",
+          "distribution_contribution_mxn": "41250.00",
+          "proposed_native_clob_contribution_mxn": "46250.00",
+          "native_minus_distribution_mxn": "5000.00",
+          "native_minus_distribution_after_build_recovery_mxn": "5000.00",
+          "gross_native_fee_gap_at_equal_volume_mxn": "66250.00",
+          "native_required_volume_retention": "0.68333333",
+          "equal_volume_native_crossover_mxn": "4347826.09",
+          "equal_volume_comparison_mode": "native_wins_above_threshold"
+        },
+        {
+          "native_volume_retention": "1",
+          "native_filled_mxn": "25000000.00",
+          "distribution_contribution_mxn": "41250.00",
+          "proposed_native_clob_contribution_mxn": "65000.00",
+          "native_minus_distribution_mxn": "23750.00",
+          "native_minus_distribution_after_build_recovery_mxn": "23750.00",
+          "gross_native_fee_gap_at_equal_volume_mxn": "66250.00",
+          "native_required_volume_retention": "0.68333333",
+          "equal_volume_native_crossover_mxn": "4347826.09",
+          "equal_volume_comparison_mode": "native_wins_above_threshold"
+        }
+      ],
+      "native_v2_pool_sensitivities": [
+        {
+          "inventory_loss_bps": "25",
+          "blended_gross_fee_bps": "100",
+          "seed_committed_mxn": "2500000.00",
+          "monthly_capital_cost_mxn": "25000.00",
+          "inventory_loss_before_fees_mxn": "62500.00",
+          "inventory_loss_exceeds_initial_seed": false,
+          "contribution_mxn": "100500.00"
+        },
+        {
+          "inventory_loss_bps": "100",
+          "blended_gross_fee_bps": "100",
+          "seed_committed_mxn": "2500000.00",
+          "monthly_capital_cost_mxn": "25000.00",
+          "inventory_loss_before_fees_mxn": "250000.00",
+          "inventory_loss_exceeds_initial_seed": false,
+          "contribution_mxn": "-87000.00"
+        },
+        {
+          "inventory_loss_bps": "200",
+          "blended_gross_fee_bps": "100",
+          "seed_committed_mxn": "2500000.00",
+          "monthly_capital_cost_mxn": "25000.00",
+          "inventory_loss_before_fees_mxn": "500000.00",
+          "inventory_loss_exceeds_initial_seed": false,
+          "contribution_mxn": "-337000.00"
+        }
+      ]
+    }
+  ]
+}
