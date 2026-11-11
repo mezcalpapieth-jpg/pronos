@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
+import { RIS26_JAR_EVENT } from '../../../../shared/jar-events.js';
 
 const REFRESH_MS = 2_000;
 const BALL_COUNT = 183;
@@ -12,7 +13,6 @@ const JAR_BOTTOM_RADIUS = 0.98;
 const JAR_BODY_RADIUS = 1.3;
 const JAR_MOUTH_RADIUS = 0.84;
 const JAR_BOTTOM_Y = -2.02;
-const HIDDEN_METRICS_STORAGE_KEY = 'pronos-ris26-hidden-metrics';
 const DEFAULT_HIDDEN_METRICS = {
   mean: false,
   total: false,
@@ -20,7 +20,6 @@ const DEFAULT_HIDDEN_METRICS = {
   leader: false,
 };
 const EMPTY_STATS = {
-  event: { title: 'RIS 26', question: QUESTION },
   stats: { total: 0, mean: null, min: null, max: null, updatedAt: null },
   distribution: [],
   recent: [],
@@ -42,19 +41,14 @@ function isParticipantPath() {
   return path.endsWith('/participar') || params.get('participar') === '1';
 }
 
-function participantUrl() {
-  if (typeof window === 'undefined') return 'https://pronos.io/ris26/participar';
-  return `${window.location.origin}/ris26/participar`;
-}
-
 function qrUrl(url) {
   return `https://api.qrserver.com/v1/create-qr-code/?size=260x260&margin=14&data=${encodeURIComponent(url)}`;
 }
 
-function readStoredSubmission() {
+function readStoredSubmission(eventKey) {
   if (typeof window === 'undefined') return null;
   try {
-    const raw = window.localStorage.getItem('pronos-ris26-submission');
+    const raw = window.localStorage.getItem(`pronos-${eventKey}-submission`);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     return Number.isInteger(parsed?.guess) ? parsed : null;
@@ -63,10 +57,10 @@ function readStoredSubmission() {
   }
 }
 
-function storeSubmission(guess) {
+function storeSubmission(eventKey, guess) {
   if (typeof window === 'undefined') return;
   try {
-    window.localStorage.setItem('pronos-ris26-submission', JSON.stringify({
+    window.localStorage.setItem(`pronos-${eventKey}-submission`, JSON.stringify({
       guess,
       savedAt: new Date().toISOString(),
     }));
@@ -75,10 +69,10 @@ function storeSubmission(guess) {
   }
 }
 
-function readHiddenMetrics() {
+function readHiddenMetrics(eventKey) {
   if (typeof window === 'undefined') return DEFAULT_HIDDEN_METRICS;
   try {
-    const raw = window.localStorage.getItem(HIDDEN_METRICS_STORAGE_KEY);
+    const raw = window.localStorage.getItem(`pronos-${eventKey}-hidden-metrics`);
     if (!raw) return DEFAULT_HIDDEN_METRICS;
     const parsed = JSON.parse(raw);
     return {
@@ -90,16 +84,16 @@ function readHiddenMetrics() {
   }
 }
 
-function storeHiddenMetrics(next) {
+function storeHiddenMetrics(eventKey, next) {
   if (typeof window === 'undefined') return;
   try {
-    window.localStorage.setItem(HIDDEN_METRICS_STORAGE_KEY, JSON.stringify(next));
+    window.localStorage.setItem(`pronos-${eventKey}-hidden-metrics`, JSON.stringify(next));
   } catch {
     // Screen controls are best effort; the live stats keep polling either way.
   }
 }
 
-function useRis26Stats() {
+function useRis26Stats(endpoint, refreshMs) {
   const [payload, setPayload] = useState(EMPTY_STATS);
   const [status, setStatus] = useState('loading');
 
@@ -109,7 +103,7 @@ function useRis26Stats() {
 
     async function load() {
       try {
-        const res = await fetch('/api/ris26', {
+        const res = await fetch(endpoint, {
           credentials: 'include',
           cache: 'no-store',
         });
@@ -128,7 +122,7 @@ function useRis26Stats() {
       } catch {
         if (!cancelled) setStatus('offline');
       } finally {
-        if (!cancelled) timeoutId = window.setTimeout(load, REFRESH_MS);
+        if (!cancelled) timeoutId = window.setTimeout(load, refreshMs);
       }
     }
 
@@ -137,7 +131,7 @@ function useRis26Stats() {
       cancelled = true;
       if (timeoutId) window.clearTimeout(timeoutId);
     };
-  }, []);
+  }, [endpoint, refreshMs]);
 
   return { payload, status, setPayload };
 }
@@ -476,7 +470,7 @@ function Metric({ label, value, hint, hidden = false, onToggle }) {
   );
 }
 
-function GuessForm({ onSubmitted }) {
+function GuessForm({ endpoint, label, onSubmitted }) {
   const [guess, setGuess] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [busy, setBusy] = useState(false);
@@ -493,14 +487,13 @@ function GuessForm({ onSubmitted }) {
     setBusy(true);
     setError('');
     try {
-      const res = await fetch('/api/ris26', {
+      const res = await fetch(endpoint, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ guess: numericGuess, displayName }),
       });
       if (!res.ok) throw new Error('submit_failed');
-      storeSubmission(numericGuess);
       onSubmitted(numericGuess);
     } catch {
       setError('No pudimos guardar tu respuesta. Intenta otra vez.');
@@ -511,7 +504,7 @@ function GuessForm({ onSubmitted }) {
 
   return (
     <form className="ris26-form" onSubmit={submit}>
-      <div className="ris26-form-kicker">RIS 26 · Demo en vivo</div>
+      <div className="ris26-form-kicker">{label}</div>
       <h1>{QUESTION}</h1>
       <label>
         <span>Tu predicción</span>
@@ -544,13 +537,13 @@ function GuessForm({ onSubmitted }) {
   );
 }
 
-function PhoneThanks({ stats }) {
+function PhoneThanks({ stats, label }) {
   const total = Number(stats.total || 0);
 
   return (
     <div className="ris26-phone-results ris26-phone-thanks">
       <div className="ris26-submitted">
-        <span>RIS 26 · Demo en vivo</span>
+        <span>{label}</span>
         <h1>Gracias por tu respuesta</h1>
       </div>
       <div className="ris26-phone-average-card">
@@ -636,10 +629,15 @@ function RevealResultsDialog({
   );
 }
 
-export default function Ris26Page() {
-  const { payload, status, setPayload } = useRis26Stats();
-  const [submittedGuess, setSubmittedGuess] = useState(() => readStoredSubmission()?.guess || null);
-  const [hiddenMetrics, setHiddenMetrics] = useState(() => readHiddenMetrics());
+export default function Ris26Page({ event = RIS26_JAR_EVENT, embedded = false, participant = false }) {
+  const { key: eventKey, title, participantPath } = event;
+  const isRis26 = eventKey === RIS26_JAR_EVENT.key;
+  const participate = participant || (!embedded && isParticipantPath());
+  const endpoint = isRis26 ? '/api/ris26' : `/api/ris26?event=${encodeURIComponent(eventKey)}`;
+  const label = isRis26 ? `${title} · Demo en vivo` : title;
+  const { payload, status, setPayload } = useRis26Stats(endpoint, !isRis26 && participate ? 30_000 : REFRESH_MS);
+  const [submittedGuess, setSubmittedGuess] = useState(() => readStoredSubmission(eventKey)?.guess || null);
+  const [hiddenMetrics, setHiddenMetrics] = useState(() => readHiddenMetrics(eventKey));
   const [revealOpen, setRevealOpen] = useState(false);
   const [operatorMode, setOperatorMode] = useState('reveal');
   const [operatorUnlocked, setOperatorUnlocked] = useState(false);
@@ -647,18 +645,19 @@ export default function Ris26Page() {
   const [operatorError, setOperatorError] = useState('');
   const [operatorBusy, setOperatorBusy] = useState(false);
   const [pendingMetricKey, setPendingMetricKey] = useState(null);
-  const participate = isParticipantPath();
   const stats = payload.stats || EMPTY_STATS.stats;
   const rows = useMemo(
     () => buildPriceRows(payload.distribution, Number(stats.total || 0)),
     [payload.distribution, stats.total],
   );
   const topRow = rows[0] || null;
-  const scanUrl = participantUrl();
+  const origin = typeof window === 'undefined' ? 'https://pronos.io' : window.location.origin;
+  const scanUrl = new URL(participantPath, origin).href;
+  const scanImage = isRis26 ? qrUrl(scanUrl) : '/points/trading-festival-jar.png';
 
   useEffect(() => {
-    document.title = 'RIS 26 | Pronos';
-  }, []);
+    if (!embedded) document.title = `${title} | Pronos`;
+  }, [embedded, title]);
 
   useEffect(() => {
     if (participate) return undefined;
@@ -678,13 +677,14 @@ export default function Ris26Page() {
   useEffect(() => {
     if (!payload.ownGuess?.guess || submittedGuess) return;
     setSubmittedGuess(payload.ownGuess.guess);
-    storeSubmission(payload.ownGuess.guess);
-  }, [payload.ownGuess?.guess, submittedGuess]);
+    storeSubmission(eventKey, payload.ownGuess.guess);
+  }, [eventKey, payload.ownGuess?.guess, submittedGuess]);
 
   async function refreshAfterSubmit(guess) {
     setSubmittedGuess(guess);
+    storeSubmission(eventKey, guess);
     try {
-      const res = await fetch('/api/ris26', { credentials: 'include', cache: 'no-store' });
+      const res = await fetch(endpoint, { credentials: 'include', cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         setPayload({
@@ -696,7 +696,7 @@ export default function Ris26Page() {
         });
       }
     } catch {
-      // The polling loop will retry within two seconds.
+      // The polling loop will retry.
     }
   }
 
@@ -706,7 +706,7 @@ export default function Ris26Page() {
         ...current,
         [metricKey]: !current[metricKey],
       };
-      storeHiddenMetrics(next);
+      storeHiddenMetrics(eventKey, next);
       return next;
     });
   }
@@ -769,9 +769,9 @@ export default function Ris26Page() {
     return (
       <main className="ris26-page ris26-page-phone">
         {!submittedGuess ? (
-          <GuessForm onSubmitted={refreshAfterSubmit} />
+          <GuessForm endpoint={endpoint} label={label} onSubmitted={refreshAfterSubmit} />
         ) : (
-          <PhoneThanks stats={stats} />
+          <PhoneThanks stats={stats} label={label} />
         )}
       </main>
     );
@@ -784,10 +784,12 @@ export default function Ris26Page() {
     { key: 'leader', label: 'Precio líder', value: topRow ? `${topRow.label} · ${fmt(topRow.pct, 1)}%` : '—', hint: 'según la multitud' },
   ];
 
+  const Stage = embedded ? 'section' : 'main';
+
   return (
-    <main className="ris26-page ris26-page-screen">
+    <Stage className={`ris26-page ris26-page-screen${embedded ? ' tf-jar-stage' : ''}`}>
       <header className="ris26-screen-header">
-        <div className="ris26-brand">PRONOS</div>
+        {!embedded && <div className="ris26-brand">PRONOS</div>}
         <div className={`ris26-live-pill ${status === 'offline' ? 'offline' : ''}`}>
           <span />
           {status === 'offline' ? 'Reconectando' : 'Resultados en vivo'}
@@ -796,9 +798,13 @@ export default function Ris26Page() {
 
       <section className="ris26-hero">
         <div className="ris26-stage-title">
-          <div className="ris26-kicker">RIS 26 · Demo en vivo</div>
-          <h1>{STAGE_QUESTION}</h1>
-          <p>{QUESTION}</p>
+          {embedded ? <h2>{QUESTION}</h2> : (
+            <>
+              <div className="ris26-kicker">{label}</div>
+              <h1>{STAGE_QUESTION}</h1>
+              <p>{QUESTION}</p>
+            </>
+          )}
         </div>
         <div className="ris26-visual-area">
           <div className="ris26-jar-panel">
@@ -806,9 +812,9 @@ export default function Ris26Page() {
           </div>
           <a className="ris26-qr-card ris26-qr-card-stage" href={scanUrl}>
             <div className="ris26-qr-inner">
-              <img src={qrUrl(scanUrl)} alt="QR para participar en RIS 26" />
+              <img src={scanImage} alt={`QR para participar en ${title}`} />
               <span>Escanea para participar</span>
-              <strong>pronos.io/ris26/participar</strong>
+              <strong>pronos.io{participantPath.replace(/\/participar$/, '')}<wbr />/participar</strong>
             </div>
           </a>
         </div>
@@ -838,14 +844,16 @@ export default function Ris26Page() {
               Revelar resultado
             </button>
           </div>
-          <div className="ris26-explainer">
-            <strong>Cómo se mueve Pronos</strong>
-            <span>
-              La media de la multitud apunta al valor real. Cada respuesta suma señal:
-              cuando más personas se concentran en un número, su precio sube; cuando
-              la opinión se dispersa, baja.
-            </span>
-          </div>
+          {!embedded && (
+            <div className="ris26-explainer">
+              <strong>Cómo se mueve Pronos</strong>
+              <span>
+                La media de la multitud apunta al valor real. Cada respuesta suma señal:
+                cuando más personas se concentran en un número, su precio sube; cuando
+                la opinión se dispersa, baja.
+              </span>
+            </div>
+          )}
         </div>
       </section>
       <RevealResultsDialog
@@ -859,6 +867,6 @@ export default function Ris26Page() {
         password={operatorPassword}
         unlocked={operatorUnlocked}
       />
-    </main>
+    </Stage>
   );
 }

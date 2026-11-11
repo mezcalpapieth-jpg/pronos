@@ -1,9 +1,17 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { FESTIVAL_SIGNUP_URL } from '../../../../shared/trading-festival.js';
+import { FESTIVAL_JAR_EVENT } from '../../../../shared/jar-events.js';
 import TradingFestivalChart from '../components/TradingFestivalChart.jsx';
 import { festivalDate, festivalStatus, festivalTime, useFestivalClock, useFestivalSchedule } from '../lib/tradingFestival.js';
+
+const FestivalJar = lazy(() => import('./Ris26Page.jsx'));
+const DISPLAY_MODES = [
+  ['auto', 'Automático'],
+  ['charts', 'Gráficas'],
+  ['jar', 'Frasco'],
+];
 
 function marketUrl(slot) {
   return slot.market && slot.market.status !== 'pending' ? `/market?id=${slot.market.id}` : null;
@@ -129,15 +137,26 @@ export default function TradingFestival({ dashboard = false, onOpenLogin }) {
   const { slots, error } = useFestivalSchedule();
   const now = useFestivalClock();
   const [selection, setSelection] = useState(null);
-  const current = slots.find(slot => (
+  const [displayMode, setDisplayMode] = useState('auto');
+  const scheduled = slots.find(slot => (
     (!slot.requiresReschedule || isPresentation(slot))
     && Date.parse(slot.startTime) <= now && now < Date.parse(slot.endTime)
-  ))
-    || slots.find(slot => Date.parse(slot.startTime) > now)
-    || slots.at(-1);
+  ));
+  const current = scheduled || slots.find(slot => Date.parse(slot.startTime) > now) || slots.at(-1);
   const slot = slots.find(item => item.key === selection) || current;
   const tradeUrl = marketUrl(slot);
   const showPresentationChart = isPresentation(slot);
+  const showJar = dashboard && (displayMode === 'jar' || (displayMode === 'auto' && !scheduled));
+
+  function selectMode(mode) {
+    if (mode === 'auto') setSelection(null);
+    setDisplayMode(mode);
+  }
+
+  function selectSlot(key) {
+    setSelection(key);
+    if (dashboard && key) setDisplayMode('charts');
+  }
 
   return (
     <main className={dashboard ? 'tf-page tf-dashboard' : 'tf-page tf-points'}>
@@ -148,36 +167,53 @@ export default function TradingFestival({ dashboard = false, onOpenLogin }) {
             <span className="tf-date">12–13 NOV 2026</span>
           </div>
           <h1>Trading <span>Festival</span></h1>
-          <p>Predice si el precio sube o baja al cierre.</p>
-        </header>
-        {error && <p className="tf-notice" role="status">El estado de los mercados se actualizará al reconectar.</p>}
-        <article className="tf-feature">
-          <SlotTitle slot={slot} now={now} />
-          {showPresentationChart ? <FestivalPresentationChart key={slot.key} slot={slot} /> : (
-            <TradingFestivalChart key={slot.key} slot={slot} />
-          )}
-          <div className="tf-directions">
-            <span><b><span aria-hidden="true">↗</span> Sube</b><small>Cierra por encima de la apertura</small></span>
-            <span><b><span aria-hidden="true">↘</span> Baja</b><small>Cierra por debajo de la apertura</small></span>
-          </div>
-          {!dashboard && !showPresentationChart && tradeUrl && (
-            <Link className="tf-cta" to={tradeUrl}>
-              {festivalStatus(slot, now) === 'Abierto' ? 'Operar con puntos' : 'Ver mercado'} →
-            </Link>
-          )}
-        </article>
-        <FestivalSchedule slots={slots} now={now} selected={slot.key} onSelect={setSelection} />
-        {dashboard ? (
-          <a className="tf-qr-panel" href={FESTIVAL_SIGNUP_URL}>
-            <div>
-              <h2>Crea tu cuenta</h2>
-              <p>Escanea el código y participa con puntos.</p>
-              <span className="tf-qr-url">pronos.io/tradingfestival</span>
+          {!showJar && <p>Predice si el precio sube o baja al cierre.</p>}
+          {dashboard && (
+            <div className="tf-display-switch" role="group" aria-label="Vista de la pantalla">
+              {DISPLAY_MODES.map(([mode, label]) => (
+                <button type="button" key={mode} aria-pressed={displayMode === mode} onClick={() => selectMode(mode)}>
+                  {label}
+                </button>
+              ))}
             </div>
-            <img src="/points/trading-festival-signup.png" alt="Código QR para crear una cuenta en Pronos" width="492" height="492" />
-          </a>
-        ) : onOpenLogin && (
-          <FestivalSignupButton onOpenLogin={onOpenLogin} />
+          )}
+        </header>
+        {showJar ? (
+          <Suspense fallback={<p className="tf-notice" role="status">Cargando frasco…</p>}>
+            <FestivalJar event={FESTIVAL_JAR_EVENT} embedded />
+          </Suspense>
+        ) : (
+          <>
+            {error && <p className="tf-notice" role="status">El estado de los mercados se actualizará al reconectar.</p>}
+            <article className="tf-feature">
+              <SlotTitle slot={slot} now={now} />
+              {showPresentationChart ? <FestivalPresentationChart key={slot.key} slot={slot} /> : (
+                <TradingFestivalChart key={slot.key} slot={slot} />
+              )}
+              <div className="tf-directions">
+                <span><b><span aria-hidden="true">↗</span> Sube</b><small>Cierra por encima de la apertura</small></span>
+                <span><b><span aria-hidden="true">↘</span> Baja</b><small>Cierra por debajo de la apertura</small></span>
+              </div>
+              {!dashboard && !showPresentationChart && tradeUrl && (
+                <Link className="tf-cta" to={tradeUrl}>
+                  {festivalStatus(slot, now) === 'Abierto' ? 'Operar con puntos' : 'Ver mercado'} →
+                </Link>
+              )}
+            </article>
+            <FestivalSchedule slots={slots} now={now} selected={slot.key} onSelect={selectSlot} />
+            {dashboard ? (
+              <a className="tf-qr-panel" href={FESTIVAL_SIGNUP_URL}>
+                <div>
+                  <h2>Crea tu cuenta</h2>
+                  <p>Escanea el código y participa con puntos.</p>
+                  <span className="tf-qr-url">pronos.io/tradingfestival</span>
+                </div>
+                <img src="/points/trading-festival-signup.png" alt="Código QR para crear una cuenta en Pronos" width="492" height="492" />
+              </a>
+            ) : onOpenLogin && (
+              <FestivalSignupButton onOpenLogin={onOpenLogin} />
+            )}
+          </>
         )}
       </div>
     </main>

@@ -2,9 +2,8 @@ import crypto from 'crypto';
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from './_lib/cors.js';
 import { clientIp, rateLimit } from './_lib/rate-limit.js';
+import { FESTIVAL_JAR_EVENT, getJarEvent } from '../shared/jar-events.js';
 
-const EVENT_KEY = 'ris26';
-const COOKIE_NAME = 'pronos_ris26_player';
 const COOKIE_TTL_SECONDS = 60 * 60 * 24 * 30;
 const MIN_GUESS = 1;
 const MAX_GUESS = 10000;
@@ -46,12 +45,12 @@ function appendSetCookie(res, cookie) {
   return res.setHeader('Set-Cookie', [existing, cookie]);
 }
 
-function setVisitorCookie(req, res, visitorId) {
+function setVisitorCookie(req, res, visitorId, cookieName) {
   const secure = req.headers['x-forwarded-proto'] === 'https'
     || process.env.VERCEL === '1'
     || process.env.VERCEL_ENV;
   const parts = [
-    `${COOKIE_NAME}=${encodeURIComponent(visitorId)}`,
+    `${cookieName}=${encodeURIComponent(visitorId)}`,
     'Path=/',
     `Max-Age=${COOKIE_TTL_SECONDS}`,
     'HttpOnly',
@@ -61,12 +60,12 @@ function setVisitorCookie(req, res, visitorId) {
   appendSetCookie(res, parts.join('; '));
 }
 
-function visitorIdForRequest(req, res) {
+function visitorIdForRequest(req, res, cookieName) {
   const cookies = parseCookieHeader(req.headers?.cookie);
-  const existing = String(cookies[COOKIE_NAME] || '').trim();
+  const existing = String(cookies[cookieName] || '').trim();
   if (/^[a-f0-9-]{20,80}$/i.test(existing)) return existing;
   const generated = crypto.randomUUID();
-  setVisitorCookie(req, res, generated);
+  setVisitorCookie(req, res, generated, cookieName);
   return generated;
 }
 
@@ -128,11 +127,11 @@ async function ensureRis26Schema() {
   return schemaPromise;
 }
 
-async function readStats(req, res) {
+async function readStats(req, res, { key, title, cookieName }) {
   await ensureRis26Schema();
   const sql = getReadSql();
   const cookies = parseCookieHeader(req.headers?.cookie);
-  const visitorId = String(cookies[COOKIE_NAME] || '').trim();
+  const visitorId = String(cookies[cookieName] || '').trim();
   const visitorKey = visitorId ? hashValue(visitorId) : null;
 
   const [summaryRows, distributionRows, recentRows, ownRows] = await Promise.all([
@@ -144,12 +143,12 @@ async function readStats(req, res) {
         MAX(guess)::int AS max,
         MAX(updated_at) AS updated_at
       FROM ris26_guesses
-      WHERE event_key = ${EVENT_KEY}
+      WHERE event_key = ${key}
     `,
     sql`
       SELECT guess AS value, COUNT(*)::int AS count
       FROM ris26_guesses
-      WHERE event_key = ${EVENT_KEY}
+      WHERE event_key = ${key}
       GROUP BY guess
       ORDER BY guess ASC
       LIMIT 300
@@ -157,7 +156,7 @@ async function readStats(req, res) {
     sql`
       SELECT display_name, guess, updated_at
       FROM ris26_guesses
-      WHERE event_key = ${EVENT_KEY}
+      WHERE event_key = ${key}
       ORDER BY updated_at DESC
       LIMIT 8
     `,
@@ -165,7 +164,7 @@ async function readStats(req, res) {
       ? sql`
           SELECT guess, display_name, updated_at
           FROM ris26_guesses
-          WHERE event_key = ${EVENT_KEY}
+          WHERE event_key = ${key}
             AND visitor_key = ${visitorKey}
           LIMIT 1
         `
@@ -183,8 +182,8 @@ async function readStats(req, res) {
   return res.status(200).json({
     ok: true,
     event: {
-      key: EVENT_KEY,
-      title: 'RIS 26',
+      key,
+      title,
       question: '¿Cuántas pelotas hay en el frasco?',
     },
     stats: {
@@ -210,10 +209,12 @@ async function readStats(req, res) {
   });
 }
 
-async function submitGuess(req, res) {
+async function submitGuess(req, res, event) {
+  const { key, cookieName } = event;
   const limited = rateLimit(req, res, {
-    key: `ris26:post:${clientIp(req)}`,
-    limit: 20,
+    key: `${key}:post:${clientIp(req)}`,
+    // Festival attendees may share the venue's public IP.
+    limit: event === FESTIVAL_JAR_EVENT ? 120 : 20,
     windowMs: 60_000,
   });
   if (limited) return;
@@ -228,7 +229,7 @@ async function submitGuess(req, res) {
 
   await ensureRis26Schema();
   const sql = getWriteSql();
-  const visitorId = visitorIdForRequest(req, res);
+  const visitorId = visitorIdForRequest(req, res, cookieName);
   const visitorKey = hashValue(visitorId);
   const ipHash = hashValue(clientIp(req));
   const displayName = cleanDisplayName(body.displayName);
@@ -238,7 +239,7 @@ async function submitGuess(req, res) {
     INSERT INTO ris26_guesses (
       event_key, visitor_key, display_name, guess, ip_hash, user_agent
     ) VALUES (
-      ${EVENT_KEY}, ${visitorKey}, ${displayName}, ${guess}, ${ipHash}, ${userAgent}
+      ${key}, ${visitorKey}, ${displayName}, ${guess}, ${ipHash}, ${userAgent}
     )
     ON CONFLICT (event_key, visitor_key)
     DO UPDATE SET
@@ -263,10 +264,14 @@ async function submitGuess(req, res) {
 export default async function handler(req, res) {
   const cors = applyCors(req, res, { methods: 'GET, POST, OPTIONS', credentials: true });
   if (cors) return cors;
+  res.setHeader('Cache-Control', 'private, no-store');
+
+  const event = getJarEvent(req.query?.event);
+  if (!event) return res.status(400).json({ error: 'invalid_event' });
 
   if (req.method === 'GET') {
     const limited = rateLimit(req, res, {
-      key: `ris26:get:${clientIp(req)}`,
+      key: `${event.key}:get:${clientIp(req)}`,
       limit: 240,
       windowMs: 60_000,
     });
@@ -274,8 +279,8 @@ export default async function handler(req, res) {
   }
 
   try {
-    if (req.method === 'GET') return await readStats(req, res);
-    if (req.method === 'POST') return await submitGuess(req, res);
+    if (req.method === 'GET') return await readStats(req, res, event);
+    if (req.method === 'POST') return await submitGuess(req, res, event);
     return res.status(405).json({ error: 'method_not_allowed' });
   } catch (e) {
     console.error('[ris26] error', { message: e?.message, code: e?.code });

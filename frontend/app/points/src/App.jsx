@@ -27,6 +27,7 @@ import { trackPublicityConversion, trackPublicityLanding } from './lib/pointsApi
 import { isVideoDemoActive } from './demo/demoFlag.js';
 import { usePointsExecution } from './lib/PointsExecution.jsx';
 import { isFestivalDashboard } from '../../../shared/trading-festival.js';
+import { FESTIVAL_JAR_EVENT, isFestivalJarParticipant } from '../../../shared/jar-events.js';
 
 const PointsHome = lazy(() => import('./pages/PointsHome.jsx'));
 const PointsMarketDetail = lazy(() => import('./pages/PointsMarketDetail.jsx'));
@@ -232,6 +233,14 @@ export default function App() {
 
   if (typeof window !== 'undefined' && isFestivalDashboard(window.location)) {
     return <Suspense fallback={<RouteFallback />}><TradingFestival dashboard /></Suspense>;
+  }
+
+  if (isFestivalJarParticipant({ pathname })) {
+    return (
+      <Suspense fallback={<RouteFallback />}>
+        <Ris26Page event={FESTIVAL_JAR_EVENT} participant />
+      </Suspense>
+    );
   }
 
   if (IS_RIS26_ROUTE) {

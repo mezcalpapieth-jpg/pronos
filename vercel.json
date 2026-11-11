@@ -74,6 +74,7 @@
   ],
   "rewrites": [
     { "source": "/tradingfestival",     "destination": "/points/" },
+    { "source": "/tradingfestival/participar", "destination": "/points/" },
     { "source": "/i",                  "destination": "/api/points/publicity/redirect?source=instagram" },
     { "source": "/i/",                 "destination": "/api/points/publicity/redirect?source=instagram" },
     { "source": "/t",                  "destination": "/api/points/publicity/redirect?source=tiktok" },
