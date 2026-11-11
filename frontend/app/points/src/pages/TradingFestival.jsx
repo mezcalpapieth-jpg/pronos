@@ -9,8 +9,29 @@ function marketUrl(slot) {
   return slot.market && slot.market.status !== 'pending' ? `/market?id=${slot.market.id}` : null;
 }
 
-function SlotInfo({ slot, now }) {
-  const status = festivalStatus(slot, now);
+function isNasdaqPresentation(slot, dashboard) {
+  return dashboard && slot.key === 'ndx';
+}
+
+function displayStatus(slot, now, dashboard) {
+  return isNasdaqPresentation(slot, dashboard) ? 'Presentación' : festivalStatus(slot, now);
+}
+
+function NasdaqPresentationChart() {
+  // Keep the third-party widget on a separate origin from the festival page.
+  return (
+    <iframe
+      className="tf-nasdaq-frame"
+      src="https://pronos-chi.vercel.app/festival-nasdaq-chart"
+      title="Gráfica del Nasdaq-100"
+      sandbox="allow-scripts allow-same-origin"
+      credentialless=""
+    />
+  );
+}
+
+function SlotInfo({ slot, now, dashboard }) {
+  const status = displayStatus(slot, now, dashboard);
   return (
     <>
       <span className="tf-slot-time">
@@ -23,8 +44,8 @@ function SlotInfo({ slot, now }) {
   );
 }
 
-function SlotTitle({ slot, now }) {
-  const status = festivalStatus(slot, now);
+function SlotTitle({ slot, now, dashboard }) {
+  const status = displayStatus(slot, now, dashboard);
   return (
     <div className="tf-market-heading">
       <div>
@@ -36,14 +57,14 @@ function SlotTitle({ slot, now }) {
   );
 }
 
-function FestivalSchedule({ slots, now, selected, onSelect }) {
+function FestivalSchedule({ slots, now, selected, onSelect, dashboard }) {
   return (
     <section className="tf-agenda" aria-labelledby="tf-schedule">
       <div className="tf-agenda-heading"><h2 id="tf-schedule">Horario de mercados</h2><span>Hora CDMX</span></div>
       {slots.map(slot => (
         <button type="button" className="tf-slot" key={slot.key} aria-pressed={selected === slot.key}
           onClick={() => onSelect(selected === slot.key ? null : slot.key)}>
-          <SlotInfo slot={slot} now={now} />
+          <SlotInfo slot={slot} now={now} dashboard={dashboard} />
         </button>
       ))}
       <p className="tf-agenda-note">Dos mercados más por anunciar.</p>
@@ -61,11 +82,15 @@ export default function TradingFestival({ dashboard = false, onOpenLogin }) {
   const { slots, error } = useFestivalSchedule();
   const now = useFestivalClock();
   const [selection, setSelection] = useState(null);
-  const current = slots.find(slot => !slot.requiresReschedule && Date.parse(slot.startTime) <= now && now < Date.parse(slot.endTime))
+  const current = slots.find(slot => (
+    (!slot.requiresReschedule || isNasdaqPresentation(slot, dashboard))
+    && Date.parse(slot.startTime) <= now && now < Date.parse(slot.endTime)
+  ))
     || slots.find(slot => Date.parse(slot.startTime) > now)
     || slots.at(-1);
   const slot = slots.find(item => item.key === selection) || current;
   const tradeUrl = marketUrl(slot);
+  const showNasdaqChart = isNasdaqPresentation(slot, dashboard);
 
   return (
     <main className={dashboard ? 'tf-page tf-dashboard' : 'tf-page tf-points'}>
@@ -80,19 +105,23 @@ export default function TradingFestival({ dashboard = false, onOpenLogin }) {
         </header>
         {error && <p className="tf-notice" role="status">El estado de los mercados se actualizará al reconectar.</p>}
         <article className="tf-feature">
-          <SlotTitle slot={slot} now={now} />
-          <TradingFestivalChart key={slot.key} slot={slot} />
-          <div className="tf-directions">
-            <span><b><span aria-hidden="true">↗</span> Sube</b><small>Cierra por encima de la apertura</small></span>
-            <span><b><span aria-hidden="true">↘</span> Baja</b><small>Cierra por debajo de la apertura</small></span>
-          </div>
+          <SlotTitle slot={slot} now={now} dashboard={dashboard} />
+          {showNasdaqChart ? <NasdaqPresentationChart /> : (
+            <TradingFestivalChart key={slot.key} slot={slot} />
+          )}
+          {!showNasdaqChart && (
+            <div className="tf-directions">
+              <span><b><span aria-hidden="true">↗</span> Sube</b><small>Cierra por encima de la apertura</small></span>
+              <span><b><span aria-hidden="true">↘</span> Baja</b><small>Cierra por debajo de la apertura</small></span>
+            </div>
+          )}
           {!dashboard && tradeUrl && (
             <Link className="tf-cta" to={tradeUrl}>
               {festivalStatus(slot, now) === 'Abierto' ? 'Operar con puntos' : 'Ver mercado'} →
             </Link>
           )}
         </article>
-        <FestivalSchedule slots={slots} now={now} selected={slot.key} onSelect={setSelection} />
+        <FestivalSchedule slots={slots} now={now} selected={slot.key} onSelect={setSelection} dashboard={dashboard} />
         {dashboard ? (
           <a className="tf-qr-panel" href={FESTIVAL_SIGNUP_URL}>
             <div>
