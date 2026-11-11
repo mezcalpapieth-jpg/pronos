@@ -30,7 +30,8 @@ export default async function handler(req, res) {
       const bars = await readFestivalBars(slot, { from, to });
       setCache(res, now >= Date.parse(slot.endTime) + 15 * FESTIVAL_MINUTE ? 300 : 12);
       return res.status(200).json({ status: 'ok', bars });
-    } catch {
+    } catch (error) {
+      console.warn('[trading-festival] chart feed failed', { key: slot.key, message: error.message });
       res.setHeader('Cache-Control', 'no-store');
       return res.status(502).json({ error: 'festival_feed_unavailable' });
     }

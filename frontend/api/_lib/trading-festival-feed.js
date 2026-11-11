@@ -25,14 +25,19 @@ export function festivalSchedule(env = process.env) {
 
 export function festivalFeedEnabled(slot, env = process.env) {
   return slot.provider === 'Coinbase' || (
-    Boolean(env.TRADING_FESTIVAL_MASSIVE_API_KEY)
+    Boolean(massiveApiKey(env))
     && (env.TRADING_FESTIVAL_MASSIVE_SYMBOLS || '').split(',').map(value => value.trim()).includes(slot.key)
   );
+}
+
+function massiveApiKey(env) {
+  return env.MASSIVE_API_KEY?.trim() || env.TRADING_FESTIVAL_MASSIVE_API_KEY?.trim();
 }
 
 export function festivalChartRange(slot, now) {
   if (slot.requiresReschedule) {
     // Display the actual regular session separately from the proposed slot.
+    if (now < NDX_SESSION_START) return { from: now - LEAD_TIME, to: now };
     const to = Math.min(now, NDX_SESSION_END);
     return { from: Math.max(NDX_SESSION_START, to - LEAD_TIME), to };
   }
@@ -62,12 +67,15 @@ export async function readFestivalBars(slot, { from, to, fetchImpl = fetch, env 
       'https://api.massive.com',
     );
     url.searchParams.set('sort', 'asc');
-    headers.Authorization = `Bearer ${env.TRADING_FESTIVAL_MASSIVE_API_KEY}`;
+    headers.Authorization = `Bearer ${massiveApiKey(env)}`;
   }
 
   const response = await fetchImpl(url, { headers, signal: AbortSignal.timeout(4500) });
   if (!response.ok) throw new Error(`festival_feed_http_${response.status}`);
   const payload = await response.json();
+  if (slot.provider === 'Massive' && payload.status === 'DELAYED') {
+    throw new Error('festival_feed_delayed');
+  }
   const rows = slot.provider === 'Coinbase' ? payload : payload.results ?? [];
   if (!Array.isArray(rows) || (slot.provider === 'Massive' && payload.status !== 'OK')) {
     throw new Error('festival_feed_invalid_response');
