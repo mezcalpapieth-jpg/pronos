@@ -29,6 +29,9 @@ const FundingPage = lazy(() => import('./pages/FundingPage.jsx'));
 const Hip4PilotPage = import.meta.env.VITE_HIP4_TESTNET_ENABLED === 'true'
   ? lazy(() => import('./pages/Hip4PilotPage.jsx'))
   : null;
+const PolymarketPilotPage = import.meta.env.VITE_POLYMARKET_PILOT_ENABLED === 'true'
+  ? lazy(() => import('./pages/PolymarketPilotPage.jsx'))
+  : null;
 const MvpUserProfile = lazy(() => import('./pages/MvpUserProfile.jsx'));
 const Admin = lazy(() => import('./pages/Admin.jsx'));
 const WorldCupPage = lazy(() => import('./pages/WorldCupPage.jsx'));
@@ -84,6 +87,7 @@ export default function App() {
   // username (first login path). Also opens on manual click from Nav.
   const showLogin = loginOpen || (authenticated && needsUsername && !checkingUsername);
   const isHip4Path = Hip4PilotPage && typeof window !== 'undefined' && /^\/mvp\/hip4\/?$/.test(window.location.pathname);
+  const isPolymarketPath = PolymarketPilotPage && typeof window !== 'undefined' && /^\/mvp\/polymarket\/?$/.test(window.location.pathname);
 
   return (
     <BrowserRouter basename="/mvp">
@@ -92,7 +96,7 @@ export default function App() {
           open={showLogin}
           onClose={() => setLoginOpen(false)}
           initialStep={authenticated && needsUsername ? 'username' : 'email'}
-          enableDelegationStep={!isHip4Path}
+          enableDelegationStep={!isHip4Path && !isPolymarketPath}
         />
       )}
 
@@ -149,6 +153,9 @@ export default function App() {
           />
           {Hip4PilotPage && (
             <Route path="/hip4" element={<Hip4PilotPage onOpenLogin={() => setLoginOpen(true)} />} />
+          )}
+          {PolymarketPilotPage && (
+            <Route path="/polymarket" element={<PolymarketPilotPage onOpenLogin={() => setLoginOpen(true)} />} />
           )}
           <Route
             path="/u/:username"

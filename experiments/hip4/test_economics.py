@@ -17,12 +17,12 @@ class DistributionEconomicsTests(unittest.TestCase):
         self.config = assumptions()
 
     def test_builder_revenue_counts_filled_cash_once_and_weights_collection(self):
-        # Half of 1M at25bps*90%, half at25bps*98% =2350, not4700.
+        # Half of 1M at25bps*90%, half at50bps*98% =3575, counted once.
         report = economics.run(self.config)
         row = next(row for row in report["rows"] if row["filled_notional_mxn"] == "1000000.00")
-        self.assertEqual(report["effective_builder_fee_bps"], "23.5")
-        self.assertEqual(row["gross_credited_builder_fees_mxn"], "2350.00")
-        self.assertEqual(row["distribution_customer_pays_funding_mxn"], "-3150.00")
+        self.assertEqual(report["effective_builder_fee_bps"], "35.75")
+        self.assertEqual(row["gross_credited_builder_fees_mxn"], "3575.00")
+        self.assertEqual(row["distribution_customer_pays_funding_mxn"], "-1925.00")
 
     def test_price_sensitive_sports_fee_is_converted_to_cash_notional(self):
         # 100shares*.05*.5*.5=1.25 fee on50 cash =250bps.
@@ -31,6 +31,12 @@ class DistributionEconomicsTests(unittest.TestCase):
         self.assertEqual(economics.sports_fee_bps("0.05", "0.9"), Decimal(50))
         _, _, weighted_venue_cost = economics.distribution_rates(self.config)
         self.assertEqual(weighted_venue_cost, Decimal(130))
+        example = economics.run(self.config)["polymarket_sports_taker_fee_examples"][1]
+        self.assertEqual(example["builder_fee_bps"], "50")
+        self.assertEqual(example["with_configured_builder_total_bps"], "300")
+        changed = deepcopy(self.config)
+        changed["venues"][1]["builder_fee_bps"] = "75"
+        self.assertEqual(economics.run(changed)["polymarket_sports_taker_fee_examples"][1]["with_configured_builder_total_bps"], "325")
 
     def test_customer_venue_fees_are_not_deducted_from_operator_by_default(self):
         baseline = economics.run(self.config)
@@ -57,22 +63,22 @@ class DistributionEconomicsTests(unittest.TestCase):
         report = economics.run(self.config)
         row = next(row for row in report["rows"] if row["filled_notional_mxn"] == "1000000.00")
         self.assertIsNone(report["funding_subsidy_break_even_volume_mxn"])
-        self.assertEqual(row["distribution_subsidizes_funding_mxn"], "-11483.33")
-        self.assertEqual(row["distribution_subsidizes_venue_fees_mxn"], "-16150.00")
-        self.assertEqual(row["distribution_subsidizes_both_mxn"], "-24483.33")
+        self.assertEqual(row["distribution_subsidizes_funding_mxn"], "-10258.33")
+        self.assertEqual(row["distribution_subsidizes_venue_fees_mxn"], "-14925.00")
+        self.assertEqual(row["distribution_subsidizes_both_mxn"], "-23258.33")
         self.assertIsNone(economics.required_volume("5000", Decimal(-1)))
         self.assertIsNone(economics.required_volume("5000", Decimal(0)))
 
     def test_base_break_even_and_treasury_risk_are_distinct(self):
         report = economics.run(self.config)
-        self.assertEqual(report["distribution_break_even_volume_mxn"], "2702702.70")
+        self.assertEqual(report["distribution_break_even_volume_mxn"], "1626016.26")
         row = next(row for row in report["rows"] if row["filled_notional_mxn"] == "1000000.00")
         self.assertEqual(row["treasury_float_mxn"], "100000.00")
         self.assertEqual(row["monthly_float_financing_cost_mxn"], "1000.00")
         self.assertEqual(row["separate_adverse_fx_event_loss_mxn"], "2000.00")
-        self.assertEqual(row["distribution_after_financing_and_fx_stress_mxn"], "-6150.00")
+        self.assertEqual(row["distribution_after_financing_and_fx_stress_mxn"], "-4925.00")
         # Committing float is not itself a100000 operating expense.
-        self.assertEqual(row["distribution_with_treasury_float_mxn"], "-4150.00")
+        self.assertEqual(row["distribution_with_treasury_float_mxn"], "-2925.00")
 
 
 class NativeOpportunityCostTests(unittest.TestCase):
@@ -87,33 +93,37 @@ class NativeOpportunityCostTests(unittest.TestCase):
     def test_proposed_native_costs_and_volume_retention_determine_opportunity(self):
         full = economics.compare_native(self.config, "10000000")
         partial = economics.compare_native(self.config, "10000000", retention=Decimal("0.75"))
-        self.assertEqual(full["distribution_contribution_mxn"], "13500.00")
+        self.assertEqual(full["distribution_contribution_mxn"], "25750.00")
         self.assertEqual(full["proposed_native_clob_contribution_mxn"], "20000.00")
-        self.assertEqual(full["native_minus_distribution_mxn"], "6500.00")
+        self.assertEqual(full["native_minus_distribution_mxn"], "-5750.00")
         self.assertEqual(partial["native_filled_mxn"], "7500000.00")
         self.assertEqual(partial["proposed_native_clob_contribution_mxn"], "12500.00")
-        self.assertEqual(partial["native_minus_distribution_mxn"], "-1000.00")
-        self.assertEqual(full["native_required_volume_retention"], "0.78333333")
-        self.assertEqual(full["equal_volume_native_crossover_mxn"], "4347826.09")
+        self.assertEqual(partial["native_minus_distribution_mxn"], "-13250.00")
+        self.assertEqual(full["native_required_volume_retention"], "1.19166667")
+        self.assertIsNone(full["equal_volume_native_crossover_mxn"])
+        self.assertEqual(full["equal_volume_comparison_mode"], "native_never_wins_at_positive_volume")
 
     def test_gross_fee_gap_is_not_equated_to_forgone_profit(self):
         comparison = economics.compare_native(self.config, "1000000")
-        self.assertEqual(comparison["gross_native_fee_gap_at_equal_volume_mxn"], "2650.00")
-        self.assertEqual(comparison["native_minus_distribution_mxn"], "-3850.00")
+        self.assertEqual(comparison["gross_native_fee_gap_at_equal_volume_mxn"], "1425.00")
+        self.assertEqual(comparison["native_minus_distribution_mxn"], "-5075.00")
         self.assertGreater(Decimal(comparison["native_required_volume_retention"]), Decimal(1))
 
     def test_build_cost_recovery_changes_crossover_not_operating_contribution(self):
-        baseline = economics.compare_native(self.config, "10000000")
         build = deepcopy(self.config)
+        # A 60bps native fee produces a positive margin gap, so this scenario has a crossover.
+        build["native_clob"]["proposed_fee_bps"] = "60"
+        baseline = economics.compare_native(build, "10000000")
         build["native_clob"]["incremental_build_cost_mxn"] = "120000"
         comparison = economics.compare_native(build, "10000000")
         self.assertEqual(comparison["native_minus_distribution_mxn"], baseline["native_minus_distribution_mxn"])
-        self.assertEqual(comparison["native_minus_distribution_after_build_recovery_mxn"], "-13500.00")
-        self.assertEqual(comparison["equal_volume_native_crossover_mxn"], "21739130.43")
+        self.assertEqual(comparison["native_minus_distribution_after_build_recovery_mxn"], "-15750.00")
+        self.assertEqual(comparison["equal_volume_native_crossover_mxn"], "27027027.03")
         self.assertGreater(Decimal(comparison["native_required_volume_retention"]), Decimal(1))
 
     def test_native_already_cheaper_and_higher_margin_has_zero_volume_threshold(self):
         cheaper = deepcopy(self.config)
+        cheaper["native_clob"]["proposed_fee_bps"] = "55"
         cheaper["native_clob"]["fixed_mxn"] = "1000"
         comparison = economics.compare_native(cheaper, "1000000")
         self.assertEqual(comparison["equal_volume_native_crossover_mxn"], "0.00")
@@ -121,6 +131,7 @@ class NativeOpportunityCostTests(unittest.TestCase):
 
     def test_amortized_build_savings_can_cover_native_fixed_cost_gap(self):
         cheaper_build = deepcopy(self.config)
+        cheaper_build["native_clob"]["proposed_fee_bps"] = "55"
         cheaper_build["distribution"]["incremental_build_cost_mxn"] = "120000"
         comparison = economics.compare_native(cheaper_build, "1000000")
         self.assertEqual(comparison["equal_volume_native_crossover_mxn"], "0.00")
@@ -140,13 +151,13 @@ class NativeOpportunityCostTests(unittest.TestCase):
         small = economics.compare_native(cheaper, "1000000")
         large = economics.compare_native(cheaper, "10000000")
         self.assertEqual(small["equal_volume_comparison_mode"], "native_wins_below_threshold")
-        self.assertEqual(small["equal_volume_native_crossover_mxn"], "4705882.35")
-        self.assertEqual(small["native_minus_distribution_mxn"], "3150.00")
-        self.assertEqual(large["native_minus_distribution_mxn"], "-4500.00")
+        self.assertEqual(small["equal_volume_native_crossover_mxn"], "1927710.84")
+        self.assertEqual(small["native_minus_distribution_mxn"], "1925.00")
+        self.assertEqual(large["native_minus_distribution_mxn"], "-16750.00")
 
     def test_equal_margins_distinguish_equality_from_fixed_cost_advantage(self):
         same = deepcopy(self.config)
-        same["native_clob"]["proposed_fee_bps"] = "38.5"
+        same["native_clob"]["proposed_fee_bps"] = "50.75"
         same["native_clob"]["fixed_mxn"] = "5000"
         equal = economics.compare_native(same, "1000000")
         self.assertEqual(equal["equal_volume_comparison_mode"], "equal_at_all_volumes")

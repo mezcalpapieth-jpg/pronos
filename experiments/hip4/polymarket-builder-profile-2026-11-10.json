@@ -1,0 +1,29 @@
+{
+  "builder_name": "Pronos",
+  "builder_code": "0x64fd36a8de3203124ffd34c4457e139fcf0aedac33fa1b4904dae451900dd30c",
+  "public_information_only": true,
+  "target_maker_fee_bps": 0,
+  "target_taker_fee_bps": 50,
+  "public_fee_observation": {
+    "observed_at_utc": "2026-11-11T01:47:54.292392Z",
+    "url": "https://clob.polymarket.com/fees/builder-fees/0x64fd36a8de3203124ffd34c4457e139fcf0aedac33fa1b4904dae451900dd30c",
+    "http_status": 200,
+    "builder_maker_fee_rate_bps": 0,
+    "builder_taker_fee_rate_bps": 0,
+    "enabled": true
+  },
+  "settings_observation": {
+    "source": "Signed-in Polymarket Builders settings, November 10 CDMX; pending date displayed without timezone",
+    "current_maker_fee_bps": 0,
+    "current_taker_fee_bps": 0,
+    "pending_maker_fee_bps": 0,
+    "pending_taker_fee_bps": 50,
+    "displayed_effective_date": "2026-11-14",
+    "next_modification_date_reported_by_owner": "2026-11-18",
+    "one_percent_draft_discarded": true
+  },
+  "builder_api_credentials_created": false,
+  "trading_enabled_in_pronos_pilot": false,
+  "fee_collection_verified": false,
+  "funding_note": "The address displayed in Builders settings is labeled for API use only; do not treat it as a funding destination."
+}

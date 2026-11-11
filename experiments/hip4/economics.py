@@ -185,13 +185,23 @@ def run(config):
             "native_v2_pool_sensitivities": [pool_scenario(config, volume, loss) for loss in config["native_v2_pool"]["inventory_loss_bps_sensitivities"]],
         })
     prices = [Decimal("0.1"), Decimal("0.5"), Decimal("0.9")]
+    polymarket = next((venue for venue in config["venues"] if "sports_fee_parameter" in venue), None)
+    sports_examples = []
+    if polymarket is not None:
+        builder_fee = nonnegative(polymarket["builder_fee_bps"])
+        sports_examples = [{
+            "price": wire(p),
+            "venue_fee_bps_of_cash_notional": wire(sports_fee_bps(polymarket["sports_fee_parameter"], p)),
+            "builder_fee_bps": wire(builder_fee),
+            "with_configured_builder_total_bps": wire(sports_fee_bps(polymarket["sports_fee_parameter"], p) + builder_fee),
+        } for p in prices]
     return {
         "assumptions": config,
         "effective_builder_fee_bps": wire(gross), "distribution_variable_margin_bps": wire(margin),
         "full_funding_subsidy_bps": wire(funding_cost), "weighted_venue_fee_scenario_bps": wire(venue_cost),
         "distribution_break_even_volume_mxn": money(required_volume(fixed, margin)) if margin > 0 else None,
         "funding_subsidy_break_even_volume_mxn": money(required_volume(fixed, margin - funding_cost)) if margin > funding_cost else None,
-        "polymarket_sports_taker_fee_examples": [{"price": wire(p), "venue_fee_bps_of_cash_notional": wire(sports_fee_bps("0.05", p)), "with_25bps_builder_total_bps": wire(sports_fee_bps("0.05", p) + 25)} for p in prices],
+        "polymarket_sports_taker_fee_examples": sports_examples,
         "rows": rows,
     }
 

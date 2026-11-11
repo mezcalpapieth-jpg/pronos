@@ -1,0 +1,50 @@
+.polymarket-pilot {
+  max-width: 1120px;
+  min-height: 60vh;
+  margin-inline: auto;
+  padding: 40px clamp(16px, 4vw, 48px) 64px;
+}
+
+.polymarket-pilot h1 { margin: 8px 0 16px; font-size: clamp(30px, 5vw, 46px); }
+.polymarket-pilot h2 { margin: 0 0 14px; font-size: 21px; }
+.polymarket-pilot p, .polymarket-pilot li { color: var(--text-secondary); line-height: 1.6; }
+.polymarket-pilot p { margin: 0 0 12px; }
+.polymarket-pilot .polymarket-pilot-eyebrow { color: var(--orange); font: 12px var(--font-mono); }
+.polymarket-pilot .polymarket-pilot-notice { padding: 12px 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface2); }
+.polymarket-pilot-account { display: flex; gap: 16px; align-items: start; justify-content: space-between; margin: 20px 0; }
+.polymarket-pilot-account > div { min-width: 0; }
+.polymarket-pilot-account > button { flex-shrink: 0; }
+.polymarket-pilot code { overflow-wrap: anywhere; font-size: 12px; }
+.polymarket-pilot-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: start; }
+.polymarket-pilot-card { min-width: 0; padding: 22px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface1); }
+.polymarket-pilot form { display: grid; gap: 14px; }
+.polymarket-pilot form p { font-size: 13px; }
+.polymarket-pilot label { display: grid; gap: 7px; font-size: 14px; }
+.polymarket-pilot input, .polymarket-pilot select { width: 100%; min-width: 0; padding: 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface2); color: inherit; font: inherit; }
+.polymarket-pilot select { text-overflow: ellipsis; }
+.polymarket-pilot button { justify-self: start; }
+.polymarket-pilot button:disabled { cursor: not-allowed; opacity: .6; }
+.polymarket-pilot input:focus-visible, .polymarket-pilot select:focus-visible, .polymarket-pilot summary:focus-visible { outline: 2px solid var(--orange); outline-offset: 3px; }
+.polymarket-pilot [role='alert'] { color: var(--no); }
+.polymarket-pilot .polymarket-pilot-market-title { color: var(--text-primary); font-weight: 600; }
+.polymarket-pilot-facts { display: grid; gap: 10px; margin: 16px 0; }
+.polymarket-pilot-facts > div { display: flex; justify-content: space-between; align-items: baseline; gap: 20px; }
+.polymarket-pilot-facts dt { color: var(--text-secondary); font-size: 13px; }
+.polymarket-pilot-facts dd { margin: 0; text-align: end; overflow-wrap: anywhere; }
+.polymarket-pilot-facts .polymarket-pilot-total { padding-top: 12px; border-top: 1px solid var(--border); font-weight: 600; }
+.polymarket-pilot-facts .polymarket-pilot-total dt { color: inherit; }
+.polymarket-pilot summary { margin: 14px 0; cursor: pointer; font-size: 14px; }
+.polymarket-pilot-rules { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; }
+.polymarket-pilot-result { margin-top: 18px; }
+.polymarket-pilot-result-header { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; }
+.polymarket-pilot-tag { align-self: start; padding: 5px 9px; border: 1px solid var(--border); border-radius: 999px; font-size: 12px; }
+.polymarket-pilot-tag.expired { color: var(--no); }
+.polymarket-pilot-warnings { padding-inline-start: 20px; }
+
+@media (max-width: 740px) {
+  .polymarket-pilot-grid { grid-template-columns: minmax(0, 1fr); }
+  .polymarket-pilot-account { flex-direction: column; }
+  .polymarket-pilot-card { padding: 18px; }
+  .polymarket-pilot-facts > div { flex-wrap: wrap; gap: 4px 16px; }
+  .polymarket-pilot-facts dd { text-align: start; }
+}

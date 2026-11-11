@@ -60,6 +60,7 @@
     { "source": "/mvp/market",    "destination": "/mvp/" },
     { "source": "/mvp/portfolio", "destination": "/mvp/" },
     { "source": "/mvp/hip4",      "destination": "/mvp/" },
+    { "source": "/mvp/polymarket", "destination": "/mvp/" },
     { "source": "/mvp/admin",     "destination": "/mvp/" },
     { "source": "/mvp/teams",     "destination": "/mvp/" },
     { "source": "/mvp/teams/:sport/:teamSlug", "destination": "/mvp/" },

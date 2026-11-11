@@ -1,0 +1,105 @@
+{
+  "observedAt": "2026-11-11T01:51:25.631Z",
+  "mode": "read_only_public_data",
+  "simulationFeeTargetBps": 50,
+  "tradesSubmitted": 0,
+  "creditsVerified": false,
+  "checks": [
+    {
+      "side": "buy",
+      "httpStatus": 200,
+      "marketId": "6428654",
+      "marketTitle": "Heat vs. Jazz",
+      "quote": {
+        "marketId": "6428654",
+        "outcomeIndex": 0,
+        "side": "buy",
+        "amount": "10",
+        "grossNotional": "9.837671",
+        "venueFee": "0.11314",
+        "pronosFee": "0.049189",
+        "totalSpend": "10",
+        "netProceeds": null,
+        "filledShares": "12.776196",
+        "remainingAmount": "0",
+        "coveragePct": 100,
+        "status": "filled",
+        "capturedAt": "2026-11-11T01:51:26.149Z",
+        "bookTimestamp": "2026-11-11T01:51:23.716Z",
+        "expiresAt": "2026-11-11T01:51:38.716Z",
+        "depthLimited": false,
+        "minimumMet": true,
+        "budgetLimited": true,
+        "minOrderSize": "5",
+        "tickSize": "0.01",
+        "levelsTouched": 1,
+        "fee": {
+          "rate": "0.05",
+          "exponent": 1,
+          "takerOnly": true
+        },
+        "builderCode": "0x64fd36a8de3203124ffd34c4457e139fcf0aedac33fa1b4904dae451900dd30c",
+        "builderFeeBps": 50,
+        "builderFeeStatus": "target_unverified",
+        "restricted": true,
+        "accessEligibility": "unverified",
+        "roundingPolicy": "conservative_per_displayed_level",
+        "executable": false,
+        "warnings": [
+          "Indicative read-only simulation; displayed liquidity and actual per-fill fees can change before execution.",
+          "Pronos target fee simulation: 50 bps taker; this is not a verified effective fee or credited revenue. No fee collection or builder credit has been verified.",
+          "Venue fee rounded upward per displayed price level to five cash decimals; maker segmentation and execution size rules require reconciliation before trading.",
+          "access_eligibility_unverified: this market is marked restricted; public data does not establish trading eligibility."
+        ]
+      }
+    },
+    {
+      "side": "sell",
+      "httpStatus": 200,
+      "marketId": "6428654",
+      "marketTitle": "Heat vs. Jazz",
+      "quote": {
+        "marketId": "6428654",
+        "outcomeIndex": 0,
+        "side": "sell",
+        "amount": "10",
+        "grossNotional": "7.6",
+        "venueFee": "0.0912",
+        "pronosFee": "0.038",
+        "totalSpend": null,
+        "netProceeds": "7.4708",
+        "filledShares": "10",
+        "remainingAmount": "0",
+        "coveragePct": 100,
+        "status": "filled",
+        "capturedAt": "2026-11-11T01:51:26.468Z",
+        "bookTimestamp": "2026-11-11T01:51:23.716Z",
+        "expiresAt": "2026-11-11T01:51:38.716Z",
+        "depthLimited": false,
+        "minimumMet": true,
+        "budgetLimited": false,
+        "minOrderSize": "5",
+        "tickSize": "0.01",
+        "levelsTouched": 1,
+        "fee": {
+          "rate": "0.05",
+          "exponent": 1,
+          "takerOnly": true
+        },
+        "builderCode": "0x64fd36a8de3203124ffd34c4457e139fcf0aedac33fa1b4904dae451900dd30c",
+        "builderFeeBps": 50,
+        "builderFeeStatus": "target_unverified",
+        "restricted": true,
+        "accessEligibility": "unverified",
+        "roundingPolicy": "conservative_per_displayed_level",
+        "executable": false,
+        "warnings": [
+          "Indicative read-only simulation; displayed liquidity and actual per-fill fees can change before execution.",
+          "Pronos target fee simulation: 50 bps taker; this is not a verified effective fee or credited revenue. No fee collection or builder credit has been verified.",
+          "Venue fee rounded upward per displayed price level to five cash decimals; maker segmentation and execution size rules require reconciliation before trading.",
+          "access_eligibility_unverified: this market is marked restricted; public data does not establish trading eligibility."
+        ]
+      }
+    }
+  ]
+}

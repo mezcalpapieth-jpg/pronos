@@ -3,6 +3,12 @@
   "currency": "MXN",
   "period": "month",
   "status": "illustrative sensitivities; not observed operating results or a forecast",
+  "operating_policy": {
+    "pronos_subsidizes_venue_fees": false,
+    "pronos_subsidizes_funding": false,
+    "pronos_rebate_revenue_assumed": "0",
+    "stress_scenarios_are_not_the_operating_plan": true
+  },
   "volume_definition": "Aggregate monthly Pronos-attributed executed cash notional across the portfolio. Count each customer buy or sell once, without adding counterparty volume. Deposits and claims are excluded.",
   "assumption_notes": [
     "Collection fractions, venue mix, operating costs, funding costs and native volume retention are explicit scenarios, not measured Pronos results.",
@@ -10,12 +16,13 @@
     "Native CLOB fee is proposed; the current BinaryCLOB contract implements no platform trading fee. Independent makers supply inventory in this CLOB scenario.",
     "Native V2 pool assumes Pronos owns the modeled seed and retains all modeled fee streams once. Seed is committed principal; only financing and inventory losses are expenses.",
     "Seed size is an uncalibrated sensitivity and does not establish executable depth. An FX shock is a separate event, not an expected monthly loss.",
-    "Native comparison applies build-cost recovery to the incremental cost difference; the base contribution table excludes unpriced development."
+    "Native comparison applies build-cost recovery to the incremental cost difference; the base contribution table excludes unpriced development.",
+    "Polymarket's 50 bps taker and zero maker input is a scheduled scenario, not current credited revenue: the observed profile currently has zero effective fees and a 50 bps taker change scheduled for 2026-11-14. Actual builder receipts are unverified."
   ],
   "volumes": ["100000", "1000000", "10000000", "25000000"],
   "venues": [
     {"name": "HIP-4", "volume_share": "0.5", "builder_fee_bps": "25", "collection_fraction": "0.90", "taker_fraction": "1", "venue_fee_bps_scenario": "10"},
-    {"name": "Polymarket sports", "volume_share": "0.5", "builder_fee_bps": "25", "collection_fraction": "0.98", "taker_fraction": "1", "sports_fee_parameter": "0.05", "reference_price": "0.50"}
+    {"name": "Polymarket sports", "volume_share": "0.5", "builder_fee_bps": "50", "collection_fraction": "0.98", "taker_fraction": "1", "sports_fee_parameter": "0.05", "reference_price": "0.50"}
   ],
   "distribution": {
     "variable_bps": "5",
