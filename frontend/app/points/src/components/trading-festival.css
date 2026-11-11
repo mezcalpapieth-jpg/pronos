@@ -43,7 +43,7 @@
   text-decoration: none;
 }
 .tf-brand span, .tf-header h1 span { color: var(--tf-accent); }
-.tf-date, .tf-caption, .tf-axis, .tf-chart-status {
+.tf-date, .tf-caption, .tf-axis, .tf-plot-scale, .tf-chart-status {
   color: var(--tf-muted);
   font: 400 clamp(11px, 1.6vw, 17px)/1.3 var(--tf-mono);
   font-variant-numeric: tabular-nums;
@@ -113,26 +113,23 @@
 .tf-reference strong { font: 500 clamp(13px, 2.45vw, 28px) var(--tf-mono); }
 .tf-reference-pending { color: var(--tf-muted); font-size: clamp(11px, 1.6vw, 18px); }
 
-.tf-live-plot, .tf-chart-empty {
-  --live-chart-height: clamp(145px, 24vw, 290px);
-  height: var(--live-chart-height);
+.tf-plot-frame, .tf-chart-empty {
+  height: clamp(145px, 24vw, 290px);
   margin: clamp(14px, 2.6vw, 26px) 0 8px;
 }
-.tf-live-plot {
-  --live-chart-neutral: var(--tf-accent);
-  --live-chart-neutral-fill: rgb(255 85 0 / 16%);
-  --live-chart-up-fill: rgb(22 163 74 / 16%);
-  --live-chart-down-fill: rgb(220 38 38 / 16%);
-  --live-chart-threshold: var(--tf-reference);
-  --live-chart-axis-size: 12px;
-  --surface0: var(--tf-bg);
-  --yes: var(--tf-up);
-  --red: var(--tf-down);
-  --border: #6e6e6e;
-  --text-primary: var(--tf-text);
-  --text-secondary: var(--tf-muted);
-  --text-muted: var(--tf-muted);
+.tf-plot-frame { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.tf-plot, .tf-chart-empty {
+  background: repeating-linear-gradient(90deg, transparent, transparent calc(16.666% - 1px), var(--tf-grid) calc(16.666% - 1px), var(--tf-grid) 16.666%);
 }
+.tf-plot svg { display: block; width: 100%; height: 100%; }
+.tf-plot-scale {
+  position: relative;
+  min-width: 6.6ch;
+  padding-left: 6px;
+  text-align: right;
+}
+.tf-plot-scale span { position: absolute; right: 0; transform: translateY(-50%); }
+.tf-plot-scale span:first-child { position: relative; display: block; }
 .tf-chart-empty {
   display: grid;
   place-items: center;
@@ -262,7 +259,7 @@
     gap: clamp(16px, 1.5vh, 34px);
     padding-block: clamp(20px, 1.8vh, 42px);
   }
-  .tf-dashboard .tf-live-plot, .tf-dashboard .tf-chart-empty { --live-chart-height: clamp(150px, 15vh, 390px); }
+  .tf-dashboard .tf-plot-frame, .tf-dashboard .tf-chart-empty { height: clamp(150px, 15vh, 390px); }
   .tf-dashboard .tf-qr-panel img { width: clamp(150px, 23vw, 264px); }
 }
 @media (max-width: 380px) {
