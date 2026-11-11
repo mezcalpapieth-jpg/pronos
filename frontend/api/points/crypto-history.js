@@ -25,6 +25,7 @@
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from '../_lib/cors.js';
 import { readCoinbaseBoundaryPrice } from '../_lib/crypto-price-source.js';
+import { readCryptoTicks } from '../_lib/crypto-ticks.js';
 
 const sql = neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL);
 
@@ -211,14 +212,7 @@ export default async function handler(req, res) {
       }
     }
 
-    const points = await sql`
-      SELECT captured_at, price
-      FROM crypto_ticks
-      WHERE asset = ${asset}
-        AND captured_at >= ${openedAt}::timestamptz
-        AND captured_at <= ${closesAt}::timestamptz
-      ORDER BY captured_at ASC
-    `;
+    const points = await readCryptoTicks(sql, { asset, from: openedAt, to: closesAt });
 
     return res.status(200).json({
       marketId,
@@ -226,10 +220,7 @@ export default async function handler(req, res) {
       openedAt,
       closesAt,
       source: finalAnchor ? 'ticks_corrected' : 'ticks',
-      points: snapFinalPoint(points.map(p => ({
-        t: new Date(p.captured_at).getTime(),
-        price: Number(p.price),
-      })), finalAnchor, { cfg, closesAt }),
+      points: snapFinalPoint(points, finalAnchor, { cfg, closesAt }),
     });
   } catch (e) {
     console.error('[points/crypto-history] error', { message: e?.message, code: e?.code });

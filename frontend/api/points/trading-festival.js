@@ -1,6 +1,7 @@
 import { neon } from '@neondatabase/serverless';
 import { FESTIVAL_MINUTE } from '../../shared/trading-festival.js';
 import { applyCors } from '../_lib/cors.js';
+import { readCryptoTicks } from '../_lib/crypto-ticks.js';
 import { clientIp, rateLimit } from '../_lib/rate-limit.js';
 import { festivalChartRange, festivalFeedEnabled, festivalSchedule, readFestivalBars } from '../_lib/trading-festival-feed.js';
 import { festivalMarketMeta, readFestivalMarkets } from '../_lib/trading-festival.js';
@@ -27,9 +28,15 @@ export default async function handler(req, res) {
     try {
       const now = Date.now();
       const { from, to } = festivalChartRange(slot, now);
-      const bars = await readFestivalBars(slot, { from, to });
+      const ticksRequest = slot.key === 'btc'
+        ? readCryptoTicks(neon(process.env.DATABASE_READ_URL || process.env.DATABASE_URL), {
+            asset: 'btc', from: new Date(from).toISOString(), to: new Date(to).toISOString(),
+          })
+        : Promise.resolve([]);
+      const [bars, ticks] = await Promise.allSettled([readFestivalBars(slot, { from, to }), ticksRequest]);
+      if (bars.status === 'rejected' && (ticks.status === 'rejected' || ticks.value.length === 0)) throw bars.reason;
       setCache(res, now >= Date.parse(slot.endTime) + 15 * FESTIVAL_MINUTE ? 300 : 12);
-      return res.status(200).json({ status: 'ok', bars });
+      return res.status(200).json({ status: 'ok', bars: bars.value ?? [], ticks: ticks.value ?? [] });
     } catch (error) {
       console.warn('[trading-festival] chart feed failed', { key: slot.key, message: error.message });
       res.setHeader('Cache-Control', 'no-store');

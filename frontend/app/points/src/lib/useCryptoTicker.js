@@ -217,3 +217,8 @@ export function preloadCryptoTicker(productId) {
   if (typeof window === 'undefined' || !productId) return;
   getStore(productId);
 }
+
+export function readCryptoTickerSnapshot(productId) {
+  const store = stores.get(productId);
+  return { history: store?.history ?? [], status: store?.status ?? 'connecting' };
+}

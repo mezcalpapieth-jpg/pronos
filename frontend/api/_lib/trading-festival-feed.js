@@ -1,9 +1,8 @@
-import { FESTIVAL_MINUTE, FESTIVAL_SCHEDULE } from '../../shared/trading-festival.js';
+import { FESTIVAL_CHART_LEAD_MS, FESTIVAL_MINUTE, FESTIVAL_SCHEDULE } from '../../shared/trading-festival.js';
 
 const NDX_SESSION_START = Date.parse('2026-11-13T14:30:00Z');
 const NDX_SESSION_END = Date.parse('2026-11-13T21:00:00Z');
 const SLOT_DURATION = 30 * FESTIVAL_MINUTE;
-const LEAD_TIME = 12 * FESTIVAL_MINUTE;
 
 export function festivalSchedule(env = process.env) {
   const override = env.TRADING_FESTIVAL_NDX_START || '';
@@ -37,12 +36,12 @@ function massiveApiKey(env) {
 export function festivalChartRange(slot, now) {
   if (slot.requiresReschedule) {
     // Display the actual regular session separately from the proposed slot.
-    if (now < NDX_SESSION_START) return { from: now - LEAD_TIME, to: now };
+    if (now < NDX_SESSION_START) return { from: now - FESTIVAL_CHART_LEAD_MS, to: now };
     const to = Math.min(now, NDX_SESSION_END);
-    return { from: Math.max(NDX_SESSION_START, to - LEAD_TIME), to };
+    return { from: Math.max(NDX_SESSION_START, to - FESTIVAL_CHART_LEAD_MS), to };
   }
   const start = Date.parse(slot.startTime);
-  return { from: Math.min(start, now) - LEAD_TIME, to: Math.min(now, Date.parse(slot.endTime)) };
+  return { from: Math.min(start, now) - FESTIVAL_CHART_LEAD_MS, to: Math.min(now, Date.parse(slot.endTime)) };
 }
 
 export async function readFestivalBars(slot, { from, to, fetchImpl = fetch, env = process.env }) {
