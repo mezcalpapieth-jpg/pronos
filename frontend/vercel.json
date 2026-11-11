@@ -1,4 +1,9 @@
 {
+  "git": {
+    "deploymentEnabled": {
+      "codex/tradingfestival": false
+    }
+  },
   "installCommand": "npm ci",
   "buildCommand": "cd app && npm ci && npm run build",
   "outputDirectory": ".",

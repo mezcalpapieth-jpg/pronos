@@ -3841,7 +3841,6 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
                 ...festivalSlot,
                 startTime: market.startTime,
                 endTime: market.endTime,
-                requiresReschedule: false,
               }} />
             )}
 

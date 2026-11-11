@@ -1,11 +1,11 @@
-import { FESTIVAL_MINUTE, FESTIVAL_SHAPE, FESTIVAL_SOURCE } from '../../shared/trading-festival.js';
+import { FESTIVAL_MINUTE, FESTIVAL_SCHEDULE, FESTIVAL_SHAPE, FESTIVAL_SOURCE } from '../../shared/trading-festival.js';
 import { initialReserves } from './amm-math.js';
 import { withTransaction } from './db-tx.js';
 import { defaultPointsSeedLiquidity } from './market-liquidity.js';
 import { cancelPointsMarket } from './points-cancel-market.js';
 import { parseJsonb, releaseOpenLimitOrdersForMarkets } from './points-limit-orders.js';
 import { bestEffortPersistTopHolderSnapshot } from './points-top-holders.js';
-import { festivalFeedEnabled, festivalSchedule, readFestivalBoundary } from './trading-festival-feed.js';
+import { festivalFeedEnabled, readFestivalBoundary } from './trading-festival-feed.js';
 
 const SETTLEMENT_RETRY_MS = 15 * FESTIVAL_MINUTE;
 const RESOLVER = 'trading_festival';
@@ -153,22 +153,22 @@ export async function runTradingFestivalTick({
 }) {
   if (env.VERCEL_ENV !== 'production' || env.TRADING_FESTIVAL_ENABLED !== '1') return null;
   const now = clock();
-  const slots = festivalSchedule(env);
   const existing = await readFestivalMarkets(sql);
   const byKey = new Map(existing.map(row => [row.source_event_id, row]));
-  return Promise.all(slots.map(async slot => {
+  return Promise.all(FESTIVAL_SCHEDULE.map(async slot => {
+    if (slot.replay) return { key: slot.key, status: 'presentation' };
     try {
       let row = byKey.get(slot.key);
-      if (!slot.requiresReschedule && festivalFeedEnabled(slot, env) && now < Date.parse(slot.endTime)
-        && (!row || (row.status === 'pending' && Date.parse(row.start_time) !== Date.parse(slot.startTime)))) {
+      const pendingScheduleChanged = row?.status === 'pending' && (
+        Date.parse(row.start_time) !== Date.parse(slot.startTime)
+        || Date.parse(row.end_time) !== Date.parse(slot.endTime)
+      );
+      if (festivalFeedEnabled(slot, env) && now < Date.parse(slot.endTime) && (!row || pendingScheduleChanged)) {
         await seedFestivalMarket(sql, slot);
         row = (await readFestivalMarkets(sql)).find(market => market.source_event_id === slot.key);
       }
       if (!row || (row.status !== 'pending' && row.status !== 'active')) {
         return { key: slot.key, status: row?.status ?? 'unavailable' };
-      }
-      if (row.status === 'pending' && slot.requiresReschedule) {
-        return { key: slot.key, status: 'requires_reschedule' };
       }
       const status = await processFestivalMarket(sql, { row, slot, now, clock, env, readBoundary, transaction });
       return { key: slot.key, status };
