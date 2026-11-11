@@ -13,6 +13,7 @@ import { PointsAuthProvider } from '@app/lib/pointsAuth.js';
 import { preloadCryptoTicker } from './lib/useCryptoTicker.js';
 import App from './App.jsx';
 import { PointsExecutionProvider } from './lib/PointsExecution.jsx';
+import { isFestivalDashboard } from '../../../shared/trading-festival.js';
 import '@app/styles/mvp.css';
 import './points.css';
 import './stocks.css';
@@ -50,9 +51,11 @@ async function bootstrap() {
   }
   const isRis26Route = /^\/(?:points\/)?ris26(?:\/|$)/.test(window.location.pathname);
 
+  const standalone = isRis26Route || isFestivalDashboard(window.location);
+
   // Must run before anything renders or pre-warms: once installed, every
   // /api/points/* call in the app resolves from fabricated in-browser data.
-  if (!isRis26Route && videoDemoRequested()) {
+  if (!standalone && videoDemoRequested()) {
     const { installDemoBackend } = await import('./demo/installDemoBackend.js');
     // The presentation demo snapshots the real market board first, while
     // fetch is still the real one, so it runs on Pronos's actual questions
@@ -75,7 +78,7 @@ async function bootstrap() {
   // live chart movement the moment the user opens one — without this,
   // the chart only starts populating on detail-page mount and re-empties
   // every navigation. The store persists across mounts.
-  if (!isRis26Route) {
+  if (!standalone) {
     preloadCryptoTicker('BTC-USD');
     preloadCryptoTicker('ETH-USD');
   }
@@ -89,7 +92,7 @@ async function bootstrap() {
           </div>
         }
       >
-        {isRis26Route ? (
+        {standalone ? (
           <App />
         ) : (
           <PointsAuthProvider>

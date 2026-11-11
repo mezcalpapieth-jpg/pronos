@@ -29,6 +29,7 @@ import { usePointsExecution } from '../lib/PointsExecution.jsx';
 export const CATEGORY_TABS = [
   { slug: 'noticias',    tKey: 'points.cat.noticias',   news: true },
   { slug: 'all',         tKey: 'points.cat.trending'    },
+  { slug: 'tradingfestival', label: 'Trading Festival' },
   ...(stocksEnabled ? [{ slug: 'stocks', stocks: true }] : []),
   { slug: 'nuevos-mercados', tKey: 'points.cat.worldCup', highlight: true },
   { slug: 'mexico',      tKey: 'points.cat.mexico',      regional: true },
@@ -194,9 +195,10 @@ export default function PointsCategoryBar() {
               <button
                 key={cat.slug}
                 className={`filter-btn${isActive ? ' active' : ''}`}
+                aria-current={isActive ? 'page' : undefined}
                 onClick={() => handleClick(cat.slug)}
               >
-                {t(cat.tKey)}
+                {cat.label || t(cat.tKey)}
               </button>
             );
           })}

@@ -2,6 +2,7 @@ import { neon } from '@neondatabase/serverless';
 import { getIndexerConfig, runProtocolIndexer } from './_lib/protocol-event-indexer.js';
 import { ensurePointsSchema } from './_lib/points-schema.js';
 import { runCrypto5MinTick } from './_lib/crypto-5min.js';
+import { runTradingFestivalTick } from './_lib/trading-festival.js';
 import { shouldRunMinuteInterval } from './_lib/cron-multiplex.js';
 import { runAutoResolve } from './cron/points-auto-resolve.js';
 import { runTokenMcapSnapshots } from './cron/points-token-mcap-snapshots.js';
@@ -80,6 +81,14 @@ export default async function handler(req, res) {
       code: e?.code,
     });
     crypto5MinReport = { error: e?.message || 'crypto_5min_failed' };
+  }
+
+  let tradingFestivalReport = null;
+  try {
+    tradingFestivalReport = await runTradingFestivalTick({ sql });
+  } catch (error) {
+    console.error('[indexer] Trading Festival tick failed', { message: error.message });
+    tradingFestivalReport = { error: 'trading_festival_tick_failed' };
   }
 
   // ── Token market-cap oracle snapshot fallback ─────────────────────
@@ -186,6 +195,7 @@ export default async function handler(req, res) {
       status: 'skipped',
       reason: 'MarketFactory address or Arbitrum RPC URL not configured',
       crypto5Min: crypto5MinReport,
+      tradingFestival: tradingFestivalReport,
       tokenMcapSnapshots: tokenMcapSnapshotsReport,
       pointsAutoResolve: pointsAutoResolveReport,
       protocolAutoResolve: protocolAutoResolveReport,
@@ -197,6 +207,7 @@ export default async function handler(req, res) {
     return res.status(200).json({
       ...indexed,
       crypto5Min: crypto5MinReport,
+      tradingFestival: tradingFestivalReport,
       tokenMcapSnapshots: tokenMcapSnapshotsReport,
       pointsAutoResolve: pointsAutoResolveReport,
       protocolAutoResolve: protocolAutoResolveReport,

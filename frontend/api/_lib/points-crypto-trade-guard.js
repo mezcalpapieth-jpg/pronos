@@ -1,3 +1,5 @@
+import { FESTIVAL_SHAPE } from '../../shared/trading-festival.js';
+
 function parseJsonb(value, fallback = null) {
   if (Array.isArray(value)) return value;
   if (value && typeof value === 'object') return value;
@@ -31,7 +33,7 @@ function closeTimeMs(market = {}, cfg = null) {
 
 export function cryptoTradeLock(market = {}, now = new Date()) {
   const cfg = cryptoMarketConfig(market);
-  if (!cfg || !isCrypto5MinMarket(market)) return null;
+  if (!cfg || (cfg.shape !== FESTIVAL_SHAPE && !isCrypto5MinMarket(market))) return null;
 
   const closeMs = closeTimeMs(market, cfg);
   const nowMs = now instanceof Date ? now.getTime() : new Date(now).getTime();
