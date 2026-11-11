@@ -4,6 +4,8 @@ import { useCryptoTicker } from '../lib/useCryptoTicker.js';
 import { festivalPrice, festivalTime, useFestivalBars, useFestivalClock } from '../lib/tradingFestival.js';
 import './trading-festival.css';
 
+const GRID_LEVELS = [0.18, 0.5, 0.82];
+
 function PricePlot({ slot, points, threshold }) {
   const fillId = useId();
   const first = points[0];
@@ -28,28 +30,36 @@ function PricePlot({ slot, points, threshold }) {
 
   return (
     <>
-      <div className="tf-plot">
-        <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" role="img"
-          aria-label={`Gráfica de ${slot.symbol}, de ${festivalTime(first.t)} a ${festivalTime(last.t)} CDMX`}>
-          <defs>
-            <linearGradient id={fillId} x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0" stopColor={lineColor} stopOpacity="0.28" />
-              <stop offset="1" stopColor={lineColor} stopOpacity="0.02" />
-            </linearGradient>
-          </defs>
-          {[0.2, 0.4, 0.6, 0.8].map(position => (
-            <line key={position} x1="0" x2={width} y1={height * position} y2={height * position}
-              stroke="var(--tf-grid)" vectorEffect="non-scaling-stroke" />
-          ))}
-          <polygon points={`${x(first.t)},${height} ${line} ${x(last.t)},${height}`} fill={`url(#${fillId})`} />
-          {threshold != null && (
-            <line x1="0" x2={width} y1={y(threshold)} y2={y(threshold)}
-              stroke="var(--tf-reference)" strokeDasharray="6 5" vectorEffect="non-scaling-stroke" />
-          )}
-          <polyline points={line} fill="none" stroke={lineColor} strokeWidth="2.4"
-            strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
-          <circle cx={x(last.t)} cy={y(last.price)} r="4" fill={lineColor} />
-        </svg>
+      <div className="tf-plot-frame">
+        <div className="tf-plot">
+          <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" role="img"
+            aria-label={`Gráfica de ${slot.symbol}, de ${festivalTime(first.t)} a ${festivalTime(last.t)} CDMX`}>
+            <defs>
+              <linearGradient id={fillId} x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0" stopColor={lineColor} stopOpacity="0.24" />
+                <stop offset="1" stopColor={lineColor} stopOpacity="0.03" />
+              </linearGradient>
+            </defs>
+            {GRID_LEVELS.map(position => (
+              <line key={position} x1="0" x2={width} y1={height * position} y2={height * position}
+                stroke="var(--tf-grid)" vectorEffect="non-scaling-stroke" />
+            ))}
+            <polygon points={`${x(first.t)},${height} ${line} ${x(last.t)},${height}`} fill={`url(#${fillId})`} />
+            {threshold != null && (
+              <line x1="0" x2={width} y1={y(threshold)} y2={y(threshold)}
+                stroke="var(--tf-reference)" strokeDasharray="6 5" vectorEffect="non-scaling-stroke" />
+            )}
+            <polyline points={line} fill="none" stroke={lineColor} strokeWidth="2.75"
+              strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+            <circle cx={x(last.t)} cy={y(last.price)} r="4" fill={lineColor} />
+          </svg>
+        </div>
+        <div className="tf-plot-scale" aria-hidden="true">
+          {GRID_LEVELS.map(position => {
+            const price = chartMax - (height * position - margin) / (height - margin * 2) * (chartMax - chartMin);
+            return <span key={position} style={{ top: `${position * 100}%` }}>{festivalPrice(slot, price)}</span>;
+          })}
+        </div>
       </div>
       <div className="tf-axis">
         <time dateTime={new Date(first.t).toISOString()}>{festivalTime(first.t)}</time>
@@ -92,20 +102,20 @@ export default function TradingFestivalChart({ slot, market = slot.market }) {
   const fresh = last && last.t <= now + 2000 && now - last.t < 2 * FESTIVAL_MINUTE && now < end;
   const status = error ? 'Datos no disponibles'
     : finalPrice != null ? 'Precio de cierre'
-      : fresh ? (slot.key === 'btc' && ticker.status === 'open' ? 'En vivo' : 'Dato por minuto')
+      : fresh ? (slot.key === 'btc' && ticker.status === 'open' ? 'En vivo' : 'Datos por minuto')
         : last ? 'Último dato'
-          : data.status === 'unavailable' ? 'Feed por confirmar' : 'Esperando datos';
+          : data.status === 'unavailable' ? 'Datos por confirmar' : 'Esperando datos';
 
   return (
     <section className="tf-chart" aria-label={`Precio de ${slot.symbol}`}>
       <div className="tf-chart-meta">
         <div>
-          <div className="tf-caption">{slot.symbol} <span>·</span> {slot.provider}</div>
-          <div className="tf-price">{festivalPrice(slot, last?.price)} {last && <small>{slot.currency || 'pts'}</small>}</div>
+          <div className="tf-caption">{slot.symbol}</div>
+          <div className="tf-price">{festivalPrice(slot, last?.price)}{last && <small>{slot.currency || 'pts'}</small>}</div>
         </div>
         <div className="tf-reference">
-          <div className="tf-caption">Referencia</div>
-          <strong>{festivalPrice(slot, threshold)}</strong>
+          <div className="tf-caption">Precio de apertura</div>
+          {threshold == null ? <span className="tf-reference-pending">Se fija al abrir</span> : <strong>{festivalPrice(slot, threshold)}</strong>}
         </div>
       </div>
       {last ? <PricePlot slot={slot} points={points} threshold={threshold} /> : (
@@ -113,7 +123,7 @@ export default function TradingFestivalChart({ slot, market = slot.market }) {
       )}
       <div className="tf-chart-status">
         {last && <span className={fresh && !error ? 'tf-signal is-live' : 'tf-signal'}>{status}</span>}
-        {slot.requiresReschedule && <span>Sesión regular de Nasdaq</span>}
+        <span className="tf-chart-source">{slot.provider}{slot.requiresReschedule && ' · Sesión regular'}</span>
       </div>
     </section>
   );

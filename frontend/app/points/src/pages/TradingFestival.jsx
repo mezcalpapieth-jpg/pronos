@@ -10,6 +10,7 @@ function marketUrl(slot) {
 }
 
 function SlotInfo({ slot, now }) {
+  const status = festivalStatus(slot, now);
   return (
     <>
       <span className="tf-slot-time">
@@ -17,30 +18,28 @@ function SlotInfo({ slot, now }) {
         <strong>{festivalTime(slot.startTime)}–{festivalTime(slot.endTime)}</strong>
       </span>
       <span className="tf-slot-name"><strong>{slot.name}</strong><small>{slot.symbol}</small></span>
-      <span className={festivalStatus(slot, now) === 'En juego' ? 'tf-pill is-live' : 'tf-pill'}>
-        {festivalStatus(slot, now)}
-      </span>
+      <span className={status === 'Abierto' ? 'tf-pill is-live' : 'tf-pill'}>{status}</span>
     </>
   );
 }
 
 function SlotTitle({ slot, now }) {
-  const isOpen = slot.market?.status === 'active' && now < Date.parse(slot.endTime);
+  const status = festivalStatus(slot, now);
   return (
     <div className="tf-market-heading">
       <div>
-        <div className="tf-caption">{festivalDate(slot.startTime)} · {festivalTime(slot.startTime)}–{festivalTime(slot.endTime)} CDMX</div>
         <h2>{slot.name}</h2>
+        <div className="tf-caption">{festivalDate(slot.startTime)} · {festivalTime(slot.startTime)}–{festivalTime(slot.endTime)} CDMX</div>
       </div>
-      <span className={isOpen ? 'tf-pill is-live' : 'tf-pill'}>{festivalStatus(slot, now)}</span>
+      <span className={status === 'Abierto' ? 'tf-pill is-live' : 'tf-pill'}>{status}</span>
     </div>
   );
 }
 
 function FestivalSchedule({ slots, now, selected, onSelect }) {
   return (
-    <div className="tf-agenda">
-      <div className="tf-agenda-heading"><h2>Horarios</h2><span>Ciudad de México</span></div>
+    <section className="tf-agenda" aria-labelledby="tf-schedule">
+      <div className="tf-agenda-heading"><h2 id="tf-schedule">Horario de mercados</h2><span>Hora CDMX</span></div>
       {slots.map(slot => (
         <button type="button" className="tf-slot" key={slot.key} aria-pressed={selected === slot.key}
           onClick={() => onSelect(selected === slot.key ? null : slot.key)}>
@@ -48,7 +47,7 @@ function FestivalSchedule({ slots, now, selected, onSelect }) {
         </button>
       ))}
       <p className="tf-agenda-note">Dos mercados más por anunciar.</p>
-    </div>
+    </section>
   );
 }
 
@@ -73,23 +72,23 @@ export default function TradingFestival({ dashboard = false, onOpenLogin }) {
       <div className="tf-shell">
         <header className="tf-header">
           <div className="tf-header-top">
-            <span className="tf-brand">pronos<span>.</span></span>
+            <a className="tf-brand" href="/" aria-label="Inicio de Pronos">PRONOS<span>.</span></a>
             <span className="tf-date">12–13 NOV 2026</span>
           </div>
-          <h1>Trading<br className="tf-dashboard-break" /> Festival<span>.</span></h1>
-          <p>Predice si el precio sube o baja.</p>
+          <h1>Trading <span>Festival</span></h1>
+          <p>Predice si el precio sube o baja al cierre.</p>
         </header>
         {error && <p className="tf-notice" role="status">El estado de los mercados se actualizará al reconectar.</p>}
         <article className="tf-feature">
           <SlotTitle slot={slot} now={now} />
           <TradingFestivalChart key={slot.key} slot={slot} />
           <div className="tf-directions">
-            <span>↗ Sube <small>Por encima de la referencia</small></span>
-            <span>↘ Baja <small>Por debajo de la referencia</small></span>
+            <span><b><span aria-hidden="true">↗</span> Sube</b><small>Cierra por encima de la apertura</small></span>
+            <span><b><span aria-hidden="true">↘</span> Baja</b><small>Cierra por debajo de la apertura</small></span>
           </div>
           {!dashboard && tradeUrl && (
             <Link className="tf-cta" to={tradeUrl}>
-              {festivalStatus(slot, now) === 'En juego' ? 'Operar con puntos' : 'Ver mercado'} →
+              {festivalStatus(slot, now) === 'Abierto' ? 'Operar con puntos' : 'Ver mercado'} →
             </Link>
           )}
         </article>
@@ -97,9 +96,9 @@ export default function TradingFestival({ dashboard = false, onOpenLogin }) {
         {dashboard ? (
           <a className="tf-qr-panel" href={FESTIVAL_SIGNUP_URL}>
             <div>
-              <div className="tf-caption">Participa con puntos</div>
-              <h2>Escanea y<br />crea tu cuenta.</h2>
-              <span>pronos.io</span>
+              <h2>Crea tu cuenta</h2>
+              <p>Escanea el código y participa con puntos.</p>
+              <span className="tf-qr-url">pronos.io/tradingfestival</span>
             </div>
             <img src="/points/trading-festival-signup.png" alt="Código QR para crear una cuenta en Pronos" width="492" height="492" />
           </a>
