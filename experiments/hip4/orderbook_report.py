@@ -1,4 +1,4 @@
-"""Summarize scheduled HIP-4 book observations, including missed samples."""
+"""Summarize scheduled public book observations, including missed samples."""
 
 from collections import Counter, defaultdict
 from decimal import Decimal
@@ -23,6 +23,68 @@ def iter_slots(start_ms, cutoff_ms, kickoff_ms, interval_ms, near_interval_ms):
 
 def _pct(numerator, denominator):
     return round(numerator * 100 / denominator, 2) if denominator else None
+
+
+def pair_listings(markets):
+    pairs = defaultdict(list)
+    for market in markets:
+        if "comparison_group" in market:
+            group = market["comparison_group"]
+            if not isinstance(group, str) or not group.strip():
+                raise ValueError("Expected a nonempty comparison group")
+            pairs[group].append(market)
+    for group, listings in pairs.items():
+        if (len(listings) != 2 or {market["venue"] for market in listings} != {"hip4", "polymarket"}
+                or len({market["kickoff_ms"] for market in listings}) != 1):
+            raise ValueError(f"{group} needs one listing per venue with the same kickoff")
+    return dict(pairs)
+
+
+def _comparison_window(slots):
+    full = {ticket: {side: Counter() for side in SIDES} for ticket in TICKETS_MXN}
+    observed = 0
+    for samples in slots:
+        if not all(sample and sample.get("pairedTickets") for sample in samples):
+            continue
+        observed += 1
+        for left, right in zip(*(sample["pairedTickets"] for sample in samples)):
+            for side in SIDES:
+                venues = [sample["venue"] for sample, ticket in zip(samples, (left, right))
+                          if ticket[side]["status"] == "full"]
+                full[left["ticketMXN"]][side].update(venues)
+                if len(venues) == len(samples):
+                    full[left["ticketMXN"]][side]["both"] += 1
+    return {"scheduledSamples": len(slots), "pairedSamples": observed, "tickets": [
+        {"ticketMXN": ticket, **{
+            side: {venue: _pct(counts[side][venue], len(slots))
+                   for venue in ("hip4", "polymarket", "both")}
+            for side in SIDES
+        }} for ticket, counts in full.items()
+    ]}
+
+
+def build_comparisons(markets, by_coin, *, start_ms, end_ms, interval_ms, near_interval_ms, grace_ms):
+    comparisons = []
+    for group, pair in pair_listings(markets).items():
+        kickoff = pair[0]["kickoff_ms"]
+        records = [by_coin[market["coin"]] for market in pair]
+        overall, near = [], []
+        latest = None
+        for slot in iter_slots(start_ms, end_ms, kickoff, interval_ms, near_interval_ms):
+            samples = [record.get(slot) for record in records]
+            if not all(samples) and end_ms < slot + grace_ms:
+                continue
+            overall.append(samples)
+            if slot >= kickoff - HOUR_MS:
+                near.append(samples)
+            if all(sample and sample.get("pairedTickets") for sample in samples):
+                latest = {"slotMs": slot, "listings": {
+                    sample["venue"]: {"observedMs": sample["observed_ms"], "tickets": sample["pairedTickets"]}
+                    for sample in samples}}
+        comparisons.append({"group": group, "latestPair": latest, "overall": _comparison_window(overall),
+                            "lastHour": {**_comparison_window(near),
+                                         "windowCovered": start_ms <= kickoff - HOUR_MS and end_ms >= kickoff}})
+    return comparisons
 
 
 def _ticket_report(ticket, slippage_by_side, full_by_side, scheduled):
@@ -140,4 +202,7 @@ def build_report(markets, scored_samples, *, start_ms, end_ms, interval_ms=300_0
         "minimumCompleteSamples": min_samples,
         "targetQualifyingPct": TARGET_QUALIFYING_PCT,
         "markets": rows,
+        "comparisons": build_comparisons(markets, by_coin, start_ms=start_ms, end_ms=end_ms,
+                                         interval_ms=interval_ms, near_interval_ms=near_interval_ms,
+                                         grace_ms=grace_ms),
     }

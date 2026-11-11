@@ -1,0 +1,28 @@
+{
+  "version": 2,
+  "assumed_taker_fee_bps": "35",
+  "hip4_builder_fee_bps": "25",
+  "polymarket_builder_fee_bps": "50",
+  "markets": [
+    {
+      "venue": "hip4",
+      "comparison_group": "Warriors–Rockets",
+      "label": "Rockets win on HIP-4",
+      "coin": "#279860",
+      "kickoff": "2026-11-12T02:30:00Z",
+      "cancellation_deadline": "2026-11-19T02:30:00Z",
+      "source_url": "https://www.nba.com/games?date=2026-11-11"
+    },
+    {
+      "venue": "polymarket",
+      "comparison_group": "Warriors–Rockets",
+      "label": "Rockets win on Polymarket",
+      "coin": "polymarket:6428665:1",
+      "market_id": "6428665",
+      "outcome_index": 1,
+      "outcome_label": "Rockets",
+      "kickoff": "2026-11-12T02:30:00Z",
+      "source_url": "https://polymarket.com/event/nba-gsw-hou-2026-11-11"
+    }
+  ]
+}

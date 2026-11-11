@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Record pregame public HIP-4 books and score visible MXN execution."""
+"""Record pregame public HIP-4 and Polymarket books and score visible MXN execution."""
 import argparse
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
@@ -18,8 +18,9 @@ from zoneinfo import ZoneInfo
 
 import requests
 
-from orderbook_report import build_report, iter_slots
-from orderbook_scoring import score_orderbook
+from orderbook_report import build_report, iter_slots, pair_listings
+from orderbook_scoring import decimal, score_orderbook
+from polymarket_orderbook import fetch_polymarket_book
 
 HERE = Path(__file__).resolve().parent
 CONFIG = HERE / "sports_orderbooks_2026-11-10.json"
@@ -50,27 +51,51 @@ def display_time(ms, tz=MEXICO_CITY):
 
 def read_config(path):
     data = json.loads(path.read_text())
-    fee = Decimal(str(data["assumed_taker_fee_bps"]))
-    if not fee.is_finite() or not 0 <= fee < 10_000:
+    version = data.get("version", 1)
+    if version not in (1, 2):
+        raise ValueError("Unsupported recorder configuration version")
+    fee = decimal(data["assumed_taker_fee_bps"])
+    if not 0 <= fee < 10_000:
         raise ValueError("Expected an assumed taker fee between 0 and 10,000 bps")
     markets = data["markets"]
-    if not 3 <= len(markets) <= 5:
-        raise ValueError("Select 3–5 sports markets")
+    minimum = 2 if version == 2 else 3
+    if not minimum <= len(markets) <= 5:
+        raise ValueError(f"Select {minimum}–5 sports markets")
     outcomes = set()
     for market in markets:
         coin = market["coin"]
-        if not re.fullmatch(r"#[1-9][0-9]*[01]", coin):
-            raise ValueError(f"Invalid HIP-4 coin {coin}")
-        outcome = int(coin[1:]) // 10
-        if outcome in outcomes:
+        venue = market["venue"] if version == 2 else "hip4"
+        if venue == "hip4":
+            if not re.fullmatch(r"#[1-9][0-9]*[01]", coin):
+                raise ValueError(f"Invalid HIP-4 coin {coin}")
+            outcome = coin[:-1]
+        elif venue == "polymarket":
+            outcome = "polymarket:" + market["market_id"]
+            index = market["outcome_index"]
+            if (not re.fullmatch(r"polymarket:[1-9][0-9]*", outcome)
+                    or type(index) is not int or index not in (0, 1)
+                    or coin != f"{outcome}:{index}" or not market["outcome_label"].strip()):
+                raise ValueError(f"Invalid Polymarket outcome {coin}")
+        else:
+            raise ValueError(f"Unsupported venue {venue}")
+        if (venue, outcome) in outcomes:
             raise ValueError(f"Multiple sides of outcome {outcome} would double-count liquidity")
-        outcomes.add(outcome)
+        outcomes.add((venue, outcome))
         if not market["label"].strip() or not market["source_url"].startswith("https://"):
             raise ValueError("Market needs a label and an HTTPS fixture source")
         market["kickoff_ms"] = timestamp(market["kickoff"])
-    return {"version": 1, "network": "mainnet-public", "markets": markets,
-            "assumed_taker_fee_bps": str(fee), "interval_ms": COARSE_MS,
-            "near_interval_ms": NEAR_MS, "fx_url": FX_URL}
+    settings = {"version": version, "network": "mainnet-public", "markets": markets,
+                "assumed_taker_fee_bps": str(fee), "interval_ms": COARSE_MS,
+                "near_interval_ms": NEAR_MS, "fx_url": FX_URL}
+    if version == 2:
+        if not pair_listings(markets):
+            raise ValueError("Select at least one cross-venue comparison")
+        hip4_builder = decimal(data["hip4_builder_fee_bps"])
+        poly_builder = decimal(data["polymarket_builder_fee_bps"])
+        if not (0 <= hip4_builder <= fee and 0 <= poly_builder < 10_000):
+            raise ValueError("Invalid builder fee scenarios")
+        settings.update(hip4_builder_fee_bps=str(hip4_builder), polymarket_builder_fee_bps=str(poly_builder))
+    return settings
 
 
 def public_json(url, *, body=None):
@@ -108,11 +133,30 @@ def attempt(fetch, *args):
     return value, now_ms(), None
 
 
-def collect_batch(markets, slot, fee, *, get_book=fetch_book, get_fx=fetch_fx):
+def fetch_poly(market):
+    return fetch_polymarket_book(market, get_json=public_json)
+
+
+def score_sample(sample, fee, settings, *, reference_midpoint=None):
+    book, fx = sample["book"], sample["fx"]
+    kwargs = {}
+    if settings is not None:
+        kwargs = {"fx_bid": fx["bid"], "fx_ask": fx["ask"],
+                  "builder_fee_bps": settings[f"{sample['venue']}_builder_fee_bps"]}
+        if sample["venue"] == "polymarket":
+            kwargs.update(curve_fee_rate=book["fee_rate"], min_order_size=book["min_order_size"])
+    return score_orderbook(book, mxn_per_usd=fx["mxn_per_usd"], fee_bps=fee,
+                           observed_at_ms=sample["observed_ms"], reference_midpoint=reference_midpoint,
+                           **kwargs)
+
+
+def collect_batch(markets, slot, fee, *, settings=None, get_book=fetch_book, get_fx=fetch_fx,
+                  get_poly=fetch_poly):
     """Fetch one indicative FX quote and timestamp each book's receipt independently."""
     with ThreadPoolExecutor(max_workers=len(markets) + 1) as pool:
         fx_future = pool.submit(attempt, get_fx)
-        books = [pool.submit(attempt, get_book, market["coin"]) for market in markets]
+        books = [pool.submit(attempt, get_poly, market) if market.get("venue") == "polymarket"
+                 else pool.submit(attempt, get_book, market["coin"]) for market in markets]
         fx, _, fx_error = fx_future.result()
         samples = []
         for market, future in zip(markets, books):
@@ -120,6 +164,8 @@ def collect_batch(markets, slot, fee, *, get_book=fetch_book, get_fx=fetch_fx):
             coin = market["coin"]
             sample = {"coin": coin, "slot_ms": slot, "observed_ms": observed,
                       "book": book, "fx": fx}
+            if settings is not None:
+                sample["venue"] = market["venue"]
             error = None
             if observed > slot + GRACE_MS or observed >= market["kickoff_ms"]:
                 status = "late"
@@ -130,11 +176,25 @@ def collect_batch(markets, slot, fee, *, get_book=fetch_book, get_fx=fetch_fx):
             elif fx is None or not -GRACE_MS <= observed - fx["time_ms"] <= MAX_FX_AGE_MS:
                 status, error = "missing_fx", fx_error or "Stale or out-of-sync Bitso ticker"
             else:
-                samples.append({**sample, **score_orderbook(
-                    book, mxn_per_usd=fx["mxn_per_usd"], fee_bps=fee, observed_at_ms=observed,
-                )})
-                continue
+                try:
+                    score = score_sample(sample, fee, settings)
+                except (KeyError, TypeError, ValueError, InvalidOperation) as exc:
+                    status, error = "invalid", str(exc)
+                else:
+                    if "market_metadata" in book:
+                        sample["marketMetadata"] = book["market_metadata"]
+                    samples.append({**sample, **score})
+                    continue
             samples.append({**sample, "status": status, "error": error, "passesDepthFloor": False})
+    if settings is not None:
+        by_coin = {sample["coin"]: sample for sample in samples}
+        for group in pair_listings(settings["markets"]).values():
+            pair = [by_coin.get(market["coin"]) for market in group]
+            if all(sample and sample["status"] == "complete" for sample in pair):
+                reference = sum(Decimal(sample["midpoint"]) for sample in pair) / len(pair)
+                for sample in pair:
+                    score = score_sample(sample, fee, settings, reference_midpoint=reference)
+                    sample["pairedTickets"] = score["tickets"]
     return samples
 
 
@@ -193,13 +253,27 @@ def render_markdown(report):
     def cell(value):
         return str(value).replace("|", "\\|").replace("\n", " ")
 
-    fee = report["config"]["assumed_taker_fee_bps"]
+    config = report["config"]
+    fee = config["assumed_taker_fee_bps"]
+    mixed = config["version"] == 2
+    if mixed:
+        methodology = (
+            f"Public HyperCore and Polymarket mainnet books. HIP-4 uses a {fee} bps total scenario, "
+            f"including {config['hip4_builder_fee_bps']} bps for Pronos. Polymarket uses each CLOB market's published "
+            f"price-dependent venue fee and a {config['polymarket_builder_fee_bps']} bps Pronos scenario. "
+            "Buy costs use Bitso's indicative USD/MXN ask and sell proceeds use the bid. Depth uses the midpoint. "
+            "Each USD-denominated collateral unit is treated as 1 USD. Estimates exclude bridge, funding, "
+            "withdrawal and per-fill fee rounding. Pronos fees are gross modeled revenue."
+        )
+    else:
+        methodology = (
+            f"Public HyperCore mainnet books with an assumed {fee} bps total trading fee on each side. "
+            "MXN values use the timestamped Bitso USD/MXN midpoint and assume 1 USDC = 1 USD. "
+            "Executable FX spreads, conversion fees and depegs are excluded."
+        )
     lines = ["# Pronos sports order-book observations", "",
              f"As of {display_time(report['asOfMs'])} CDMX. Started {display_time(report['startedAtMs'])}.", "",
-             "Public HyperCore mainnet data. All executions below are simulations of displayed liquidity.", "",
-             f"Assumed total trading fee: {fee} bps on both sides. This is a scenario, not a verified fee quote. "
-             "MXN values use the timestamped Bitso USD/MXN midpoint and assume 1 USDC = 1 USD. "
-             "Executable FX spreads, conversion fees and depegs are excluded.", "",
+             methodology, "",
              "Depth target: at least MXN 600 on each side within two probability points of the midpoint "
              "after assumed trading fees, in at least 90% of scheduled observations. "
              "Overall classification needs 20 complete samples. The final-hour gate also requires the entire "
@@ -231,7 +305,8 @@ def render_markdown(report):
                 continue
             values = [market["label"], budget["requestedBudgetMXN"], budget["wholeShares"],
                       number(budget["actualSpendMXN"]), number(budget["remainingBudgetMXN"]),
-                      number(budget["slippagePoints"], 4), budget["limitation"]]
+                      number(budget["slippagePoints"], 4),
+                      budget["limitation"] if budget["status"] == "quoted" else budget["status"]]
             lines.append("| " + " | ".join(cell(value) for value in values) + " |")
     lines += ["", "## Matched-position buy and sell simulations", "",
               "Ticket labels are midpoint reference amounts rounded down to whole shares. "
@@ -248,24 +323,60 @@ def render_markdown(report):
                       number(buy["slippagePoints"], 4), number(sell["coveragePct"]),
                       number(sell["feeAdjustedNotionalMXN"]), number(sell["slippagePoints"], 4)]
             lines.append("| " + " | ".join(cell(value) for value in values) + " |")
+    for comparison in report.get("comparisons", []):
+        lines += ["", f"## {cell(comparison['group'])} cross-venue comparison", "",
+                  "Both books use the same whole-share quantity at the average of their two midpoints. "
+                  "Each venue carries its own resolution and cancellation terms.", ""]
+        latest_pair = comparison["latestPair"]
+        if latest_pair:
+            lines += [f"Latest paired slot at {display_time(latest_pair['slotMs'])} CDMX.", "",
+                      "| Venue | Reference MXN | Shares | Buy cost MXN | Sell proceeds MXN | Venue fees buy / sell MXN | Pronos fees buy / sell MXN | Buy / sell status |",
+                      "|---|---:|---:|---:|---:|---:|---:|---|"]
+            for venue, listing in latest_pair["listings"].items():
+                for ticket in listing["tickets"]:
+                    buy, sell = ticket["buy"], ticket["sell"]
+                    values = [venue, ticket["ticketMXN"], ticket["requestedShares"],
+                              number(buy["feeAdjustedNotionalMXN"]), number(sell["feeAdjustedNotionalMXN"]),
+                              " / ".join(number(quote["venueFeeMXN"], 4) for quote in (buy, sell)),
+                              " / ".join(number(quote["builderFeeMXN"], 4) for quote in (buy, sell)),
+                              f"{buy['status']} / {sell['status']}"]
+                    lines.append("| " + " | ".join(cell(value) for value in values) + " |")
+            lines.append("")
+        for name, window in (("Overall", comparison["overall"]), ("Final hour", comparison["lastHour"])):
+            coverage = "" if window.get("windowCovered", True) else " The final hour is still provisional."
+            lines += [f"{name} paired observations {window['pairedSamples']}/{window['scheduledSamples']}.{coverage}", "",
+                      "| Reference MXN | Full buy HIP-4 / Polymarket / both % | Full sell HIP-4 / Polymarket / both % |",
+                      "|---:|---:|---:|"]
+            for ticket in window["tickets"]:
+                rates = [" / ".join(number(ticket[side][venue]) for venue in ("hip4", "polymarket", "both"))
+                         for side in ("buy", "sell")]
+                lines.append(f"| {ticket['ticketMXN']} | {' | '.join(rates)} |")
+            lines.append("")
     lines += ["", "## Sampling and coverage", "",
               "Polls every five minutes, then every minute during the final hour before kickoff. "
               "Collection ends at the last selected kickoff. Reports include only pregame slots. "
               "Responses more than 15 seconds late, books at least 15 seconds old and FX over two minutes old "
-              "fail qualification. Only the top 20 visible price levels are available. "
+              "fail qualification. Simulations use the levels returned by each venue's public book. "
               "Computer sleep, network outages and restarts can leave missed slots and reduce the qualifying rate.", ""]
     for market in report["markets"]:
         latest = report["latest"].get(market["coin"], {})
         overall, near = market["overall"], market["lastHour"]
         fx = latest.get("fx") or {}
+        metadata = latest.get("marketMetadata", {})
+        cancellation = metadata.get("cancellation_deadline") or market.get("cancellation_deadline")
         lines += [f"### {cell(market['label'])}", "",
-                  f"Coin `{market['coin']}`. [Fixture source]({market['source_url']}).",
+                  f"Listing `{market['coin']}`. [Fixture source]({market['source_url']}).",
                   f"Latest receipt: {display_time(latest['observed_ms']) if latest else 'pending'}. "
                   f"FX: {fx.get('mxn_per_usd', 'unavailable')} MXN/USD "
                   f"({display_time(fx['time_ms']) if fx else 'no timestamp'}).",
                   f"Overall statuses: `{json.dumps(overall['counts'], sort_keys=True)}`. "
                   f"Final hour: {near['qualifiedSamples']}/{near['scheduledSamples']} qualified. "
                   f"Provisional reasons: {', '.join(near['provisionalReasons']) or 'none'}.", ""]
+        if cancellation:
+            lines += [f"Venue no-result deadline {cell(cancellation)}.", ""]
+        if latest.get("error"):
+            error = cell(latest["error"]).replace("`", "")
+            lines += [f"Latest capture error `{error}`.", ""]
         for window_name, window in (("Overall", overall), ("Final hour", near)):
             lines += [f"{window_name} ticket history:", "",
                       "| Reference MXN | Full buy / scheduled % | Buy p95 slippage points | Full sell / scheduled % | Sell p95 slippage points |",
@@ -313,7 +424,8 @@ def collect(config, directory):
                     time.sleep(min(60, max(0, (slot - now_ms()) / 1000)))
                 if now_ms() > slot + GRACE_MS:
                     continue
-                results = collect_batch(markets, slot, config["assumed_taker_fee_bps"])
+                results = collect_batch(markets, slot, config["assumed_taker_fee_bps"],
+                                        settings=config if config["version"] == 2 else None)
                 store_samples(db, results)
                 write_reports(db, directory, now_ms())
                 results_text = ", ".join(f"{s['coin']} {s['status']}" for s in results)

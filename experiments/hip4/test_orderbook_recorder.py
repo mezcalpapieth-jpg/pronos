@@ -155,6 +155,53 @@ class PersistenceTests(unittest.TestCase):
         self.assertEqual(len(keys), len(set(keys)))
 
 
+class CrossVenueTests(unittest.TestCase):
+    def test_paired_capture_uses_equal_quantities_directional_fx_and_published_curve(self):
+        fixture = Path(recorder.HERE) / "sports_orderbooks_2026-11-11_cross_venue.json"
+        settings = recorder.read_config(fixture)
+        hip, poly = settings["markets"]
+        hip_book = book(hip["coin"])
+        poly_book = {**book(poly["coin"]), "fee_rate": "0.05", "min_order_size": "11",
+                     "market_metadata": {"cancellation_payout_per_share": "0.50"},
+                     "levels": [[{"px": "0.39", "sz": "1000"}], [{"px": "0.41", "sz": "1000"}]]}
+        with patch.object(recorder, "now_ms", return_value=CLOCK):
+            samples = recorder.collect_batch(settings["markets"], CLOCK, "35", settings=settings,
+                                             get_book=lambda coin: hip_book, get_fx=fx,
+                                             get_poly=lambda selected: poly_book)
+        hip_sample, poly_sample = samples
+        self.assertEqual(hip_sample["status"], "complete")
+        self.assertEqual(poly_sample["status"], "complete")
+        self.assertEqual(poly_sample["marketMetadata"]["cancellation_payout_per_share"], "0.50")
+        self.assertEqual(poly_sample["tickets"][0]["requestedShares"], 12)
+        self.assertEqual(hip_sample["tickets"][0]["requestedShares"], 10)
+        hip_small, poly_small = [sample["pairedTickets"][0] for sample in samples]
+        self.assertEqual(hip_small["requestedShares"], poly_small["requestedShares"])
+        self.assertEqual(poly_small["requestedShares"], 11)
+        self.assertEqual(poly_small["buy"]["venueFeeMXN"], "2.66223045")
+        self.assertEqual(poly_small["sell"]["builderFeeMXN"], "0.4287855")
+        self.assertEqual(poly_small["budgetBuy"]["wholeShares"], 11)
+        self.assertEqual(hip_small["budgetBuy"]["wholeShares"], 9)
+        self.assertEqual(poly_small["buy"]["grossNotionalMXN"], "90.2451")
+
+        with sqlite3.connect(":memory:") as db:
+            recorder.initialize(db, settings, CLOCK)
+            recorder.store_samples(db, samples)
+            report = recorder.snapshot_report(db, CLOCK + recorder.COARSE_MS + recorder.GRACE_MS)
+            comparison, = report["comparisons"]
+            self.assertEqual(comparison["overall"]["pairedSamples"], 1)
+            self.assertEqual(comparison["overall"]["scheduledSamples"], 2)
+            self.assertEqual(comparison["overall"]["tickets"][0]["buy"]["both"], 50)
+            self.assertFalse(comparison["lastHour"]["windowCovered"])
+            self.assertIn("Pronos fees buy / sell MXN", recorder.render_markdown(report))
+
+    def test_below_venue_minimum_blocks_quote(self):
+        quote = recorder.score_orderbook(book(), mxn_per_usd=20, fee_bps=0,
+                                        observed_at_ms=CLOCK, min_order_size=11)["tickets"][0]
+        self.assertEqual(quote["sell"]["status"], "below_venue_minimum")
+        self.assertEqual(quote["budgetBuy"]["status"], "below_venue_minimum")
+        self.assertEqual(quote["budgetBuy"]["wholeShares"], 0)
+
+
 class RequestBoundaryTests(unittest.TestCase):
     def test_book_only_posts_to_public_info(self):
         with patch.object(recorder, "public_json", return_value=book()) as request:

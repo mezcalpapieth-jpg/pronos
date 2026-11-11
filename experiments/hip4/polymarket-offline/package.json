@@ -1,0 +1,16 @@
+{
+  "name": "pronos-polymarket-offline",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "test": "node --test workflow.test.js",
+    "demo": "node demo.js"
+  },
+  "dependencies": {
+    "@polymarket/client": "0.18.0",
+    "ethers": "5.8.0"
+  }
+}

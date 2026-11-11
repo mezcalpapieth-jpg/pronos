@@ -13,7 +13,7 @@ python3 -m venv .venv
 
 Run `probe.py init-wallets` on a new checkout to create a fresh testnet-only pair. It prints only the addresses, writes private keys to a Git-ignored local file with mode `0600`, and never overwrites it. The original pair is available only in the original worktree. Save that file in private storage if you need the same addresses after removing the worktree. Do not reuse mainnet keys or transfer real funds to these addresses.
 
-The current testnet builder is `0x040fe3673b6bded15d949eefccf3509a2284cd04`; the test trader is `0x53454f7449d447067663c3e2bc21b027b277d71c`. On November 10, 2026, the public API reported zero balances and zero fee approval. Use a funded HyperCore testnet operator to transfer 110 mock spot USDC to the builder and 30 to the trader. For the browser pilot, use the Turnkey address displayed in the app as the trader. A fresh recipient adds a one-time 1 test USDC activation fee to the sender’s cost. The [official testnet faucet](https://hyperliquid.gitbook.io/hyperliquid-docs/onboarding/testnet-faucet) requires prior mainnet deposit on the same address.
+The testnet builder is `0x040fe3673b6bded15d949eefccf3509a2284cd04`. The CLI test trader is `0x53454f7449d447067663c3e2bc21b027b277d71c`. The November 10, 2026 recheck reported zero spot balances, zero builder perps equity and zero builder fee approval for the CLI trader. A funded HyperCore testnet operator can transfer 110 mock spot USDC to the builder and 30 to the trader. For the browser pilot, use the Turnkey address displayed in the app as the trader. Each fresh recipient adds a one-time 1 test USDC activation fee to the sender’s cost. Both published addresses lack the HyperCore mainnet state required for direct faucet or Circle testnet-to-Core funding. [Hyperliquid testnet faucet](https://hyperliquid.gitbook.io/hyperliquid-docs/onboarding/testnet-faucet) · [Circle testnet recipient limits](https://developers.circle.com/cctp/concepts/cctp-on-hypercore#testnet-recipient-address-limitations)
 
 ```sh
 .venv/bin/python probe.py fund-builder-perps
@@ -114,6 +114,21 @@ The configured **35 bps total fee** is an explicit scenario, not a verified HIP-
 
 Cash-limited buys find the largest whole-share quantity whose displayed cost, including assumed fees, fits MXN 100, 300 or 1,000. They report unspent cash and whether budget or displayed depth limits the quantity. The separate matched-position comparison values a whole-share position at the midpoint and independently sweeps buys and sells of that same position. The report shows actual fee-adjusted spend/proceeds because those can differ from its reference labels. Slippage is measured in **probability percentage points**, not relative price percentages. Aggregate full-visible rates and percentiles refer to these matched-position comparisons. Full-visible rates include all scheduled observations, while slippage percentiles include only complete visible sweeps. A fee scenario is frozen per run so reports never mix different assumptions.
 
+### Compare the same fixture across venues
+
+The cross-venue configuration captures the Houston Rockets outcome for Warriors–Rockets, November 11 at 20:30 CDMX. It uses the existing sampling cadence, with both listings scheduled in each slot.
+
+```sh
+cd experiments/hip4
+.venv/bin/python orderbook_recorder.py --data-dir .local-orderbooks/2026-11-11-warriors-rockets \
+  collect --config sports_orderbooks_2026-11-11_cross_venue.json
+.venv/bin/python orderbook_recorder.py --data-dir .local-orderbooks/2026-11-11-warriors-rockets report
+```
+
+The recorder verifies Polymarket's selected outcome and kickoff across Gamma, the CLOB, and the published NBA rules. The report keeps both listings separate and shows their distinct no-result deadlines. A matched slot applies the same whole-share size on both venues, based on the average of the two midpoints. Overall and final-hour full-coverage rates use all scheduled slots, including missing or stale samples. Standalone venue tables also show cash-limited buys and the two-sided depth gate.
+
+The mixed report uses Bitso's indicative ask to convert buy cost and bid to convert sell proceeds. HIP-4 uses a 35 bps scenario including 25 bps for Pronos. Polymarket uses the published per-market taker curve at each displayed price and a 50 bps Pronos scenario. Pronos fees are modeled gross revenue. Bridge, funding and withdrawal costs and per-fill rounding are outside the estimates. [Polymarket fees](https://docs.polymarket.com/trading/fees) · [HIP-4 outcome fees](https://hyperliquid.gitbook.io/hyperliquid-docs/trading/fees#outcome-tokens)
+
 ## Take and reconcile two fills
 
 1. Use `markets` and `book OUTCOME SIDE` to select a live USDC outcome, far from settlement, with independent bids and asks. Choose bounds and an integer size that can cross on both sides for 10–25 mock USDC per leg. These are probe limits; live order minimums may differ. Fresh quotes can still move between observation and execution.
@@ -143,7 +158,7 @@ Polymarket's 2.5% sports taker charge at a 50¢ price is not automatically share
 
 The connector selects token IDs by explicit market version, binds condition/token IDs across metadata and book responses, sorts levels, checks minimums and rejects unsupported fee curves or stale data. Fee estimates use conservative rounding; actual fills can split into multiple matches and incur different rounding. Displayed depth and quotes are observations rather than fills or guaranteed prices. The pilot never combines MXNB, HyperCore USDC and Polygon pUSD balances.
 
-The signed-in Turnkey owner address can be displayed, but the Polygon wallet, collateral funding, permissions and order-signing path remain unverified. Existing EIP-712 signing is reusable; new Deposit Wallet orders additionally require the official SDK's signature type 3 / ERC-7739 wrapping. Complete the adapter and builder setup before bounded funded acceptance tests: buy, sell, reconcile builder payout, and withdraw. Do not send a raw owner signature as a complete Deposit Wallet order. [Wallets/authentication](https://docs.polymarket.com/trading/wallets-auth), [order signing](https://docs.polymarket.com/trading/place-orders).
+The signed-in Turnkey owner address can be displayed. The offline workflow below exercises EIP-712 signing and the official SDK's signature type 3 / ERC-7739 wrapping for the distinct Deposit Wallet. Live wallet creation, collateral funding, approvals, order execution and payout reconciliation still need a funded acceptance test. [Wallets/authentication](https://docs.polymarket.com/trading/wallets-auth) · [Order signing](https://docs.polymarket.com/trading/place-orders)
 
 The owner completed account signup and the **Pronos** builder profile is registered. Code: `0x64fd36a8de3203124ffd34c4457e139fcf0aedac33fa1b4904dae451900dd30c`. The official [Builders settings](https://polymarket.com/settings?tab=builder) show current maker/taker rates of 0%, with **0% maker / 0.50% taker pending for November 14, 2026** (date displayed without timezone). The public fee endpoint independently returned both effective rates as 0 bps and `enabled: true` at 01:47:54 UTC November 11. The owner reported that another change is unavailable until November 18 and chose to retain 0.50%; the unsaved 1% draft was discarded. No future rate change is scheduled by Pronos. No builder API credentials were created and no fee credits were verified. Before any future signed order, query the effective rates rather than inferring activation from the calendar. Public observations are retained in [polymarket-builder-profile-2026-11-10.json](polymarket-builder-profile-2026-11-10.json).
 
@@ -161,6 +176,19 @@ Run the connector, API and client tests from the repository root:
 ```sh
 node --test frontend/api/_lib/polymarket-distribution.test.js frontend/api/polymarket-pilot.test.js frontend/app/src/lib/polymarketPilot.test.js
 ```
+
+### Exercise the Polymarket wallet lifecycle offline
+
+The isolated Node 24+ prototype uses Polymarket's SDK to generate the CTF Deposit Wallet signatures with the existing Turnkey typed-data callback interface. The demo uses a fixture signer and mock transport for Deposit Wallet creation, two approvals in one batch, buy and sell signing, partial-fill reconciliation after a lost response, builder fee accrual, and a Polygon pUSD withdrawal to the owner. The order retry is scoped to one running instance and reads the original receipt.
+
+```sh
+cd experiments/hip4/polymarket-offline
+npm ci
+npm test
+npm run demo
+```
+
+The demo uses an explicit 50 bps fee scenario. Its buy and sell accrue 0.0475 pUSD to the builder ledger and remain below the 0.10 pUSD daily payout threshold. All balances and receipts are fixtures. Live Turnkey, Polygon, the CLOB and the Polymarket relayer receive no requests from the demo. [Deposit Wallets](https://docs.polymarket.com/trading/wallets-auth) · [Builder fees](https://docs.polymarket.com/programs/builders/fees)
 
 ## HIP-4, Polymarket and native-market economics — November 10, 2026
 
