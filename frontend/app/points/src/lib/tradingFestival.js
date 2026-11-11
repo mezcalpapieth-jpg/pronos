@@ -27,12 +27,12 @@ export function festivalPrice(slot, value) {
 
 export function festivalStatus(slot, now) {
   const market = slot.market;
-  if (slot.requiresReschedule) return 'Horario por confirmar';
+  if (slot.requiresReschedule) return 'Horario tentativo';
   if (market?.status === 'resolved') return market.outcome === 0 ? 'Subió' : 'Bajó';
   if (market?.status === 'canceled') return 'Cancelado';
-  if (!market && slot.feedEnabled === false) return 'Feed por confirmar';
+  if (!market && slot.feedEnabled === false) return 'Datos por confirmar';
   if (now < Date.parse(slot.startTime)) return 'Próximo';
-  if (now < Date.parse(slot.endTime)) return market?.status === 'active' ? 'En juego' : 'Esperando apertura';
+  if (now < Date.parse(slot.endTime)) return market?.status === 'active' ? 'Abierto' : 'Esperando apertura';
   return market?.status === 'active' ? 'Por resolver' : 'Cerrado';
 }
 
