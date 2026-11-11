@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Nasdaq-100 | Pronos</title>
+  <title>Gráfica de mercado | Pronos</title>
   <style>
     html, body { margin: 0; background: #111; color: #f5f5f3; }
     vunelix-advanced-chart { display: block; height: 100dvh; }
@@ -40,16 +40,21 @@
   <script>
     if (window.top !== window.self && location.hostname === 'pronos-chi.vercel.app') {
       const chart = document.querySelector('vunelix-advanced-chart');
+      if (new URLSearchParams(location.search).get('asset') === 'usdmxn') {
+        chart.dataset.symbol = 'FX:USDMXN';
+        chart.dataset.showReplay = 'false';
+      }
       const script = document.createElement('script');
-      const parentOrigin = document.referrer && new URL(document.referrer).origin;
       const allowedParents = ['https://pronos.io', 'https://www.pronos.io'];
 
-      function notifyWhenReady() {
-        if (!allowedParents.includes(parentOrigin)) return;
-        const deadline = Date.now() + 12000;
+      function notifyWhenReady(event) {
+        if (event.source !== window.parent || !allowedParents.includes(event.origin)
+          || event.data !== 'pronos:festival-chart-init') return;
+        window.removeEventListener('message', notifyWhenReady);
+        const deadline = Date.now() + 30000;
         const check = () => {
           if (chart.shadowRoot?.querySelector('canvas')) {
-            window.parent.postMessage('pronos:festival-nasdaq-ready', parentOrigin);
+            window.parent.postMessage('pronos:festival-chart-ready', event.origin);
           } else if (Date.now() < deadline) {
             setTimeout(check, 250);
           }
@@ -59,7 +64,7 @@
 
       script.type = 'module';
       script.src = 'https://vunelix.com/assets/bundles/js/widgets/charts/vunelix-advanced-chart.js';
-      script.addEventListener('load', notifyWhenReady, { once: true });
+      window.addEventListener('message', notifyWhenReady);
       document.body.append(script);
     }
   </script>

@@ -9,58 +9,76 @@ function marketUrl(slot) {
   return slot.market && slot.market.status !== 'pending' ? `/market?id=${slot.market.id}` : null;
 }
 
-function isNasdaqPresentation(slot, dashboard) {
-  return dashboard && slot.key === 'ndx';
+function isPresentation(slot) {
+  return (slot.key === 'ndx' && slot.requiresReschedule)
+    || (slot.key === 'usdmxn' && slot.feedEnabled === false && !slot.market);
 }
 
-function displayStatus(slot, now, dashboard) {
-  return isNasdaqPresentation(slot, dashboard) ? 'Presentación' : festivalStatus(slot, now);
+function displayStatus(slot, now) {
+  return isPresentation(slot) ? 'Presentación' : festivalStatus(slot, now);
 }
 
-const NASDAQ_CHART_ORIGIN = 'https://pronos-chi.vercel.app';
+const FESTIVAL_CHART_ORIGIN = 'https://pronos-chi.vercel.app';
+const PRESENTATION_SYMBOLS = { ndx: 'NASDAQ:NDX', usdmxn: 'FX:USDMXN' };
 
-function NasdaqPresentationChart() {
+function FestivalPresentationChart({ slot }) {
   const frame = useRef(null);
-  const [ready, setReady] = useState(false);
+  const [status, setStatus] = useState('loading');
+  const [attempt, setAttempt] = useState(0);
+  const ready = status === 'ready';
 
   useEffect(() => {
+    const timeout = setTimeout(() => setStatus('unavailable'), 15000);
     function handleChartReady(event) {
-      if (event.origin === NASDAQ_CHART_ORIGIN && event.source === frame.current?.contentWindow
-        && event.data === 'pronos:festival-nasdaq-ready') {
-        setReady(true);
-      }
+      if (event.origin !== FESTIVAL_CHART_ORIGIN || event.source !== frame.current?.contentWindow
+        || event.data !== 'pronos:festival-chart-ready') return;
+      clearTimeout(timeout);
+      setStatus('ready');
     }
 
     window.addEventListener('message', handleChartReady);
-    return () => window.removeEventListener('message', handleChartReady);
-  }, []);
+    return () => {
+      clearTimeout(timeout);
+      window.removeEventListener('message', handleChartReady);
+    };
+  }, [attempt]);
+
+  function retry() {
+    setStatus('loading');
+    setAttempt(previous => previous + 1);
+  }
 
   return (
-    <div className="tf-nasdaq-presentation">
+    <div className="tf-presentation-chart">
       {/* Keep the third-party widget on a separate origin from the festival page. */}
       <iframe
+        key={attempt}
         ref={frame}
-        className="tf-nasdaq-frame"
-        src={`${NASDAQ_CHART_ORIGIN}/festival-nasdaq-chart`}
-        title="Gráfica del Nasdaq-100"
+        className="tf-presentation-frame"
+        src={`${FESTIVAL_CHART_ORIGIN}/festival-nasdaq-chart?asset=${slot.key}`}
+        title={`Gráfica de ${slot.symbol}`}
         sandbox="allow-scripts allow-same-origin"
         credentialless=""
-        style={{ visibility: ready ? 'visible' : 'hidden' }}
+        aria-hidden={!ready}
+        tabIndex={ready ? undefined : -1}
+        style={{ opacity: ready ? 1 : 0, pointerEvents: ready ? undefined : 'none' }}
+        onLoad={event => event.currentTarget.contentWindow?.postMessage('pronos:festival-chart-init', FESTIVAL_CHART_ORIGIN)}
       />
-      {!ready && (
-        <div className="tf-nasdaq-fallback">
-          <a className="tf-cta" href="https://vunelix.com/chart?symbol=NASDAQ%3ANDX" target="_blank" rel="noopener noreferrer">
-            Ver gráfica del Nasdaq-100 ↗
+      {status === 'loading' && <p className="tf-presentation-fallback tf-caption" role="status">Cargando gráfica…</p>}
+      {status === 'unavailable' && (
+        <div className="tf-presentation-fallback">
+          <button type="button" className="tf-cta" onClick={retry}>Volver a cargar la gráfica</button>
+          <a className="tf-presentation-external tf-caption" href={`https://vunelix.com/chart?symbol=${encodeURIComponent(PRESENTATION_SYMBOLS[slot.key])}`} target="_blank" rel="noopener noreferrer">
+            Abrir en Vunelix ↗
           </a>
-          <small className="tf-caption">Vunelix</small>
         </div>
       )}
     </div>
   );
 }
 
-function SlotInfo({ slot, now, dashboard }) {
-  const status = displayStatus(slot, now, dashboard);
+function SlotInfo({ slot, now }) {
+  const status = displayStatus(slot, now);
   return (
     <>
       <span className="tf-slot-time">
@@ -73,8 +91,8 @@ function SlotInfo({ slot, now, dashboard }) {
   );
 }
 
-function SlotTitle({ slot, now, dashboard }) {
-  const status = displayStatus(slot, now, dashboard);
+function SlotTitle({ slot, now }) {
+  const status = displayStatus(slot, now);
   return (
     <div className="tf-market-heading">
       <div>
@@ -86,14 +104,14 @@ function SlotTitle({ slot, now, dashboard }) {
   );
 }
 
-function FestivalSchedule({ slots, now, selected, onSelect, dashboard }) {
+function FestivalSchedule({ slots, now, selected, onSelect }) {
   return (
     <section className="tf-agenda" aria-labelledby="tf-schedule">
       <div className="tf-agenda-heading"><h2 id="tf-schedule">Horario de mercados</h2><span>Hora CDMX</span></div>
       {slots.map(slot => (
         <button type="button" className="tf-slot" key={slot.key} aria-pressed={selected === slot.key}
           onClick={() => onSelect(selected === slot.key ? null : slot.key)}>
-          <SlotInfo slot={slot} now={now} dashboard={dashboard} />
+          <SlotInfo slot={slot} now={now} />
         </button>
       ))}
       <p className="tf-agenda-note">Dos mercados más por anunciar.</p>
@@ -112,14 +130,14 @@ export default function TradingFestival({ dashboard = false, onOpenLogin }) {
   const now = useFestivalClock();
   const [selection, setSelection] = useState(null);
   const current = slots.find(slot => (
-    (!slot.requiresReschedule || isNasdaqPresentation(slot, dashboard))
+    (!slot.requiresReschedule || isPresentation(slot))
     && Date.parse(slot.startTime) <= now && now < Date.parse(slot.endTime)
   ))
     || slots.find(slot => Date.parse(slot.startTime) > now)
     || slots.at(-1);
   const slot = slots.find(item => item.key === selection) || current;
   const tradeUrl = marketUrl(slot);
-  const showNasdaqChart = isNasdaqPresentation(slot, dashboard);
+  const showPresentationChart = isPresentation(slot);
 
   return (
     <main className={dashboard ? 'tf-page tf-dashboard' : 'tf-page tf-points'}>
@@ -134,23 +152,23 @@ export default function TradingFestival({ dashboard = false, onOpenLogin }) {
         </header>
         {error && <p className="tf-notice" role="status">El estado de los mercados se actualizará al reconectar.</p>}
         <article className="tf-feature">
-          <SlotTitle slot={slot} now={now} dashboard={dashboard} />
-          {showNasdaqChart ? <NasdaqPresentationChart /> : (
+          <SlotTitle slot={slot} now={now} />
+          {showPresentationChart ? <FestivalPresentationChart key={slot.key} slot={slot} /> : (
             <TradingFestivalChart key={slot.key} slot={slot} />
           )}
-          {!showNasdaqChart && (
+          {!showPresentationChart && (
             <div className="tf-directions">
               <span><b><span aria-hidden="true">↗</span> Sube</b><small>Cierra por encima de la apertura</small></span>
               <span><b><span aria-hidden="true">↘</span> Baja</b><small>Cierra por debajo de la apertura</small></span>
             </div>
           )}
-          {!dashboard && tradeUrl && (
+          {!dashboard && !showPresentationChart && tradeUrl && (
             <Link className="tf-cta" to={tradeUrl}>
               {festivalStatus(slot, now) === 'Abierto' ? 'Operar con puntos' : 'Ver mercado'} →
             </Link>
           )}
         </article>
-        <FestivalSchedule slots={slots} now={now} selected={slot.key} onSelect={setSelection} dashboard={dashboard} />
+        <FestivalSchedule slots={slots} now={now} selected={slot.key} onSelect={setSelection} />
         {dashboard ? (
           <a className="tf-qr-panel" href={FESTIVAL_SIGNUP_URL}>
             <div>
