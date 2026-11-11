@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { FESTIVAL_SIGNUP_URL } from '../../../../shared/trading-festival.js';
@@ -17,16 +17,45 @@ function displayStatus(slot, now, dashboard) {
   return isNasdaqPresentation(slot, dashboard) ? 'Presentación' : festivalStatus(slot, now);
 }
 
+const NASDAQ_CHART_ORIGIN = 'https://pronos-chi.vercel.app';
+
 function NasdaqPresentationChart() {
-  // Keep the third-party widget on a separate origin from the festival page.
+  const frame = useRef(null);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    function handleChartReady(event) {
+      if (event.origin === NASDAQ_CHART_ORIGIN && event.source === frame.current?.contentWindow
+        && event.data === 'pronos:festival-nasdaq-ready') {
+        setReady(true);
+      }
+    }
+
+    window.addEventListener('message', handleChartReady);
+    return () => window.removeEventListener('message', handleChartReady);
+  }, []);
+
   return (
-    <iframe
-      className="tf-nasdaq-frame"
-      src="https://pronos-chi.vercel.app/festival-nasdaq-chart"
-      title="Gráfica del Nasdaq-100"
-      sandbox="allow-scripts allow-same-origin"
-      credentialless=""
-    />
+    <div className="tf-nasdaq-presentation">
+      {/* Keep the third-party widget on a separate origin from the festival page. */}
+      <iframe
+        ref={frame}
+        className="tf-nasdaq-frame"
+        src={`${NASDAQ_CHART_ORIGIN}/festival-nasdaq-chart`}
+        title="Gráfica del Nasdaq-100"
+        sandbox="allow-scripts allow-same-origin"
+        credentialless=""
+        style={{ visibility: ready ? 'visible' : 'hidden' }}
+      />
+      {!ready && (
+        <div className="tf-nasdaq-fallback">
+          <a className="tf-cta" href="https://vunelix.com/chart?symbol=NASDAQ%3ANDX" target="_blank" rel="noopener noreferrer">
+            Ver gráfica del Nasdaq-100 ↗
+          </a>
+          <small className="tf-caption">Vunelix</small>
+        </div>
+      )}
+    </div>
   );
 }
 
