@@ -16,7 +16,7 @@ export function cardScoreWindowOpen(market, now = Date.now()) {
 export function cardLiveScoreUrl(config) {
   if (!config?.leaguePath || (!config.eventId && !(config.homeName && config.awayName))) return null;
   const params = new URLSearchParams({ source: config.source || 'espn', leaguePath: config.leaguePath });
-  for (const key of ['eventId', 'dateYmd', 'homeName', 'awayName']) {
+  for (const key of ['eventId', 'dateYmd', 'homeName', 'awayName', 'leagueSlug', 'tournamentId', 'homeId', 'awayId', 'bestOf']) {
     if (config[key]) params.set(key, config[key]);
   }
   return `/api/sports/live-score?${params}`;

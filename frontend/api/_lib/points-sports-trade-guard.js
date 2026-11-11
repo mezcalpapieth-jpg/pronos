@@ -1,5 +1,6 @@
 import { airportOutcomeTradeLock } from './aicm-outcome-policy.js';
 import { readLmpEvent } from './lmp-results.js';
+import { readLolEvent } from './lol-esports.js';
 import { readEspnEvent } from './sports-results.js';
 import { buildFootballDataEspnFallbackConfig } from './sports-resolver-fallback.js';
 
@@ -11,11 +12,11 @@ function resolverConfig(market) {
   try { return JSON.parse(value); } catch { return {}; }
 }
 
-export async function sportsTradeLock(market, { readEvent = readEspnEvent, readLmp = readLmpEvent, db } = {}) {
+export async function sportsTradeLock(market, { readEvent = readEspnEvent, readLmp = readLmpEvent, readLol = readLolEvent, db } = {}) {
   const airportLock = await airportOutcomeTradeLock(market, { db });
   if (airportLock) return airportLock;
   const cfg = resolverConfig(market);
-  if (!['espn', 'football-data', 'mlb-stats'].includes(cfg.source) || !SINGLE_GAME_SHAPES.has(cfg.shape)) return null;
+  if (!['espn', 'football-data', 'mlb-stats', 'lolesports'].includes(cfg.source) || !SINGLE_GAME_SHAPES.has(cfg.shape)) return null;
   try {
     let lookup = cfg;
     if (cfg.source === 'football-data') {
@@ -35,9 +36,10 @@ export async function sportsTradeLock(market, { readEvent = readEspnEvent, readL
       if (!lookup) throw new Error('missing football event lookup');
     }
     // Rescheduled games can finish before the kickoff saved in our database.
-    const result = cfg.source === 'mlb-stats' ? await readLmp(lookup) : await readEvent({ ...lookup, preferSummary: true });
-    if (!result || result.notFound) throw new Error('missing event');
-    if (result.completed || result.interrupted) {
+    const readers = { 'mlb-stats': readLmp, lolesports: readLol, espn: readEvent, 'football-data': readEvent };
+    const result = await readers[cfg.source]({ ...lookup, preferSummary: true });
+    if (!result || result.notFound || result.invalidResult) throw new Error('missing or invalid event');
+    if (result.completed || result.interrupted || result.tradingClosed) {
       return { error: 'market_closed', status: 400, detail: 'The game has finished or is suspended. Trading is closed.' };
     }
     if (!['pre', 'in'].includes(result.state)) throw new Error('unverified game state');

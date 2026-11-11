@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
-  ADMIN_BASEBALL_LEAGUES, ADMIN_COMBATE_LEAGUES, ADMIN_CRYPTO_FILTERS,
+  ADMIN_BASEBALL_LEAGUES, ADMIN_COMBATE_LEAGUES, ADMIN_CRYPTO_FILTERS, ADMIN_ESPORTS_LEAGUES,
   ADMIN_ENTERTAINMENT_TOPIC_FILTERS, ADMIN_GEO_FILTERS, ADMIN_INFRASTRUCTURE_TOPIC_FILTERS, ADMIN_MEXICO_TOPIC_FILTERS,
   ADMIN_SOCCER_LEAGUES, ADMIN_SPORT_FILTERS, MARKET_CATEGORY_FILTERS, adminMarketCategoryLabel, formatAdminMarketDate,
 } from '../lib/adminMarketFilters.js';
@@ -322,7 +322,7 @@ export function AdminQueueToolbar({ queue, proposal = false, searchAction, child
   useEffect(() => { setDraft(search); }, [search]);
   const group = (label, key, options) => <AdminFilterGroup label={label} options={options}
     value={values[key]} onChange={value => update(key, value)} categories={key === 'category'} />;
-  const leagues = { soccer: ADMIN_SOCCER_LEAGUES, baseball: ADMIN_BASEBALL_LEAGUES, combate: ADMIN_COMBATE_LEAGUES };
+  const leagues = { soccer: ADMIN_SOCCER_LEAGUES, baseball: ADMIN_BASEBALL_LEAGUES, combate: ADMIN_COMBATE_LEAGUES, esports: ADMIN_ESPORTS_LEAGUES };
 
   return (
     <div className="pb-admin-panel pb-admin-toolbar">

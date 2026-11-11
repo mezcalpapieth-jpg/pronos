@@ -36,6 +36,7 @@ export const ADMIN_SPORT_FILTERS = [
   { key: 'tennis', label: 'Tenis' },
   { key: 'golf', label: 'Golf' },
   { key: 'combate', label: 'Combate' },
+  { key: 'esports', label: 'Esports' },
 ];
 
 export const ADMIN_SOCCER_LEAGUES = [
@@ -65,6 +66,11 @@ export const ADMIN_BASEBALL_LEAGUES = [
   { key: 'mlb', label: 'MLB' },
   { key: 'lmb', label: 'LMB' },
   { key: 'lmp', label: 'LMP' },
+];
+
+export const ADMIN_ESPORTS_LEAGUES = [
+  { key: 'all', label: 'Todos' },
+  { key: 'lol', label: 'League of Legends' },
 ];
 
 export const ADMIN_COMBATE_LEAGUES = [
@@ -165,7 +171,7 @@ export function buildAdminMarketsQuery({
     if (sportFilter !== 'all') q.set('sport', sportFilter);
     if (
       leagueFilter !== 'all'
-      && (sportFilter === 'soccer' || sportFilter === 'baseball' || sportFilter === 'combate')
+      && (sportFilter === 'soccer' || sportFilter === 'baseball' || sportFilter === 'combate' || sportFilter === 'esports')
     ) {
       q.set('league', leagueFilter);
     }

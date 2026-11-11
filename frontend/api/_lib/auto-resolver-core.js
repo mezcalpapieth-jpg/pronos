@@ -30,6 +30,7 @@ import {
   readAicmAeDelayCount,
 } from './aicm-aviation-edge.js';
 import { readLmpEvent } from './lmp-results.js';
+import { readLolEvent } from './lol-esports.js';
 import { readAicmTimetableDelayCount } from './aicm-timetable.js';
 import { readAppleMxTopArtist } from './charts.js';
 import { readYouTubeTopMxChannel } from './youtube.js';
@@ -841,6 +842,8 @@ export async function resolveAutoResolverCandidate(candidate = {}, { sql = null 
         awayName: cfg.awayName,
         shape: cfg.shape,
       });
+    } else if (cfg.source === 'lolesports') {
+      result = await readLolEvent(cfg);
     } else if (cfg.source === 'mlb-stats') {
       result = await readLmpEvent(cfg);
     } else if (cfg.source === 'football-data') {
@@ -929,6 +932,8 @@ export async function resolveAutoResolverCandidate(candidate = {}, { sql = null 
         source: cfg.source,
         state: result.state || null,
         notFound: result.notFound === true,
+        invalidResult: result.invalidResult === true,
+        reason: result.reason || null,
       };
       throw err;
     }
@@ -1075,6 +1080,7 @@ export async function resolveAutoResolverCandidate(candidate = {}, { sql = null 
     resolverInfo = {
       source: cfg.source,
       shape: cfg.shape,
+      ...(cfg.source === 'lolesports' ? { eventId: result.eventId, sourceUrl: result.sourceUrl, observedAt: result.observedAt, bestOf: result.bestOf } : {}),
       winner: result.winner,
       homeScore: result.homeScore ?? null,
       awayScore: result.awayScore ?? null,

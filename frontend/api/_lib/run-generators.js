@@ -31,6 +31,7 @@ import { generateStockMarkets }         from './market-gen/stocks.js';
 import { generateWeatherMarkets }       from './market-gen/weather.js';
 import { generateAicmMarkets }          from './market-gen/aicm.js';
 import { generateAicm48hMarkets }       from './market-gen/aicm-48h.js';
+import { generateLolEsportsMarkets }   from './market-gen/lol-esports.js';
 import { generateLmpMarkets }           from './market-gen/lmp.js';
 import { generateMlbMarkets }           from './market-gen/mlb.js';
 import { generateNbaMarkets }           from './market-gen/nba.js';
@@ -82,6 +83,7 @@ export const GENERATORS = [
   { name: 'weather',        run: generateWeatherMarkets       },
   { name: 'aicm',           run: generateAicmMarkets          },
   { name: 'aicm-48h',       run: generateAicm48hMarkets       },
+  { name: 'lol-esports',    run: generateLolEsportsMarkets    },
   { name: 'lmp',            run: generateLmpMarkets           },
   { name: 'mlb',            run: generateMlbMarkets           },
   { name: 'nba',            run: generateNbaMarkets           },

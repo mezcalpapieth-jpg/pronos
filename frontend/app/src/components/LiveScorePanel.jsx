@@ -19,6 +19,9 @@ function liveScoreUrl(config) {
   if (config.dateYmd) params.set('dateYmd', config.dateYmd);
   if (config.homeName) params.set('homeName', config.homeName);
   if (config.awayName) params.set('awayName', config.awayName);
+  for (const key of ['leagueSlug', 'tournamentId', 'homeId', 'awayId', 'bestOf']) {
+    if (config[key]) params.set(key, config[key]);
+  }
   return `/api/sports/live-score?${params}`;
 }
 

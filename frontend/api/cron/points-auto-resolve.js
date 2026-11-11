@@ -75,6 +75,7 @@ import { resolveMexicoMajorHurricaneLandfall } from '../_lib/hurricanes.js';
 import { aicmDelayBucketIndexFor, readAicmDelayCount } from '../_lib/aicm-board.js';
 import { aicmAeBucketIndexFor, countAicmAeDaysInclusive } from '../_lib/aicm-aviation-edge.js';
 import { readLmpEvent } from '../_lib/lmp-results.js';
+import { readLolEvent } from '../_lib/lol-esports.js';
 import { readAicmTimetableDelayCount } from '../_lib/aicm-timetable.js';
 import { readAppleMxTopArtist } from '../_lib/charts.js';
 import { readYouTubeTopMxChannel } from '../_lib/youtube.js';
@@ -1581,7 +1582,7 @@ export async function runAutoResolve({ dry = false, sportsOnly = false, marketId
           NOT ${sportsOnly}::boolean
           OR (
             m.resolver_type = 'sports_api'
-            AND m.resolver_config->>'source' IN ('espn', 'football-data', 'mlb-stats')
+            AND m.resolver_config->>'source' IN ('espn', 'football-data', 'mlb-stats', 'lolesports')
             AND m.resolver_config->>'shape' IN ('binary', 'draw3', 'total-goals-over')
             -- Check ahead too: a rescheduled game can finish before its saved kickoff.
             AND m.start_time <= NOW() + INTERVAL '12 hours'
@@ -1595,7 +1596,7 @@ export async function runAutoResolve({ dry = false, sportsOnly = false, marketId
               m.end_time < NOW()
               OR (
                 m.resolver_type = 'sports_api'
-                AND m.resolver_config->>'source' IN ('espn', 'football-data', 'mlb-stats')
+                AND m.resolver_config->>'source' IN ('espn', 'football-data', 'mlb-stats', 'lolesports')
                 AND m.resolver_config->>'shape' IN ('binary', 'draw3', 'total-goals-over')
                 AND m.start_time IS NOT NULL
                 AND m.start_time <= NOW() + INTERVAL '12 hours'
@@ -1785,9 +1786,10 @@ export async function runAutoResolve({ dry = false, sportsOnly = false, marketId
               sourceData: market.pending_source_data, sport: market.sport,
               league: market.league, startTime: market.start_time });
           }
-          if (!['espn','mlb-stats'].includes(config?.source)) return;
+          if (!['espn', 'mlb-stats', 'lolesports'].includes(config?.source)) return;
           try {
-            sportsResults.set(market.id, { result: config.source === 'mlb-stats' ? await readLmpEvent(config) : await readEspnEvent({ ...config, preferSummary: true }) });
+            const readers = { 'mlb-stats': readLmpEvent, lolesports: readLolEvent, espn: readEspnEvent };
+            sportsResults.set(market.id, { result: await readers[config.source]({ ...config, preferSummary: true }) });
           } catch (error) {
             sportsResults.set(market.id, { error });
           }
@@ -2736,6 +2738,10 @@ export async function runAutoResolve({ dry = false, sportsOnly = false, marketId
                 preferSummary: true,
               });
             }
+          } else if (cfg.source === 'lolesports') {
+            const prefetched = sportsResults.get(m.id);
+            if (prefetched?.error) throw prefetched.error;
+            result = prefetched ? prefetched.result : await readLolEvent(cfg);
           } else if (cfg.source === 'mlb-stats') {
             const prefetched = sportsResults.get(m.id);
             if (prefetched?.error) throw prefetched.error;
@@ -2898,6 +2904,7 @@ export async function runAutoResolve({ dry = false, sportsOnly = false, marketId
               notFound: result.notFound === true,
               invalidResult: result.invalidResult === true,
               interrupted: result.interrupted === true,
+              reason: result.reason || null,
             };
             throw err;
           }
@@ -2951,6 +2958,7 @@ export async function runAutoResolve({ dry = false, sportsOnly = false, marketId
           resolverInfo = {
             source: cfg.source,
             shape: cfg.shape,
+            ...(cfg.source === 'lolesports' ? { eventId: result.eventId, sourceUrl: result.sourceUrl, observedAt: result.observedAt, bestOf: result.bestOf } : {}),
             winner: result.winner,
             homeScore: result.homeScore ?? null,
             awayScore: result.awayScore ?? null,

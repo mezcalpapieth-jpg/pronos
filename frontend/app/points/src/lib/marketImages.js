@@ -210,6 +210,7 @@ const BADGE_THEMES = Object.freeze({
 });
 
 const SPORTS_LEAGUE_BADGES = Object.freeze([
+  { key: 'league:lol', label: 'LoL', eyebrow: 'Esports', theme: 'sportsBlue', aliases: ['lol', 'league-of-legends'] },
   { key: 'league:nba', label: 'NBA', eyebrow: 'Basket', theme: 'basketball', aliases: ['nba', 'basketball-nba'] },
   { key: 'league:nfl', label: 'NFL', eyebrow: 'Football', theme: 'football', aliases: ['nfl', 'football-nfl'] },
   { key: 'league:ncaaf', label: 'NCAAF', eyebrow: 'Bowls', theme: 'football', aliases: ['ncaaf', 'college-football', 'football-college-football'] },
@@ -240,6 +241,7 @@ const SPORTS_LEAGUE_BADGES = Object.freeze([
 ]);
 
 const SPORT_BADGES = Object.freeze([
+  { key: 'sport:esports', label: 'ESPORTS', eyebrow: 'Serie', theme: 'sportsBlue', aliases: ['esports'] },
   { key: 'sport:soccer', label: 'FUTBOL', eyebrow: 'Partido', theme: 'soccer', aliases: ['soccer', 'football', 'futbol', 'balon de oro', 'ballon dor', 'ballon d or', 'ballon-dor'] },
   { key: 'sport:ncaaf', label: 'NCAAF', eyebrow: 'Bowl', theme: 'football', aliases: ['ncaaf', 'college football'] },
   { key: 'sport:ncaab', label: 'NCAAB', eyebrow: 'March', theme: 'basketball', aliases: ['ncaab', 'college basketball', 'march madness'] },

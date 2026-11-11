@@ -32,7 +32,8 @@ test('the minute sports pass finds early finals and rescheduled games without wa
       (10,NOW()-INTERVAL '2 hours'),
       (11,NOW()-INTERVAL '2 hours'),
       (12,NOW()-INTERVAL '2 hours'),
-      (13,NOW()-INTERVAL '2 hours');
+      (13,NOW()-INTERVAL '2 hours'),
+      (14,NOW()-INTERVAL '2 hours');
     UPDATE points_markets SET resolver_type='manual_review',end_time=NOW()-INTERVAL '1 hour' WHERE id=6;
     UPDATE points_markets SET resolver_type='weather_api',end_time=NOW()-INTERVAL '1 hour' WHERE id=7;
     UPDATE points_markets SET status='resolved' WHERE id=8;
@@ -41,6 +42,7 @@ test('the minute sports pass finds early finals and rescheduled games without wa
     UPDATE points_markets SET resolver_config='{"source":"espn","shape":"draw3"}' WHERE id=11;
     UPDATE points_markets SET resolver_config='{"source":"football-data","shape":"total-goals-over"}' WHERE id=12;
     UPDATE points_markets SET resolver_config='{"source":"mlb-stats","shape":"binary"}' WHERE id=13;
+    UPDATE points_markets SET resolver_config='{"source":"lolesports","shape":"binary"}' WHERE id=14;
   `);
   const sql = async (strings, ...values) => (await db.query(
     strings.reduce((text, part, i) => text + (i ? `$${i}` : '') + part, ''), values,
@@ -51,7 +53,7 @@ test('the minute sports pass finds early finals and rescheduled games without wa
   assert.deepEqual(scoped.map(row => row.id), [11]);
   assert.deepEqual(await run(sql, false, 6, 8), []);
   const fast = await run(sql, true, 6, null);
-  assert.deepEqual(fast.map(row => row.id).sort((a, b) => a - b), [1, 2, 3, 11, 12, 13]);
+  assert.deepEqual(fast.map(row => row.id).sort((a, b) => a - b), [1, 2, 3, 11, 12, 13, 14]);
   const full = await run(sql, false, 6, null);
-  assert.deepEqual(full.map(row => row.id).sort((a, b) => a - b), [1, 2, 3, 5, 6, 7, 11, 12, 13]);
+  assert.deepEqual(full.map(row => row.id).sort((a, b) => a - b), [1, 2, 3, 5, 6, 7, 11, 12, 13, 14]);
 });
