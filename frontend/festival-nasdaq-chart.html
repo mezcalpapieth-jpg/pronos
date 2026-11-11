@@ -40,9 +40,12 @@
   <script>
     if (window.top !== window.self && location.hostname === 'pronos-chi.vercel.app') {
       const chart = document.querySelector('vunelix-advanced-chart');
-      if (new URLSearchParams(location.search).get('asset') === 'usdmxn') {
+      const asset = new URLSearchParams(location.search).get('asset');
+      if (asset === 'usdmxn') {
         chart.dataset.symbol = 'FX:USDMXN';
         chart.dataset.showReplay = 'false';
+      } else if (asset === 'spx') {
+        chart.dataset.symbol = 'SP:SPX';
       }
       const script = document.createElement('script');
       const allowedParents = ['https://pronos.io', 'https://www.pronos.io'];

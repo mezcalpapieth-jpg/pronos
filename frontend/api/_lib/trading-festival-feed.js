@@ -23,6 +23,7 @@ export function festivalSchedule(env = process.env) {
 }
 
 export function festivalFeedEnabled(slot, env = process.env) {
+  if (slot.presentationOnly) return false;
   return slot.provider === 'Coinbase' || (
     Boolean(massiveApiKey(env))
     && (env.TRADING_FESTIVAL_MASSIVE_SYMBOLS || '').split(',').map(value => value.trim()).includes(slot.key)

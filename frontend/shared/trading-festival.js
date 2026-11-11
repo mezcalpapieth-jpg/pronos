@@ -6,7 +6,7 @@ export const FESTIVAL_TIME_ZONE = 'America/Mexico_City';
 export const FESTIVAL_MINUTE = 60_000;
 export const FESTIVAL_CHART_LEAD_MS = 12 * FESTIVAL_MINUTE;
 
-// These are the event's confirmed wall-clock times in Mexico City (UTC−06).
+// The schedule uses Mexico City wall-clock times (UTC−06).
 export const FESTIVAL_SCHEDULE = [
   {
     key: 'btc', name: 'Bitcoin', symbol: 'BTC/USD', currency: 'USD', decimals: 2,
@@ -19,12 +19,26 @@ export const FESTIVAL_SCHEDULE = [
     startTime: '2026-11-12T22:35:00.000Z', endTime: '2026-11-12T23:05:00.000Z',
   },
   {
+    key: 'btc-fri', name: 'Bitcoin', symbol: 'BTC/USD', currency: 'USD', decimals: 2,
+    category: 'crypto', provider: 'Coinbase', ticker: 'BTC-USD',
+    startTime: '2026-11-13T19:15:00.000Z', endTime: '2026-11-13T19:45:00.000Z',
+  },
+  {
+    key: 'spx', name: 'S&P 500', symbol: 'SPX', currency: null, decimals: 2,
+    category: 'finanzas', provider: 'Vunelix', ticker: 'SP:SPX', presentationOnly: true,
+    startTime: '2026-11-13T20:15:00.000Z', endTime: '2026-11-13T20:45:00.000Z',
+  },
+  {
     key: 'ndx', name: 'Nasdaq-100', symbol: 'NDX', currency: null, decimals: 2,
     category: 'finanzas', provider: 'Massive', ticker: 'I:NDX',
     startTime: '2026-11-13T22:05:00.000Z', endTime: '2026-11-13T22:35:00.000Z',
     requiresReschedule: true,
   },
 ];
+
+export function isFestivalBitcoin(slot) {
+  return slot.provider === 'Coinbase' && slot.ticker === 'BTC-USD';
+}
 
 export function isFestivalDashboard(location) {
   return location.pathname.replace(/\/$/, '') === FESTIVAL_DASHBOARD_PATH;
