@@ -157,16 +157,23 @@
 .tf-signal.is-live { color: var(--tf-text); }
 .tf-signal.is-live::before { background: var(--tf-up); }
 
-.tf-nasdaq-frame {
-  display: block;
-  width: 100%;
+.tf-nasdaq-presentation {
+  display: grid;
   height: clamp(295px, 40vw, 410px);
-  border: 0;
   border-top: 1px solid var(--tf-grid);
   background: var(--tf-bg);
 }
+.tf-nasdaq-frame, .tf-nasdaq-fallback { grid-area: 1 / 1; }
+.tf-nasdaq-frame { width: 100%; height: 100%; border: 0; }
+.tf-nasdaq-fallback {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+}
+.tf-feature .tf-nasdaq-fallback .tf-cta { margin: 0; }
 @media (orientation: portrait) and (min-width: 650px) {
-  .tf-nasdaq-frame { height: clamp(320px, 23vh, 495px); }
+  .tf-nasdaq-presentation { height: clamp(320px, 23vh, 495px); }
 }
 
 .tf-directions {
