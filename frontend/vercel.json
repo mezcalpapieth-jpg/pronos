@@ -94,7 +94,7 @@
   ],
   "headers": [
     {
-      "source": "/(.*)",
+      "source": "/((?!festival-nasdaq-chart(?:\\.html)?$).*)",
       "headers": [
         { "key": "X-Frame-Options", "value": "DENY" },
         { "key": "X-Content-Type-Options", "value": "nosniff" },
@@ -104,7 +104,21 @@
         { "key": "Strict-Transport-Security", "value": "max-age=63072000; includeSubDomains; preload" },
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.sentry-cdn.com https://browser.sentry-cdn.com https://cdn.jsdelivr.net https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https: http://localhost:*; connect-src 'self' https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com https://api.turnkey.com https://*.turnkey.com https://*.alchemy.com https://*.alchemyapi.io https://api.resend.com https://api.twitter.com https://graph.instagram.com https://api.instagram.com https://o0.ingest.sentry.io https://*.ingest.sentry.io https://o4.ingest.us.sentry.io https://api.exchange.coinbase.com wss://*.alchemy.com wss://*.alchemyapi.io wss://ws-feed.exchange.coinbase.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://accounts.google.com https://twitter.com https://www.instagram.com https://api.instagram.com https://www.tiktok.com; object-src 'none'; upgrade-insecure-requests"
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.sentry-cdn.com https://browser.sentry-cdn.com https://cdn.jsdelivr.net https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https: http://localhost:*; connect-src 'self' https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com https://api.turnkey.com https://*.turnkey.com https://*.alchemy.com https://*.alchemyapi.io https://api.resend.com https://api.twitter.com https://graph.instagram.com https://api.instagram.com https://o0.ingest.sentry.io https://*.ingest.sentry.io https://o4.ingest.us.sentry.io https://api.exchange.coinbase.com wss://*.alchemy.com wss://*.alchemyapi.io wss://ws-feed.exchange.coinbase.com; frame-src 'self' https://pronos-chi.vercel.app/festival-nasdaq-chart; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://accounts.google.com https://twitter.com https://www.instagram.com https://api.instagram.com https://www.tiktok.com; object-src 'none'; upgrade-insecure-requests"
+        }
+      ]
+    },
+    {
+      "source": "/festival-nasdaq-chart",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow" },
+        { "key": "Referrer-Policy", "value": "no-referrer" },
+        { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=(), payment=(), usb=()" },
+        { "key": "Strict-Transport-Security", "value": "max-age=63072000; includeSubDomains; preload" },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'none'; script-src 'unsafe-inline' https://vunelix.com https://*.vunelix.com https://cdn.jsdelivr.net; style-src 'unsafe-inline' https://vunelix.com https://*.vunelix.com https://cdn.jsdelivr.net; connect-src https://vunelix.com https://*.vunelix.com https://fcsapi.com https://*.fcsapi.com wss://*.vunelix.com wss://*.fcsapi.com; img-src https: data: blob:; font-src https: data:; frame-ancestors https://pronos.io https://www.pronos.io; base-uri 'none'; form-action 'none'"
         }
       ]
     },

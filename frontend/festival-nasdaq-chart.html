@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nasdaq-100 | Pronos</title>
+  <style>
+    html, body { margin: 0; background: #111; color: #f5f5f3; }
+    vunelix-advanced-chart { display: block; height: 100dvh; }
+    p { margin: 1rem; font: 1rem system-ui; }
+  </style>
+</head>
+<body>
+  <vunelix-advanced-chart
+    data-symbol="NASDAQ:NDX"
+    data-period="1"
+    data-chart-type="area"
+    data-theme="dark"
+    data-timezone="-360"
+    data-full-page="true"
+    data-show-toolbar="true"
+    data-show-replay="true"
+    data-show-search="false"
+    data-show-sidebar="false"
+    data-show-range="false"
+    data-show-indicators="false"
+    data-show-symbol-info="false"
+    data-show-settings="false"
+    data-show-multi-chart="false"
+    data-show-templates="false"
+    data-show-capture="false"
+    data-show-undo-redo="false"
+    data-show-chart-types="false"
+    data-show-timeframes="false"
+    data-show-context-menu="false"
+    data-show-high-low="false"
+    data-show-ask-bid="false"
+    data-enable-cache="false"
+    data-change-url="false"
+  ></vunelix-advanced-chart>
+  <script>
+    if (window.top !== window.self && location.hostname === 'pronos-chi.vercel.app') {
+      const widget = document.createElement('script');
+      widget.type = 'module';
+      widget.src = 'https://vunelix.com/assets/bundles/js/widgets/charts/vunelix-advanced-chart.js';
+      widget.addEventListener('error', () => {
+        const message = document.createElement('p');
+        message.textContent = 'La gráfica del Nasdaq-100 no está disponible.';
+        document.querySelector('vunelix-advanced-chart').replaceWith(message);
+      });
+      document.body.append(widget);
+    }
+  </script>
+</body>
+</html>

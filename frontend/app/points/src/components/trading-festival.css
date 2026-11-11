@@ -157,6 +157,18 @@
 .tf-signal.is-live { color: var(--tf-text); }
 .tf-signal.is-live::before { background: var(--tf-up); }
 
+.tf-nasdaq-frame {
+  display: block;
+  width: 100%;
+  height: clamp(295px, 40vw, 410px);
+  border: 0;
+  border-top: 1px solid var(--tf-grid);
+  background: var(--tf-bg);
+}
+@media (orientation: portrait) and (min-width: 650px) {
+  .tf-nasdaq-frame { height: clamp(320px, 23vh, 495px); }
+}
+
 .tf-directions {
   display: grid;
   grid-template-columns: 1fr 1fr;
