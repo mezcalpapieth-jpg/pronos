@@ -16,14 +16,14 @@ async function setup(t) {
   await db.exec(`
     CREATE TABLE points_cycles (id INT PRIMARY KEY, label TEXT, started_at TIMESTAMPTZ,
       ends_at TIMESTAMPTZ, status TEXT, closed_at TIMESTAMPTZ);
-    CREATE TABLE points_markets (id INT PRIMARY KEY, status TEXT, outcome INT);
+    CREATE TABLE points_markets (id INT PRIMARY KEY, status TEXT, outcome INT, mode TEXT DEFAULT 'points');
     CREATE TABLE points_positions (market_id INT, username TEXT, outcome_index INT,
       shares NUMERIC(20,6), cost_basis NUMERIC(20,6), realized_pnl NUMERIC(20,6) DEFAULT 0,
       dismissed_at TIMESTAMPTZ, updated_at TIMESTAMPTZ,
       PRIMARY KEY (market_id, username, outcome_index));
     CREATE TABLE points_trades (id SERIAL PRIMARY KEY, market_id INT, username TEXT,
       side TEXT, outcome_index INT, shares NUMERIC(20,6), collateral NUMERIC(20,6) DEFAULT 0,
-      fee NUMERIC(20,6) DEFAULT 0, price_at_trade NUMERIC, source TEXT,
+      fee NUMERIC(20,6) DEFAULT 0, price_at_trade NUMERIC, source TEXT, api_key_id BIGINT,
       created_at TIMESTAMPTZ DEFAULT NOW());
     CREATE TABLE points_balances (username TEXT PRIMARY KEY, balance NUMERIC(20,6),
       updated_at TIMESTAMPTZ);
@@ -35,7 +35,7 @@ async function setup(t) {
       PRIMARY KEY (cycle_id, username));
     INSERT INTO points_cycles VALUES
       (5, 'Torneo Octubre 2026', '2026-10-01T06:00:00Z', '${cutoff}', 'active', NULL);
-    INSERT INTO points_markets VALUES (${marketId}, 'resolved', 1);
+    INSERT INTO points_markets(id,status,outcome) VALUES (${marketId}, 'resolved', 1);
     INSERT INTO points_cycle_snapshots VALUES (5, 'holder', 1485.7, -1002.95, -1002.95, 127);
   `);
   return db;

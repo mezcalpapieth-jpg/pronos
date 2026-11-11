@@ -66,6 +66,39 @@ const res = await fetch(\`https://pronos.io\${path}\`, {
 });`;
 }
 
+function claimCodeSample() {
+  return `import crypto from 'node:crypto';
+
+async function signedRequest(method, path, payload, idempotencyKey) {
+  const body = payload ? JSON.stringify(payload) : '';
+  const timestamp = Date.now().toString();
+  const signature = crypto.createHmac('sha256', process.env.PRONOS_API_SECRET)
+    .update(\`\${timestamp}\${method}\${path}\${body}\`).digest('hex');
+  const res = await fetch(\`https://pronos.io\${path}\`, {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      'X-PRONOS-API-KEY': process.env.PRONOS_API_KEY,
+      'X-PRONOS-TIMESTAMP': timestamp,
+      'X-PRONOS-SIGNATURE': signature,
+      ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
+    },
+    ...(body ? { body } : {}),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error?.code || 'request_failed');
+  return data;
+}
+
+const { claims } = await signedRequest('GET', '/api/v1/claimable');
+for (const { marketId, outcomeIndex } of claims) {
+  const key = crypto.randomUUID(); // Persist before sending; reuse on retries.
+  const result = await signedRequest('POST', '/api/v1/redeem',
+    { marketId, outcomeIndex }, key);
+  console.log(result.redemption.payout, result.currency);
+}`;
+}
+
 function CopyButton({ value, copiedId, setCopiedId, id, children }) {
   async function copy() {
     try {
@@ -112,7 +145,7 @@ export default function PointsDeveloper({ onOpenLogin }) {
         expires: 'Expires',
         readOnly: 'Read markets and account data',
         trading: 'Request trading access',
-        tradingNote: 'Trading keys can place orders from your account. We may ask for phone verification before higher-risk access is approved.',
+        tradingNote: 'Trading keys can place orders and claim winnings into your account balance. We may ask for phone verification before higher-risk access is approved.',
         create: 'Create key',
         creating: 'Creating...',
         current: 'Current keys',
@@ -142,7 +175,7 @@ export default function PointsDeveloper({ onOpenLogin }) {
         expires: 'Expira',
         readOnly: 'Leer mercados y datos de tu cuenta',
         trading: 'Solicitar acceso de trading',
-        tradingNote: 'Las keys con trading pueden operar desde tu cuenta. Podemos pedir verificacion telefonica antes de aprobar uso de mayor riesgo.',
+        tradingNote: 'Las claves de trading pueden operar y cobrar ganancias a tu balance. Podemos pedir verificación telefónica antes de aprobar usos de mayor riesgo.',
         create: 'Crear key',
         creating: 'Creando...',
         current: 'Keys activas',
@@ -461,6 +494,8 @@ export default function PointsDeveloper({ onOpenLogin }) {
                 'GET /api/v1/me',
                 'GET /api/v1/balance',
                 'GET /api/v1/positions',
+                'GET /api/v1/claimable',
+                'POST /api/v1/redeem',
                 'GET /api/v1/trades',
                 'POST /api/v1/trades',
               ].map(endpoint => (
@@ -469,9 +504,21 @@ export default function PointsDeveloper({ onOpenLogin }) {
             </ul>
             <p style={{ ...bodyStyle, marginTop: 12 }}>
               {lang === 'en'
-                ? 'Use Idempotency-Key on POST /api/v1/trades so retries do not duplicate an order.'
-                : 'Usa Idempotency-Key en POST /api/v1/trades para que un retry no duplique una orden.'}
+                ? 'Use Idempotency-Key on POST /api/v1/trades and POST /api/v1/redeem. Reuse the key and identical body when retrying; sign each attempt with a fresh timestamp.'
+                : 'Usa Idempotency-Key en POST /api/v1/trades y POST /api/v1/redeem. Reutiliza la clave y el mismo cuerpo al reintentar; firma cada intento con una nueva marca de tiempo.'}
             </p>
+            <h3 style={docsHeadingStyle}>{lang === 'en' ? 'Claim winnings without a session' : 'Cobrar ganancias sin una sesión'}</h3>
+            <p style={bodyStyle}>
+              {lang === 'en'
+                ? 'READ keys can list claimable positions; TRADE keys can claim them. Send { marketId, outcomeIndex } to redeem every eligible winning share in that position, credited as MXNP. The signed key determines the account; no cookie or username is needed. Claims stay open after the tournament until cycle reset, and frozen standings stay unchanged.'
+                : 'Las claves READ pueden listar posiciones por cobrar; las claves TRADE pueden cobrarlas. Envía { marketId, outcomeIndex } para cobrar todas las acciones ganadoras elegibles de esa posición, abonadas en MXNP. La clave firmada identifica la cuenta; no necesitas cookie ni nombre de usuario. Los cobros siguen abiertos después del torneo hasta reiniciar el ciclo, sin cambiar la clasificación congelada.'}
+            </p>
+            <p style={bodyStyle}>
+              {lang === 'en'
+                ? 'GET /api/v1/claimable accepts marketId, limit (default 100, maximum 200), and afterMarketId. If nextCursor is present, pass it as afterMarketId for the next page. Poll again after claiming; balances in an idempotent replay reflect the original claim. Use GET /api/v1/balance for the latest balance.'
+                : 'GET /api/v1/claimable acepta marketId, limit (100 por defecto, máximo 200) y afterMarketId. Si aparece nextCursor, úsalo como afterMarketId para la siguiente página. Consulta de nuevo después de cobrar; el balance de una respuesta repetida corresponde al cobro original. Usa GET /api/v1/balance para consultar el balance actual.'}
+            </p>
+            <pre style={codeStyle}>{claimCodeSample()}</pre>
           </div>
         </div>
       </section>

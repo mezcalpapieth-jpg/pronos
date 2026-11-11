@@ -7,17 +7,18 @@ function fail(message, status = 400) {
 }
 
 export async function redeemWinningPosition(client, {
-  username, marketId, outcomeIndex, window = null, automatic = false,
+  username, marketId, outcomeIndex, window = null, automatic = false, source = 'web', apiKeyId = null,
 }) {
   // Share the cycle lock with rollover and the cutoff snapshot before wallet locks.
   const activeWindow = window || await readActiveCycleWindow(client, { forUpdate: true });
   const scoringStartIso = scoringStartIsoForWindow(activeWindow);
   if (!scoringStartIso) fail('no_active_cycle', 409);
   const marketResult = await client.query(
-    'SELECT id, status, outcome FROM points_markets WHERE id = $1 FOR UPDATE', [marketId],
+    'SELECT id, status, outcome, mode FROM points_markets WHERE id = $1 FOR UPDATE', [marketId],
   );
   const m = marketResult.rows[0];
   if (!m) fail('market_not_found', 404);
+  if ((m.mode || 'points') !== 'points') fail('market_mode_not_supported');
   if (m.status !== 'resolved') fail('market_not_resolved');
   if (m.outcome == null || Number(m.outcome) !== outcomeIndex) fail('losing_outcome');
   const positionResult = await client.query(`
@@ -68,9 +69,10 @@ export async function redeemWinningPosition(client, {
     remainingShares <= SHARE_EPSILON || staleRemainder, marketId, username, outcomeIndex]);
   await client.query(`
     INSERT INTO points_trades (market_id, username, side, outcome_index,
-      shares, collateral, fee, price_at_trade, source)
-    VALUES ($1, $2, 'redeem', $3, $4, $5, 0, 1, $6)
-  `, [marketId, username, outcomeIndex, redeemShares, payout, automatic ? 'tournament_auto_claim' : 'web']);
+      shares, collateral, fee, price_at_trade, source, api_key_id)
+    VALUES ($1, $2, 'redeem', $3, $4, $5, 0, 1, $6, $7)
+  `, [marketId, username, outcomeIndex, redeemShares, payout, automatic ? 'tournament_auto_claim' : source === 'api' ? 'api' : 'web',
+    !automatic && source === 'api' ? apiKeyId : null]);
   await client.query(`
     INSERT INTO points_distributions (username, amount, kind, reference_id, reason)
     VALUES ($1, $2, 'redemption', $3, $4)
@@ -84,6 +86,7 @@ export async function collectCyclePositionWinnings(client, window) {
     SELECT p.market_id, p.username, p.outcome_index
     FROM points_positions p JOIN points_markets m ON m.id = p.market_id
     WHERE m.status = 'resolved' AND m.outcome = p.outcome_index AND p.shares > $3
+      AND COALESCE(m.mode, 'points') = 'points'
       AND EXISTS (SELECT 1 FROM points_trades t
         WHERE LOWER(t.username) = LOWER(p.username) AND t.market_id = p.market_id
           AND t.outcome_index = p.outcome_index AND t.side = 'buy'

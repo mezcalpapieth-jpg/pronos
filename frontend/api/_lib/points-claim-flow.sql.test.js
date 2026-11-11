@@ -22,7 +22,7 @@ async function fixture(t) {
     INSERT INTO points_users(username) VALUES('ana'),('ben');
     INSERT INTO points_balances VALUES('ana',900,NOW()),('ben',900,NOW());
     CREATE TABLE points_markets(id INT PRIMARY KEY,parent_id INT,created_at TIMESTAMPTZ DEFAULT '2026-10-02T06:00Z',
-      tournament_featured BOOLEAN DEFAULT true,status TEXT,outcome INT,reserves JSONB DEFAULT '[1000,1000]',
+      mode TEXT DEFAULT 'points',tournament_featured BOOLEAN DEFAULT true,status TEXT,outcome INT,reserves JSONB DEFAULT '[1000,1000]',
       outcomes JSONB DEFAULT '["Yes","No"]',start_time TIMESTAMPTZ,end_time TIMESTAMPTZ,resolved_at TIMESTAMPTZ,resolver_config JSONB DEFAULT '{}');
     INSERT INTO points_markets(id,status,outcome,resolved_at) VALUES
       (1,'resolved',0,'2026-10-03T06:00Z'),(2,'resolved',1,'2026-10-03T06:00Z'),
@@ -32,7 +32,7 @@ async function fixture(t) {
       realized_pnl NUMERIC DEFAULT 0,updated_at TIMESTAMPTZ,dismissed_at TIMESTAMPTZ,PRIMARY KEY(market_id,username,outcome_index));
     INSERT INTO points_positions(market_id,username,outcome_index,shares,cost_basis) VALUES(1,'ana',0,200,100),(1,'ben',1,100,100);
     CREATE TABLE points_trades(id SERIAL PRIMARY KEY,market_id INT,username TEXT,side TEXT,outcome_index INT,shares NUMERIC,
-      collateral NUMERIC,fee NUMERIC DEFAULT 0,price_at_trade NUMERIC,source TEXT DEFAULT 'web',created_at TIMESTAMPTZ DEFAULT NOW());
+      collateral NUMERIC,fee NUMERIC DEFAULT 0,price_at_trade NUMERIC,source TEXT DEFAULT 'web',api_key_id BIGINT,created_at TIMESTAMPTZ DEFAULT NOW());
     INSERT INTO points_trades(market_id,username,side,outcome_index,shares,collateral,price_at_trade,created_at) VALUES
       (1,'ana','buy',0,200,100,0.5,'2026-10-02T06:00Z'),(1,'ben','buy',1,100,100,1,'2026-10-02T06:00Z');
     CREATE TABLE points_parlay_tickets(id INT PRIMARY KEY,username TEXT,cycle_id INT DEFAULT 5,stake NUMERIC,multiplier NUMERIC DEFAULT 5,
