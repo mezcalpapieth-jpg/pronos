@@ -1,0 +1,250 @@
+[
+  {
+    "__typename": "EventMatch",
+    "id": "115660540726095133",
+    "blockName": "Finals",
+    "startTime": "2026-11-14T19:00:00Z",
+    "state": "unstarted",
+    "type": "match",
+    "league": {
+      "__typename": "League",
+      "id": "98767975604431411",
+      "name": "Worlds",
+      "image": "http://static.lolesports.com/leagues/1592594612171_WorldsDarkBG.png",
+      "slug": "worlds",
+      "displayPriority": {
+        "__typename": "Priority",
+        "status": "force_selected",
+        "position": 0
+      }
+    },
+    "tournament": {
+      "__typename": "Tournament",
+      "id": "115660540725177488",
+      "name": "2026",
+      "state": "inProgress"
+    },
+    "matchTeams": [
+      {
+        "__typename": "MatchTeam",
+        "id": "115660540726095133:100205573495116443",
+        "teamId": "100205573495116443",
+        "homeLeague": {
+          "__typename": "HomeLeague",
+          "image": "http://static.lolesports.com/leagues/lck-color-on-black.png",
+          "regionSlug": "kr"
+        },
+        "name": "Gen.G Esports",
+        "image": "http://static.lolesports.com/teams/1773829250929_GENGLOGO_GOLD.png",
+        "lightImage": null,
+        "code": "GEN",
+        "result": {
+          "__typename": "TeamResult",
+          "gameWins": 0,
+          "outcome": null
+        }
+      },
+      {
+        "__typename": "MatchTeam",
+        "id": "115660540726095133:99566404853854212",
+        "teamId": "99566404853854212",
+        "homeLeague": {
+          "__typename": "HomeLeague",
+          "image": "http://static.lolesports.com/leagues/1592516115322_LPL-01-FullonDark.png",
+          "regionSlug": "cn"
+        },
+        "name": "BILIBILI GAMING",
+        "image": "http://static.lolesports.com/teams/1682322954525_Bilibili_Gaming_logo_20211.png",
+        "lightImage": null,
+        "code": "BLG",
+        "result": {
+          "__typename": "TeamResult",
+          "gameWins": 0,
+          "outcome": null
+        }
+      }
+    ],
+    "match": {
+      "__typename": "Match",
+      "id": "115660540726095133",
+      "state": "unstarted",
+      "flags": [
+        "isSpoiler"
+      ],
+      "type": "normal",
+      "strategy": {
+        "__typename": "MatchStrategy",
+        "type": "bestOf",
+        "count": 5
+      },
+      "games": []
+    },
+    "streams": []
+  },
+  {
+    "__typename": "EventMatch",
+    "id": "115660540726095127",
+    "blockName": "Semifinals",
+    "startTime": "2026-11-07T22:00:00Z",
+    "state": "completed",
+    "type": "match",
+    "league": {
+      "__typename": "League",
+      "id": "98767975604431411",
+      "name": "Worlds",
+      "image": "http://static.lolesports.com/leagues/1592594612171_WorldsDarkBG.png",
+      "slug": "worlds",
+      "displayPriority": {
+        "__typename": "Priority",
+        "status": "force_selected",
+        "position": 0
+      }
+    },
+    "tournament": {
+      "__typename": "Tournament",
+      "id": "115660540725177488",
+      "name": "2026",
+      "state": "inProgress"
+    },
+    "matchTeams": [
+      {
+        "__typename": "MatchTeam",
+        "id": "115660540726095127:100205573495116443",
+        "teamId": "100205573495116443",
+        "homeLeague": {
+          "__typename": "HomeLeague",
+          "image": "http://static.lolesports.com/leagues/lck-color-on-black.png",
+          "regionSlug": "kr"
+        },
+        "name": "Gen.G Esports",
+        "image": "http://static.lolesports.com/teams/1773829250929_GENGLOGO_GOLD.png",
+        "lightImage": null,
+        "code": "GEN",
+        "result": {
+          "__typename": "TeamResult",
+          "gameWins": 3,
+          "outcome": "win"
+        }
+      },
+      {
+        "__typename": "MatchTeam",
+        "id": "115660540726095127:99566404848691211",
+        "teamId": "99566404848691211",
+        "homeLeague": {
+          "__typename": "HomeLeague",
+          "image": "http://static.lolesports.com/leagues/1592516115322_LPL-01-FullonDark.png",
+          "regionSlug": "cn"
+        },
+        "name": "Invictus Gaming",
+        "image": "http://static.lolesports.com/teams/1634762917340_300px-Invictus_Gaming_logo.png",
+        "lightImage": "http://static.lolesports.com/teams/1634762917340_300px-Invictus_Gaming_logo.png",
+        "code": "IG",
+        "result": {
+          "__typename": "TeamResult",
+          "gameWins": 0,
+          "outcome": "loss"
+        }
+      }
+    ],
+    "match": {
+      "__typename": "Match",
+      "id": "115660540726095127",
+      "state": "completed",
+      "flags": [
+        "hasVod",
+        "isSpoiler"
+      ],
+      "type": "normal",
+      "strategy": {
+        "__typename": "MatchStrategy",
+        "type": "bestOf",
+        "count": 5
+      },
+      "games": []
+    },
+    "streams": []
+  },
+  {
+    "__typename": "EventMatch",
+    "id": "115660540726095121",
+    "blockName": "Semifinals",
+    "startTime": "2026-11-08T22:00:00Z",
+    "state": "completed",
+    "type": "match",
+    "league": {
+      "__typename": "League",
+      "id": "98767975604431411",
+      "name": "Worlds",
+      "image": "http://static.lolesports.com/leagues/1592594612171_WorldsDarkBG.png",
+      "slug": "worlds",
+      "displayPriority": {
+        "__typename": "Priority",
+        "status": "force_selected",
+        "position": 0
+      }
+    },
+    "tournament": {
+      "__typename": "Tournament",
+      "id": "115660540725177488",
+      "name": "2026",
+      "state": "inProgress"
+    },
+    "matchTeams": [
+      {
+        "__typename": "MatchTeam",
+        "id": "115660540726095121:99566404853854212",
+        "teamId": "99566404853854212",
+        "homeLeague": {
+          "__typename": "HomeLeague",
+          "image": "http://static.lolesports.com/leagues/1592516115322_LPL-01-FullonDark.png",
+          "regionSlug": "cn"
+        },
+        "name": "BILIBILI GAMING",
+        "image": "http://static.lolesports.com/teams/1682322954525_Bilibili_Gaming_logo_20211.png",
+        "lightImage": null,
+        "code": "BLG",
+        "result": {
+          "__typename": "TeamResult",
+          "gameWins": 3,
+          "outcome": "win"
+        }
+      },
+      {
+        "__typename": "MatchTeam",
+        "id": "115660540726095121:98767991853197861",
+        "teamId": "98767991853197861",
+        "homeLeague": {
+          "__typename": "HomeLeague",
+          "image": "http://static.lolesports.com/leagues/lck-color-on-black.png",
+          "regionSlug": "kr"
+        },
+        "name": "T1",
+        "image": "http://static.lolesports.com/teams/1726801573959_539px-T1_2019_full_allmode.png",
+        "lightImage": "http://static.lolesports.com/teams/1592589079406_T1T1-02-SingleonDark.png",
+        "code": "T1",
+        "result": {
+          "__typename": "TeamResult",
+          "gameWins": 1,
+          "outcome": "loss"
+        }
+      }
+    ],
+    "match": {
+      "__typename": "Match",
+      "id": "115660540726095121",
+      "state": "completed",
+      "flags": [
+        "hasVod",
+        "isSpoiler"
+      ],
+      "type": "normal",
+      "strategy": {
+        "__typename": "MatchStrategy",
+        "type": "bestOf",
+        "count": 5
+      },
+      "games": []
+    },
+    "streams": []
+  }
+]

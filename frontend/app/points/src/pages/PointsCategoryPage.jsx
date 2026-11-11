@@ -67,6 +67,7 @@ const SPORT_TABS = [
   { key: 'f1',       tKey: 'points.sport.f1'       },
   { key: 'tennis',   tKey: 'points.sport.tennis'   },
   { key: 'golf',     tKey: 'points.sport.golf'     },
+  { key: 'esports',  tKey: 'points.sport.esports'  },
   // Combate = fighting umbrella. Markets land here with sport='combate'
   // and league='ufc' or 'boxing'. Generator: market-gen/ufc.js; boxing
   // generator pending a data source decision.
@@ -105,6 +106,11 @@ const BASEBALL_LEAGUES = [
   { key: 'mlb', tKey: 'points.league.mlb' },
   { key: 'lmb', tKey: 'points.league.lmb' },
   { key: 'lmp', tKey: 'points.league.lmp' },
+];
+
+const ESPORTS_LEAGUES = [
+  { key: 'all', tKey: 'points.league.all' },
+  { key: 'lol', tKey: 'points.league.lol' },
 ];
 
 // Combate (fighting) leagues sidebar — UFC + Boxing today, with
@@ -353,8 +359,8 @@ export default function PointsCategoryPage() {
       || (RESOLVED_SLUGS.has(slug) && resueltosCat === 'deportes');
     if (inDeportesContext && sport !== 'all') {
       out = out.filter(m => (m.sport || '').toLowerCase() === sport);
-      // League sidebars on soccer + baseball + combate (combat sports).
-      if ((sport === 'soccer' || sport === 'baseball' || sport === 'combate') && league !== 'all') {
+      // Narrow sports that have league or game subfilters.
+      if ((sport === 'soccer' || sport === 'baseball' || sport === 'combate' || sport === 'esports') && league !== 'all') {
         out = out.filter(m => (m.league || '').toLowerCase() === league);
       }
     }
@@ -446,7 +452,7 @@ export default function PointsCategoryPage() {
   const showSportBar = slug === 'deportes'
     || (isResueltos && resueltosCat === 'deportes');
   const showLeagueSidebar = (slug === 'deportes' || (isResueltos && resueltosCat === 'deportes'))
-    && (sport === 'soccer' || sport === 'baseball' || sport === 'combate');
+    && (sport === 'soccer' || sport === 'baseball' || sport === 'combate' || sport === 'esports');
   // Crypto-type sub-row: /c/crypto, or /c/resueltos?cat=crypto.
   const showCryptoTypeBar = slug === 'crypto'
     || (isResueltos && resueltosCat === 'crypto');
@@ -455,11 +461,7 @@ export default function PointsCategoryPage() {
   const topicTabs = activeFilterCategory === 'musica'
     ? ENTERTAINMENT_TOPIC_TABS
     : MEXICO_TOPIC_TABS;
-  const leagueTabs = sport === 'baseball'
-    ? BASEBALL_LEAGUES
-    : sport === 'combate'
-      ? COMBATE_LEAGUES
-      : SOCCER_LEAGUES;
+  const leagueTabs = { baseball: BASEBALL_LEAGUES, combate: COMBATE_LEAGUES, esports: ESPORTS_LEAGUES }[sport] || SOCCER_LEAGUES;
   // Friendly sidebar header. "Disciplinas" feels right for combat
   // sports vs "Ligas" for soccer / baseball.
   const leagueSidebarLabel = sport === 'combate' ? 'Disciplinas' : 'Ligas';

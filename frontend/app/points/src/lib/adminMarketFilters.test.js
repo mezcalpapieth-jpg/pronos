@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 
 import {
   ADMIN_ENTERTAINMENT_TOPIC_FILTERS,
+  ADMIN_ESPORTS_LEAGUES,
+  ADMIN_SPORT_FILTERS,
   ADMIN_GEO_FILTERS,
   ADMIN_MEXICO_TOPIC_FILTERS,
   CATEGORIES,
@@ -108,4 +110,12 @@ test('shows infrastructure in the catalog and forwards its subcategory', () => {
     categoryFilter: 'infraestructura',
     topicFilter: 'aeropuertos',
   }).toString(), 'status=active&category=infraestructura&topic=aeropuertos');
+});
+
+test('esports catalog narrows proposals and markets to League of Legends', () => {
+  assert.ok(ADMIN_SPORT_FILTERS.some(({ key }) => key === 'esports'));
+  assert.ok(ADMIN_ESPORTS_LEAGUES.some(({ key }) => key === 'lol'));
+  assert.equal(buildAdminMarketsQuery({
+    status: 'pending', categoryFilter: 'deportes', sportFilter: 'esports', leagueFilter: 'lol',
+  }).toString(), 'status=pending&category=deportes&sport=esports&league=lol');
 });

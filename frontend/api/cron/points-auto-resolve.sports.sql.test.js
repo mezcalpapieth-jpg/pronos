@@ -42,7 +42,8 @@ test('the minute sports pass finds early finals and rescheduled games without wa
     UPDATE points_markets SET resolver_config='{"source":"espn","shape":"parallel"}' WHERE id=10;
     UPDATE points_markets SET resolver_config='{"source":"espn","shape":"draw3"}' WHERE id=11;
     UPDATE points_markets SET resolver_config='{"source":"football-data","shape":"total-goals-over"}' WHERE id=12;
-    UPDATE points_markets SET resolver_config='{"source":"mlb-stats","shape":"binary"}' WHERE id IN (13,14);
+    UPDATE points_markets SET resolver_config='{"source":"mlb-stats","shape":"binary"}' WHERE id=13;
+    UPDATE points_markets SET resolver_config='{"source":"lolesports","shape":"binary"}' WHERE id=14;
   `);
   const sql = async (strings, ...values) => (await db.query(
     strings.reduce((text, part, i) => text + (i ? `$${i}` : '') + part, ''), values,

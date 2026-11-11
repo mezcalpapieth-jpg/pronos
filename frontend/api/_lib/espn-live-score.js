@@ -294,6 +294,12 @@ export function buildEspnLiveScoreConfig({
   startTime,
 }) {
   const cfg = parseJsonb(resolverConfig, null);
+  if (resolverType === 'sports_api' && cfg?.source === 'lolesports' && cfg.shape === 'binary') {
+    return {
+      source: 'lolesports', leaguePath: 'esports/lol', eventId: String(cfg.eventId),
+      leagueSlug: cfg.leagueSlug, tournamentId: cfg.tournamentId, homeId: cfg.homeId, awayId: cfg.awayId, bestOf: cfg.bestOf,
+    };
+  }
   const pinned = cfg?.source === 'football-data' ? cfg.espnFallback : cfg?.source === 'espn' ? cfg : null;
   if (resolverType === 'sports_api' && pinned?.leaguePath && pinned?.eventId) {
     return {
