@@ -80,6 +80,38 @@ The outcome IDs are examples from November 10. Use `markets` for current testnet
 
 The report walks the visible levels for each size and records coverage, average and worst prices, spread, and depth within two and five probability points. `--fee-bps` models a flat **total taker fee** for the estimate. Use a separately confirmed fee for each scenario. The default is zero, and FX, venue minimums and changes before submission are outside this estimate. Stale, missing and one-sided observations should count separately in the pilot. Record repeated samples and eventual order results. HyperCore exposes up to 20 levels per side, and the two tokens of the same binary outcome share a merged book. [Order-book endpoint](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/info-endpoint#l2-book-snapshot) · [Merged outcome book](https://hyperliquid.gitbook.io/hyperliquid-docs/hyperliquid-improvement-proposals-hips/hip-4-outcome-markets#mechanics)
 
+## Record sports books continuously without signing
+
+`orderbook_recorder.py` imports no wallet, signing or exchange code. It reads public **mainnet** books, since testnet depth cannot establish retail execution quality. It needs only Python 3.9+ and `requests`. The dated configuration selects five distinct sports events and includes official fixture sources. Confirm the selected outcome's full rules and kickoff before starting a new run. Soccer selections are individual home-win Yes tokens, with a draw counting as No.
+
+```sh
+cd experiments/hip4
+.venv/bin/python orderbook_recorder.py collect --config sports_orderbooks_2026-11-10.json
+```
+
+The foreground command records through the last configured kickoff. For a local detached process, keep the computer awake and retain this worktree. Run the following from the same directory, with an existing virtual environment:
+
+```sh
+mkdir -p .local-orderbooks/2026-11-10-sports
+nohup .venv/bin/python -u orderbook_recorder.py collect \
+  > .local-orderbooks/2026-11-10-sports/collector.log 2>&1 < /dev/null &
+sleep 2
+cat .local-orderbooks/2026-11-10-sports/collector.pid
+.venv/bin/python orderbook_recorder.py report
+```
+
+The collector writes its actual PID after acquiring a single-process lock. To stop it, send SIGTERM to that PID. Restart the same command and directory to resume the original schedule. Configuration changes require a new `--data-dir`; previously captured observations are immutable. The CLI accepts this global option before `collect` or `report`. This is a local process, with no automatic startup after reboot or recovery after a process crash. A temporary worktree is not permanent storage. Preserve its ignored data directory before deleting it.
+
+Each run stores raw books, receipt times, timestamped FX quotes, failures and scores in `samples.sqlite3`. `report.md` and `report.json` refresh after each batch and at the final kickoff. `report` recomputes the denominator at the current time, including missed slots. Add `--json` after `report` for structured output. No balance or private-key file is read. No transaction is submitted.
+
+Sampling is every five minutes, increasing to every minute for each event's last pregame hour. The depth target is **MXN 600 per side within two probability points of the midpoint after assumed trading fees**, qualified in **at least 90% of all scheduled observations**. A classification needs 20 complete samples. The last-hour gate also requires recording from an hour before kickoff through kickoff. Starting later always leaves that gate provisional. These are pilot screening thresholds, not proof of profitable operation.
+
+Missing, stale, one-sided, crossed, invalid and late samples reduce the qualifying rate. Captures have a 15-second grace period. Book timestamps at least 15 seconds away from receipt fail freshness. This conservative rule can reject an unchanged book. Bitso ticker times must be no more than two minutes old or 15 seconds in the future. Computer sleep and downtime are inferred from the frozen schedule and counted as missing. HTTP errors are retained as failures, rather than empty successful books.
+
+The configured **35 bps total fee** is an explicit scenario, not a verified HIP-4 charge. MXN conversion uses the indicative public [Bitso USD/MXN ticker](https://api.bitso.com/v3/ticker/?book=usd_mxn), assuming 1 USDC = 1 USD. It excludes executable conversion spreads and fees. Books expose at most 20 price levels per side. Partial displayed coverage is retained, and simulated sweeps never establish actual fills or fee credits. [Book endpoint](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/info-endpoint#l2-book-snapshot)
+
+Cash-limited buys find the largest whole-share quantity whose displayed cost, including assumed fees, fits MXN 100, 300 or 1,000. They report unspent cash and whether budget or displayed depth limits the quantity. The separate matched-position comparison values a whole-share position at the midpoint and independently sweeps buys and sells of that same position. The report shows actual fee-adjusted spend/proceeds because those can differ from its reference labels. Slippage is measured in **probability percentage points**, not relative price percentages. Aggregate full-visible rates and percentiles refer to these matched-position comparisons. Full-visible rates include all scheduled observations, while slippage percentiles include only complete visible sweeps. A fee scenario is frozen per run so reports never mix different assumptions.
+
 ## Take and reconcile two fills
 
 1. Use `markets` and `book OUTCOME SIDE` to select a live USDC outcome, far from settlement, with independent bids and asks. Choose bounds and an integer size that can cross on both sides for 10–25 mock USDC per leg. These are probe limits; live order minimums may differ. Fresh quotes can still move between observation and execution.

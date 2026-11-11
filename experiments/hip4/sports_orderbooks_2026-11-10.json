@@ -1,0 +1,35 @@
+{
+  "assumed_taker_fee_bps": "35",
+  "markets": [
+    {
+      "label": "Philadelphia 76ers win vs Boston Celtics",
+      "coin": "#279540",
+      "kickoff": "2026-11-11T01:00:00Z",
+      "source_url": "https://www.nba.com/game/bos-vs-phi-0022600212"
+    },
+    {
+      "label": "Houston Rockets win vs Golden State Warriors",
+      "coin": "#279860",
+      "kickoff": "2026-11-12T02:30:00Z",
+      "source_url": "https://www.nba.com/games?date=2026-11-11"
+    },
+    {
+      "label": "Turkiye win vs Belgium (draw counts as No)",
+      "coin": "#290550",
+      "kickoff": "2026-11-12T17:00:00Z",
+      "source_url": "https://www.uefa.com/uefanationsleague/news/02a2-1fea18abbcbc-456e846509e7-1000--2026-27-uefa-nations-league-all-the-league-phase-fixtures/"
+    },
+    {
+      "label": "Italy win vs France (draw counts as No)",
+      "coin": "#290690",
+      "kickoff": "2026-11-12T19:45:00Z",
+      "source_url": "https://www.uefa.com/uefanationsleague/news/02a2-1fea18abbcbc-456e846509e7-1000--2026-27-uefa-nations-league-all-the-league-phase-fixtures/"
+    },
+    {
+      "label": "New York Giants win vs Washington Commanders",
+      "coin": "#301230",
+      "kickoff": "2026-11-13T01:15:00Z",
+      "source_url": "https://www.nfl.com/schedules/2026/by-week/week-10"
+    }
+  ]
+}

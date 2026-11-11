@@ -1,3 +1,5 @@
 .local-testnet/
 .venv/
 __pycache__/
+
+.local-orderbooks/
