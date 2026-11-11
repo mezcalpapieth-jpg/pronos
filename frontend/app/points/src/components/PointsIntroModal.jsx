@@ -22,6 +22,7 @@
 import React, { useEffect, useState } from 'react';
 import { useT } from '@app/lib/i18n.js';
 import { fetchStats } from '../lib/pointsApi.js';
+import { TOURNAMENT_REWARDS } from '../../../../shared/points-rewards.js';
 
 export const INTRO_SEEN_KEY = 'pronos-points-intro-seen';
 
@@ -71,8 +72,12 @@ export default function PointsIntroModal({ open, onClose, onCreateAccount }) {
   if (!open) return null;
 
   const stats = [
-    { value: '500', unit: 'MXNP', label: t('points.hero.stats.welcomeBonus') },
-    { value: '100', unit: '+20/día', label: t('points.hero.stats.dailyClaim') },
+    { value: TOURNAMENT_REWARDS.signupBonus, unit: 'MXNP', label: t('points.hero.stats.welcomeBonus') },
+    {
+      value: TOURNAMENT_REWARDS.dailyBase,
+      unit: t('points.hero.stats.dailyStreak', { amount: TOURNAMENT_REWARDS.dailyStep }),
+      label: t('points.hero.stats.dailyClaim'),
+    },
     ...(activeCount != null
       ? [{ value: String(activeCount), unit: '', label: t('points.hero.stats.activeMarkets') }]
       : []),

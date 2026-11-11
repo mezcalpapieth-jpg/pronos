@@ -1,3 +1,7 @@
+import { TOURNAMENT_REWARDS } from '../../shared/points-rewards.js';
+
+export { TOURNAMENT_REWARDS };
+
 export const TOURNAMENT_TIME_ZONE = 'America/Mexico_City';
 
 export const TOURNAMENT_START_ISO = '2026-08-12T06:00:00.000Z';
@@ -35,23 +39,6 @@ export const TOURNAMENT_PARLAY_MAX_PAYOUT_MXNP = 5000;
 export const TOURNAMENT_PARLAY_MAX_MULTIPLIER = 25;
 export const TOURNAMENT_PARLAY_PRICE_FLOOR = 0.05;
 export const TOURNAMENT_PARLAY_PRICE_CEILING = 0.95;
-
-export const TOURNAMENT_REWARDS = Object.freeze({
-  signupBonus: 500,
-  preCycleSignupBonus: 200,
-  dailyBase: 100,
-  dailyStep: 20,
-  dailyMax: 200,
-  rescueFloor: 300,
-  rescueMaxClaims: 3,
-  referrerReward: 100,
-  preCycleReferralReward: 50,
-  referredReward: 250,
-  referralCycleCap: 10,
-  socialFollow: 100,
-  socialPost: 100,
-  socialStory: 750,
-});
 
 export const TOURNAMENT_PRIZES = Object.freeze([
   { rank: '1', prize: '$3,500 MXN', amount: 3500 },

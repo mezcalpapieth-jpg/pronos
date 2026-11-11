@@ -30,6 +30,7 @@ import {
 } from '../lib/pointsApi.js';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { usePointsExecution } from '../lib/PointsExecution.jsx';
+import { TOURNAMENT_REWARDS } from '../../../../shared/points-rewards.js';
 import { useLang, useT } from '@app/lib/i18n.js';
 import { useIsMobile } from '@app/lib/useIsMobile.js';
 import {
@@ -648,7 +649,7 @@ export default function PointsHome({ onOpenLogin }) {
             <div key={s.n} className="step">
               <div className="step-num">{s.n}</div>
               <div className="step-title">{t(s.tKey)}</div>
-              <p className="step-desc">{t(s.dKey)}</p>
+              <p className="step-desc">{t(s.dKey, { bonus: TOURNAMENT_REWARDS.signupBonus })}</p>
             </div>
           ))}
         </div>
