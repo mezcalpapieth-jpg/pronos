@@ -1,0 +1,51 @@
+.mxn-checkout {
+  max-width: 1120px;
+  min-height: 60vh;
+  margin-inline: auto;
+  padding: 40px clamp(16px, 4vw, 48px) 64px;
+}
+
+.mxn-checkout h1 { margin: 0 0 12px; font-size: clamp(30px, 5vw, 46px); }
+.mxn-checkout h2 { margin: 0 0 16px; font-size: 21px; }
+.mxn-checkout p { margin: 0; color: var(--text-secondary); line-height: 1.55; }
+.mxn-checkout-layout { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); align-items: start; gap: 18px; margin-top: 24px; }
+.mxn-checkout-card { min-width: 0; padding: clamp(18px, 3vw, 26px); border: 1px solid var(--border); border-radius: 12px; background: var(--surface1); }
+.mxn-checkout-card form { display: grid; gap: 16px; }
+.mxn-checkout-card form > label { display: grid; gap: 7px; font-size: 14px; }
+.mxn-checkout-card select { width: 100%; min-width: 0; min-height: 42px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface2); color: inherit; font: inherit; text-overflow: ellipsis; }
+.mxn-checkout-card button { justify-self: start; }
+.mxn-checkout-card button:disabled { opacity: .6; cursor: not-allowed; }
+.mxn-checkout-card select:focus-visible, .mxn-checkout-segments input:focus-visible + span { outline: 2px solid var(--orange); outline-offset: 3px; }
+.mxn-checkout-segments { min-width: 0; margin: 0; padding: 0; border: 0; }
+.mxn-checkout-segments legend { margin-bottom: 7px; padding: 0; font-size: 14px; }
+.mxn-checkout-segments > div { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; }
+.mxn-checkout-segments label { display: grid; position: relative; cursor: pointer; }
+.mxn-checkout-segments input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.mxn-checkout-segments span { display: grid; place-items: center; min-height: 42px; padding: 7px 5px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface2); font-size: 14px; }
+.mxn-checkout-segments input:checked + span { border-color: var(--orange); color: var(--orange); }
+.mxn-checkout-terms { display: grid; gap: 6px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); font-size: 13px; }
+.mxn-checkout-result-head { display: flex; flex-wrap: wrap; align-items: start; justify-content: space-between; gap: 12px; }
+.mxn-checkout-result-head h2 { margin: 0 0 4px; }
+.mxn-checkout-result-head p { font-size: 14px; }
+.mxn-checkout-flag { padding: 5px 9px; border: 1px solid currentColor; border-radius: 999px; color: var(--yes, var(--green)); font-size: 12px; }
+.mxn-checkout-flag-alert, .mxn-checkout p[role='alert'] { color: var(--red); }
+.mxn-checkout-total { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 18px 0; padding: 14px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface2); }
+.mxn-checkout-total dt { color: var(--text-secondary); font-size: 13px; }
+.mxn-checkout-total dd { margin: 4px 0 0; color: var(--text-primary); font-size: clamp(16px, 2vw, 21px); font-weight: 600; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.mxn-checkout-total small { font-size: 11px; }
+.mxn-checkout-costs { display: grid; gap: 10px; margin: 0 0 16px; }
+.mxn-checkout-costs > div { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.mxn-checkout-costs dt { color: var(--text-secondary); font-size: 13px; }
+.mxn-checkout-costs dd { margin: 0; text-align: end; font-size: 14px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.mxn-checkout-costs .mxn-checkout-cap { padding-bottom: 10px; border-bottom: 1px solid var(--border); font-weight: 600; }
+.mxn-checkout .mxn-checkout-help { font-size: 13px; }
+.mxn-checkout .mxn-checkout-disclosure { margin-top: 18px; }
+
+@media (max-width: 760px) {
+  .mxn-checkout-layout { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 400px) {
+  .mxn-checkout-costs > div { flex-wrap: wrap; gap: 4px 12px; }
+  .mxn-checkout-costs dd { text-align: start; }
+}

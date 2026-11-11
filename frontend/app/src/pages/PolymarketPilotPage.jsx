@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import Nav from '../components/Nav.jsx';
 import Footer from '../components/Footer.jsx';
 import { usePointsAuth } from '../lib/pointsAuth.js';
@@ -195,6 +196,7 @@ export default function PolymarketPilotPage({ onOpenLogin }) {
           <h1>Explora y simula mercados</h1>
           <p>Consulta hasta cinco mercados deportivos binarios activos y compara compras o ventas con las comisiones por separado.</p>
           <p className="polymarket-pilot-notice">Piloto de consulta con datos públicos reales. Esta pantalla no firma, envía órdenes ni mueve fondos.</p>
+          {import.meta.env.VITE_MXN_CHECKOUT_ENABLED === 'true' && <Link to="/mxn-checkout?venue=polymarket">Cotizar mercados en MXN</Link>}
         </header>
 
         <section className="polymarket-pilot-account" aria-label="Cuenta y moneda del piloto">

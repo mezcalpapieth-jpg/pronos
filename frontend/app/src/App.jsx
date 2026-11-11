@@ -32,6 +32,9 @@ const Hip4PilotPage = import.meta.env.VITE_HIP4_TESTNET_ENABLED === 'true'
 const PolymarketPilotPage = import.meta.env.VITE_POLYMARKET_PILOT_ENABLED === 'true'
   ? lazy(() => import('./pages/PolymarketPilotPage.jsx'))
   : null;
+const MxnCheckoutPage = import.meta.env.VITE_MXN_CHECKOUT_ENABLED === 'true'
+  ? lazy(() => import('./pages/MxnCheckoutPage.jsx'))
+  : null;
 const MvpUserProfile = lazy(() => import('./pages/MvpUserProfile.jsx'));
 const Admin = lazy(() => import('./pages/Admin.jsx'));
 const WorldCupPage = lazy(() => import('./pages/WorldCupPage.jsx'));
@@ -88,6 +91,7 @@ export default function App() {
   const showLogin = loginOpen || (authenticated && needsUsername && !checkingUsername);
   const isHip4Path = Hip4PilotPage && typeof window !== 'undefined' && /^\/mvp\/hip4\/?$/.test(window.location.pathname);
   const isPolymarketPath = PolymarketPilotPage && typeof window !== 'undefined' && /^\/mvp\/polymarket\/?$/.test(window.location.pathname);
+  const isMxnCheckoutPath = MxnCheckoutPage && typeof window !== 'undefined' && /^\/mvp\/mxn-checkout\/?$/.test(window.location.pathname);
 
   return (
     <BrowserRouter basename="/mvp">
@@ -96,7 +100,7 @@ export default function App() {
           open={showLogin}
           onClose={() => setLoginOpen(false)}
           initialStep={authenticated && needsUsername ? 'username' : 'email'}
-          enableDelegationStep={!isHip4Path && !isPolymarketPath}
+          enableDelegationStep={!isHip4Path && !isPolymarketPath && !isMxnCheckoutPath}
         />
       )}
 
@@ -156,6 +160,9 @@ export default function App() {
           )}
           {PolymarketPilotPage && (
             <Route path="/polymarket" element={<PolymarketPilotPage onOpenLogin={() => setLoginOpen(true)} />} />
+          )}
+          {MxnCheckoutPage && (
+            <Route path="/mxn-checkout" element={<MxnCheckoutPage onOpenLogin={() => setLoginOpen(true)} />} />
           )}
           <Route
             path="/u/:username"

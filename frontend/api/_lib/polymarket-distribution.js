@@ -121,6 +121,7 @@ export function normalizePolymarketMarket(raw, { sportsEvent = false } = {}) {
   return {
     id: marketId(String(raw.id)), title, description, rules: text(raw.rules) || description,
     resolutionSource: text(raw.resolutionSource, 2000), endDate: text(raw.endDate, 100),
+    gameStartTime: text(raw.gameStartTime, 100), slug: text(raw.slug, 250),
     version: raw.version, conditionId: conditionId(raw.conditionId),
     outcomes: labels.map((label, i) => ({ label, tokenId: ids[i] })),
     active: true, closed: false, acceptingOrders: true, enableOrderBook: true,

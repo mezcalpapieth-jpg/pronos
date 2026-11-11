@@ -107,6 +107,7 @@
     { "source": "/mvp/market",    "destination": "/mvp/" },
     { "source": "/mvp/portfolio", "destination": "/mvp/" },
     { "source": "/mvp/hip4",      "destination": "/mvp/" },
+    { "source": "/mvp/mxn-checkout", "destination": "/mvp/" },
     { "source": "/mvp/admin",     "destination": "/mvp/" },
     { "source": "/mvp/c/deportes/uefa-champions-league", "destination": "/mvp/" },
     { "source": "/mvp/privacy",   "destination": "/mvp/" },

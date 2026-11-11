@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import Nav from '../components/Nav.jsx';
 import Footer from '../components/Footer.jsx';
 import { usePointsAuth } from '../lib/pointsAuth.js';
@@ -209,6 +210,7 @@ export default function Hip4PilotPage({ onOpenLogin }) {
         <header>
           <p className="hip4-pilot-eyebrow">HyperCore testnet · USDC de prueba</p>
           <h1>Piloto HIP-4</h1>
+          {import.meta.env.VITE_MXN_CHECKOUT_ENABLED === 'true' && <Link to="/mxn-checkout?venue=hip4">Cotizar mercados en MXN</Link>}
         </header>
         {loading ? <p role="status">Cargando tu cuenta Pronos…</p> : authenticated ? (
           user?.walletAddress && user?.suborgId ? (
