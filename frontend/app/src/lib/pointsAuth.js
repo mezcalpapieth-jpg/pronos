@@ -102,8 +102,8 @@ export async function verifyOtp({ otpId, suborgId, code, email }) {
   return data; // { ok, needsUsername, suborgId, walletAddress, username, session }
 }
 
-export async function setUsername(username) {
-  const { ok, data, status } = await postJson('/api/points/auth/username', { username });
+export async function setUsername(username, language) {
+  const { ok, data, status } = await postJson('/api/points/auth/username', { username, language });
   if (!ok) {
     const err = new Error(data?.error || `HTTP ${status}`);
     err.code = data?.error;
@@ -112,31 +112,36 @@ export async function setUsername(username) {
     throw err;
   }
 
-  // After the username is claimed successfully, consume any pending
-  // referrer stashed from a /r/<username> landing. Ignore errors here —
-  // the signup itself succeeded; a missing/invalid referrer shouldn't
-  // block the user.
+  // Only a successful username claim can attach a visitor's invite to an account.
   try {
-    const pending = readPendingReferrer();
-    if (pending && pending !== String(username || '').toLowerCase()) {
-      await postJson('/api/points/referrals/claim-pending', { referrer: pending });
+    const referrer = localStorage.getItem(REFERRER_KEY);
+    const claimedUsername = (data?.username || username).toLowerCase();
+    if (referrer && referrer !== claimedUsername) {
+      localStorage.setItem(REFERRAL_CLAIM_PREFIX + claimedUsername, referrer);
     }
-    if (pending) clearPendingReferrer();
-  } catch { /* silent — pending-referrer is best-effort */ }
+    localStorage.removeItem(REFERRER_KEY);
+  } catch { /* Signup is complete even if browser storage is unavailable. */ }
 
-  return data; // { ok, username }
+  return data;
 }
 
-// Shared referrer stash helpers — duplicated lightly here so the module
-// doesn't need to pull in the components file (keeps auth lib tree-shakeable).
 const REFERRER_KEY = 'pronos-points-pending-referrer';
+const REFERRAL_CLAIM_PREFIX = 'pronos-points-referral-claim:';
+const INVALID_REFERRAL_ERRORS = new Set(['invalid_referrer', 'self_referral', 'referrer_not_found']);
 
-function readPendingReferrer() {
-  try { return localStorage.getItem(REFERRER_KEY); } catch { return null; }
-}
-
-function clearPendingReferrer() {
-  try { localStorage.removeItem(REFERRER_KEY); } catch { /* ignore */ }
+async function claimPendingReferral(username) {
+  const key = REFERRAL_CLAIM_PREFIX + username.toLowerCase();
+  try {
+    const referrer = localStorage.getItem(key);
+    if (!referrer) return false;
+    const { ok, data } = await postJson('/api/points/referrals/claim-pending', { referrer });
+    if (ok || INVALID_REFERRAL_ERRORS.has(data?.error)) {
+      localStorage.removeItem(key);
+    }
+    return ok;
+  } catch {
+    return false;
+  }
 }
 
 export async function fetchMe() {
@@ -199,7 +204,13 @@ export function PointsAuthProvider({ children }) {
 
   const refresh = useCallback(async () => {
     try {
-      const me = await fetchMe();
+      let me = await fetchMe();
+      if (me.authenticated && me.username && await claimPendingReferral(me.username)) {
+        // The claim endpoint is idempotent. Read the balance again even when
+        // this was a retry of a claim whose response was lost.
+        const updated = await fetchMe().catch(() => null);
+        if (updated?.authenticated && updated.username === me.username) me = updated;
+      }
       if (me.authenticated) {
         setState({
           loading: false,

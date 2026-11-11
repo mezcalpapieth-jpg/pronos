@@ -10,41 +10,19 @@
  * reaches "done" and has a username). On outside click / ESC it resets
  * to step 1.
  *
- * Error messages come from short backend codes (e.g. `invalid_code`,
- * `username_taken`) mapped here to Spanish-language strings. Keeping
- * messages in this component means no i18n churn on the server.
+ * Short backend error codes map to messages in the selected language.
  */
 
 import React, { useEffect, useRef, useState } from 'react';
 import { usePointsAuth } from '../lib/pointsAuth.js';
-import { useLang } from '../lib/i18n.js';
+import { useLang, useT } from '../lib/i18n.js';
+import { TOURNAMENT_REWARDS } from '../../../shared/points-rewards.js';
 import DelegationPrompt from './DelegationPrompt.jsx';
 
-const ERRORS = {
-  invalid_email:          'Ingresa un correo válido.',
-  rate_limited:           'Demasiados intentos. Espera un minuto e intenta de nuevo.',
-  turnkey_unavailable:    'Servicio de autenticación no disponible. Intenta más tarde.',
-  invalid_code:           'Código incorrecto o expirado. Revisa tu correo.',
-  session_failed:         'No se pudo establecer la sesión. Intenta de nuevo.',
-  session_config_missing: 'Falta configurar el servidor. Avisa al equipo de Pronos.',
-  invalid_input:          'Datos inválidos. Refresca e intenta de nuevo.',
-  db_unavailable:         'Error del servidor. Intenta más tarde.',
-  server_error:           'Error del servidor. Intenta más tarde.',
-  invalid_username:       'Usuario inválido. 3–20 letras/números, debe empezar con letra.',
-  username_taken:         'Ese usuario ya está en uso.',
-  already_set:            'Ya tienes un usuario asignado.',
-  not_authenticated:      'Tu sesión expiró. Vuelve a iniciar sesión.',
-  default:                'Algo salió mal. Intenta de nuevo.',
-};
-
-function humanError(code, detail) {
-  const base = code && ERRORS[code]
-    ? ERRORS[code]
-    : (code ? `${ERRORS.default} (${code})` : ERRORS.default);
-  // Append server-provided detail when present (preview debugging aid;
-  // strip this once we're confident in the flow).
-  if (detail) return `${base}\n\n${detail}`;
-  return base;
+function humanError(error, t) {
+  const key = `points.auth.error.${error.code || error.message}`;
+  const message = t(key);
+  return message === key ? t('points.auth.error.default') : message;
 }
 
 export default function PointsLoginModal({
@@ -55,6 +33,7 @@ export default function PointsLoginModal({
 }) {
   const { initOtp, verifyOtp, setUsername, refresh, user } = usePointsAuth();
   const lang = useLang();
+  const t = useT();
 
   // `initialStep` lets a caller (e.g. MVP App.jsx) jump straight to the
   // username step when the user is already authed but missing a username.
@@ -69,6 +48,7 @@ export default function PointsLoginModal({
   const [suborgId, setSuborgId] = useState(null);
   const [pending, setPending] = useState(false);
   const [err, setErr] = useState('');
+  const [canResend, setCanResend] = useState(false);
   const firstFieldRef = useRef(null);
 
   // Reset when the modal closes so the next open starts clean.
@@ -83,6 +63,9 @@ export default function PointsLoginModal({
       setPending(false);
       setErr('');
     } else {
+      if (initialStep === 'username') {
+        setStep(current => current === 'email' || current === 'code' ? 'username' : current);
+      }
       // Small delay so the input exists before focusing.
       const id = setTimeout(() => firstFieldRef.current?.focus(), 50);
       return () => clearTimeout(id);
@@ -97,6 +80,13 @@ export default function PointsLoginModal({
     return () => window.removeEventListener('keydown', h);
   }, [open, onClose]);
 
+  useEffect(() => {
+    if (!open || step !== 'code' || !otpId) return undefined;
+    setCanResend(false);
+    const timer = setTimeout(() => setCanResend(true), 30_000);
+    return () => clearTimeout(timer);
+  }, [open, step, otpId]);
+
   if (!open) return null;
 
   async function handleSubmitEmail(e) {
@@ -106,11 +96,12 @@ export default function PointsLoginModal({
     try {
       const { otpId: id, suborgId: sub } = await initOtp(email.trim().toLowerCase());
       setOtpId(id);
+      setCode('');
       setSuborgId(sub);
       setStep('code');
       setTimeout(() => firstFieldRef.current?.focus(), 50);
     } catch (e) {
-      setErr(humanError(e.code || e.message, e.detail));
+      setErr(humanError(e, t));
     } finally {
       setPending(false);
     }
@@ -134,10 +125,17 @@ export default function PointsLoginModal({
         onClose?.();
       }
     } catch (e) {
-      setErr(humanError(e.code || e.message, e.detail));
+      setErr(humanError(e, t));
     } finally {
       setPending(false);
     }
+  }
+
+  function changeEmail() {
+    setStep('email');
+    setErr('');
+    setCode('');
+    setTimeout(() => firstFieldRef.current?.focus(), 50);
   }
 
   async function handleSubmitUsername(e) {
@@ -145,7 +143,7 @@ export default function PointsLoginModal({
     setErr('');
     setPending(true);
     try {
-      await setUsername(uname.trim().toLowerCase());
+      await setUsername(uname.trim().toLowerCase(), lang);
       await refresh();
       if (enableDelegationStep) {
         // MVP signup: pivot to the on-chain delegation prompt. The
@@ -156,7 +154,7 @@ export default function PointsLoginModal({
         finishLogin();
       }
     } catch (e) {
-      setErr(humanError(e.code || e.message, e.detail));
+      setErr(humanError(e, t));
     } finally {
       setPending(false);
     }
@@ -176,8 +174,8 @@ export default function PointsLoginModal({
         background: 'rgba(0, 0, 0, 0.65)', backdropFilter: 'blur(4px)',
       }}
     >
-      <div style={{
-        width: 'min(420px, 92vw)',
+      <div role="dialog" aria-modal="true" aria-labelledby="points-auth-title" style={{
+        width: 'min(420px, 92vw)', maxHeight: 'calc(100vh - 24px)', overflowY: 'auto',
         background: 'var(--surface1)',
         border: '1px solid var(--border)',
         borderRadius: 16,
@@ -191,54 +189,55 @@ export default function PointsLoginModal({
         }}>
           PRONOS
         </div>
-        <h2 style={{
+        <h2 id="points-auth-title" style={{
           fontFamily: 'var(--font-display)', fontSize: 24,
           color: 'var(--text-primary)', marginBottom: 18,
           textTransform: 'uppercase', letterSpacing: '0.02em',
         }}>
-          {step === 'email' && (lang === 'en' ? 'Log in / Create account' : 'Iniciar sesión / Crear cuenta')}
-          {step === 'code' && 'Código enviado'}
-          {step === 'username' && 'Elige tu usuario'}
-          {step === 'delegate' && 'Bienvenido a Pronos'}
+          {step === 'email' && t('points.auth.emailHeading')}
+          {step === 'code' && t('points.auth.codeHeading')}
+          {step === 'username' && t('points.auth.usernameHeading')}
+          {step === 'delegate' && t('points.auth.welcomeHeading')}
         </h2>
 
         {step === 'email' && (
           <form onSubmit={handleSubmitEmail}>
-            <label style={{
+            <label htmlFor="points-auth-email" style={{
               display: 'block', fontFamily: 'var(--font-mono)', fontSize: 10,
               color: 'var(--text-muted)', letterSpacing: '0.1em',
               textTransform: 'uppercase', marginBottom: 6,
             }}>
-              Correo electrónico
+              {t('points.auth.email')}
             </label>
             <input
               ref={firstFieldRef}
               type="email"
+              id="points-auth-email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               autoComplete="email"
-              placeholder="tu@correo.com"
+              placeholder={t('points.auth.emailPlaceholder')}
               disabled={pending}
               style={inputStyle}
             />
             <p style={helperStyle}>
-              Te enviaremos un código de 6 dígitos. Sin contraseña.
+              {t('points.auth.emailHelp')}
             </p>
-            {err && <div style={errorStyle}>{err}</div>}
+            {err && <div role="alert" style={errorStyle}>{err}</div>}
             <button type="submit" disabled={pending || !email} style={btnPrimaryStyle}>
-              {pending ? 'Enviando…' : 'Enviar código'}
+              {t(pending ? 'points.auth.sending' : 'points.auth.send')}
             </button>
           </form>
         )}
 
         {step === 'code' && (
           <form onSubmit={handleSubmitCode}>
-            <label style={{
+            <label htmlFor="points-auth-code" style={{
               display: 'block', fontFamily: 'var(--font-mono)', fontSize: 10,
               color: 'var(--text-muted)', letterSpacing: '0.1em',
               textTransform: 'uppercase', marginBottom: 6,
             }}>
-              Código de verificación
+              {t('points.auth.code')}
             </label>
             <input
               ref={firstFieldRef}
@@ -247,6 +246,7 @@ export default function PointsLoginModal({
               pattern="[0-9]*"
               maxLength={6}
               autoComplete="one-time-code"
+              id="points-auth-code"
               value={code}
               onChange={(e) => setCode(e.target.value.replace(/[^0-9]/g, ''))}
               placeholder="123456"
@@ -254,51 +254,60 @@ export default function PointsLoginModal({
               style={{ ...inputStyle, letterSpacing: '0.5em', textAlign: 'center', fontSize: 22 }}
             />
             <p style={helperStyle}>
-              Revisa tu correo ({email}). El código expira en 5 minutos.
+              {t('points.auth.codeHelp', { email: email.trim() })}
             </p>
-            {err && <div style={errorStyle}>{err}</div>}
+            {err && <div role="alert" style={errorStyle}>{err}</div>}
             <button type="submit" disabled={pending || code.length !== 6} style={btnPrimaryStyle}>
-              {pending ? 'Verificando…' : 'Verificar código'}
+              {t(pending ? 'points.auth.verifying' : 'points.auth.verify')}
             </button>
             <button
               type="button"
-              onClick={() => { setStep('email'); setErr(''); setCode(''); }}
+              onClick={handleSubmitEmail}
+              disabled={pending || !canResend}
+              style={btnGhostStyle}
+            >
+              {t('points.auth.resend')}
+            </button>
+            <button
+              type="button"
+              onClick={changeEmail}
               disabled={pending}
               style={btnGhostStyle}
             >
-              Cambiar correo
+              {t('points.auth.changeEmail')}
             </button>
           </form>
         )}
 
         {step === 'username' && (
           <form onSubmit={handleSubmitUsername}>
-            <label style={{
+            <label htmlFor="points-auth-username" style={{
               display: 'block', fontFamily: 'var(--font-mono)', fontSize: 10,
               color: 'var(--text-muted)', letterSpacing: '0.1em',
               textTransform: 'uppercase', marginBottom: 6,
             }}>
-              Usuario
+              {t('points.auth.username')}
             </label>
             <input
               ref={firstFieldRef}
               type="text"
+              id="points-auth-username"
               value={uname}
               onChange={(e) => setUname(e.target.value.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase())}
-              placeholder="mi_usuario"
+              placeholder={t('points.auth.usernamePlaceholder')}
               disabled={pending}
               maxLength={20}
               style={inputStyle}
             />
             <p style={helperStyle}>
-              3–20 caracteres · letras, números y _ · no se puede cambiar después.
+              {t('points.auth.usernameHelp')}
             </p>
-            {err && <div style={errorStyle}>{err}</div>}
-            <button type="submit" disabled={pending || uname.length < 3} style={btnPrimaryStyle}>
-              {pending ? 'Guardando…' : (lang === 'en' ? 'Create account' : 'Crear cuenta')}
+            {err && <div role="alert" style={errorStyle}>{err}</div>}
+            <button type="submit" disabled={pending || !/^[a-z][a-z0-9_]{2,19}$/.test(uname)} style={btnPrimaryStyle}>
+              {t(pending ? 'points.auth.saving' : 'points.auth.create')}
             </button>
             <p style={{ ...helperStyle, marginTop: 10, fontSize: 10 }}>
-              Recibes 500 MXNP de bienvenida al crear tu usuario.
+              {t('points.auth.signupBonus', { bonus: TOURNAMENT_REWARDS.signupBonus })}
             </p>
           </form>
         )}

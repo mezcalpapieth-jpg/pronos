@@ -294,8 +294,7 @@ function PointsAppChrome({ pathname, basename }) {
   const sawPendingUsernameRef = useRef(false);
 
   // Auto-open the login modal when a user finishes OTP but hasn't picked a
-  // username yet. The modal internally jumps to the "username" step when
-  // opened in that state (it polls auth via usePointsAuth).
+  // username yet. Resume at the username step when the session is valid.
   useEffect(() => {
     if (loading) return;
     if (authenticated && user?.needsUsername) {
@@ -368,6 +367,7 @@ function PointsAppChrome({ pathname, basename }) {
       />
       <PointsLoginModal
         open={loginOpen}
+        initialStep={authenticated && user?.needsUsername ? 'username' : 'email'}
         onClose={() => setLoginOpen(false)}
       />
       <PointsWelcomeModal

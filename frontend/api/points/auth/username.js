@@ -1,6 +1,6 @@
 /**
  * POST /api/points/auth/username
- * Body: { username }
+ * Body: { username, language? }
  *
  * Claims a username for the authenticated sub-org and atomically seeds
  * the user's MXNP balance with the configured signup bonus if this is
@@ -86,21 +86,6 @@ export default async function handler(req, res) {
         return { username, isFirstTime };
       });
 
-      // Fire-and-forget welcome email on first signup. Uses Resend via
-      // the shared helper; silently no-ops if RESEND_API_KEY isn't set.
-      // Wrapped in Promise.resolve so a slow email provider never blocks
-      // the response — the UI should feel snappy even if SMTP hiccups.
-      if (claimed.isFirstTime && session.email) {
-        Promise.resolve(sendPointsWelcomeEmail({
-          email: session.email,
-          username: claimed.username,
-        })).catch(err => {
-          console.error('[auth/username] welcome email failed', {
-            message: err?.message,
-          });
-        });
-      }
-
       await capturePointsRiskEvent(sql, req, {
         res,
         username: claimed.username,
@@ -124,6 +109,16 @@ export default async function handler(req, res) {
         return res.status(500).json({
           error: 'session_config_missing',
           detail: 'POINTS_SESSION_SECRET is not configured on the server.',
+        });
+      }
+
+      if (claimed.isFirstTime && session.email) {
+        // The mail helper bounds the wait and handles provider failures.
+        // Finish the send attempt before returning from the serverless function.
+        await sendPointsWelcomeEmail({
+          email: session.email,
+          username: claimed.username,
+          language: req.body?.language,
         });
       }
 
