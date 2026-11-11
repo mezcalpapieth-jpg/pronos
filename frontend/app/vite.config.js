@@ -4,6 +4,8 @@ import { randomUUID } from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { getJarEvent, isFestivalJarParticipant } from '../shared/jar-events.js';
+import { isFestivalDashboard } from '../shared/trading-festival.js';
 import {
   MVP_ACCESS_COOKIE_NAME,
   buildMvpAccessCookie,
@@ -230,7 +232,8 @@ function pointsRootDeckDevMiddleware() {
           req.url = `/points/${query ? `?${query}` : ''}`;
           return next();
         }
-        if (/^\/ris26(?:\/|$)/.test(pathname)) {
+        if (/^\/ris26(?:\/|$)/.test(pathname)
+          || isFestivalDashboard({ pathname }) || isFestivalJarParticipant({ pathname })) {
           req.url = `/points/${query ? `?${query}` : ''}`;
           return next();
         }
@@ -355,11 +358,10 @@ function parseCookies(header = '') {
 }
 
 function ris26DevApiMiddleware() {
-  const cookieName = 'pronos_ris26_player_dev';
   const now = () => new Date().toISOString();
-  const guesses = new Map();
+  const guessesByEvent = new Map();
 
-  function visitorKey(req, res) {
+  function visitorKey(req, res, cookieName) {
     const cookies = parseCookies(req.headers?.cookie);
     const existing = String(cookies[cookieName] || '').trim();
     if (existing) return existing;
@@ -368,7 +370,7 @@ function ris26DevApiMiddleware() {
     return generated;
   }
 
-  function makePayload(req) {
+  function makePayload(req, event, cookieName, guesses) {
     const cookies = parseCookies(req.headers?.cookie);
     const own = guesses.get(cookies[cookieName]);
     const values = [...guesses.values()];
@@ -379,8 +381,8 @@ function ris26DevApiMiddleware() {
     return {
       ok: true,
       event: {
-        key: 'ris26',
-        title: 'RIS 26',
+        key: event.key,
+        title: event.title,
         question: '¿Cuántas pelotas de ping-pong hay en el frasco?',
       },
       stats: {
@@ -410,8 +412,14 @@ function ris26DevApiMiddleware() {
           res.statusCode = 204;
           return res.end();
         }
+        const query = new URL(req.url || '/', 'http://localhost').searchParams;
+        const event = getJarEvent(query.get('event') ?? undefined);
+        if (!event) return sendJson(res, 400, { error: 'invalid_event' });
+        const cookieName = `${event.cookieName}_dev`;
+        if (!guessesByEvent.has(event.key)) guessesByEvent.set(event.key, new Map());
+        const guesses = guessesByEvent.get(event.key);
         if (req.method === 'GET') {
-          return sendJson(res, 200, makePayload(req));
+          return sendJson(res, 200, makePayload(req, event, cookieName, guesses));
         }
         if (req.method !== 'POST') {
           return sendJson(res, 405, { error: 'method_not_allowed' });
@@ -421,7 +429,7 @@ function ris26DevApiMiddleware() {
         if (!Number.isInteger(guess) || guess < 1 || guess > 10000) {
           return sendJson(res, 400, { error: 'invalid_guess' });
         }
-        const key = visitorKey(req, res);
+        const key = visitorKey(req, res, cookieName);
         guesses.set(key, {
           guess,
           displayName: String(body.displayName || '').trim().slice(0, 40) || null,

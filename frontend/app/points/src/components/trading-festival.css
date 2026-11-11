@@ -287,3 +287,101 @@
   .tf-shell { width: calc(100% - 24px); }
   .tf-slot { grid-template-columns: minmax(73px, .9fr) minmax(0, 1fr) minmax(60px, .85fr); }
 }
+
+.tf-display-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: clamp(10px, 1.3svh, 20px);
+}
+.tf-display-switch button {
+  min-height: 40px;
+  padding: 7px clamp(11px, 2vw, 22px);
+  border: 1px solid var(--tf-grid);
+  background: var(--tf-surface);
+  color: var(--tf-text);
+  font: 700 clamp(13px, 1.7vw, 19px)/1.2 var(--tf-body);
+  cursor: pointer;
+}
+.tf-display-switch button[aria-pressed='true'] {
+  background: var(--tf-accent);
+  border-color: var(--tf-accent);
+  color: var(--tf-bg);
+}
+.tf-display-switch button:focus-visible {
+  outline: 2px solid var(--tf-accent);
+  outline-offset: 3px;
+}
+
+.tf-dashboard .tf-jar-stage {
+  min-height: 0;
+  padding: var(--tf-pad);
+  grid-template-rows: auto auto auto;
+  border: 1px solid var(--tf-grid);
+  border-top: 3px solid var(--tf-accent);
+}
+.tf-jar-stage .ris26-screen-header { align-items: flex-end; }
+.tf-jar-stage .ris26-live-pill { margin: 0; padding: 6px 10px; }
+.tf-jar-stage .ris26-hero { grid-template-rows: auto auto; }
+.tf-jar-stage .ris26-stage-title h2 {
+  margin: 0;
+  color: var(--tf-text);
+  font: 400 clamp(28px, 6vw, 76px)/.98 var(--tf-display);
+  text-transform: uppercase;
+}
+.tf-jar-stage .ris26-visual-area {
+  grid-template-columns: minmax(0, 1fr) clamp(115px, 30vw, 290px);
+}
+.tf-jar-stage .ris26-jar-panel {
+  height: clamp(160px, 37svh, 720px);
+  min-height: 0;
+}
+.tf-jar-stage .ris26-jar-scene { min-height: 0; }
+.tf-jar-stage .ris26-qr-card-stage {
+  width: 100%;
+  aspect-ratio: auto;
+}
+.tf-jar-stage .ris26-qr-card img {
+  display: block;
+  width: 100%;
+  max-width: 240px;
+  height: auto;
+  border: 0;
+  image-rendering: pixelated;
+}
+.tf-jar-stage .ris26-qr-card span,
+.tf-jar-stage .ris26-qr-card strong {
+  transform: none;
+  overflow-wrap: anywhere;
+}
+.tf-jar-stage .ris26-qr-card strong { text-transform: none; letter-spacing: 0; }
+.tf-jar-stage .ris26-chart-panel { padding: clamp(10px, 1.7vw, 22px); }
+.tf-jar-stage .ris26-bar-chart { height: clamp(90px, 12svh, 225px); }
+.tf-jar-stage .ris26-empty-chart { min-height: clamp(62px, 9svh, 160px); }
+
+@media (max-width: 560px) {
+  .tf-jar-stage .ris26-stats-strip .ris26-metric { padding-inline: 6px; }
+  .tf-jar-stage .ris26-metric-top { flex-wrap: wrap; gap: 4px; }
+  .tf-jar-stage .ris26-bar-column span { font-size: 9px; letter-spacing: 0; }
+}
+
+@media (min-width: 650px) {
+  .tf-jar-stage .ris26-stats-strip { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .tf-jar-stage .ris26-stats-strip .ris26-metric + .ris26-metric {
+    border-left: 1px solid rgb(255 255 255 / 10%);
+  }
+  .tf-jar-stage .ris26-metric-top { flex-wrap: wrap; gap: 4px; }
+}
+
+@media (orientation: portrait) and (min-width: 600px) and (max-height: 1400px) {
+  .tf-dashboard .tf-shell { gap: 13px; padding-block: 16px; }
+  .tf-dashboard .tf-header h1 {
+    margin-top: 12px;
+    font-size: clamp(46px, 8.6vw, 94px);
+  }
+  .tf-dashboard .tf-header p { margin-top: 7px; font-size: clamp(15px, 2.1vw, 23px); }
+  .tf-dashboard .tf-market-heading { padding-block: 14px; }
+  .tf-dashboard .tf-directions > span { padding-block: 10px; }
+  .tf-dashboard .tf-qr-panel { padding-block: 12px; }
+  .tf-jar-stage .ris26-jar-panel { height: clamp(225px, 32svh, 445px); }
+}
