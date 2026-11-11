@@ -216,9 +216,13 @@
 }
 
 @media (orientation: portrait) and (min-width: 700px) {
-  .tf-dashboard .tf-shell { width: min(89%, 1050px); gap: clamp(22px, 3vh, 58px); }
+  .tf-dashboard .tf-shell {
+    width: min(89%, 1050px);
+    gap: clamp(14px, 1.65vh, 34px);
+    padding-block: clamp(16px, 1.5vh, 32px);
+  }
   .tf-dashboard .tf-dashboard-break { display: initial; }
-  .tf-dashboard .tf-plot, .tf-dashboard .tf-chart-empty { height: clamp(195px, 18vh, 360px); }
+  .tf-dashboard .tf-plot, .tf-dashboard .tf-chart-empty { height: clamp(155px, 13.5vh, 320px); }
   .tf-dashboard .tf-qr-panel img { width: clamp(180px, 22vw, 265px); }
 }
 @media (max-width: 410px) {

@@ -89,7 +89,7 @@ export default function TradingFestivalChart({ slot, market = slot.market }) {
   }
 
   const last = points.at(-1);
-  const fresh = last && now >= last.t && now - last.t < 2 * FESTIVAL_MINUTE && now < end;
+  const fresh = last && last.t <= now + 2000 && now - last.t < 2 * FESTIVAL_MINUTE && now < end;
   const status = error ? 'Datos no disponibles'
     : finalPrice != null ? 'Precio de cierre'
       : fresh ? (slot.key === 'btc' && ticker.status === 'open' ? 'En vivo' : 'Dato por minuto')
