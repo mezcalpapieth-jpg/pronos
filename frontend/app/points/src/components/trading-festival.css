@@ -391,7 +391,7 @@
   .tf-jar-stage .ris26-metric-top { flex-wrap: wrap; gap: 4px; }
 }
 
-@media (orientation: portrait) and (min-width: 600px) and (max-height: 1400px) {
+@media (orientation: portrait) and (min-width: 600px) and (max-height: 2000px) {
   .tf-dashboard .tf-shell { gap: 13px; padding-block: 16px; }
   .tf-dashboard .tf-header h1 {
     margin-top: 12px;
@@ -400,6 +400,11 @@
   .tf-dashboard .tf-header p { margin-top: 7px; font-size: clamp(15px, 2.1vw, 23px); }
   .tf-dashboard .tf-market-heading { padding-block: 14px; }
   .tf-dashboard .tf-directions > span { padding-block: 10px; }
+  .tf-dashboard .tf-slot { padding-block: 8px; }
   .tf-dashboard .tf-qr-panel { padding-block: 12px; }
+}
+
+@media (orientation: portrait) and (min-width: 600px) and (max-height: 1400px) {
+  .tf-dashboard .tf-qr-panel img { width: clamp(135px, 20vw, 180px); }
   .tf-jar-stage .ris26-jar-panel { height: clamp(225px, 32svh, 445px); }
 }
