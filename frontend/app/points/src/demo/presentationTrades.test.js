@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildLiveSeedState } from './demoLiveSeed.js';
 
-const MINUTE = 60_000;
+const TRADE_INTERVAL_MS = 3 * 60_000;
 const START = Date.parse('2026-11-12T13:00:00-06:00');
 
 function market(id, endTime, extra = {}) {
@@ -18,14 +18,14 @@ function market(id, endTime, extra = {}) {
   };
 }
 
-test('presentation trades rotate all eligible November markets at one fill per minute', async t => {
+test('presentation trades rotate eligible November markets every three minutes with random sizes', async t => {
   let now = START;
   t.mock.method(Date, 'now', () => now);
   const storage = new Map();
   const timers = new Map();
   const refreshes = [];
   let nextTimer = 0;
-  t.mock.method(Math, 'random', () => 0.99);
+  t.mock.method(Math, 'random', () => 1 - Number.EPSILON);
   globalThis.window = {
     document: { visibilityState: 'visible' },
     location: { origin: 'https://pronos.test' },
@@ -43,7 +43,7 @@ test('presentation trades rotate all eligible November markets at one fill per m
 
   const novemberClose = '2026-11-30T23:59:59-06:00';
   const eligible = [
-    market(1, new Date(START + 7 * MINUTE).toISOString()),
+    market(1, new Date(START + 7 * TRADE_INTERVAL_MS).toISOString()),
     market(2, novemberClose, { outcomes: ['A', 'B', 'C'], prices: [0.3, 0.3, 0.4] }),
     ...[3, 4, 5, 6, 7, 8].map(id => market(id, novemberClose)),
   ];
@@ -82,24 +82,24 @@ test('presentation trades rotate all eligible November markets at one fill per m
   assert.notEqual(tape[1][0].priceBefore, tape[1][0].priceAfter);
   assert.deepEqual(tape[2], []);
 
-  now += MINUTE - 1;
+  now += TRADE_INTERVAL_MS - 1;
   tick();
   assert.equal(state.recentTrades.length, 1);
   const pricesAfterFirst = [...first.prices];
-  Math.random.mock.mockImplementation(() => 0);
+  Math.random.mock.mockImplementation(() => 0.42);
   for (let i = 1; i <= eligible.length; i += 1) {
-    now = START + i * MINUTE;
+    now = START + i * TRADE_INTERVAL_MS;
     tick();
     tick();
   }
   assert.deepEqual(state.recentTrades.map(trade => trade.marketId), [1, 2, 3, 4, 5, 6, 7, 8, 2]);
   assert.deepEqual(first.prices, pricesAfterFirst);
-  assert.equal(state.recentTrades[1].size, 100);
-  assert.ok(state.recentTrades.every(({ size, username }) => size >= 100 && size <= 2000 && size % 100 === 0 && username.startsWith('demo_')));
+  assert.equal(state.recentTrades[1].size, 898);
+  assert.ok(state.recentTrades.every(({ size, username }) => size >= 100 && size <= 2000 && username.startsWith('demo_')));
   assert.equal(new Set(state.recentTrades.slice(0, 7).map(trade => trade.username)).size, 7);
 
   updateDemoSettings({ tradeFlowEnabled: false });
-  now += 2 * MINUTE;
+  now += 2 * TRADE_INTERVAL_MS;
   tick();
   assert.equal(state.recentTrades.length, 9);
   updateDemoSettings({ tradeFlowEnabled: true });
@@ -107,13 +107,13 @@ test('presentation trades rotate all eligible November markets at one fill per m
   tick();
   assert.equal(state.recentTrades.length, 10);
 
-  // A reload restores the last fill and does not trade again inside that minute.
+  // A reload restores the last fill without restarting the interval.
   timers.clear();
   const { initDemoStore: reload } = await import('./demoStore.js?reload');
   const reloaded = reload(seed);
   tick();
   assert.equal(reloaded.recentTrades.length, 10);
-  now += MINUTE;
+  now += TRADE_INTERVAL_MS;
   tick();
   assert.equal(reloaded.recentTrades.length, 11);
   assert.equal(reloaded.recentTrades.at(-1).marketId, 4);
