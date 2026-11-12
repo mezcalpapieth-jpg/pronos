@@ -1,4 +1,4 @@
-import React, { useId, useMemo } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { FESTIVAL_CHART_LEAD_MS, FESTIVAL_MINUTE, isFestivalBitcoin } from '../../../../shared/trading-festival.js';
 import { buildFestivalPriceHistory } from '../lib/festivalChartHistory.js';
 import { useCryptoTicker } from '../lib/useCryptoTicker.js';
@@ -9,6 +9,71 @@ import './trading-festival.css';
 const GRID_LEVELS = [0.18, 0.5, 0.82];
 const NO_TICKS = [];
 const LIVE_TICK_MAX_AGE_MS = 15_000;
+
+const FESTIVAL_CHART_ORIGIN = 'https://pronos-chi.vercel.app';
+
+function FestivalPresentationChart({ slot, dashboard }) {
+  const frame = useRef(null);
+  const [status, setStatus] = useState('loading');
+  const [attempt, setAttempt] = useState(0);
+  const ready = status === 'ready';
+  const params = new URLSearchParams({ asset: slot.key });
+  if (dashboard && slot.replay) {
+    params.set('showStart', slot.startTime);
+    params.set('showEnd', slot.endTime);
+    params.set('recordingStart', slot.replay.startTime);
+    params.set('recordingEnd', slot.replay.endTime);
+  }
+
+  useEffect(() => {
+    const timeout = setTimeout(() => setStatus('unavailable'), 15000);
+    function handleChartReady(event) {
+      if (event.origin !== FESTIVAL_CHART_ORIGIN || event.source !== frame.current?.contentWindow
+        || event.data !== 'pronos:festival-chart-ready') return;
+      clearTimeout(timeout);
+      setStatus('ready');
+    }
+
+    window.addEventListener('message', handleChartReady);
+    return () => {
+      clearTimeout(timeout);
+      window.removeEventListener('message', handleChartReady);
+    };
+  }, [attempt]);
+
+  function retry() {
+    setStatus('loading');
+    setAttempt(previous => previous + 1);
+  }
+
+  return (
+    <div className="tf-presentation-chart">
+      {/* Keep the third-party widget on a separate origin from the festival page. */}
+      <iframe
+        key={attempt}
+        ref={frame}
+        className="tf-presentation-frame"
+        src={`${FESTIVAL_CHART_ORIGIN}/festival-nasdaq-chart?${params}`}
+        title={`Gráfica de ${slot.symbol}`}
+        sandbox="allow-scripts allow-same-origin"
+        credentialless=""
+        aria-hidden={!ready}
+        tabIndex={ready ? undefined : -1}
+        style={{ opacity: ready ? 1 : 0, pointerEvents: ready ? undefined : 'none' }}
+        onLoad={event => event.currentTarget.contentWindow?.postMessage('pronos:festival-chart-init', FESTIVAL_CHART_ORIGIN)}
+      />
+      {status === 'loading' && <p className="tf-presentation-fallback tf-caption" role="status">Cargando gráfica…</p>}
+      {status === 'unavailable' && (
+        <div className="tf-presentation-fallback">
+          <button type="button" className="tf-cta" onClick={retry}>Volver a cargar la gráfica</button>
+          <a className="tf-presentation-external tf-caption" href={`https://vunelix.com/chart?symbol=${encodeURIComponent(slot.presentationTicker)}`} target="_blank" rel="noopener noreferrer">
+            Abrir en Vunelix ↗
+          </a>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function PricePlot({ slot, points, threshold }) {
   const fillId = useId();
@@ -82,7 +147,7 @@ function PriceValue({ slot, liveProduct, fallback }) {
   return <div className="tf-price">{festivalPrice(slot, price)}{price != null && <small>{slot.currency || 'pts'}</small>}</div>;
 }
 
-export default function TradingFestivalChart({ slot, market = slot.market }) {
+function FestivalPriceChart({ slot, market }) {
   const now = useFestivalClock();
   const start = Date.parse(slot.startTime);
   const end = Date.parse(slot.endTime);
@@ -136,6 +201,23 @@ export default function TradingFestivalChart({ slot, market = slot.market }) {
         {last && <span className={fresh && (!error || streaming) ? 'tf-signal is-live' : 'tf-signal'}>{status}</span>}
         <span className="tf-chart-source">{slot.provider}{dataDelayMinutes > 0 && ` · ${dataDelayMinutes} min de retraso`}</span>
       </div>
+    </section>
+  );
+}
+
+export default function TradingFestivalChart({ slot, market = slot.market, dashboard = false }) {
+  if (!slot.presentationTicker) return <FestivalPriceChart slot={slot} market={market} />;
+  return (
+    <section className="tf-embedded-chart" aria-label={`Precio de ${slot.symbol}`}>
+      <FestivalPresentationChart slot={slot} dashboard={dashboard} />
+      {market && !slot.replay && (
+        <div className="tf-settlement-prices tf-caption">
+          <span>Apertura según {slot.provider} · {market.threshold == null
+            ? 'Pendiente'
+            : festivalPrice(slot, market.threshold)}</span>
+          {market.closePrice != null && <span>Cierre · {festivalPrice(slot, market.closePrice)}</span>}
+        </div>
+      )}
     </section>
   );
 }
