@@ -3,7 +3,7 @@ import { FESTIVAL_MINUTE, FESTIVAL_SCHEDULE, isFestivalBitcoin } from '../../sha
 import { applyCors } from '../_lib/cors.js';
 import { readCryptoTicks } from '../_lib/crypto-ticks.js';
 import { clientIp, rateLimit } from '../_lib/rate-limit.js';
-import { festivalChartRange, festivalFeedEnabled, readFestivalBars, readFestivalReplay } from '../_lib/trading-festival-feed.js';
+import { festivalChartRange, festivalFeedEnabled, readFestivalBars } from '../_lib/trading-festival-feed.js';
 import { festivalMarketMeta, readFestivalMarkets } from '../_lib/trading-festival.js';
 
 function setCache(res, seconds) {
@@ -16,20 +16,6 @@ export default async function handler(req, res) {
   if (cors) return cors;
   if (req.method !== 'GET') return res.status(405).json({ error: 'method_not_allowed' });
   if (rateLimit(req, res, { key: `festival:${clientIp(req)}`, limit: 240, windowMs: FESTIVAL_MINUTE })) return;
-
-  if (req.query.replay !== undefined) {
-    const slot = FESTIVAL_SCHEDULE.find(item => item.replay && item.key === req.query.replay);
-    if (!slot) return res.status(400).json({ error: 'invalid_slot' });
-    try {
-      const replay = await readFestivalReplay(slot);
-      setCache(res, replay.closePrice == null ? 15 : 300);
-      return res.status(200).json(replay);
-    } catch (error) {
-      console.warn('[trading-festival] replay prices unavailable', { key: slot.key, message: error.message });
-      setCache(res, 30);
-      return res.status(200).json({ threshold: null, closePrice: null, outcome: null });
-    }
-  }
 
   if (req.query.slot !== undefined) {
     const slot = FESTIVAL_SCHEDULE.find(item => item.key === req.query.slot);

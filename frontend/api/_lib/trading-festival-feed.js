@@ -27,10 +27,6 @@ export async function readFestivalBars(slot, {
   from, to, fetchImpl = fetch, env = process.env, allowDelayed = festivalDataDelayMinutes(slot, env) > 0,
 }) {
   if (!festivalFeedEnabled(slot, env)) throw new Error('festival_feed_disabled');
-  return readBars(slot, { from, to, fetchImpl, env, allowDelayed });
-}
-
-async function readBars(slot, { from, to, fetchImpl, env, allowDelayed = false }) {
   if (to <= from) return [];
   const floorStart = Math.floor(from / FESTIVAL_MINUTE) * FESTIVAL_MINUTE;
   const lastFullBoundary = Math.floor(to / FESTIVAL_MINUTE) * FESTIVAL_MINUTE;
@@ -81,26 +77,4 @@ export async function readFestivalBoundary(slot, { at, ...options }) {
   const bars = await readFestivalBars(slot, { from: at - FESTIVAL_MINUTE, to: at, ...options });
   // No stale fallback, partial bar, or observation after the boundary.
   return bars.find(bar => bar.t === at) ?? null;
-}
-
-export async function readFestivalReplay(slot, { now = Date.now(), fetchImpl = fetch, env = process.env } = {}) {
-  const empty = { threshold: null, closePrice: null, outcome: null };
-  if (!slot.replay || now < Date.parse(slot.startTime) || !massiveApiKey(env)) return empty;
-
-  // Replay timestamps identify the start of each candle shown by Vunelix.
-  const opening = Date.parse(slot.replay.startTime);
-  const closing = Date.parse(slot.replay.endTime);
-  const ended = now >= Date.parse(slot.endTime);
-  const bars = await readBars(slot, {
-    from: opening,
-    to: (ended ? closing : opening) + FESTIVAL_MINUTE,
-    fetchImpl,
-    env,
-    allowDelayed: true,
-  });
-  const threshold = bars.find(bar => bar.t === opening + FESTIVAL_MINUTE)?.price ?? null;
-  const closePrice = ended ? bars.find(bar => bar.t === closing + FESTIVAL_MINUTE)?.price ?? null : null;
-  const outcome = threshold === null || closePrice === null || closePrice === threshold
-    ? null : closePrice > threshold ? 0 : 1;
-  return { threshold, closePrice, outcome };
 }

@@ -7,7 +7,7 @@ import { parseHTML } from 'linkedom';
 import { FESTIVAL_MINUTE, FESTIVAL_SCHEDULE, isFestivalBitcoin } from '../../shared/trading-festival.js';
 import { cryptoTradeLock } from './points-crypto-trade-guard.js';
 import { ensurePointsSchema } from './points-schema.js';
-import { festivalChartRange, festivalFeedEnabled, readFestivalBoundary, readFestivalReplay } from './trading-festival-feed.js';
+import { festivalChartRange, festivalFeedEnabled, readFestivalBoundary } from './trading-festival-feed.js';
 import { readFestivalMarkets, runTradingFestivalTick } from './trading-festival.js';
 
 const production = { VERCEL_ENV: 'production', TRADING_FESTIVAL_ENABLED: '1' };
@@ -156,33 +156,6 @@ test('SPX uses its exact Massive minute bar when configured', async () => {
   assert.deepEqual(await readFestivalBoundary(slot, {
     at, env: { ...licensed, TRADING_FESTIVAL_MASSIVE_DELAYED_SYMBOLS: 'spx' }, fetchImpl: fetchImpl('DELAYED'),
   }), { t: at, price: 7500 });
-});
-
-test('Nasdaq practice uses the displayed recording bars and withholds the result until the slot ends', async () => {
-  const slot = FESTIVAL_SCHEDULE.at(-1);
-  const start = Date.parse(slot.startTime);
-  const end = Date.parse(slot.endTime);
-  const firstBar = Date.parse(slot.replay.startTime);
-  const lastBar = Date.parse(slot.replay.endTime);
-  const fetchImpl = async url => {
-    assert.match(url.pathname, /\/I:NDX\/range\/1\/minute\//);
-    return {
-      ok: true,
-      json: async () => ({ status: 'OK', results: [
-        { t: firstBar - FESTIVAL_MINUTE, c: 24700 },
-        { t: firstBar, c: 24800 },
-        { t: lastBar, c: 24750 },
-        { t: lastBar + FESTIVAL_MINUTE, c: 25000 },
-      ] }),
-    };
-  };
-  const read = now => readFestivalReplay(slot, {
-    now, env: licensed,
-    fetchImpl: now >= start ? fetchImpl : () => assert.fail('prices requested before the replay'),
-  });
-  assert.deepEqual(await read(start - 1), { threshold: null, closePrice: null, outcome: null });
-  assert.deepEqual(await read(end - 1), { threshold: 24800, closePrice: null, outcome: null });
-  assert.deepEqual(await read(end), { threshold: 24800, closePrice: 24750, outcome: 1 });
 });
 
 test('festival seed, activation, lock, settlement and tie refund use the Points schema', async t => {

@@ -83,13 +83,6 @@ export function useFestivalMarketPrices(id) {
   return id != null && String(market?.id) === String(id) ? market.prices : null;
 }
 
-const initialReplay = { threshold: null, closePrice: null, outcome: null };
-
-export function useFestivalReplay(key, started) {
-  const url = started ? `${ENDPOINT}?replay=${encodeURIComponent(key)}` : null;
-  return useFestivalPoll(url, 30_000, initialReplay).data;
-}
-
 export function useFestivalClock() {
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
