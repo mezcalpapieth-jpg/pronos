@@ -433,7 +433,7 @@ function Shell({ onOpenLogin, isAdmin }) {
               specialized layout wins over the standard category grid.
               adminPath='/admin' targets the points-app's own admin. */}
           <Route path="/c/noticias" element={<NewsPage isAdmin={isAdmin} adminPath="/admin" />} />
-          <Route path="/c/tradingfestival" element={<TradingFestival onOpenLogin={onOpenLogin} />} />
+          <Route path="/c/tradingfestival" element={<TradingFestival onOpenLogin={onOpenLogin} isAdmin={isAdmin} />} />
           <Route path="/c/:slug" element={<PointsCategoryPage />} />
           <Route path="/market" element={<PointsMarketDetail onOpenLogin={onOpenLogin} isAdmin={isAdmin} />} />
           <Route path="/portfolio" element={<PointsPortfolio />} />

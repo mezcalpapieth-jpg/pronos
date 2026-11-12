@@ -59,7 +59,6 @@ export default async function handler(req, res) {
           outcome: row.outcome,
           threshold: meta.threshold,
           closePrice: meta.closePrice,
-          dataDelayMinutes: meta.dataDelayMinutes,
         } : null;
         // Once a market has opened, show its stored times even if the
         // provisional schedule is subsequently changed.

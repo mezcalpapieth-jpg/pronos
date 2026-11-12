@@ -12,12 +12,13 @@ const LIVE_TICK_MAX_AGE_MS = 15_000;
 
 const FESTIVAL_CHART_ORIGIN = 'https://pronos-chi.vercel.app';
 
-function FestivalPresentationChart({ slot, dashboard }) {
+function FestivalPresentationChart({ slot, dashboard, resolver, barStart, onBar }) {
   const frame = useRef(null);
   const [status, setStatus] = useState('loading');
   const [attempt, setAttempt] = useState(0);
   const ready = status === 'ready';
   const params = new URLSearchParams({ asset: slot.key });
+  if (resolver) params.set('resolve', '1');
   if (dashboard && slot.replay) {
     params.set('showStart', slot.startTime);
     params.set('showEnd', slot.endTime);
@@ -45,6 +46,32 @@ function FestivalPresentationChart({ slot, dashboard }) {
     setStatus('loading');
     setAttempt(previous => previous + 1);
   }
+
+  useEffect(() => {
+    if (!resolver || barStart == null) return;
+    const type = 'pronos:festival-chart-bar';
+    function requestBar() {
+      frame.current?.contentWindow?.postMessage({ type, barStart }, FESTIVAL_CHART_ORIGIN);
+    }
+    function handleBar(event) {
+      const data = event.data;
+      if (event.origin !== FESTIVAL_CHART_ORIGIN || event.source !== frame.current?.contentWindow
+        || data?.type !== type || data.asset !== slot.key || data.symbol !== slot.presentationTicker
+        || data.barStart !== barStart || !Number.isFinite(data.price) || data.price <= 0) return;
+      onBar(data);
+    }
+
+    window.addEventListener('message', handleBar);
+    requestBar();
+    const poll = setInterval(requestBar, 8000);
+    // Reload only the admin's resolver to recover if the widget's stream stalls.
+    const reload = setTimeout(retry, 90_000);
+    return () => {
+      window.removeEventListener('message', handleBar);
+      clearInterval(poll);
+      clearTimeout(reload);
+    };
+  }, [resolver, slot.key, slot.presentationTicker, barStart, onBar, attempt]);
 
   return (
     <div className="tf-presentation-chart">
@@ -156,7 +183,6 @@ function FestivalPriceChart({ slot, market }) {
   const { data, error } = useFestivalBars(slot.key);
   const threshold = market?.threshold ?? null;
   const finalPrice = market?.closePrice ?? null;
-  const dataDelayMinutes = market?.dataDelayMinutes || 0;
   const from = Math.min(now, start) - FESTIVAL_CHART_LEAD_MS;
   const to = Math.min(end, Math.max(now, ticker.history.at(-1)?.t ?? 0));
   const points = useMemo(() => buildFestivalPriceHistory({
@@ -190,7 +216,7 @@ function FestivalPriceChart({ slot, market }) {
         <div className="tf-reference">
           <div className="tf-caption">Precio de apertura</div>
           {threshold == null ? (
-            <span className="tf-reference-pending">{dataDelayMinutes ? 'Pendiente de la fuente' : 'Se fija al abrir'}</span>
+            <span className="tf-reference-pending">Se fija al abrir</span>
           ) : <strong>{festivalPrice(slot, threshold)}</strong>}
         </div>
       </div>
@@ -199,17 +225,20 @@ function FestivalPriceChart({ slot, market }) {
       )}
       <div className="tf-chart-status">
         {last && <span className={fresh && (!error || streaming) ? 'tf-signal is-live' : 'tf-signal'}>{status}</span>}
-        <span className="tf-chart-source">{slot.provider}{dataDelayMinutes > 0 && ` · ${dataDelayMinutes} min de retraso`}</span>
+        <span className="tf-chart-source">{slot.provider}</span>
       </div>
     </section>
   );
 }
 
-export default function TradingFestivalChart({ slot, market = slot.market, dashboard = false }) {
+export default function TradingFestivalChart({
+  slot, market = slot.market, dashboard = false, resolver = false, barStart, onBar,
+}) {
   if (!slot.presentationTicker) return <FestivalPriceChart slot={slot} market={market} />;
   return (
     <section className="tf-embedded-chart" aria-label={`Precio de ${slot.symbol}`}>
-      <FestivalPresentationChart slot={slot} dashboard={dashboard} />
+      <FestivalPresentationChart slot={slot} dashboard={dashboard}
+        resolver={resolver} barStart={barStart} onBar={onBar} />
       {market && !slot.replay && (
         <div className="tf-settlement-prices tf-caption">
           <span>Apertura según {slot.provider} · {market.threshold == null

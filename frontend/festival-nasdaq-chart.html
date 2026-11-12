@@ -78,6 +78,7 @@
         chart.dataset.showReplay = 'false';
       } else if (asset === 'spx') {
         chart.dataset.symbol = 'SP:SPX';
+        if (params.get('resolve') === '1') chart.dataset.showReplay = 'false';
       }
       const script = document.createElement('script');
       const allowedParents = ['https://pronos.io', 'https://www.pronos.io'];
@@ -90,6 +91,27 @@
       });
 
       const minute = 60_000;
+      if ((asset === 'usdmxn' || asset === 'spx') && params.get('resolve') === '1') {
+        window.addEventListener('message', event => {
+          if (event.source !== window.parent || !allowedParents.includes(event.origin)
+            || event.data?.type !== 'pronos:festival-chart-bar') return;
+          const { barStart } = event.data;
+          if (!Number.isSafeInteger(barStart) || barStart % minute !== 0) return;
+
+          // The widget stores bars by their start time in Unix seconds.
+          const widget = chart._chart;
+          const rows = widget?.engine?.data;
+          if (widget?.options?.symbol !== chart.dataset.symbol || widget.options.period !== '1m'
+            || !Array.isArray(rows)) return;
+          const bar = rows.find(row => row.timestamp * 1000 === barStart);
+          if (!Number.isFinite(bar?.close) || bar.close <= 0
+            || !rows.some(row => row.timestamp * 1000 > barStart)) return;
+          window.parent.postMessage({
+            type: 'pronos:festival-chart-bar', asset, symbol: chart.dataset.symbol, barStart, price: bar.close,
+          }, event.origin);
+        });
+      }
+
       const showStart = Date.parse(params.get('showStart'));
       const showEnd = Date.parse(params.get('showEnd'));
       const recordingStart = Date.parse(params.get('recordingStart'));
