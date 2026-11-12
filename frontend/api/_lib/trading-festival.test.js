@@ -7,7 +7,7 @@ import { parseHTML } from 'linkedom';
 import { FESTIVAL_MINUTE, FESTIVAL_SCHEDULE, isFestivalBitcoin } from '../../shared/trading-festival.js';
 import { cryptoTradeLock } from './points-crypto-trade-guard.js';
 import { ensurePointsSchema } from './points-schema.js';
-import { festivalChartRange, festivalFeedEnabled, readFestivalBoundary } from './trading-festival-feed.js';
+import { festivalChartRange, festivalFeedEnabled, readFestivalBoundary, readFestivalReplay } from './trading-festival-feed.js';
 import { readFestivalMarkets, runTradingFestivalTick } from './trading-festival.js';
 
 const production = { VERCEL_ENV: 'production', TRADING_FESTIVAL_ENABLED: '1' };
@@ -153,6 +153,36 @@ test('SPX uses its exact Massive minute bar when configured', async () => {
   };
   assert.deepEqual(await readFestivalBoundary(slot, { at, env: licensed, fetchImpl: fetchImpl('OK') }), { t: at, price: 7500 });
   await assert.rejects(readFestivalBoundary(slot, { at, env: licensed, fetchImpl: fetchImpl('DELAYED') }), /festival_feed_delayed/);
+  assert.deepEqual(await readFestivalBoundary(slot, {
+    at, env: { ...licensed, TRADING_FESTIVAL_MASSIVE_DELAYED_SYMBOLS: 'spx' }, fetchImpl: fetchImpl('DELAYED'),
+  }), { t: at, price: 7500 });
+});
+
+test('Nasdaq practice uses the displayed recording bars and withholds the result until the slot ends', async () => {
+  const slot = FESTIVAL_SCHEDULE.at(-1);
+  const start = Date.parse(slot.startTime);
+  const end = Date.parse(slot.endTime);
+  const firstBar = Date.parse(slot.replay.startTime);
+  const lastBar = Date.parse(slot.replay.endTime);
+  const fetchImpl = async url => {
+    assert.match(url.pathname, /\/I:NDX\/range\/1\/minute\//);
+    return {
+      ok: true,
+      json: async () => ({ status: 'OK', results: [
+        { t: firstBar - FESTIVAL_MINUTE, c: 24700 },
+        { t: firstBar, c: 24800 },
+        { t: lastBar, c: 24750 },
+        { t: lastBar + FESTIVAL_MINUTE, c: 25000 },
+      ] }),
+    };
+  };
+  const read = now => readFestivalReplay(slot, {
+    now, env: licensed,
+    fetchImpl: now >= start ? fetchImpl : () => assert.fail('prices requested before the replay'),
+  });
+  assert.deepEqual(await read(start - 1), { threshold: null, closePrice: null, outcome: null });
+  assert.deepEqual(await read(end - 1), { threshold: 24800, closePrice: null, outcome: null });
+  assert.deepEqual(await read(end), { threshold: 24800, closePrice: 24750, outcome: 1 });
 });
 
 test('festival seed, activation, lock, settlement and tie refund use the Points schema', async t => {
@@ -171,14 +201,18 @@ test('festival seed, activation, lock, settlement and tie refund use the Points 
   const btcClose = boundary(btc, 'endTime');
   const fxStart = boundary(fx, 'startTime');
   const fxClose = boundary(fx, 'endTime');
-  const run = (now, env = licensed) => runTradingFestivalTick({
+  const delay = 15 * FESTIVAL_MINUTE;
+  const spxBoundaries = [];
+  const delayed = { ...licensed, TRADING_FESTIVAL_MASSIVE_DELAYED_SYMBOLS: 'spx' };
+  const run = (now, env = delayed) => runTradingFestivalTick({
     sql, env, clock: () => now, transaction: cb => db.transaction(cb),
-    readBoundary: async (slot, { at }) => {
+    readBoundary: async (slot, { at, allowDelayed }) => {
       const opening = at === boundary(slot, 'startTime');
       if (isFestivalBitcoin(slot)) return { t: at, price: opening ? 74000 : 74001 };
       if (slot.key === fx.key) return { t: at, price: 18.92 };
       assert.equal(slot.key, spx.key);
-      if (opening && now === at) return null;
+      assert.equal(allowDelayed, true);
+      spxBoundaries.push(at);
       return { t: at, price: opening ? 7500 : 7499 };
     },
   });
@@ -228,16 +262,29 @@ test('festival seed, activation, lock, settlement and tie refund use the Points 
   assert.equal((await get(fridayBtc.key)).outcome, 0);
   assert.deepEqual(await get(btc.key), resolvedBtc);
 
+  const spxStart = boundary(spx, 'startTime');
+  const spxEnd = boundary(spx, 'endTime');
+  const spxPreflight = spxStart - delay - 2 * FESTIVAL_MINUTE;
   assert.equal((await get(spx.key)).status, 'pending');
-  await run(boundary(spx, 'startTime') + FESTIVAL_MINUTE);
+  await run(spxStart);
   const openSpx = await get(spx.key);
   assert.equal(openSpx.status, 'active');
-  assert.equal(openSpx.resolver_config.threshold, 7500);
-  await run(boundary(spx, 'endTime'));
+  assert.equal(openSpx.resolver_config.dataDelayMinutes, 15);
+  assert.equal(openSpx.resolver_config.threshold, undefined);
+  await run(spxStart + delay - 1);
+  assert.deepEqual(spxBoundaries, [spxPreflight]);
+  await run(spxStart + delay);
+  assert.equal((await get(spx.key)).resolver_config.threshold, 7500);
+  assert.equal(cryptoTradeLock(openSpx, spxEnd).error, 'market_expired');
+  await run(spxEnd + delay - 1);
+  assert.equal((await get(spx.key)).status, 'active');
+  assert.deepEqual(spxBoundaries, [spxPreflight, spxStart]);
+  await run(spxEnd + delay);
   const settledSpx = await get(spx.key);
   assert.equal(settledSpx.status, 'resolved');
   assert.equal(settledSpx.outcome, 1);
   assert.equal(settledSpx.resolver_config.closePrice, 7499);
+  assert.deepEqual(spxBoundaries, [spxPreflight, spxStart, spxEnd]);
   const tick = await run(boundary(ndx, 'startTime'));
   assert.deepEqual(tick.find(item => item.key === ndx.key), { key: ndx.key, status: 'presentation' });
   assert.equal(await get(ndx.key), undefined);

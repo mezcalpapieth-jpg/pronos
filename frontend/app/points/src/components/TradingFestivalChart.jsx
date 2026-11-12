@@ -91,6 +91,7 @@ export default function TradingFestivalChart({ slot, market = slot.market }) {
   const { data, error } = useFestivalBars(slot.key);
   const threshold = market?.threshold ?? null;
   const finalPrice = market?.closePrice ?? null;
+  const dataDelayMinutes = market?.dataDelayMinutes || 0;
   const from = Math.min(now, start) - FESTIVAL_CHART_LEAD_MS;
   const to = Math.min(end, Math.max(now, ticker.history.at(-1)?.t ?? 0));
   const points = useMemo(() => buildFestivalPriceHistory({
@@ -123,7 +124,9 @@ export default function TradingFestivalChart({ slot, market = slot.market }) {
         </div>
         <div className="tf-reference">
           <div className="tf-caption">Precio de apertura</div>
-          {threshold == null ? <span className="tf-reference-pending">Se fija al abrir</span> : <strong>{festivalPrice(slot, threshold)}</strong>}
+          {threshold == null ? (
+            <span className="tf-reference-pending">{dataDelayMinutes ? 'Pendiente de la fuente' : 'Se fija al abrir'}</span>
+          ) : <strong>{festivalPrice(slot, threshold)}</strong>}
         </div>
       </div>
       {last ? <PricePlot slot={slot} points={points} threshold={threshold} /> : (
@@ -131,7 +134,7 @@ export default function TradingFestivalChart({ slot, market = slot.market }) {
       )}
       <div className="tf-chart-status">
         {last && <span className={fresh && (!error || streaming) ? 'tf-signal is-live' : 'tf-signal'}>{status}</span>}
-        <span className="tf-chart-source">{slot.provider}</span>
+        <span className="tf-chart-source">{slot.provider}{dataDelayMinutes > 0 && ` · ${dataDelayMinutes} min de retraso`}</span>
       </div>
     </section>
   );
