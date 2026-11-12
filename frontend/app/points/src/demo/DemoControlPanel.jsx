@@ -10,10 +10,12 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  appendMarketHistory,
   applyProbabilities,
   exportDemoState,
   getDemoState,
   importDemoState,
+  IS_FESTIVAL_DEMO,
   renameDemoUser,
   resetDemoState,
   subscribeDemoState,
@@ -22,6 +24,7 @@ import {
 } from './demoStore.js';
 import { reservesForProbabilities, pricesFromReserves } from './demoSeed.js';
 import { emitPointsRefresh } from '../lib/pointsLiveRefresh.js';
+import { DEMO_SESSION_KEY, FESTIVAL_DEMO_SESSION_KEY, LIVE_SEED_SESSION_KEY } from './demoFlag.js';
 
 const ORANGE = '#FF5500';
 const PANEL_BG = '#101013';
@@ -166,6 +169,7 @@ export default function DemoControlPanel() {
       const next = [first, ...rest.map(p => (1 - first) * (p / restSum))];
       applyProbabilities(target, next);
       target.anchorProbs = [...target.prices];
+      if (IS_FESTIVAL_DEMO) appendMarketHistory(target);
     });
     emitPointsRefresh();
   }
@@ -319,8 +323,9 @@ export default function DemoControlPanel() {
   function handleExitDemo() {
     if (!window.confirm('¿Salir del demo y volver al sitio real?')) return;
     try {
-      window.sessionStorage.removeItem('pronos-video-demo-active');
-      window.sessionStorage.removeItem('pronos-demo-live-seed');
+      window.sessionStorage.removeItem(DEMO_SESSION_KEY);
+      window.sessionStorage.removeItem(LIVE_SEED_SESSION_KEY);
+      window.sessionStorage.removeItem(FESTIVAL_DEMO_SESSION_KEY);
     } catch { /* private mode — the reload below still leaves the demo */ }
     window.location.href = '/points/';
   }
@@ -411,7 +416,7 @@ export default function DemoControlPanel() {
         </Field>
       </Section>
 
-      <Section title="Gráficas en vivo">
+      {!IS_FESTIVAL_DEMO && <Section title="Gráficas en vivo">
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginBottom: 10 }}>
           <input
             type="checkbox"
@@ -427,27 +432,28 @@ export default function DemoControlPanel() {
             onChange={e => updateDemoSettings({ driftSpeed: Number(e.target.value) })}
           />
         </Field>
-      </Section>
+      </Section>}
 
-      <Section title="Compras y ventas">
+      <Section title={IS_FESTIVAL_DEMO ? 'Actividad simulada' : 'Compras y ventas'}>
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginBottom: 10 }}>
           <input
             type="checkbox"
             checked={!!state.settings.tradeFlowEnabled}
             onChange={e => updateDemoSettings({ tradeFlowEnabled: e.target.checked })}
           />
-          Que entren órdenes solas
+          {IS_FESTIVAL_DEMO ? 'Simular una operación por minuto' : 'Que entren órdenes solas'}
         </label>
-        <Field label={`Cuántas: ${state.settings.tradeFlowIntensity}`}>
+        {!IS_FESTIVAL_DEMO && <Field label={`Cuántas: ${state.settings.tradeFlowIntensity}`}>
           <input
             type="range" min="1" max="10" style={{ width: '100%' }}
             value={state.settings.tradeFlowIntensity}
             onChange={e => updateDemoSettings({ tradeFlowIntensity: Number(e.target.value) })}
           />
-        </Field>
+        </Field>}
         <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', margin: '-4px 0 0', lineHeight: 1.5 }}>
-          Sube el volumen, mueve las barras de actividad y mantiene el
-          “último movimiento” en ahora.
+          {IS_FESTIVAL_DEMO
+            ? 'Operaciones de 100 a 2,000 MXNP en mercados abiertos que cierran antes de diciembre.'
+            : 'Sube el volumen, mueve las barras de actividad y mantiene el “último movimiento” en ahora.'}
         </p>
       </Section>
 

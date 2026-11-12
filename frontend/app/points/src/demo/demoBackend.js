@@ -14,9 +14,7 @@
  * change upstream.
  */
 import {
-  binaryBuyQuote,
   binarySellQuote,
-  multiBuyQuote,
   multiSellQuote,
 } from '../../../../api/_lib/amm-math.js';
 import {
@@ -26,7 +24,7 @@ import {
   TOURNAMENT_START_ISO,
   tournamentRulesPayload,
 } from '../../../../api/_lib/points-tournament-config.js';
-import { getDemoState, updateDemoState } from './demoStore.js';
+import { appendMarketHistory, getDemoState, IS_FESTIVAL_DEMO, quoteDemoBuy, updateDemoState } from './demoStore.js';
 import { routeDemoStocks } from './demoStocks.js';
 
 const json = (body, status = 200) => ({ status, body });
@@ -490,7 +488,7 @@ function handleTradeActivity(state, params) {
 
     const series = weights.map((w, i) => {
       const volume = Math.round((total * w) / weightSum);
-      const buyVolume = Math.round(volume * (0.5 + Math.random() * 0.25));
+      const buyVolume = Math.round(volume * (IS_FESTIVAL_DEMO ? 0.6 : 0.5 + Math.random() * 0.25));
       return {
         t: nowSec - (buckets - 1 - i) * bucketSeconds,
         count: Math.max(1, Math.round(volume / 900)),
@@ -506,6 +504,7 @@ function handleTradeActivity(state, params) {
     const firstBucketStart = series[0]?.t ?? nowSec;
     for (const trade of state.recentTrades) {
       if (trade.marketId !== Number(id)) continue;
+      if (IS_FESTIVAL_DEMO && trade.t < firstBucketStart) continue;
       const slot = Math.floor((trade.t - firstBucketStart) / bucketSeconds);
       const bucket = series[Math.min(series.length - 1, Math.max(0, slot))];
       if (!bucket) continue;
@@ -601,13 +600,6 @@ function handlePositions(state) {
   });
 }
 
-function quoteFor(market, outcomeIndex, collateral) {
-  const reserves = market.reserves.map(Number);
-  return reserves.length === 2
-    ? binaryBuyQuote(reserves, outcomeIndex, collateral)
-    : multiBuyQuote(reserves, outcomeIndex, collateral);
-}
-
 function handleQuoteBuy(state, body) {
   const market = findMarket(state, body.marketId);
   if (!market) return json({ error: 'market_not_found' }, 404);
@@ -618,7 +610,7 @@ function handleQuoteBuy(state, body) {
   }
   if (!Number.isFinite(amt) || amt <= 0) return json({ error: 'invalid_amount' }, 400);
 
-  const q = quoteFor(market, oi, amt);
+  const q = quoteDemoBuy(market, oi, amt);
   return json({
     collateral: q.collateral,
     fee: q.fee,
@@ -644,7 +636,7 @@ function handleBuy(state, body) {
   if (!Number.isFinite(amt) || amt <= 0) return json({ error: 'invalid_amount' }, 400);
   if (amt > state.user.balance) return json({ error: 'insufficient_balance' }, 400);
 
-  const q = quoteFor(market, oi, amt);
+  const q = quoteDemoBuy(market, oi, amt);
   let balance = state.user.balance;
 
   updateDemoState(s => {
@@ -656,6 +648,7 @@ function handleBuy(state, body) {
     target.anchorProbs = [...q.pricesAfter];
     target.tradeVolume = Number(target.tradeVolume || 0) + amt;
     target.lastTradeAt = new Date().toISOString();
+    if (IS_FESTIVAL_DEMO) appendMarketHistory(target);
 
     s.user.balance = Math.round((s.user.balance - amt) * 100) / 100;
     balance = s.user.balance;
@@ -772,6 +765,7 @@ function handleSell(state, body) {
     target.anchorProbs = [...q.pricesAfter];
     target.tradeVolume = Number(target.tradeVolume || 0) + q.collateralOut;
     target.lastTradeAt = new Date().toISOString();
+    if (IS_FESTIVAL_DEMO) appendMarketHistory(target);
 
     s.user.balance = Math.round((s.user.balance + q.collateralOut) * 100) / 100;
     balance = s.user.balance;
@@ -813,7 +807,8 @@ function handleSell(state, body) {
 
 // ─── Trade tape ─────────────────────────────────────────────────────────────
 
-function tapeRow(market, { t, side, size, outcomeIndex, username, shares, price }, key) {
+function tapeRow(market, trade, key) {
+  const { t, side, size, outcomeIndex, username, shares, price, fee = 0, priceBefore = price, priceAfter = price } = trade;
   const label = market.outcomes[outcomeIndex] || '';
   return {
     id: `${market.id}-${t}-${key}`,
@@ -828,12 +823,12 @@ function tapeRow(market, { t, side, size, outcomeIndex, username, shares, price 
     question: market.question,
     shares: Number((shares ?? size / Math.max(0.02, price)).toFixed(2)),
     collateral: size,
-    fee: 0,
+    fee,
     price,
-    priceBefore: price,
-    priceAfter: price,
-    priceMin: price,
-    priceMax: price,
+    priceBefore,
+    priceAfter,
+    priceMin: Math.min(priceBefore, priceAfter),
+    priceMax: Math.max(priceBefore, priceAfter),
     fillCount: 1,
     createdAt: new Date(t * 1000).toISOString(),
     t,
@@ -883,7 +878,7 @@ function handleTradeTape(state, params) {
       return seed / 2147483648;
     };
     let t = rows.length ? rows[rows.length - 1].t : nowSec;
-    while (rows.length < limit && t > cutoff) {
+    while (!IS_FESTIVAL_DEMO && rows.length < limit && t > cutoff) {
       t -= 60 + Math.floor(nextSeeded() * 900);
       if (t <= cutoff) break;
       const outcomeIndex = Math.floor(nextSeeded() * market.outcomes.length);

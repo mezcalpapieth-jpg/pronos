@@ -12,35 +12,25 @@
  *     with a climb bias on the recording account (shot 2).
  */
 import { buildSeedState, pricesFromReserves, rankLeaderboard } from './demoSeed.js';
+import { binaryBuyQuote, multiBuyQuote } from '../../../../api/_lib/amm-math.js';
+import { emitPointsRefresh } from '../lib/pointsLiveRefresh.js';
+import { isFestivalDemo, isLiveSeedDemo } from './demoFlag.js';
 
-// Read inline rather than importing demoFlag.js. That module lives in the main
-// bundle (regular pages import it for the poll interval), so importing it here
-// widens this chunk's dependency graph — which shows up as a bigger preload
-// manifest inside PointsMarketDetail, a chunk every visitor downloads. Two
-// lines of duplication is the cheaper trade.
-function liveSeedDemo() {
-  try {
-    return window.sessionStorage.getItem('pronos-demo-live-seed') === '1';
-  } catch {
-    return false;
-  }
-}
-
-// Namespaced per demo, because the two hold different boards: the video demo
-// records against invented markets while the presentation demo runs on the
-// real ones. A shared key would let whichever ran last hand the other its
-// scenario. v2 because the shape gained userTrades — a v1 blob would
-// short-circuit readStored() and serve a board with no trade history.
+// Each demo keeps its own board and settings. v2 scenarios include userTrades.
 const STATE_VERSION = 2;
-const STORAGE_KEY = liveSeedDemo()
-  ? 'pronos-demo-live-v2'
-  : 'pronos-video-demo-v2';
+export const IS_FESTIVAL_DEMO = isFestivalDemo();
+const STORAGE_KEY = IS_FESTIVAL_DEMO
+  ? 'pronos-festival-demo-v2'
+  : isLiveSeedDemo() ? 'pronos-demo-live-v2' : 'pronos-video-demo-v2';
 const HISTORY_POINT_SECONDS = 10;
 const MAX_HISTORY_POINTS = 360;
 // Sized for the presentation board (~90 markets), not the video demo's 22.
 // At 600 the buffer turned over in seconds and per-market tapes came up empty.
 const MAX_RECENT_TRADES = 3000;
 const PERSIST_THROTTLE_MS = 3000;
+const PRESENTATION_TRADE_INTERVAL_MS = 60_000;
+const PRESENTATION_MARKET_CLOSE_CUTOFF = Date.parse('2026-12-01T00:00:00-06:00');
+const PRESENTATION_TRADERS = ['demo_ana', 'demo_bruno', 'demo_carla', 'demo_diego', 'demo_elena', 'demo_luis', 'demo_sofia'];
 
 let state = null;
 let listeners = new Set();
@@ -155,14 +145,12 @@ function ensureHistory(now) {
   }
 }
 
-function appendHistory(now) {
-  const t = Math.floor(now / 1000);
-  for (const market of state.markets) {
-    const series = state.history[market.id];
-    if (!series) continue;
-    series.push({ t, ps: currentPercentages(market) });
-    if (series.length > MAX_HISTORY_POINTS) series.splice(0, series.length - MAX_HISTORY_POINTS);
-  }
+export function appendMarketHistory(market, now = Date.now()) {
+  const series = state.history[market.id] ??= [];
+  const point = { t: Math.floor(now / 1000), ps: currentPercentages(market) };
+  if (series.at(-1)?.t === point.t) series[series.length - 1] = point;
+  else series.push(point);
+  if (series.length > MAX_HISTORY_POINTS) series.splice(0, series.length - MAX_HISTORY_POINTS);
 }
 
 // ─── Drift ──────────────────────────────────────────────────────────────────
@@ -226,7 +214,7 @@ function liveTick() {
   const now = Date.now();
   if (now - lastHistoryAppend >= HISTORY_POINT_SECONDS * 1000) {
     lastHistoryAppend = now;
-    appendHistory(now);
+    for (const market of state.markets) appendMarketHistory(market, now);
   }
   persist();
   notify();
@@ -252,6 +240,63 @@ function liveTick() {
 // at a time, which showed up as cards with a dead "hace 2 h" timestamp sitting
 // next to live ones.
 let flowCursor = 0;
+
+export function quoteDemoBuy(market, outcomeIndex, collateral) {
+  const reserves = market.reserves.map(Number);
+  return reserves.length === 2
+    ? binaryBuyQuote(reserves, outcomeIndex, collateral)
+    : multiBuyQuote(reserves, outcomeIndex, collateral);
+}
+
+function presentationTradeTick() {
+  if (window.document?.visibilityState === 'hidden') return;
+  const now = Date.now();
+  const flow = state.presentationFlow;
+  if (now - (flow.lastTradeAt ?? -Infinity) < PRESENTATION_TRADE_INTERVAL_MS) return;
+
+  // Keep rotating in board order, even if the previous market just closed.
+  const startIndex = state.markets.findIndex(market => market.id === flow.lastMarketId) + 1;
+  const rotation = state.markets.slice(startIndex).concat(state.markets.slice(0, startIndex));
+  const market = rotation.find(market => {
+    const close = Date.parse(market.endTime);
+    return market.presentationMarket && market.status === 'active'
+      && (!market.startTime || Date.parse(market.startTime) <= now)
+      && close > now && close < PRESENTATION_MARKET_CLOSE_CUTOFF;
+  });
+  if (!market) return;
+  const outcomeIndex = Math.floor(Math.random() * market.outcomes.length);
+  const size = 100 * (1 + Math.floor(Math.random() * 20));
+  const quote = quoteDemoBuy(market, outcomeIndex, size);
+  const traderIndex = flow.nextTraderIndex ?? 0;
+
+  market.reserves = quote.reservesAfter;
+  market.prices = quote.pricesAfter;
+  market.tradeVolume = Number(market.tradeVolume || 0) + size;
+  market.lastTradeAt = new Date(now).toISOString();
+  state.recentTrades.push({
+    marketId: market.id,
+    t: Math.floor(now / 1000),
+    side: 'buy',
+    size,
+    outcomeIndex,
+    username: PRESENTATION_TRADERS[traderIndex],
+    price: quote.avgPrice,
+    priceBefore: quote.priceBefore,
+    priceAfter: quote.priceAfter,
+    fee: quote.fee,
+    shares: quote.sharesOut,
+  });
+  if (state.recentTrades.length > MAX_RECENT_TRADES) state.recentTrades.shift();
+  appendMarketHistory(market, now);
+  state.presentationFlow = {
+    lastTradeAt: now,
+    lastMarketId: market.id,
+    nextTraderIndex: (traderIndex + 1) % PRESENTATION_TRADERS.length,
+  };
+  persist(true);
+  notify();
+  emitPointsRefresh({ source: 'presentation_trade', marketId: market.id });
+}
 
 function recordTrade(market, now, nowSec) {
   // Slight buy lean so the pressure bar sits believably above 50%.
@@ -357,7 +402,9 @@ function shuffleTick() {
 
 function startTimers() {
   stopTimers();
-  if (state.settings.driftEnabled || state.settings.tradeFlowEnabled) {
+  if (IS_FESTIVAL_DEMO) {
+    if (state.settings.tradeFlowEnabled) driftTimer = window.setInterval(presentationTradeTick, 1000);
+  } else if (state.settings.driftEnabled || state.settings.tradeFlowEnabled) {
     driftTimer = window.setInterval(liveTick, 1000);
   }
   if (state.settings.leaderboardShuffleEnabled) {
@@ -379,6 +426,27 @@ function notify() {
   }
 }
 
+function preparePresentationState(seedState) {
+  if (!IS_FESTIVAL_DEMO) return;
+  if (!state.presentationFlow) {
+    state.presentationFlow = {};
+    state.recentTrades = [];
+  }
+  if (!seedState?.liveSeed || seedState === state) return;
+
+  // Refresh availability on reload while preserving the scenario's fills and prices.
+  const current = new Map(seedState.markets.filter(market => market.presentationMarket).map(market => [market.id, market]));
+  for (const market of state.markets) {
+    const fresh = current.get(market.id);
+    market.presentationMarket = Boolean(fresh);
+    if (!fresh) continue;
+    market.startTime = fresh.startTime;
+    market.endTime = fresh.endTime;
+    current.delete(market.id);
+  }
+  state.markets.push(...current.values());
+}
+
 /**
  * @param {object} [seedState] a pre-built seed (the presentation demo passes
  *   the live backend snapshot). A saved scenario still wins over it, so a
@@ -394,6 +462,7 @@ export function initDemoStore(seedState = null) {
   state.settings = { ...defaults.settings, ...(state.settings || {}) };
   if (!Array.isArray(state.recentTrades)) state.recentTrades = [];
   if (!Array.isArray(state.userTrades)) state.userTrades = [];
+  preparePresentationState(seedState);
   ensureHistory(now);
   lastHistoryAppend = now;
   persist(true);
@@ -452,7 +521,10 @@ export function renameDemoUser(nextName) {
  */
 export function resetDemoState(seedState = null) {
   const now = Date.now();
+  const presentationFlow = state?.presentationFlow;
   state = seedState || buildSeedState(now);
+  preparePresentationState(seedState);
+  if (IS_FESTIVAL_DEMO && presentationFlow) state.presentationFlow = presentationFlow;
   ensureHistory(now);
   lastHistoryAppend = now;
   persist(true);
@@ -478,6 +550,7 @@ export function importDemoState(json) {
   state.settings = { ...defaults.settings, ...(state.settings || {}) };
   if (!Array.isArray(state.recentTrades)) state.recentTrades = [];
   if (!Array.isArray(state.userTrades)) state.userTrades = [];
+  preparePresentationState(null);
   ensureHistory(Date.now());
   persist(true);
   startTimers();

@@ -19,6 +19,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { FESTIVAL_SCHEDULE, FESTIVAL_SOURCE } from '../../../../shared/trading-festival.js';
 import { matchesMarketSearch, normalizeSearchText } from '../lib/marketSearch.js';
+import { onPointsRefresh } from '../lib/pointsLiveRefresh.js';
+import { isFestivalDemo } from '../demo/demoFlag.js';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   createParlay,
@@ -206,6 +208,21 @@ export default function PointsHome({ onOpenLogin }) {
     load();
     return () => { cancelled = true; };
   }, [authenticated]);
+
+  useEffect(() => {
+    if (!isFestivalDemo()) return undefined;
+    let canceled = false;
+    const unsubscribe = onPointsRefresh(event => {
+      if (event.detail?.source !== 'presentation_trade') return;
+      fetchMarkets({ status: 'active', featured: 'all' })
+        .then(rows => { if (!canceled) setMarkets(rows); })
+        .catch(() => { /* Keep the previous board until the next trade. */ });
+    });
+    return () => {
+      canceled = true;
+      unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
     const firstStart = Date.parse(FESTIVAL_SCHEDULE[0].startTime);

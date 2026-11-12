@@ -19,6 +19,7 @@ export const DEMO_SESSION_KEY = 'pronos-video-demo-active';
  * board.
  */
 export const LIVE_SEED_SESSION_KEY = 'pronos-demo-live-seed';
+export const FESTIVAL_DEMO_SESSION_KEY = 'pronos-festival-demo';
 
 export function isVideoDemoActive() {
   try {
@@ -31,6 +32,14 @@ export function isVideoDemoActive() {
 export function isLiveSeedDemo() {
   try {
     return window.sessionStorage.getItem(LIVE_SEED_SESSION_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function isFestivalDemo() {
+  try {
+    return isLiveSeedDemo() && window.sessionStorage.getItem(FESTIVAL_DEMO_SESSION_KEY) === '1';
   } catch {
     return false;
   }
