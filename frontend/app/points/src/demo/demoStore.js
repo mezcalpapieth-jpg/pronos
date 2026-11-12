@@ -28,7 +28,7 @@ const MAX_HISTORY_POINTS = 360;
 // At 600 the buffer turned over in seconds and per-market tapes came up empty.
 const MAX_RECENT_TRADES = 3000;
 const PERSIST_THROTTLE_MS = 3000;
-const PRESENTATION_TRADE_INTERVAL_MS = 60_000;
+const PRESENTATION_TRADE_INTERVAL_MS = 3 * 60_000;
 const PRESENTATION_MARKET_CLOSE_CUTOFF = Date.parse('2026-12-01T00:00:00-06:00');
 const PRESENTATION_TRADERS = ['demo_ana', 'demo_bruno', 'demo_carla', 'demo_diego', 'demo_elena', 'demo_luis', 'demo_sofia'];
 
@@ -265,7 +265,7 @@ function presentationTradeTick() {
   });
   if (!market) return;
   const outcomeIndex = Math.floor(Math.random() * market.outcomes.length);
-  const size = 100 * (1 + Math.floor(Math.random() * 20));
+  const size = 100 + Math.floor(Math.random() * 1901);
   const quote = quoteDemoBuy(market, outcomeIndex, size);
   const traderIndex = flow.nextTraderIndex ?? 0;
 

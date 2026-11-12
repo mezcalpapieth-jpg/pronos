@@ -441,7 +441,7 @@ export default function DemoControlPanel() {
             checked={!!state.settings.tradeFlowEnabled}
             onChange={e => updateDemoSettings({ tradeFlowEnabled: e.target.checked })}
           />
-          {IS_FESTIVAL_DEMO ? 'Simular una operación por minuto' : 'Que entren órdenes solas'}
+          {IS_FESTIVAL_DEMO ? 'Simular una operación cada tres minutos' : 'Que entren órdenes solas'}
         </label>
         {!IS_FESTIVAL_DEMO && <Field label={`Cuántas: ${state.settings.tradeFlowIntensity}`}>
           <input
@@ -452,7 +452,7 @@ export default function DemoControlPanel() {
         </Field>}
         <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', margin: '-4px 0 0', lineHeight: 1.5 }}>
           {IS_FESTIVAL_DEMO
-            ? 'Operaciones de 100 a 2,000 MXNP en mercados abiertos que cierran antes de diciembre.'
+            ? 'Montos aleatorios de 100 a 2,000 MXNP en mercados abiertos que cierran antes de diciembre.'
             : 'Sube el volumen, mueve las barras de actividad y mantiene el “último movimiento” en ahora.'}
         </p>
       </Section>
