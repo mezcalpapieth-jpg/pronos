@@ -42,7 +42,8 @@ export default function PointsDemoGate() {
     // The second flag is what separates this from the video demo: it selects
     // the live backend snapshot over the invented markets, and namespaces the
     // saved scenario so the two demos never inherit each other's board.
-    markLiveSeedDemo();
+    const festival = new URLSearchParams(window.location.search).get('festival') === '1';
+    markLiveSeedDemo({ festival });
     window.location.href = '/points/';
   }
 

@@ -15,6 +15,7 @@
  */
 import { routeDemoRequest } from './demoBackend.js';
 import { initDemoStore } from './demoStore.js';
+import { FESTIVAL_DEMO_SESSION_KEY, LIVE_SEED_SESSION_KEY } from './demoFlag.js';
 
 const DEMO_SESSION_KEY = 'pronos-video-demo-active';
 
@@ -45,9 +46,11 @@ export function markDemoActive() {
  * Marks this session as the presentation demo, which seeds from the live
  * backend instead of the invented markets. Set only by /points-demo.
  */
-export function markLiveSeedDemo() {
+export function markLiveSeedDemo({ festival = false } = {}) {
   try {
-    window.sessionStorage.setItem('pronos-demo-live-seed', '1');
+    window.sessionStorage.setItem(LIVE_SEED_SESSION_KEY, '1');
+    if (festival) window.sessionStorage.setItem(FESTIVAL_DEMO_SESSION_KEY, '1');
+    else window.sessionStorage.removeItem(FESTIVAL_DEMO_SESSION_KEY);
   } catch { /* private mode — the demo still runs for this page load */ }
 }
 

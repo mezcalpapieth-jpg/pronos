@@ -24,6 +24,7 @@ import {
   rankLeaderboard,
   reservesForProbabilities,
 } from './demoSeed.js';
+import { isFestivalDemo } from './demoFlag.js';
 
 const DAY = 24 * 60 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 6000;
@@ -134,7 +135,7 @@ function volumeAndDepth(market, rand) {
  * The output shape has to match GET /api/points/markets field-for-field,
  * because the demo backend serves it straight back to the same components.
  */
-function toDemoMarket(market, { now, revived, index, rand }) {
+function toDemoMarket(market, { now, revived, index, rand, festival }) {
   const probs = reviveProbabilities(market, rand);
   const { volume, depth } = volumeAndDepth(market, rand);
   const reserves = reservesForProbabilities(probs, depth);
@@ -145,11 +146,9 @@ function toDemoMarket(market, { now, revived, index, rand }) {
   const seedLiquidity = Math.round(volume * 0.35);
   const tradeVolume = volume - seedLiquidity;
 
-  // Staggered so the "closes soon" ordering has something to sort by and the
-  // grid isn't a wall of identical dates.
-  const endsInDays = revived
-    ? 2 + (index % 9) * 3 + rand() * 8
-    : Math.max(1, (new Date(market.endTime).getTime() - now) / DAY);
+  const endTime = revived
+    ? new Date(now + (2 + (index % 9) * 3 + rand() * 8) * DAY).toISOString()
+    : festival ? market.endTime : new Date(Math.max(now + DAY, Date.parse(market.endTime) || now)).toISOString();
 
   return {
     ...market,
@@ -175,7 +174,8 @@ function toDemoMarket(market, { now, revived, index, rand }) {
     resolvedAt: null,
     finalScore: null,
     archivedAt: null,
-    endTime: new Date(now + endsInDays * DAY).toISOString(),
+    endTime,
+    presentationMarket: festival && !revived,
     hiddenFromHome: false,
     featured: true,
     live: false,
@@ -266,6 +266,7 @@ export async function buildLiveSeedState({
   now = Date.now(),
   timeoutMs = FETCH_TIMEOUT_MS,
   revivedTarget = REVIVED_TARGET,
+  festival = isFestivalDemo(),
 } = {}) {
   const [activeRes, resolvedRes] = await Promise.all([
     fetchJson(fetchImpl, '/api/points/markets?status=active&featured=all&limit=2000', timeoutMs),
@@ -284,10 +285,10 @@ export async function buildLiveSeedState({
 
   const markets = [
     ...active.map((m, i) => toDemoMarket(m, {
-      now, revived: false, index: i, rand: seededRandom(m.id * 7 + 13),
+      now, revived: false, index: i, rand: seededRandom(m.id * 7 + 13), festival,
     })),
     ...revived.map((m, i) => toDemoMarket(m, {
-      now, revived: true, index: i, rand: seededRandom(m.id * 7 + 13),
+      now, revived: true, index: i, rand: seededRandom(m.id * 7 + 13), festival,
     })),
   ];
 
@@ -304,16 +305,7 @@ export async function buildLiveSeedState({
     positions,
     userTrades,
     leaderboard: rankLeaderboard(base.leaderboard),
-    settings: {
-      ...base.settings,
-      // The video demo runs drift at 3, tuned so a market visibly travels
-      // inside a 30-second take. A presentation is watched for minutes at a
-      // time and often on a projector next to the real product, where that
-      // speed reads as a random number generator — a market swinging 20
-      // points in 20 seconds is not a market. At 1 the percentage still
-      // ticks every few seconds, which is all the movement needs to do.
-      driftSpeed: 1,
-    },
+    settings: { ...base.settings, driftSpeed: 1 },
     liveSeed: true,
     liveSeedAt: new Date(now).toISOString(),
   };
