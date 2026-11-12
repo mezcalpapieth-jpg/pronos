@@ -175,6 +175,7 @@
 .tf-presentation-external { text-underline-offset: .2em; }
 .tf-feature .tf-presentation-fallback .tf-cta { margin: 0; }
 .tf-replay-caption { padding: 0.65rem 1rem; }
+.tf-replay-result { margin: 0; border-top: 1px solid var(--tf-grid); }
 @media (orientation: portrait) and (min-width: 650px) {
   .tf-dashboard .tf-presentation-chart { height: clamp(320px, 23vh, 495px); }
 }
@@ -183,8 +184,20 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
 }
-.tf-directions > span { padding: clamp(10px, 2vw, 24px) var(--tf-pad); }
-.tf-directions > span + span { border-left: 1px solid var(--tf-grid); }
+.tf-directions > * { padding: clamp(10px, 2vw, 24px) var(--tf-pad); }
+.tf-directions > * + * { border-left: 1px solid var(--tf-grid); }
+.tf-directions > button {
+  text-align: start;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  border: 0;
+}
+.tf-directions > button + button { border-left: 1px solid var(--tf-grid); }
+.tf-directions > button[aria-pressed="true"], .tf-directions > button:focus-visible {
+  outline: 2px solid var(--tf-accent);
+  outline-offset: -2px;
+}
 .tf-directions b {
   display: block;
   color: var(--tf-text);
@@ -193,7 +206,13 @@
   letter-spacing: .035em;
 }
 .tf-directions b span { color: var(--tf-up); font: 700 .72em var(--tf-body); }
-.tf-directions > span + span b span { color: var(--tf-down); }
+.tf-directions > :nth-child(2) b span { color: var(--tf-down); }
+.tf-directions b strong {
+  margin-inline-start: .25em;
+  font-weight: inherit;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .tf-directions small {
   display: block;
   margin-top: 4px;

@@ -38,6 +38,7 @@ export function festivalStatus(slot, now) {
 function useFestivalPoll(url, interval, initial) {
   const [snapshot, setSnapshot] = useState({ data: initial, error: false });
   useEffect(() => {
+    if (!url) return;
     const controller = new AbortController();
     let timeout;
     async function refresh() {
@@ -71,6 +72,22 @@ export function useFestivalSchedule() {
 
 export function useFestivalBars(key) {
   return useFestivalPoll(`${ENDPOINT}?slot=${encodeURIComponent(key)}`, 15_000, initialBars);
+}
+
+const initialMarket = { market: null };
+
+export function useFestivalMarketPrices(id) {
+  const url = id == null ? null : `/api/points/market?id=${encodeURIComponent(id)}`;
+  const { data } = useFestivalPoll(url, 10_000, initialMarket);
+  const market = data.market;
+  return id != null && String(market?.id) === String(id) ? market.prices : null;
+}
+
+const initialReplay = { threshold: null, closePrice: null, outcome: null };
+
+export function useFestivalReplay(key, started) {
+  const url = started ? `${ENDPOINT}?replay=${encodeURIComponent(key)}` : null;
+  return useFestivalPoll(url, 30_000, initialReplay).data;
 }
 
 export function useFestivalClock() {

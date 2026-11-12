@@ -5,7 +5,7 @@ import { defaultPointsSeedLiquidity } from './market-liquidity.js';
 import { cancelPointsMarket } from './points-cancel-market.js';
 import { parseJsonb, releaseOpenLimitOrdersForMarkets } from './points-limit-orders.js';
 import { bestEffortPersistTopHolderSnapshot } from './points-top-holders.js';
-import { festivalFeedEnabled, readFestivalBoundary } from './trading-festival-feed.js';
+import { festivalDataDelayMinutes, festivalFeedEnabled, readFestivalBoundary } from './trading-festival-feed.js';
 
 const SETTLEMENT_RETRY_MS = 15 * FESTIVAL_MINUTE;
 const RESOLVER = 'trading_festival';
@@ -16,10 +16,11 @@ export function festivalMarketMeta(row, config = parseJsonb(row.resolver_config,
     key: row.source_event_id,
     threshold: config.threshold ?? null,
     closePrice: config.closePrice ?? null,
+    dataDelayMinutes: config.dataDelayMinutes ?? 0,
   };
 }
 
-async function seedFestivalMarket(sql, slot) {
+async function seedFestivalMarket(sql, slot, dataDelayMinutes) {
   const seed = defaultPointsSeedLiquidity({ category: slot.category, outcomeCount: 2 });
   const reserves = JSON.stringify(initialReserves(seed, 2));
   const basis = slot.key === 'usdmxn' ? 'cotización de compra (bid)' : 'precio';
@@ -28,7 +29,10 @@ async function seedFestivalMarket(sql, slot) {
     source: slot.provider.toLowerCase(),
     symbol: slot.symbol,
     closesAt: slot.endTime,
-    criteria: `Se usa el cierre del minuto inmediatamente anterior a cada límite del horario según ${slot.provider} (${slot.symbol}, ${basis}). El valor de apertura fija la referencia. Sube si el cierre supera la referencia y Baja si queda por debajo. Si son iguales, o falta el dato de cierre tras 15 minutos, se cancela y se devuelven los puntos de las posiciones abiertas.`,
+    dataDelayMinutes,
+    criteria: `Se usa el cierre del minuto inmediatamente anterior a cada límite del horario según ${slot.provider} (${slot.symbol}, ${basis}). El valor de apertura fija la referencia. Sube si el cierre supera la referencia y Baja si queda por debajo.`
+      + (dataDelayMinutes ? ` La fuente publica los precios con ${dataDelayMinutes} minutos de retraso. La referencia se muestra al recibir el dato de apertura.` : '')
+      + ` Si los precios son iguales, o falta algún precio ${dataDelayMinutes + 15} minutos después del cierre, se cancela y se devuelven los puntos de las posiciones abiertas.`,
   };
   await sql`
     INSERT INTO points_markets (
@@ -45,7 +49,10 @@ async function seedFestivalMarket(sql, slot) {
     DO UPDATE SET start_time = EXCLUDED.start_time, end_time = EXCLUDED.end_time,
                   resolver_config = EXCLUDED.resolver_config
     WHERE points_markets.status = 'pending'
-      AND (points_markets.start_time, points_markets.end_time) IS DISTINCT FROM (EXCLUDED.start_time, EXCLUDED.end_time)
+      AND (
+        (points_markets.start_time, points_markets.end_time) IS DISTINCT FROM (EXCLUDED.start_time, EXCLUDED.end_time)
+        OR COALESCE(points_markets.resolver_config->>'dataDelayMinutes', '0') IS DISTINCT FROM EXCLUDED.resolver_config->>'dataDelayMinutes'
+      )
   `;
 }
 
@@ -68,7 +75,7 @@ async function settleFestivalMarket(client, { row, slot, closing }) {
   if (market?.status !== 'active') return 'unchanged';
 
   const threshold = Number(parseJsonb(market.resolver_config, {}).threshold);
-  if (!Number.isFinite(threshold) || threshold <= 0) throw new Error('festival_invalid_threshold');
+  const hasThreshold = Number.isFinite(threshold) && threshold > 0;
   const closePrice = closing?.price ?? null;
   const evidence = closePrice === null ? {} : {
     closePrice,
@@ -76,8 +83,8 @@ async function settleFestivalMarket(client, { row, slot, closing }) {
     closePriceSource: slot.provider,
   };
 
-  if (closePrice === null || closePrice === threshold) {
-    const reason = closePrice === null ? 'festival_missing_close' : 'festival_tie';
+  if (!hasThreshold || closePrice === null || closePrice === threshold) {
+    const reason = !hasThreshold ? 'festival_missing_open' : closePrice === null ? 'festival_missing_close' : 'festival_tie';
     await cancelPointsMarket(client, row.id, { actor: 'system', reason });
     await client.query(
       `UPDATE points_markets SET resolver_config = resolver_config || $2::jsonb WHERE id = $1`,
@@ -100,9 +107,20 @@ async function settleFestivalMarket(client, { row, slot, closing }) {
   return 'resolved';
 }
 
+function festivalOpeningEvidence(slot, opening) {
+  return JSON.stringify({
+    threshold: opening.price,
+    openPriceAt: new Date(opening.t).toISOString(),
+    openPriceSource: slot.provider,
+  });
+}
+
 async function processFestivalMarket(sql, { row, slot, now, clock, env, readBoundary, transaction }) {
   const start = Date.parse(row.start_time);
   const end = Date.parse(row.end_time);
+  const config = parseJsonb(row.resolver_config, {});
+  const delay = (config.dataDelayMinutes || 0) * FESTIVAL_MINUTE;
+  const retryUntil = end + delay + SETTLEMENT_RETRY_MS;
   if (now < start) return 'pending';
 
   if (row.status === 'pending') {
@@ -115,14 +133,11 @@ async function processFestivalMarket(sql, { row, slot, now, clock, env, readBoun
       return 'canceled';
     }
     if (!festivalFeedEnabled(slot, env)) return 'feed_disabled';
-    const opening = await readBoundary(slot, { at: start, env });
-    if (!opening) return 'waiting_for_open';
-
-    const evidence = JSON.stringify({
-      threshold: opening.price,
-      openPriceAt: new Date(opening.t).toISOString(),
-      openPriceSource: slot.provider,
-    });
+    // Check same-session access to a completed bar before accepting trades on a delayed feed.
+    const at = delay ? start - delay - 2 * FESTIVAL_MINUTE : start;
+    const available = await readBoundary(slot, { at, env, allowDelayed: delay > 0 });
+    if (!available) return 'waiting_for_open';
+    const evidence = delay ? '{}' : festivalOpeningEvidence(slot, available);
     const updated = await sql`
       UPDATE points_markets SET status = 'active', resolver_config = resolver_config || ${evidence}::jsonb
       WHERE id = ${row.id} AND status = 'pending' AND archived_at IS NULL
@@ -133,14 +148,33 @@ async function processFestivalMarket(sql, { row, slot, now, clock, env, readBoun
     return updated.length ? 'opened' : 'unchanged';
   }
 
+  if (delay && config.threshold == null && now >= start + delay) {
+    let opening;
+    try {
+      opening = await readBoundary(slot, { at: start, env, allowDelayed: true });
+    } catch (error) {
+      if (now < retryUntil) throw error;
+    }
+    if (!opening) {
+      if (now < retryUntil) return 'waiting_for_open';
+      return transaction(client => settleFestivalMarket(client, { row, slot, closing: null }));
+    }
+    await sql`
+      UPDATE points_markets SET resolver_config = resolver_config || ${festivalOpeningEvidence(slot, opening)}::jsonb
+      WHERE id = ${row.id} AND status = 'active' AND archived_at IS NULL
+        AND start_time = ${row.start_time}::timestamptz AND end_time = ${row.end_time}::timestamptz
+        AND resolver_config->>'threshold' IS NULL
+    `;
+  }
   if (now < end) return 'active';
+  if (now < end + delay) return 'waiting_for_close';
   let closing = null;
   try {
-    closing = await readBoundary(slot, { at: end, env });
+    closing = await readBoundary(slot, { at: end, env, allowDelayed: delay > 0 });
   } catch (error) {
-    if (now < end + SETTLEMENT_RETRY_MS) throw error;
+    if (now < retryUntil) throw error;
   }
-  if (!closing && now < end + SETTLEMENT_RETRY_MS) return 'waiting_for_close';
+  if (!closing && now < retryUntil) return 'waiting_for_close';
   return transaction(client => settleFestivalMarket(client, { row, slot, closing }));
 }
 
@@ -159,12 +193,14 @@ export async function runTradingFestivalTick({
     if (slot.replay) return { key: slot.key, status: 'presentation' };
     try {
       let row = byKey.get(slot.key);
-      const pendingScheduleChanged = row?.status === 'pending' && (
+      const dataDelayMinutes = festivalDataDelayMinutes(slot, env);
+      const pendingMarketChanged = row?.status === 'pending' && (
         Date.parse(row.start_time) !== Date.parse(slot.startTime)
         || Date.parse(row.end_time) !== Date.parse(slot.endTime)
+        || festivalMarketMeta(row)?.dataDelayMinutes !== dataDelayMinutes
       );
-      if (festivalFeedEnabled(slot, env) && now < Date.parse(slot.endTime) && (!row || pendingScheduleChanged)) {
-        await seedFestivalMarket(sql, slot);
+      if (festivalFeedEnabled(slot, env) && now < Date.parse(slot.endTime) && (!row || pendingMarketChanged)) {
+        await seedFestivalMarket(sql, slot, dataDelayMinutes);
         row = (await readFestivalMarkets(sql)).find(market => market.source_event_id === slot.key);
       }
       if (!row || (row.status !== 'pending' && row.status !== 'active')) {

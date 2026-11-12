@@ -4,7 +4,10 @@ import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { FESTIVAL_MINUTE, FESTIVAL_SIGNUP_URL } from '../../../../shared/trading-festival.js';
 import { FESTIVAL_JAR_EVENT } from '../../../../shared/jar-events.js';
 import TradingFestivalChart from '../components/TradingFestivalChart.jsx';
-import { festivalDate, festivalStatus, festivalTime, useFestivalClock, useFestivalSchedule } from '../lib/tradingFestival.js';
+import {
+  festivalDate, festivalPrice, festivalStatus, festivalTime,
+  useFestivalClock, useFestivalMarketPrices, useFestivalReplay, useFestivalSchedule,
+} from '../lib/tradingFestival.js';
 
 const FestivalJar = lazy(() => import('./Ris26Page.jsx'));
 const DISPLAY_MODES = [
@@ -12,6 +15,7 @@ const DISPLAY_MODES = [
   ['charts', 'Gráficas'],
   ['jar', 'Frasco'],
 ];
+const formatPercent = new Intl.NumberFormat('es-MX', { style: 'percent' });
 
 function marketUrl(slot) {
   return slot.market && slot.market.status !== 'pending' ? `/market?id=${slot.market.id}` : null;
@@ -22,6 +26,7 @@ function isPresentation(slot) {
 }
 
 function displayStatus(slot, now) {
+  if (slot.replay) return 'Práctica';
   return isPresentation(slot) ? 'Presentación' : festivalStatus(slot, now);
 }
 
@@ -137,6 +142,80 @@ function FestivalSignupButton({ onOpenLogin }) {
   return <button type="button" className="tf-cta" onClick={onOpenLogin}>Crear cuenta</button>;
 }
 
+const directions = [
+  { label: 'Sube', arrow: '↗', rule: 'Cierra por encima de la apertura' },
+  { label: 'Baja', arrow: '↘', rule: 'Cierra por debajo de la apertura' },
+];
+
+function Direction({ index, price }) {
+  const { label, arrow, rule } = directions[index];
+  return (
+    <>
+      <b><span aria-hidden="true">{arrow}</span> {label} {Number.isFinite(price) && <strong>{formatPercent.format(price)}</strong>}</b>
+      <small>{rule}</small>
+    </>
+  );
+}
+
+function FestivalDirections({ market }) {
+  const prices = useFestivalMarketPrices(market?.status === 'canceled' ? null : market?.id);
+  return (
+    <div className="tf-directions">
+      {directions.map(({ label }, index) => <span key={label}><Direction index={index} price={prices?.[index]} /></span>)}
+    </div>
+  );
+}
+
+function FestivalReplayMarket({ slot, now, dashboard }) {
+  const started = now >= Date.parse(slot.startTime);
+  const ended = now >= Date.parse(slot.endTime);
+  const storageKey = `pronos:festival-replay:${slot.key}:${slot.startTime}`;
+  const [pick, setPick] = useState(() => {
+    if (dashboard) return null;
+    try {
+      const stored = window.localStorage.getItem(storageKey);
+      if (stored === '0' || stored === '1') return Number(stored);
+    } catch { /* A blocked storage API still allows a pick in this tab. */ }
+    return null;
+  });
+  const { threshold, closePrice, outcome } = useFestivalReplay(slot.key, started);
+  const canPick = !dashboard && started && !ended;
+
+  function choose(index) {
+    if (Date.now() < Date.parse(slot.startTime) || Date.now() >= Date.parse(slot.endTime)) return;
+    setPick(index);
+    try { window.localStorage.setItem(storageKey, String(index)); } catch { /* In-tab pick remains available. */ }
+  }
+
+  let status = 'Predicción de práctica · sin puntos';
+  if (!dashboard && pick != null) status = `Tu predicción: ${directions[pick].label} · sin puntos`;
+  if (ended) {
+    if (threshold == null || closePrice == null) status = 'Esperando el resultado de la práctica';
+    else if (outcome == null) status = 'Resultado de la práctica: empate';
+    else status = `Resultado de la práctica: ${directions[outcome].label}${pick == null ? '' : pick === outcome ? ' · Acertaste' : ' · Tu predicción no acertó'}`;
+  }
+
+  return (
+    <>
+      <div className="tf-replay-caption tf-caption">
+        Replay · {festivalTime(slot.replay.startTime)}–{festivalTime(slot.replay.endTime)} CDMX
+        {threshold != null && <> · Apertura {festivalPrice(slot, threshold)}</>}
+        {ended && closePrice != null && <> · Cierre {festivalPrice(slot, closePrice)}</>}
+      </div>
+      <div className="tf-directions">
+        {directions.map(({ label }, index) => canPick ? (
+          <button key={label} type="button" aria-pressed={pick === index} onClick={() => choose(index)}>
+            <Direction index={index} />
+          </button>
+        ) : (
+          <span key={label}><Direction index={index} /></span>
+        ))}
+      </div>
+      <p className="tf-replay-caption tf-caption tf-replay-result" role="status">{status}</p>
+    </>
+  );
+}
+
 export default function TradingFestival({ dashboard = false, onOpenLogin }) {
   const { slots, error } = useFestivalSchedule();
   const now = useFestivalClock();
@@ -197,15 +276,11 @@ export default function TradingFestival({ dashboard = false, onOpenLogin }) {
               {showPresentationChart ? <FestivalPresentationChart key={slot.key} slot={slot} dashboard={dashboard} /> : (
                 <TradingFestivalChart key={slot.key} slot={slot} />
               )}
-              {slot.replay && (
-                <div className="tf-replay-caption tf-caption">
-                  Replay · {festivalTime(slot.replay.startTime)}–{festivalTime(slot.replay.endTime)} CDMX
-                </div>
+              {slot.replay ? (
+                <FestivalReplayMarket key={slot.key} slot={slot} now={now} dashboard={dashboard} />
+              ) : (
+                <FestivalDirections market={slot.market} />
               )}
-              <div className="tf-directions">
-                <span><b><span aria-hidden="true">↗</span> Sube</b><small>Cierra por encima de la apertura</small></span>
-                <span><b><span aria-hidden="true">↘</span> Baja</b><small>Cierra por debajo de la apertura</small></span>
-              </div>
               {!dashboard && !showPresentationChart && tradeUrl && (
                 <Link className="tf-cta" to={tradeUrl}>
                   {festivalStatus(slot, now) === 'Abierto' ? 'Operar con puntos' : 'Ver mercado'} →
