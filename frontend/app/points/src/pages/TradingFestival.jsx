@@ -1,5 +1,6 @@
 import React, { lazy, Suspense, useState } from 'react';
 import { Link } from 'react-router-dom';
+import FestivalChartResolver from '../components/FestivalChartResolver.jsx';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { FESTIVAL_MINUTE, FESTIVAL_SIGNUP_URL } from '../../../../shared/trading-festival.js';
 import { FESTIVAL_JAR_EVENT } from '../../../../shared/jar-events.js';
@@ -100,7 +101,7 @@ function FestivalDirections({ market }) {
   );
 }
 
-export default function TradingFestival({ dashboard = false, onOpenLogin }) {
+export default function TradingFestival({ dashboard = false, onOpenLogin, isAdmin = false }) {
   const { slots, error } = useFestivalSchedule();
   const now = useFestivalClock();
   const [selection, setSelection] = useState(null);
@@ -127,6 +128,9 @@ export default function TradingFestival({ dashboard = false, onOpenLogin }) {
     if (dashboard && key) setDisplayMode('charts');
   }
 
+  const showResolver = !dashboard && isAdmin && new URLSearchParams(window.location.search).get('resolver') === '1';
+  if (showResolver) return <FestivalChartResolver slots={slots} now={now} scheduleError={error} />;
+
   return (
     <main className={dashboard ? 'tf-page tf-dashboard' : 'tf-page tf-points'}>
       <div className="tf-shell">
@@ -137,6 +141,7 @@ export default function TradingFestival({ dashboard = false, onOpenLogin }) {
           </div>
           <h1>Trading <span>Festival</span></h1>
           {!showJar && <p>Predice si el precio sube o baja al cierre.</p>}
+          {!dashboard && isAdmin && <a className="tf-caption" href="?resolver=1">Resolución de gráficas ↗</a>}
           {dashboard && (
             <div className="tf-display-switch" role="group" aria-label="Vista de la pantalla">
               {DISPLAY_MODES.map(([mode, label]) => (

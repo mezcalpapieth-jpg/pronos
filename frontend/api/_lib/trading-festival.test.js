@@ -4,18 +4,13 @@ import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import { PGlite } from '@electric-sql/pglite';
 import { parseHTML } from 'linkedom';
-import { FESTIVAL_MINUTE, FESTIVAL_SCHEDULE, isFestivalBitcoin } from '../../shared/trading-festival.js';
+import { FESTIVAL_CHART_SETTLEMENT_MS, FESTIVAL_MINUTE, FESTIVAL_SCHEDULE, isFestivalBitcoin } from '../../shared/trading-festival.js';
 import { cryptoTradeLock } from './points-crypto-trade-guard.js';
 import { ensurePointsSchema } from './points-schema.js';
 import { festivalChartRange, festivalFeedEnabled, readFestivalBoundary } from './trading-festival-feed.js';
-import { readFestivalMarkets, runTradingFestivalTick } from './trading-festival.js';
+import { readFestivalMarkets, recordFestivalChartBar, runTradingFestivalTick } from './trading-festival.js';
 
 const production = { VERCEL_ENV: 'production', TRADING_FESTIVAL_ENABLED: '1' };
-const licensed = {
-  ...production,
-  MASSIVE_API_KEY: 'test-key',
-  TRADING_FESTIVAL_MASSIVE_SYMBOLS: 'usdmxn,ndx,spx',
-};
 
 test('Friday Nasdaq replays the last 30 minutes at 16:05 CDMX', () => {
   const ndx = FESTIVAL_SCHEDULE.at(-1);
@@ -26,7 +21,7 @@ test('Friday Nasdaq replays the last 30 minutes at 16:05 CDMX', () => {
 
   assert.equal(Date.parse(ndx.endTime) - Date.parse(ndx.startTime), 30 * FESTIVAL_MINUTE);
   assert.equal(Date.parse(ndx.replay.endTime) - Date.parse(ndx.replay.startTime), 30 * FESTIVAL_MINUTE);
-  assert.equal(festivalFeedEnabled(ndx, licensed), false);
+  assert.equal(festivalFeedEnabled(ndx), false);
 });
 
 test('the Vunelix wrapper advances Nasdaq once each show minute, including with controls hidden', t => {
@@ -103,8 +98,8 @@ test('the SPX chart uses the market window and a lead-in', () => {
   });
 });
 
-test('the same exact-minute bar is required for both Coinbase and Massive boundaries', async () => {
-  const [btc, fx] = FESTIVAL_SCHEDULE;
+test('Coinbase uses the exact minute immediately before the boundary', async () => {
+  const [btc] = FESTIVAL_SCHEDULE;
   const fridayBtc = FESTIVAL_SCHEDULE.find(slot => slot.key === 'btc-fri');
   const at = Date.parse(btc.startTime);
   const response = data => ({ ok: true, json: async () => data });
@@ -126,36 +121,52 @@ test('the same exact-minute bar is required for both Coinbase and Massive bounda
     },
   }), { t: fridayStart, price: 102 });
 
-  const massive = async (url, { headers }) => {
-    assert.equal(url.hostname, 'api.massive.com');
-    assert.equal(url.pathname, `/v2/aggs/ticker/C:USDMXN/range/1/minute/${at - FESTIVAL_MINUTE}/${at - 1}`);
-    assert.equal(headers.Authorization, 'Bearer test-key');
-    return response({ status: 'OK', results: [{ t: at - FESTIVAL_MINUTE, c: 18.32 }, { t: at, c: 18.44 }] });
-  };
-  assert.deepEqual(await readFestivalBoundary(fx, { at, fetchImpl: massive, env: licensed }), { t: at, price: 18.32 });
-  assert.deepEqual(await readFestivalBoundary(fx, {
-    at, fetchImpl: massive, env: { ...licensed, MASSIVE_API_KEY: '', TRADING_FESTIVAL_MASSIVE_API_KEY: 'test-key' },
-  }), { t: at, price: 18.32 });
-  const delayed = async () => response({ status: 'DELAYED', results: [{ t: at - FESTIVAL_MINUTE, c: 18.32 }] });
-  await assert.rejects(readFestivalBoundary(fx, { at, fetchImpl: delayed, env: licensed }), /festival_feed_delayed/);
 });
 
-test('SPX uses its exact Massive minute bar when configured', async () => {
+test('the Vunelix resolver relays the requested finished candle only', () => {
+  const html = readFileSync(new URL('../../festival-nasdaq-chart.html', import.meta.url), 'utf8');
+  const { document } = parseHTML(html);
   const slot = FESTIVAL_SCHEDULE.find(item => item.key === 'spx');
-  assert.equal(slot.presentationTicker, 'SP:SPX');
-  assert.equal(festivalFeedEnabled(slot, production), false);
-  assert.equal(festivalFeedEnabled(slot, { ...licensed, TRADING_FESTIVAL_MASSIVE_SYMBOLS: 'usdmxn' }), false);
-  assert.equal(festivalFeedEnabled(slot, licensed), true);
-  const at = Date.parse(slot.startTime);
-  const fetchImpl = status => async url => {
-    assert.equal(url.pathname, `/v2/aggs/ticker/I:SPX/range/1/minute/${at - FESTIVAL_MINUTE}/${at - 1}`);
-    return { ok: true, json: async () => ({ status, results: [{ t: at - FESTIVAL_MINUTE, c: 7500 }] }) };
+  assert.equal(festivalFeedEnabled(slot), false);
+  const barStart = Date.parse(slot.startTime) - FESTIVAL_MINUTE;
+  const params = new URLSearchParams({ asset: slot.key, resolve: '1' });
+  const messages = [];
+  const parent = { postMessage: (...args) => messages.push(args) };
+  const listeners = [];
+  const window = { top: parent, self: {}, parent, addEventListener: (type, listener) => listeners.push(listener) };
+  runInNewContext(document.querySelector('script').textContent, {
+    document, window, location: { hostname: 'pronos-chi.vercel.app', search: params.toString() },
+    Date, Intl, URLSearchParams, setTimeout, clearTimeout,
+  });
+  const chart = document.querySelector('vunelix-advanced-chart');
+  chart._chart = {
+    options: { symbol: 'SP:SPX', period: '1m' },
+    engine: { data: [{ timestamp: barStart / 1000, close: 7501.2 }] },
   };
-  assert.deepEqual(await readFestivalBoundary(slot, { at, env: licensed, fetchImpl: fetchImpl('OK') }), { t: at, price: 7500 });
-  await assert.rejects(readFestivalBoundary(slot, { at, env: licensed, fetchImpl: fetchImpl('DELAYED') }), /festival_feed_delayed/);
-  assert.deepEqual(await readFestivalBoundary(slot, {
-    at, env: { ...licensed, TRADING_FESTIVAL_MASSIVE_DELAYED_SYMBOLS: 'spx' }, fetchImpl: fetchImpl('DELAYED'),
-  }), { t: at, price: 7500 });
+  const request = {
+    source: parent, origin: 'https://pronos.io',
+    data: { type: 'pronos:festival-chart-bar', barStart },
+  };
+  const send = event => listeners.forEach(listener => listener(event));
+  send(request);
+  assert.equal(messages.length, 0);
+  chart._chart.engine.data.push({ timestamp: barStart / 1000 + 60, close: 7502.2 });
+  send({ ...request, origin: 'https://example.com' });
+  send({ ...request, source: {} });
+  send({ ...request, data: { ...request.data, barStart: barStart - FESTIVAL_MINUTE } });
+  chart._chart.options.symbol = 'NASDAQ:NDX';
+  send(request);
+  chart._chart.options.symbol = 'SP:SPX';
+  chart._chart.options.period = '5m';
+  send(request);
+  assert.equal(messages.length, 0);
+  chart._chart.options.period = '1m';
+  send(request);
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0][1], request.origin);
+  assert.deepEqual({ ...messages[0][0] }, {
+    type: request.data.type, asset: 'spx', symbol: 'SP:SPX', barStart, price: 7501.2,
+  });
 });
 
 test('festival seed, activation, lock, settlement and tie refund use the Points schema', async t => {
@@ -174,26 +185,20 @@ test('festival seed, activation, lock, settlement and tie refund use the Points 
   const btcClose = boundary(btc, 'endTime');
   const fxStart = boundary(fx, 'startTime');
   const fxClose = boundary(fx, 'endTime');
-  const delay = 15 * FESTIVAL_MINUTE;
-  const spxBoundaries = [];
-  const delayed = { ...licensed, TRADING_FESTIVAL_MASSIVE_DELAYED_SYMBOLS: 'spx' };
-  const run = (now, env = delayed) => runTradingFestivalTick({
+  const run = (now, env = production) => runTradingFestivalTick({
     sql, env, clock: () => now, transaction: cb => db.transaction(cb),
-    readBoundary: async (slot, { at, allowDelayed }) => {
-      const opening = at === boundary(slot, 'startTime');
-      if (isFestivalBitcoin(slot)) return { t: at, price: opening ? 74000 : 74001 };
-      if (slot.key === fx.key) return { t: at, price: 18.92 };
-      assert.equal(slot.key, spx.key);
-      assert.equal(allowDelayed, true);
-      spxBoundaries.push(at);
-      return { t: at, price: opening ? 7500 : 7499 };
+    readBoundary: async (slot, { at }) => {
+      assert.ok(isFestivalBitcoin(slot));
+      return { t: at, price: at === boundary(slot, 'startTime') ? 74000 : 74001 };
     },
   });
+  const record = (slot, at, price, now = at, overrides = {}) => recordFestivalChartBar({
+    key: slot.key, symbol: slot.presentationTicker, barStart: at - FESTIVAL_MINUTE, price,
+    actor: 'festival-admin', clock: () => now, transaction: cb => db.transaction(cb), ...overrides,
+  });
 
-  assert.equal(await run(btcStart - FESTIVAL_MINUTE, { ...licensed, VERCEL_ENV: 'preview' }), null);
+  assert.equal(await run(btcStart - FESTIVAL_MINUTE, { ...production, VERCEL_ENV: 'preview' }), null);
   assert.deepEqual(await readFestivalMarkets(sql), []);
-  await run(btcStart - FESTIVAL_MINUTE, production);
-  assert.deepEqual((await readFestivalMarkets(sql)).map(row => row.source_event_id).sort(), ['btc', 'btc-fri']);
   await run(btcStart - FESTIVAL_MINUTE);
   await run(btcStart - FESTIVAL_MINUTE);
   const seeded = await readFestivalMarkets(sql);
@@ -218,8 +223,17 @@ test('festival seed, activation, lock, settlement and tie refund use the Points 
   await run(fxStart);
   const openFx = await get('usdmxn');
   await db.query("INSERT INTO points_positions (market_id, username, outcome_index, shares, cost_basis) VALUES ($1, 'attendee', 0, 100, 25)", [openFx.id]);
+  assert.equal(openFx.status, 'active');
+  await assert.rejects(record(fx, fxStart, 18.92, fxStart - 1), /chart_market_not_ready/);
+  await assert.rejects(record(fx, fxStart - FESTIVAL_MINUTE, 18.92), /invalid_chart_minute/);
+  await assert.rejects(record(fx, fxStart, 18.92, fxStart, { symbol: spx.presentationTicker }), /invalid_chart_bar/);
   await run(fxClose);
-  await run(fxClose + FESTIVAL_MINUTE);
+  await assert.rejects(record(fx, fxClose, 18.92), /chart_open_missing/);
+  // A collector restarted after close can still relay both finished candles.
+  assert.deepEqual(await record(fx, fxStart, 18.92, fxClose), { status: 'active' });
+  await assert.rejects(record(fx, fxStart, 19, fxClose), /chart_bar_already_recorded/);
+  assert.deepEqual(await record(fx, fxClose, 18.92), { status: 'canceled' });
+  assert.deepEqual(await record(fx, fxClose, 18.92), { status: 'canceled' });
   const canceled = await get('usdmxn');
   assert.equal(canceled.status, 'canceled');
   assert.equal(canceled.resolver_config.cancelReason, 'festival_tie');
@@ -237,28 +251,35 @@ test('festival seed, activation, lock, settlement and tie refund use the Points 
 
   const spxStart = boundary(spx, 'startTime');
   const spxEnd = boundary(spx, 'endTime');
-  const spxPreflight = spxStart - delay - 2 * FESTIVAL_MINUTE;
   assert.equal((await get(spx.key)).status, 'pending');
   await run(spxStart);
   const openSpx = await get(spx.key);
   assert.equal(openSpx.status, 'active');
-  assert.equal(openSpx.resolver_config.dataDelayMinutes, 15);
   assert.equal(openSpx.resolver_config.threshold, undefined);
-  await run(spxStart + delay - 1);
-  assert.deepEqual(spxBoundaries, [spxPreflight]);
-  await run(spxStart + delay);
+  await record(spx, spxStart, 7500, spxStart + 12 * FESTIVAL_MINUTE);
   assert.equal((await get(spx.key)).resolver_config.threshold, 7500);
   assert.equal(cryptoTradeLock(openSpx, spxEnd).error, 'market_expired');
-  await run(spxEnd + delay - 1);
+  await assert.rejects(record(spx, spxEnd, 7499, spxEnd - 1), /chart_market_not_ready/);
+  await run(spxEnd + 12 * FESTIVAL_MINUTE);
   assert.equal((await get(spx.key)).status, 'active');
-  assert.deepEqual(spxBoundaries, [spxPreflight, spxStart]);
-  await run(spxEnd + delay);
+  await record(spx, spxEnd, 7499, spxEnd + 12 * FESTIVAL_MINUTE);
   const settledSpx = await get(spx.key);
   assert.equal(settledSpx.status, 'resolved');
   assert.equal(settledSpx.outcome, 1);
   assert.equal(settledSpx.resolver_config.closePrice, 7499);
-  assert.deepEqual(spxBoundaries, [spxPreflight, spxStart, spxEnd]);
+  assert.equal(settledSpx.resolver_config.closePriceSource, 'Vunelix');
+  assert.equal(settledSpx.resolver_config.closePriceRecordedBy, 'festival-admin');
+  await assert.rejects(record(ndx, boundary(ndx, 'startTime'), 7400), /invalid_chart_bar/);
   const tick = await run(boundary(ndx, 'startTime'));
   assert.deepEqual(tick.find(item => item.key === ndx.key), { key: ndx.key, status: 'presentation' });
   assert.equal(await get(ndx.key), undefined);
+
+  await db.query('DELETE FROM points_markets WHERE id = $1', [openSpx.id]);
+  await run(spxStart);
+  await run(spxEnd + FESTIVAL_CHART_SETTLEMENT_MS - 1);
+  assert.equal((await get(spx.key)).status, 'active');
+  await run(spxEnd + FESTIVAL_CHART_SETTLEMENT_MS);
+  const missing = await get(spx.key);
+  assert.equal(missing.status, 'canceled');
+  assert.equal(missing.resolver_config.cancelReason, 'festival_missing_open');
 });
