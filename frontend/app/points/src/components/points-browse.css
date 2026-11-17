@@ -56,3 +56,56 @@
   color: var(--orange);
   border-color: var(--orange);
 }
+
+.points-bookmark {
+  border: 0;
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px;
+  margin-inline-start: auto;
+  font: inherit;
+  font-size: var(--text-xs, 12px);
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.points-bookmark[aria-pressed="true"] {
+  color: var(--orange);
+}
+
+.points-bookmark:disabled {
+  opacity: 0.5;
+}
+
+.points-watchlist-error {
+  position: fixed;
+  inset-inline-end: 16px;
+  inset-block-end: calc(var(--points-bottom-nav-height, 0px) + 16px);
+  z-index: 90;
+  background: var(--surface2);
+  color: var(--danger);
+  padding: 8px 16px;
+  border-radius: var(--radius-md, 12px);
+}
+
+.points-watchlist-list {
+  padding: 0;
+  margin: 16px 0;
+  list-style: none;
+}
+
+.points-watchlist-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-block-end: 1px solid var(--border);
+}
+
+.points-watchlist-list a {
+  color: var(--text-primary);
+}

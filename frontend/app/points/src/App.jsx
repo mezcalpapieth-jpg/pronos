@@ -17,6 +17,7 @@ import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import PointsLoginModal from '@app/components/PointsLoginModal.jsx';
 import PointsNav from './components/PointsNav.jsx';
 import PendingTradeNotice from './components/PendingTradeNotice.jsx';
+import { PointsWatchlistProvider } from './components/PointsWatchlist.jsx';
 import PointsTicker from './components/PointsTicker.jsx';
 import PointsCategoryBar from './components/PointsCategoryBar.jsx';
 import TournamentExtensionBanner from './components/TournamentExtensionBanner.jsx';
@@ -353,11 +354,9 @@ function PointsAppChrome({ pathname, basename }) {
     // /points.
     <BrowserRouter basename={basename}>
       <PointsSiteTimeTracker enabled={authenticated && !!user?.username} />
-      <Shell
-        onOpenLogin={() => setLoginOpen(true)}
-        isAdmin={isAdmin}
-        authLoading={loading}
-      />
+      <PointsWatchlistProvider onOpenLogin={() => setLoginOpen(true)}>
+        <Shell onOpenLogin={() => setLoginOpen(true)} isAdmin={isAdmin} authLoading={loading} />
+      </PointsWatchlistProvider>
       <PointsLoginModal
         open={loginOpen}
         initialStep={authenticated && user?.needsUsername ? 'username' : 'email'}

@@ -11,10 +11,11 @@
  * users have one dashboard for everything.
  */
 import React, { useEffect, useRef, useState } from 'react';
+import { PointsBookmark, usePointsWatchlist } from '../components/PointsWatchlist.jsx';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { useExecutionBalance, usePointsExecution } from '../lib/PointsExecution.jsx';
-import { useLang, useT } from '@app/lib/i18n.js';
+import { localizedTitle, useLang, useT } from '@app/lib/i18n.js';
 import { historyPnlValue } from '../lib/historyPnl.js';
 import { buildSellPreview, normalizeSellShares } from '../lib/sellPreview.js';
 import { HistorySkeleton, LeaderboardSkeleton, PositionSkeleton } from '../components/PointsSkeleton.jsx';
@@ -1051,7 +1052,9 @@ export default function PointsPortfolio() {
   const onchain = mode === 'onchain';
   const stocksEnabled = pointsStocksEnabled && !onchain;
   const executionBalance = useExecutionBalance();
-  const [tab, setTab] = useState('activo'); // 'activo' | 'combinadas' | 'historial' | 'recompensas'
+  const [tab, setTab] = useState('activo');
+  const watchlist = usePointsWatchlist();
+  const savedMarkets = watchlist?.markets.filter(market => (market.mode || 'points') === mode) || [];
   const [positions, setPositions] = useState([]);
   const [history, setHistory] = useState([]);
   const [rewards, setRewards] = useState([]);
@@ -1103,6 +1106,7 @@ export default function PointsPortfolio() {
   }, [authenticated, tab, pnlRange, pnlCycleScope]);
 
   async function load({ silent = false } = {}) {
+    if (tab === 'favoritos') return;
     if (!silent) setLoading(true);
     try {
       if (tab === 'activo') {
@@ -1372,7 +1376,8 @@ export default function PointsPortfolio() {
           { id: 'combinadas', label: t('points.portfolio.tab.parlays') },
           { id: 'historial', label: t('points.portfolio.tab.history') },
           { id: 'recompensas', label: t('points.portfolio.tab.rewards') },
-        ].filter(t => !onchain || ['activo', 'historial'].includes(t.id)).map(t => {
+          { id: 'favoritos', label: t('points.watchlist.title') },
+        ].filter(t => !onchain || ['activo', 'historial', 'favoritos'].includes(t.id)).map(t => {
           const active = tab === t.id;
           return (
             <button
@@ -1406,6 +1411,23 @@ export default function PointsPortfolio() {
             }}>
               {msg.text}
             </div>
+          )}
+          {tab === 'favoritos' && watchlist && (
+            <>
+              {watchlist.status === 'loading' && <p role="status">{t('points.watchlist.loading')}</p>}
+              {watchlist.status === 'error' && <button type="button" className="filter-btn" onClick={watchlist.refresh}>{t('points.watchlist.retry')}</button>}
+              {watchlist.status === 'ready' && savedMarkets.length === 0 && <p>{t('points.watchlist.empty')}</p>}
+              <ul className="points-watchlist-list">
+                {savedMarkets.map(market => (
+                  <li key={market.id}>
+                    <Link to={`/market?id=${encodeURIComponent(market.id)}`}>
+                      {localizedTitle(market, lang) || market.question}
+                    </Link>
+                    <PointsBookmark market={market} />
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
           {tab === 'activo' && (
             <>

@@ -44,6 +44,7 @@ import { enrichNewsItemsWithGeo } from '@app/lib/newsGeo.js';
 import NewsMapView from '@app/components/NewsMapView.jsx';
 import PointsMarketCard from '../components/PointsMarketCard.jsx';
 import PointsMarketSort from '../components/PointsMarketSort.jsx';
+import { usePointsWatchlist } from '../components/PointsWatchlist.jsx';
 import { orderPointsMarkets } from '@app/lib/pointsMarketOrdering.js';
 import PointsActivityCarousel from '../components/PointsActivityCarousel.jsx';
 import { ActivityCarouselSkeleton, MarketGridSkeleton } from '../components/PointsSkeleton.jsx';
@@ -164,6 +165,8 @@ export default function PointsHome({ onOpenLogin }) {
   // a React context.
   const searchQuery = searchParams.get('q') || '';
   const sort = searchParams.get('sort');
+  const watchlist = usePointsWatchlist();
+  const onlyFavorites = watchlist?.authenticated && searchParams.get('favorites') === '1';
 
   useEffect(() => {
     let cancelled = false;
@@ -295,6 +298,10 @@ export default function PointsHome({ onOpenLogin }) {
     const out = mapMarkets.filter(m => onchain || shouldShowOnHome(m, featuredTeamKeys));
     return orderPointsMarkets(sortMarketsByLiveThenEndDate(out), sort);
   }, [mapMarkets, featuredTeamKeys, onchain, sort]);
+
+  const gridMarkets = onlyFavorites
+    ? filtered.filter(market => watchlist.savedIds.has(String(market.id)))
+    : filtered;
 
   const carouselMarkets = useMemo(() => (
     sortMarketsByLiveThenEndDate(mapMarkets.filter(m => onchain ? m.executionReady : shouldShowOnHome(m, featuredTeamKeys)))
@@ -589,7 +596,7 @@ export default function PointsHome({ onOpenLogin }) {
           </div>
         )}
         {trendingView === 'markets' && <PointsMarketSort />}
-        {!loading && !error && (trendingView === 'map' ? (homeMapMarkets.length + mapNewsItems.length) : filtered.length) === 0 && (
+        {!loading && !error && (trendingView === 'map' ? (homeMapMarkets.length + mapNewsItems.length) : gridMarkets.length) === 0 && (
           <div style={{
             textAlign: 'center',
             padding: 60,
@@ -597,12 +604,15 @@ export default function PointsHome({ onOpenLogin }) {
             fontSize: 13,
             color: 'var(--text-muted)',
           }}>
-            {searchQuery
-              ? t('points.home.emptySearch', { q: searchQuery })
-              : t('points.home.empty')}
+            {onlyFavorites
+              ? t(watchlist.status === 'loading' ? 'points.watchlist.loading'
+                : watchlist.status === 'error' ? 'points.watchlist.loadError' : 'points.watchlist.noMatches')
+              : searchQuery
+                ? t('points.home.emptySearch', { q: searchQuery })
+                : t('points.home.empty')}
           </div>
         )}
-        {!loading && !error && (trendingView === 'map' ? (homeMapMarkets.length + mapNewsItems.length) : filtered.length) > 0 && (
+        {!loading && !error && (trendingView === 'map' ? (homeMapMarkets.length + mapNewsItems.length) : gridMarkets.length) > 0 && (
           trendingView === 'map' ? (
             <NewsMapView
               items={mapNewsItems}
@@ -612,7 +622,7 @@ export default function PointsHome({ onOpenLogin }) {
             />
           ) : (
             <div className="markets-grid">
-              {filtered.map(m => (
+              {gridMarkets.map(m => (
                 <PointsMarketCard key={m.id} market={m} userPosition={positionByMarket[m.id]} />
               ))}
             </div>

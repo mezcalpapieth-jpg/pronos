@@ -30,6 +30,7 @@ const POINTS_SCHEMA_LOCK_LEASE_SECONDS = 45;
 const POINTS_SCHEMA_READY_PROBE = `
   SELECT
     to_regclass('public.points_users') IS NOT NULL AS points_users,
+    to_regclass('public.points_watchlist') IS NOT NULL AS points_watchlist,
     to_regclass('public.points_markets') IS NOT NULL AS points_markets,
     to_regclass('public.points_balances') IS NOT NULL AS points_balances,
     to_regclass('public.points_trades') IS NOT NULL AS points_trades,
@@ -324,6 +325,14 @@ const POINTS_SCHEMA_MIGRATIONS = [
   )`,
   `CREATE INDEX IF NOT EXISTS idx_points_markets_status ON points_markets(status)`,
   `CREATE INDEX IF NOT EXISTS idx_points_markets_end_time ON points_markets(end_time)`,
+  `CREATE TABLE IF NOT EXISTS points_watchlist (
+    user_id INTEGER NOT NULL REFERENCES points_users(id) ON DELETE CASCADE,
+    market_id INTEGER NOT NULL REFERENCES points_markets(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (user_id, market_id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_points_watchlist_market
+    ON points_watchlist(market_id)`,
   // Chain classifier (M3). `mode` is one of:
   //   'points'  — DB-backed CPMM (what every market currently uses)
   //   'onchain' — settled via PronosAMM contracts on Arbitrum; the

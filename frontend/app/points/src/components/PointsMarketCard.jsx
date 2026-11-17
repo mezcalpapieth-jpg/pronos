@@ -31,6 +31,7 @@ import { marketArtworkHidden, marketImageSrc, marketPlaceholderImageSrc } from '
 import { isClosingSoonNonSportsMarket, isLiveSportsMarket } from '../lib/marketStatus.js';
 import PointsBuyModal from './PointsBuyModal.jsx';
 import CardLiveScore from './CardLiveScore.jsx';
+import { PointsBookmark } from './PointsWatchlist.jsx';
 import './points-browse.css';
 import { useCardLiveScore } from '../lib/useCardLiveScore.js';
 
@@ -347,6 +348,7 @@ export default function PointsMarketCard({ market, userPosition }) {
             {t('points.card.yourPos')}
           </span>
         )}
+        <PointsBookmark market={market} />
       </div>
 
       <div className="mock-card-body">

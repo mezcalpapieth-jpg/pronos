@@ -559,6 +559,15 @@ export async function fetchAicmOverview() {
   return getJson('/api/points/aicm/overview');
 }
 
+export function fetchPointsWatchlist() {
+  return getJson('/api/points/watchlist');
+}
+
+export function setPointsWatchlistMarket(marketId, saved) {
+  const request = saved ? postJson : deleteJson;
+  return request('/api/points/watchlist', { marketId });
+}
+
 export async function fetchMarket(id) {
   // For parallel (amm_mode='parallel') markets the payload also carries
   // a `legs: [...]` array with one entry per outcome. Attach it onto the
