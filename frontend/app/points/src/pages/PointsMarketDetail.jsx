@@ -52,6 +52,8 @@ import { useIsMobile } from '@app/lib/useIsMobile.js';
 import PointsBuyModal from '../components/PointsBuyModal.jsx';
 import MobileMarketBuyBar from '../components/MobileMarketBuyBar.jsx';
 import RelatedMarkets from '../components/RelatedMarkets.jsx';
+import MarketExportActions from '../components/MarketExportActions.jsx';
+import { marketProbabilityCsv } from '../lib/marketExports.js';
 import PointsSellPreviewModal from '../components/PointsSellPreviewModal.jsx';
 import PointsActivityTape from '../components/PointsActivityTape.jsx';
 import { ResolutionReview, useResolutionReview } from '../components/ResolutionReview.jsx';
@@ -3375,6 +3377,21 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
     const last = displayHistoryByOutcome?.[i]?.at(-1);
     return chartFrozen && last && Number.isFinite(Number(last.p)) ? Number(last.p) : pctFor(i);
   }
+  const chartIndices = useSingleLineChart ? [0] : chartOutcomeIndicesForDisplay({
+    displayOutcomes,
+    displayPrices,
+    displayActivityByOutcome,
+    parallelDisplayLegs,
+  });
+  const chartSeries = chartIndices.map(i => ({
+    key: `opt-${i}`,
+    label: displayOutcomes[i],
+    color: chartColorFor(i, displayOutcomes.length),
+    data: displayHistoryByOutcome[i] || [],
+    targetPct: chartPctFor(i),
+  }));
+  const chartCsv = marketProbabilityCsv(chartSeries, { start: chartWindowStart, end: chartWindowEnd });
+
   // isLive wins over isPendingResolution when start_time has passed
   // but end_time hasn't — the game is in progress and trading stays
   // open. Only sports markets set start_time; everything else falls
@@ -3712,6 +3729,12 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
               )}
               <PointsBookmark market={market} showLabel />
               <ShareButton marketId={market.id} app="points" question={marketTitle} />
+              <MarketExportActions
+                marketId={market.id}
+                title={marketTitle}
+                endTime={market.endTime}
+                csv={chartCsv}
+              />
             </div>
 
             <div style={{
@@ -3925,54 +3948,31 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
                     emptySubLabel={t('points.activity.noHistorySub')}
                   />
                 ) : (
-                  // Chart shows the current leaders. Parallel tournament
-                  // markets can append a couple of resolved-to-zero lines
-                  // so users see who dropped out without burying live legs.
-                  // Color stays tied to the outcome's ORIGINAL index so it
-                  // matches the color in the buy-list below.
-                  (() => {
-                    const chartIndices = chartOutcomeIndicesForDisplay({
-                      displayOutcomes,
-                      displayPrices,
-                      displayActivityByOutcome,
-                      parallelDisplayLegs,
-                    });
-                    return (
-                      <MultiSparkline
-                        height={240}
-                        strokeWidth={1.5}
-                        domainMin={0}
-                        domainMax={100}
-                        timeMin={chartWindowStart}
-                        timeMax={chartWindowEnd}
-                        series={chartIndices.map((i) => ({
-                          key: `opt-${i}`,
-                          label: displayOutcomes[i],
-                          color: chartColorFor(i, displayOutcomes.length),
-                          data: Array.isArray(displayHistoryByOutcome?.[i])
-                            ? displayHistoryByOutcome[i]
-                            : [],
-                          targetPct: chartPctFor(i),
-                        }))}
-                        activity={chartIndices.map(i => displayActivityByOutcome?.[i] || [])}
-                        annotations={liveScoreAnnotations}
-                        showEmptyState={priceHistoryState !== 'stale'}
-                        emptyLabel={t('points.activity.noHistory')}
-                        emptySubLabel={t('points.activity.noHistorySub')}
-                        legendNote={displayOutcomes.length > 4 ? (
-                          <span style={{
-                            fontFamily: 'var(--font-mono)',
-                            fontSize: 10,
-                            color: 'var(--text-muted)',
-                            letterSpacing: '0.04em',
-                            alignSelf: 'center',
-                          }}>
-                            {t('points.detail.topOnly', { n: displayOutcomes.length })}
-                          </span>
-                        ) : null}
-                      />
-                    );
-                  })()
+                  <MultiSparkline
+                    height={240}
+                    strokeWidth={1.5}
+                    domainMin={0}
+                    domainMax={100}
+                    timeMin={chartWindowStart}
+                    timeMax={chartWindowEnd}
+                    series={chartSeries}
+                    activity={chartIndices.map(i => displayActivityByOutcome?.[i] || [])}
+                    annotations={liveScoreAnnotations}
+                    showEmptyState={priceHistoryState !== 'stale'}
+                    emptyLabel={t('points.activity.noHistory')}
+                    emptySubLabel={t('points.activity.noHistorySub')}
+                    legendNote={displayOutcomes.length > 4 ? (
+                      <span style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 10,
+                        color: 'var(--text-muted)',
+                        letterSpacing: '0.04em',
+                        alignSelf: 'center',
+                      }}>
+                        {t('points.detail.topOnly', { n: displayOutcomes.length })}
+                      </span>
+                    ) : null}
+                  />
                 ))}
                 <MarketActivityStrip
                   summary={activitySummary}
