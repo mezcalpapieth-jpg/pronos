@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   deleteComment,
   fetchCommentReplies,
@@ -145,6 +146,13 @@ function MarketCommentFeed({ marketId, authenticated, username, onOpenLogin }) {
   const [error, setError] = useState(null);
   const [retry, setRetry] = useState(0);
 
+  const { hash, key: locationKey } = useLocation();
+  const commentsSection = useRef(null);
+
+  useEffect(() => {
+    if (hash === '#comments') commentsSection.current?.scrollIntoView();
+  }, [hash, locationKey]);
+
   useEffect(() => {
     if (!marketId) return;
     const controller = new AbortController();
@@ -269,7 +277,7 @@ function MarketCommentFeed({ marketId, authenticated, username, onOpenLogin }) {
   const count = comments.reduce((total, comment) => total + Number(!comment.deleted) + comment.replyCount, 0);
 
   return (
-    <section id="comments" className="points-market-comments" aria-labelledby="points-comments-title">
+    <section id="comments" ref={commentsSection} className="points-market-comments" aria-labelledby="points-comments-title">
       <div className="points-comments-header">
         <h2 id="points-comments-title">{t('points.comments.title')}</h2>
         {!loading && !loadFailed && (
