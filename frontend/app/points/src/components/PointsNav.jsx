@@ -155,6 +155,25 @@ export default function PointsNav({ onOpenLogin, isAdmin, isAdminWorkspace, show
     return () => document.removeEventListener('mousedown', handler);
   }, [searchOpen]);
 
+  useEffect(() => {
+    if (isAdminWorkspace) return undefined;
+    function focusSearch(event) {
+      if (event.key !== '/' || event.defaultPrevented || event.repeat || event.isComposing) return;
+      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      if (!window.matchMedia('(width >= 720px)').matches) return;
+      const target = event.target;
+      if (target instanceof HTMLElement
+        && (target.isContentEditable || target.closest('input, textarea, select, [role="textbox"], [aria-modal="true"]'))) return;
+      if (document.querySelector('[aria-modal="true"]')) return;
+      const field = searchRef.current?.querySelector('input');
+      if (!field?.getClientRects().length) return;
+      event.preventDefault();
+      field.focus();
+    }
+    window.addEventListener('keydown', focusSearch);
+    return () => window.removeEventListener('keydown', focusSearch);
+  }, [isAdminWorkspace]);
+
   // Apply theme to <html data-theme> so the shared CSS variables cascade.
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -344,6 +363,7 @@ export default function PointsNav({ onOpenLogin, isAdmin, isAdminWorkspace, show
         <Input
           className="points-nav-search-field"
           type="search"
+          aria-keyshortcuts="/"
           value={searchValue}
           onChange={handleSearchChange}
           onFocus={() => { ensureSearchCache(); if (searchValue) setSearchOpen(true); }}
@@ -359,6 +379,7 @@ export default function PointsNav({ onOpenLogin, isAdmin, isAdminWorkspace, show
           aria-label={t('points.nav.search')}
         />
 
+        {!searchValue && <kbd className="points-search-shortcut" aria-hidden="true">/</kbd>}
         {searchOpen && searchValue.trim() && (
           <div style={{
             position: 'absolute',
