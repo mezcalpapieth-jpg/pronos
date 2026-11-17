@@ -20,3 +20,19 @@ test('market search preserves substring matching and unrelated letters', () => {
   assert.equal(normalizeSearchText(null), '');
   assert.equal(normalizeSearchText('東京'), '東京');
 });
+
+test('market search includes translated outcomes, category names and team names', () => {
+  const market = {
+    question: 'Partido del domingo',
+    outcomes: ['Sí', 'No'],
+    outcomes_en: ['Home win', 'Draw'],
+    category: 'deportes',
+    categoryTags: ['mexico', 'musica'],
+    seriesMeta: { homeTeam: { name: 'Águilas del América', abbreviation: 'AME' } },
+    liveScoreConfig: { awayName: 'Pumas UNAM' },
+  };
+  for (const query of ['home win', 'sports', 'entretenimiento', 'aguilas', 'AME', 'unam']) {
+    assert.equal(matchesMarketSearch(market, query), true, query);
+  }
+  assert.equal(matchesMarketSearch(market, 'Selección de Francia'), false);
+});

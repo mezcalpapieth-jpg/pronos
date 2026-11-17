@@ -26,6 +26,7 @@ import {
   isTournamentSocialTaskSeen,
   onTournamentSocialTaskSeen,
 } from '../lib/tournamentSocialTaskNotice.js';
+import './points-browse.css';
 
 // Public info pages on pronos.io that explain prediction markets.
 const HOW_IT_WORKS_URLS = {
@@ -150,6 +151,25 @@ export default function PointsNav({ onOpenLogin, isAdmin, isAdminWorkspace }) {
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [searchOpen]);
+
+  useEffect(() => {
+    if (isAdminWorkspace) return undefined;
+    function focusSearch(event) {
+      if (event.key !== '/' || event.defaultPrevented || event.repeat || event.isComposing) return;
+      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      if (!window.matchMedia('(width >= 720px)').matches) return;
+      const target = event.target;
+      if (target instanceof HTMLElement
+        && (target.isContentEditable || target.closest('input, textarea, select, [role="textbox"], [aria-modal="true"]'))) return;
+      if (document.querySelector('[aria-modal="true"]')) return;
+      const field = searchRef.current?.querySelector('input');
+      if (!field?.getClientRects().length) return;
+      event.preventDefault();
+      field.focus();
+    }
+    window.addEventListener('keydown', focusSearch);
+    return () => window.removeEventListener('keydown', focusSearch);
+  }, [isAdminWorkspace]);
 
   // Apply theme to <html data-theme> so the shared CSS variables cascade.
   useEffect(() => {
@@ -347,6 +367,7 @@ export default function PointsNav({ onOpenLogin, isAdmin, isAdminWorkspace }) {
         </span>
         <input
           type="search"
+          aria-keyshortcuts="/"
           value={searchValue}
           onChange={handleSearchChange}
           onFocus={() => { ensureSearchCache(); if (searchValue) setSearchOpen(true); }}
@@ -362,7 +383,7 @@ export default function PointsNav({ onOpenLogin, isAdmin, isAdminWorkspace }) {
           aria-label={t('points.nav.search')}
           style={{
             width: '100%',
-            padding: '8px 12px 8px 30px',
+            padding: `8px ${searchValue ? 12 : 36}px 8px 30px`,
             background: 'var(--surface1)',
             border: '1px solid var(--border)',
             borderRadius: 8,
@@ -373,6 +394,7 @@ export default function PointsNav({ onOpenLogin, isAdmin, isAdminWorkspace }) {
           }}
         />
 
+        {!searchValue && <kbd className="points-search-shortcut" aria-hidden="true">/</kbd>}
         {searchOpen && searchValue.trim() && (
           <div style={{
             position: 'absolute',
