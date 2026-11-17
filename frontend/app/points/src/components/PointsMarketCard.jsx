@@ -321,7 +321,7 @@ export default function PointsMarketCard({ market, userPosition }) {
           )}
           {matchTypeLabel && (
             <span className="mock-card-badge points-card-status is-accent">
-              {matchTypeLabel === 'TORNEO' ? 'Torneo' : matchTypeLabel}
+              {matchTypeLabel === 'TORNEO' ? t('points.nav.mobileTournament') : matchTypeLabel}
             </span>
           )}
           {isResolved && (
