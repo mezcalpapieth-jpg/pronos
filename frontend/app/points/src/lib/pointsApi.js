@@ -954,15 +954,26 @@ export async function adminReviewResolutionCandidate({ candidateId, action, outc
 }
 
 // ─── Comments ───────────────────────────────────────────────────────────────
-export async function fetchComments(marketId, { limit = 50 } = {}) {
+export async function fetchComments(marketId, { limit = 50, signal } = {}) {
   const { comments = [] } = await getJson(
     `/api/points/comments?marketId=${encodeURIComponent(marketId)}&limit=${limit}`,
+    { signal },
   );
   return comments;
 }
 
-export async function postComment(marketId, body) {
-  return postJson('/api/points/comments', { marketId, body });
+export async function fetchCommentReplies(marketId, parentId, { afterId, signal } = {}) {
+  const params = new URLSearchParams({ marketId, parentId });
+  if (afterId) params.set('afterId', afterId);
+  return getJson(`/api/points/comments?${params}`, { signal });
+}
+
+export async function postComment(marketId, body, parentId = null) {
+  return postJson('/api/points/comments', { marketId, body, parentId });
+}
+
+export async function setCommentLike(commentId, liked) {
+  return postJson('/api/points/comments', { action: 'like', commentId, liked });
 }
 
 export async function deleteComment(commentId) {
