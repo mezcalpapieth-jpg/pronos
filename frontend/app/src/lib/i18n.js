@@ -805,6 +805,18 @@ const STRINGS = {
   'points.comments.delete':        { es: 'eliminar',            en: 'delete' },
   'points.comments.confirmDelete': { es: '¿Eliminar este comentario?', en: 'Delete this comment?' },
   'points.comments.deleteFail':    { es: 'No se pudo eliminar: {err}', en: 'Could not delete: {err}' },
+  'points.comments.reply':         { es: 'Responder', en: 'Reply' },
+  'points.comments.replyTo':       { es: 'Responder a {name}…', en: 'Reply to {name}…' },
+  'points.comments.replyCancel':   { es: 'Cancelar respuesta', en: 'Cancel reply' },
+  'points.comments.replyOne':      { es: 'Una respuesta', en: 'One reply' },
+  'points.comments.replyMany':     { es: '{n} respuestas', en: '{n} replies' },
+  'points.comments.moreReplies':   { es: 'Ver más respuestas', en: 'Show more replies' },
+  'points.comments.loadFail':      { es: 'No se pudieron cargar los comentarios.', en: 'Could not load comments.' },
+  'points.comments.loadRepliesFail': { es: 'No se pudieron cargar las respuestas.', en: 'Could not load replies.' },
+  'points.comments.retry':         { es: 'Reintentar', en: 'Try again' },
+  'points.comments.deleted':       { es: 'Comentario eliminado', en: 'Deleted comment' },
+  'points.comments.like':          { es: 'Me gusta', en: 'Like' },
+  'points.comments.likeFail':      { es: 'No se pudo guardar el me gusta.', en: 'Could not save your like.' },
 
   // Top holders
   'points.top.title':              { es: 'Top holders',         en: 'Top holders' },
