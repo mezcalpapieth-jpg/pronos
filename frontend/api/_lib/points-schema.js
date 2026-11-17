@@ -23,6 +23,7 @@
  */
 
 import { POINTS_COMMENT_MIGRATIONS } from './points-comments.js';
+import { POINTS_NOTIFICATION_MIGRATIONS } from './points-notification-schema.js';
 
 let pointsSchemaReady = false;
 let pointsSchemaProbeReady = false;
@@ -68,6 +69,18 @@ const POINTS_SCHEMA_READY_PROBE = `
     to_regclass('public.points_risk_flags') IS NOT NULL AS points_risk_flags,
     to_regclass('public.points_parlay_tickets') IS NOT NULL AS points_parlay_tickets,
     to_regclass('public.points_parlay_legs') IS NOT NULL AS points_parlay_legs,
+    to_regclass('public.points_notification_settings') IS NOT NULL AS points_notification_settings,
+    to_regclass('public.points_notifications') IS NOT NULL AS points_notifications,
+    to_regclass('public.points_notification_emails') IS NOT NULL AS points_notification_emails,
+    to_regclass('public.idx_points_notifications_user_feed') IS NOT NULL AS points_notification_feed_index,
+    to_regclass('public.idx_points_notifications_unread') IS NOT NULL AS points_notification_unread_index,
+    to_regclass('public.idx_points_notification_emails_pending') IS NOT NULL AS points_notification_email_index,
+    (SELECT COUNT(*) = 4 FROM pg_trigger WHERE tgenabled <> 'D' AND (
+      (tgrelid = to_regclass('public.points_markets') AND tgname = 'points_notify_market_resolution_trigger')
+      OR (tgrelid = to_regclass('public.points_limit_orders') AND tgname = 'points_notify_limit_fill_trigger')
+      OR (tgrelid = to_regclass('public.points_distributions') AND tgname = 'points_notify_winnings_credit_trigger')
+      OR (tgrelid = to_regclass('public.points_comments') AND tgname = 'points_notify_comment_reply_trigger')
+    )) AS points_notification_triggers,
     to_regclass('public.points_comment_likes') IS NOT NULL AS points_comment_likes,
     to_regclass('public.idx_points_comments_live_replies') IS NOT NULL AS points_comment_reply_index,
     EXISTS (
@@ -1608,6 +1621,7 @@ const POINTS_SCHEMA_MIGRATIONS = [
   // 3+ outcome markets always draw one shared-axis line per outcome
   // and ignore this column.
   `ALTER TABLE points_markets ADD COLUMN IF NOT EXISTS chart_style TEXT`,
+  ...POINTS_NOTIFICATION_MIGRATIONS,
 ];
 
 // Historical row-shaping backfills are intentionally NOT part of

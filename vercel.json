@@ -34,6 +34,10 @@
       "schedule": "*/15 * * * *"
     },
     {
+      "path": "/api/cron/points-notification-email",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/points-auto-feature",
       "schedule": "*/5 * * * *"
     },

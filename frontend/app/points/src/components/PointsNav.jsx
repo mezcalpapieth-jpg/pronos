@@ -24,6 +24,7 @@ import {
   fetchSocialTaskCatalog,
 } from '../lib/pointsApi.js';
 import { onPointsRefresh } from '../lib/pointsLiveRefresh.js';
+import PointsNotifications from './PointsNotifications.jsx';
 import {
   isTournamentSocialTaskSeen,
   onTournamentSocialTaskSeen,
@@ -430,6 +431,8 @@ export default function PointsNav({ onOpenLogin, isAdmin, isAdminWorkspace, show
           </div>
         )}
       </div>}
+
+      {authenticated && !isAdminWorkspace && <PointsNotifications key={user?.suborgId} />}
 
       <div className="points-mobile-menu" ref={mobileMenuRef}>
         <button
