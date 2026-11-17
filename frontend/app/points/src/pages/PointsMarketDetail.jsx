@@ -44,6 +44,7 @@ import Sparkline from '@app/components/Sparkline.jsx';
 import MultiSparkline from '@app/components/MultiSparkline.jsx';
 import LiveScorePanel from '@app/components/LiveScorePanel.jsx';
 import ShareButton from '@app/components/ShareButton.jsx';
+import { PointsBookmark } from '../components/PointsWatchlist.jsx';
 import TeamMarketStrip from '@app/components/TeamMarketStrip.jsx';
 import TokenMarketStrip from '../components/TokenMarketStrip.jsx';
 import { Card, Tabs } from '../ui/index.jsx';
@@ -3824,6 +3825,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
                   {t('points.testMarket.badge')}
                 </span>
               )}
+              <PointsBookmark market={market} showLabel />
               <ShareButton marketId={market.id} app="points" question={marketTitle} />
             </div>
 
