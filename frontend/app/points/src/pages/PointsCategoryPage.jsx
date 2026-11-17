@@ -35,6 +35,7 @@ import {
 import { AICM_HUB_PATH, isAicmDelayMarket } from '../lib/aicmMarkets.js';
 import PointsMarketCard from '../components/PointsMarketCard.jsx';
 import PointsMarketSort from '../components/PointsMarketSort.jsx';
+import { usePointsWatchlist } from '../components/PointsWatchlist.jsx';
 import { orderPointsMarkets } from '@app/lib/pointsMarketOrdering.js';
 import { MarketGridSkeleton } from '../components/PointsSkeleton.jsx';
 
@@ -243,6 +244,8 @@ export default function PointsCategoryPage() {
 
   const searchQuery = (searchParams.get('q') || '').trim();
   const sort = searchParams.get('sort');
+  const watchlist = usePointsWatchlist();
+  const onlyFavorites = watchlist?.authenticated && searchParams.get('favorites') === '1';
   const sport  = searchParams.get('sport')  || 'all';
   const league = searchParams.get('league') || 'all';
   // Category narrower for /c/resueltos: 'all' shows every resolved
@@ -391,6 +394,14 @@ export default function PointsCategoryPage() {
 
     return orderPointsMarkets(prioritizeFeaturedMarkets(out, featuredTeamKeys), sort, now);
   }, [markets, slug, categoryFilter, isNewMarketsShelf, nowMs, sport, league, resueltosCat, cryptoType, geo, topic, supportsGeoFilters, supportsTopicFilters, searchQuery, featuredTeamKeys, sort]);
+
+  const gridMarkets = onlyFavorites
+    ? filtered.filter(market => watchlist.savedIds.has(String(market.id)))
+    : filtered;
+  const gridEmptyKey = onlyFavorites
+    ? (watchlist.status === 'loading' ? 'points.watchlist.loading'
+      : watchlist.status === 'error' ? 'points.watchlist.loadError' : 'points.watchlist.noMatches')
+    : slug === 'porresolver' ? 'points.home.emptyPending' : 'points.home.empty';
 
   function setSport(next) {
     const params = new URLSearchParams(searchParams);
@@ -680,10 +691,10 @@ export default function PointsCategoryPage() {
           <MarketsGrid
             loading={loading}
             error={error}
-            filtered={filtered}
+            filtered={gridMarkets}
             positionByMarket={positionByMarket}
-            emptyKey={slug === 'porresolver' ? 'points.home.emptyPending' : 'points.home.empty'}
-            searchQuery={searchQuery}
+            emptyKey={gridEmptyKey}
+            searchQuery={onlyFavorites ? '' : searchQuery}
             t={t}
             before={showAicmHubCard ? <AicmInfrastructureHubCard /> : null}
           />
@@ -692,10 +703,10 @@ export default function PointsCategoryPage() {
         <MarketsGrid
           loading={loading}
           error={error}
-          filtered={filtered}
+          filtered={gridMarkets}
           positionByMarket={positionByMarket}
-          emptyKey={slug === 'porresolver' ? 'points.home.emptyPending' : 'points.home.empty'}
-          searchQuery={searchQuery}
+          emptyKey={gridEmptyKey}
+          searchQuery={onlyFavorites ? '' : searchQuery}
           t={t}
           before={showAicmHubCard ? <AicmInfrastructureHubCard /> : null}
         />
