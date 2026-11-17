@@ -2561,3 +2561,30 @@
   color: var(--points-caption);
   font-variant-numeric: tabular-nums;
 }
+
+.points-market-exports {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--points-space-2);
+}
+
+.points-market-exports button {
+  min-height: 36px;
+  padding: var(--points-space-1) var(--points-space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--points-radius-pill);
+  background: var(--points-control);
+  color: var(--points-caption);
+  font: var(--text-xs) var(--font-body);
+  cursor: pointer;
+}
+
+.points-market-exports button:not(:disabled):hover {
+  border-color: var(--orange);
+  color: var(--text-primary);
+}
+
+.points-market-exports button:disabled {
+  color: var(--text-muted);
+  cursor: default;
+}
