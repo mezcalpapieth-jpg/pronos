@@ -10,6 +10,7 @@
  * No wallet-chain UI, no RPC, no Privy — this is an off-chain points app.
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronDown, Moon, Search, Sun } from 'lucide-react';
 import { matchesMarketSearch, normalizeSearchText } from '../lib/marketSearch.js';
 import { Link, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
@@ -323,16 +324,7 @@ export default function PointsNav({ onOpenLogin, isAdmin, isAdminWorkspace }) {
           minWidth: 0,
         }}
       >
-        <span style={{
-          position: 'absolute',
-          left: 12,
-          top: 16,
-          fontSize: 13,
-          color: 'var(--text-muted)',
-          pointerEvents: 'none',
-        }}>
-          ⌕
-        </span>
+        <Search aria-hidden="true" className="points-nav-search-icon" size={16} />
         <input
           type="search"
           value={searchValue}
@@ -605,7 +597,9 @@ export default function PointsNav({ onOpenLogin, isAdmin, isAdminWorkspace }) {
           title={t('points.nav.theme')}
           aria-label={t('points.nav.theme')}
         >
-          <span className="points-theme-sun" aria-hidden="true" />
+          {theme === 'light'
+            ? <Moon aria-hidden="true" size={16} />
+            : <Sun aria-hidden="true" size={16} />}
         </button>
 
         {!authenticated ? (
@@ -622,7 +616,7 @@ export default function PointsNav({ onOpenLogin, isAdmin, isAdminWorkspace }) {
               <span className="dot" />
               <span className="balance">{balanceLabel}</span>
               <span style={{ opacity: 0.7 }}>MXNP</span>
-              <span style={{ opacity: 0.5, fontSize: 10 }}>▾</span>
+              <ChevronDown aria-hidden="true" size={14} />
             </button>
 
             {dropdownOpen && (

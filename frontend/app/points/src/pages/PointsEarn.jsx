@@ -11,6 +11,7 @@
  * Portfolio page and gives users a clear "here's how to farm MXNP" hub.
  */
 import React, { useEffect, useState } from 'react';
+import { Camera, Music2, X } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { useLang, useT } from '@app/lib/i18n.js';
@@ -541,17 +542,20 @@ function socialTaskNetworkLabel(task) {
   if (network === 'x' || network === 'twitter') return 'X';
   if (network === 'instagram') return 'Instagram';
   if (network === 'tiktok') return 'TikTok';
-  return 'social';
+  return '';
 }
 
 function socialTaskAccountText(task) {
   const account = task?.socialAccount || task?.social_account || null;
-  return hasSocialTaskAccount(task) ? `@${String(account).trim().replace(/^@/, '')}` : 'Sin cuenta guardada';
+  return hasSocialTaskAccount(task) ? `@${String(account).trim().replace(/^@/, '')}` : null;
 }
 
 function SocialTaskRow({ task, onSubmit }) {
   const [submitting, setSubmitting] = useState(false);
   const isAutoVerify = !!task.autoVerify;
+  const t = useT();
+  const network = socialTaskNetworkLabel(task);
+  const account = socialTaskAccountText(task);
 
   const STATUS_COPY = {
     not_submitted: { label: isAutoVerify ? 'Verificar' : 'Enviar revisión', primary: true,  disabled: false },
@@ -589,7 +593,9 @@ function SocialTaskRow({ task, onSubmit }) {
           {task.description}
         </div>
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-secondary)', marginTop: 4 }}>
-          Cuenta {socialTaskNetworkLabel(task)} guardada: {socialTaskAccountText(task)}
+          {account
+            ? t('points.earn.socialTask.savedAccount', { account })
+            : network && t('points.earn.socialTask.missingAccount', { network })}
         </div>
         {task.status === 'rejected' && task.rejectionNote && (
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--danger)', marginTop: 4 }}>
@@ -657,37 +663,32 @@ const SOCIAL_PROVIDERS = [
   {
     key: 'x',
     label: 'X',
-    icon: 'X',
+    icon: X,
     reward: 100,
     available: false,
     manualAllowed: true,
-    comingSoonNote: 'OAuth pausado hasta recargar créditos de X',
-    comingSoonNoteEn: 'OAuth paused until X API credits are restored',
   },
   {
     key: 'instagram',
     label: 'Instagram',
-    icon: 'IG',
+    icon: Camera,
     reward: 100,
     available: false,
     manualAllowed: true,
-    comingSoonNote: 'Esperando aprobación de Meta',
-    comingSoonNoteEn: 'Waiting for Meta approval',
   },
   {
     key: 'tiktok',
     label: 'TikTok',
-    icon: 'TT',
+    icon: Music2,
     reward: 100,
     available: false,
     manualAllowed: true,
-    comingSoonNote: 'Esperando aprobación de TikTok',
-    comingSoonNoteEn: 'Waiting for TikTok approval',
   },
 ];
 
 function SocialLinksCard() {
   const lang = useLang();
+  const t = useT();
   const [links, setLinks] = useState(null);
   const [drafts, setDrafts] = useState({});
   const [err, setErr] = useState(null);
@@ -821,6 +822,7 @@ function SocialLinksCard() {
           const canSave = isLinked || p.manualAllowed;
           const handleValue = canEditHandle ? draft.handle : (link?.handle || '');
           const saving = saveBusy === p.key;
+          const ProviderIcon = p.icon;
           return (
             <div
               key={p.key}
@@ -841,7 +843,7 @@ function SocialLinksCard() {
                 filter: locked ? 'grayscale(1)' : 'none',
                 opacity: locked ? 0.5 : 1,
               }}>
-                {p.icon}
+                <ProviderIcon aria-hidden="true" size={18} />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{
@@ -858,7 +860,7 @@ function SocialLinksCard() {
                   <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                     {isLinked
                       ? (link.verified ? (lang === 'en' ? 'Verified' : 'Verificado') : 'Manual')
-                      : (p.available ? 'OAuth' : 'Manual')}
+                      : (p.available ? t('points.earn.socialLinks.automatic') : 'Manual')}
                   </div>
                 </div>
                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', marginBottom: 10 }}>
@@ -866,7 +868,7 @@ function SocialLinksCard() {
                     ? (lang === 'en' ? `Saved as @${link.handle || '-'}` : `Guardado como @${link.handle || '-'}`)
                     : (p.manualAllowed
                       ? (lang === 'en' ? 'Add your username manually.' : 'Agrega tu usuario manualmente.')
-                      : (lang === 'en' ? 'Automatic verification via OAuth.' : 'Verificación automática vía OAuth.'))}
+                      : t('points.earn.socialLinks.automaticHelp'))}
                 </div>
                 {canSave && (
                   <input
@@ -954,7 +956,7 @@ function SocialLinksCard() {
                     )}
                   </div>
                 </div>
-                {p.comingSoonNote && (
+                {!p.available && (
                   <div style={{
                     fontFamily: 'var(--font-mono)',
                     fontSize: 9,
@@ -963,9 +965,7 @@ function SocialLinksCard() {
                     letterSpacing: '0.04em',
                   }}
                   >
-                    {lang === 'en'
-                      ? `${p.comingSoonNoteEn || p.comingSoonNote}. Manual usernames do not grant verification bonuses.`
-                      : `${p.comingSoonNote}. El usuario manual no da bono de verificación.`}
+                    {t('points.earn.socialLinks.comingSoon', { network: p.label })}
                   </div>
                 )}
               </div>
