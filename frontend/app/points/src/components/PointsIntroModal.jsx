@@ -96,14 +96,13 @@ export default function PointsIntroModal({ open, onClose, onCreateAccount }) {
         background: 'rgba(0,0,0,0.72)',
         backdropFilter: 'blur(4px)',
         display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
         padding: 18,
         overflowY: 'auto',
       }}
     >
       <div style={{
         width: 'min(560px, 100%)',
+        margin: 'auto',
         background: 'var(--surface1)',
         border: '1px solid var(--border)',
         borderRadius: 18,
@@ -174,9 +173,23 @@ export default function PointsIntroModal({ open, onClose, onCreateAccount }) {
             type="button"
             className="btn-primary"
             onClick={() => { markIntroSeen(); onClose?.(); onCreateAccount?.(); }}
-            style={{ flex: '1 1 180px', padding: '13px 18px' }}
+            style={{
+              flex: '1 1 180px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 'var(--points-space-1)',
+              padding: '13px 18px',
+              background: 'var(--orange)',
+              fontSize: 'var(--text-lg)',
+              lineHeight: 1.2,
+            }}
           >
-            {t('points.hero.cta.createAccount')}
+            <span>{t('points.hero.cta.createAccount')}</span>
+            <span style={{ color: 'var(--points-on-brand-muted)', fontSize: 'var(--text-xs)', fontWeight: 600 }}>
+              {t('points.hero.cta.signupBonus', { bonus: TOURNAMENT_REWARDS.signupBonus })}
+            </span>
           </button>
           <button
             type="button"
