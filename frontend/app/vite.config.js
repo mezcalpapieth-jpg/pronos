@@ -4,8 +4,8 @@ import { randomUUID } from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { getJarEvent, isFestivalJarParticipant } from '../shared/jar-events.js';
-import { isFestivalDashboard } from '../shared/trading-festival.js';
+import { getJarEvent } from '../shared/jar-events.js';
+import { isFestivalCategoryPath, isRetiredFestivalUrl } from '../shared/trading-festival.js';
 import {
   MVP_ACCESS_COOKIE_NAME,
   buildMvpAccessCookie,
@@ -232,8 +232,10 @@ function pointsRootDeckDevMiddleware() {
           req.url = `/points/${query ? `?${query}` : ''}`;
           return next();
         }
-        if (/^\/ris26(?:\/|$)/.test(pathname)
-          || isFestivalDashboard({ pathname }) || isFestivalJarParticipant({ pathname })) {
+        if (isRetiredFestivalUrl({ pathname, search: query })) {
+          return sendText(res, 302, '', { Location: '/points/' });
+        }
+        if (/^\/ris26(?:\/|$)/.test(pathname) || isFestivalCategoryPath(pathname)) {
           req.url = `/points/${query ? `?${query}` : ''}`;
           return next();
         }
@@ -415,6 +417,7 @@ function ris26DevApiMiddleware() {
         const query = new URL(req.url || '/', 'http://localhost').searchParams;
         const event = getJarEvent(query.get('event') ?? undefined);
         if (!event) return sendJson(res, 400, { error: 'invalid_event' });
+        if (req.method === 'POST' && event.closed) return sendJson(res, 410, { error: 'event_closed' });
         const cookieName = `${event.cookieName}_dev`;
         if (!guessesByEvent.has(event.key)) guessesByEvent.set(event.key, new Map());
         const guesses = guessesByEvent.get(event.key);

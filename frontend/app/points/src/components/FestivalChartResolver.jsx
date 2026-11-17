@@ -3,7 +3,7 @@ import {
   FESTIVAL_CHART_SETTLEMENT_MS, FESTIVAL_MINUTE, isFestivalChartMarket,
 } from '../../../../shared/trading-festival.js';
 import { postJson } from '../lib/pointsApi.js';
-import { festivalDate, festivalTime } from '../lib/tradingFestival.js';
+import { festivalDate, festivalTime, useFestivalClock, useFestivalSchedule } from '../lib/tradingFestival.js';
 import TradingFestivalChart from './TradingFestivalChart.jsx';
 
 function ChartCapture({ slot, now }) {
@@ -51,7 +51,9 @@ function ChartCapture({ slot, now }) {
   );
 }
 
-export default function FestivalChartResolver({ slots, now, scheduleError }) {
+export default function FestivalChartResolver() {
+  const { slots, error: scheduleError } = useFestivalSchedule();
+  const now = useFestivalClock();
   const markets = slots.filter(isFestivalChartMarket);
   const active = markets.find(slot => (
     now >= Date.parse(slot.startTime) - 5 * FESTIVAL_MINUTE
@@ -66,7 +68,7 @@ export default function FestivalChartResolver({ slots, now, scheduleError }) {
         <header className="tf-header">
           <h1>Resolución de <span>gráficas</span></h1>
           <p>Mantén esta pestaña visible para guardar los precios de Vunelix automáticamente.</p>
-          <a className="tf-caption" href="/points/c/tradingfestival">Volver a los mercados ↗</a>
+          <a className="tf-caption" href="/points/">Volver a los mercados ↗</a>
         </header>
         {scheduleError && <p className="tf-notice" role="status">Reconectando al horario del festival…</p>}
         {active ? <ChartCapture key={active.key} slot={active} now={now} /> : (

@@ -4,13 +4,28 @@ import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import { PGlite } from '@electric-sql/pglite';
 import { parseHTML } from 'linkedom';
-import { FESTIVAL_CHART_SETTLEMENT_MS, FESTIVAL_MINUTE, FESTIVAL_SCHEDULE, isFestivalBitcoin } from '../../shared/trading-festival.js';
+import {
+  FESTIVAL_CHART_SETTLEMENT_MS, FESTIVAL_MINUTE, FESTIVAL_SCHEDULE, isFestivalBitcoin, isRetiredFestivalUrl,
+} from '../../shared/trading-festival.js';
 import { cryptoTradeLock } from './points-crypto-trade-guard.js';
 import { ensurePointsSchema } from './points-schema.js';
 import { festivalChartRange, festivalFeedEnabled, readFestivalBoundary } from './trading-festival-feed.js';
 import { readFestivalMarkets, recordFestivalChartBar, runTradingFestivalTick } from './trading-festival.js';
 
 const production = { VERCEL_ENV: 'production', TRADING_FESTIVAL_ENABLED: '1' };
+
+test('retired Festival links include the printed QRs and keep the admin resolver path', () => {
+  const retired = [
+    '/tradingfestival', '/tradingfestival/participar/', '/c/tradingfestival',
+    '/points/c/tradingfestival?signup=1', '/points/c/tradingfestival?resolver=0',
+  ];
+  const kept = [
+    '/points/c/tradingfestival?resolver=1', '/ris26/participar',
+    '/points/market?id=1', '/points-demo?festival=1',
+  ];
+  for (const path of retired) assert.equal(isRetiredFestivalUrl(new URL(path, 'https://pronos.io')), true, path);
+  for (const path of kept) assert.equal(isRetiredFestivalUrl(new URL(path, 'https://pronos.io')), false, path);
+});
 
 test('Friday Nasdaq replays the last 30 minutes at 16:05 CDMX', () => {
   const ndx = FESTIVAL_SCHEDULE.at(-1);

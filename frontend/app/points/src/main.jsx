@@ -13,8 +13,7 @@ import { PointsAuthProvider } from '@app/lib/pointsAuth.js';
 import { preloadCryptoTicker } from './lib/useCryptoTicker.js';
 import App from './App.jsx';
 import { PointsExecutionProvider } from './lib/PointsExecution.jsx';
-import { isFestivalDashboard } from '../../../shared/trading-festival.js';
-import { isFestivalJarParticipant } from '../../../shared/jar-events.js';
+import { isRetiredFestivalUrl } from '../../../shared/trading-festival.js';
 import '@app/styles/mvp.css';
 import './points.css';
 import './stocks.css';
@@ -44,15 +43,18 @@ function liveSeedRequested() {
 }
 
 async function bootstrap() {
+  if (isRetiredFestivalUrl(window.location)) {
+    window.location.replace('/points/');
+    return;
+  }
+
   // Local preview entry: /points/stocks?stocksDemo=1. This branch is removed
   // from production builds; the existing demos retain their own access gates.
   if (import.meta.env.DEV && new URLSearchParams(window.location.search).get('stocksDemo') === '1') {
     window.sessionStorage.setItem('pronos-video-demo-active', '1');
     window.sessionStorage.setItem('pronos-stock-demo', '1');
   }
-  const isRis26Route = /^\/(?:points\/)?ris26(?:\/|$)/.test(window.location.pathname);
-
-  const standalone = isRis26Route || isFestivalDashboard(window.location) || isFestivalJarParticipant(window.location);
+  const standalone = /^\/(?:points\/)?ris26(?:\/|$)/.test(window.location.pathname);
 
   // Must run before anything renders or pre-warms: once installed, every
   // /api/points/* call in the app resolves from fabricated in-browser data.

@@ -10,14 +10,11 @@ export const FESTIVAL_JAR_EVENT = {
   title: 'Trading Festival',
   cookieName: 'pronos_trading_festival_jar_player',
   participantPath: '/tradingfestival/participar',
+  closed: true,
 };
 
 export function getJarEvent(key) {
   if (key === undefined || key === RIS26_JAR_EVENT.key) return RIS26_JAR_EVENT;
   if (key === FESTIVAL_JAR_EVENT.key) return FESTIVAL_JAR_EVENT;
   return null;
-}
-
-export function isFestivalJarParticipant(location) {
-  return location.pathname.replace(/\/$/, '') === FESTIVAL_JAR_EVENT.participantPath;
 }

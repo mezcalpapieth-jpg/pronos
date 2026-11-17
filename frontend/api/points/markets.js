@@ -20,6 +20,7 @@ import { binaryPricesWithBookTrade, pricesWithBookTrades } from '../_lib/points-
 import { pendingApprovalSettings } from '../_lib/onchain-preview-approval.js';
 import { tradingFactories } from '../_lib/trading-router.js';
 import { buildEspnLiveScoreConfig } from '../_lib/espn-live-score.js';
+import { FESTIVAL_SOURCE } from '../../shared/trading-festival.js';
 
 // Lazy neon client init — defer until the first request so a missing
 // DATABASE_URL at module-load time surfaces as a structured JSON error
@@ -167,7 +168,7 @@ export default async function handler(req, res) {
     const tournamentOnly = !category && featuredParam === 'tournament';
     const featuredOnly = !category && !tournamentOnly && featuredParam !== 'all';
     const cacheKey = [
-      'points:markets:v16',
+      'points:markets:v17',
       status,
       category || 'all',
       modeFilter || 'all-modes',
@@ -274,6 +275,7 @@ export default async function handler(req, res) {
           AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
           AND (${chainIdFilter}::integer IS NULL OR m.chain_id = ${chainIdFilter}::integer)
           AND m.archived_at IS NULL
+          AND m.source IS DISTINCT FROM ${FESTIVAL_SOURCE}::text
           AND (
             ${tournamentOnly}::boolean = false
             OR m.tournament_featured = true

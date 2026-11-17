@@ -1,7 +1,5 @@
 export const FESTIVAL_SOURCE = 'trading-festival-2026';
 export const FESTIVAL_SHAPE = 'festival-direction';
-export const FESTIVAL_DASHBOARD_PATH = '/tradingfestival';
-export const FESTIVAL_SIGNUP_URL = 'https://pronos.io/points/c/tradingfestival?signup=1';
 export const FESTIVAL_TIME_ZONE = 'America/Mexico_City';
 export const FESTIVAL_MINUTE = 60_000;
 export const FESTIVAL_CHART_LEAD_MS = 12 * FESTIVAL_MINUTE;
@@ -45,6 +43,15 @@ export function isFestivalChartMarket(slot) {
   return slot.provider === 'Vunelix' && !slot.replay;
 }
 
-export function isFestivalDashboard(location) {
-  return location.pathname.replace(/\/$/, '') === FESTIVAL_DASHBOARD_PATH;
+export function isFestivalCategoryPath(pathname) {
+  return /^\/(?:points\/)?c\/tradingfestival\/?$/i.test(pathname);
+}
+
+export function isFestivalResolverRequest(search) {
+  return new URLSearchParams(search).get('resolver') === '1';
+}
+
+export function isRetiredFestivalUrl({ pathname, search }) {
+  return /^\/(?:points\/)?tradingfestival(?:\/participar)?\/?$/i.test(pathname)
+    || (isFestivalCategoryPath(pathname) && !isFestivalResolverRequest(search));
 }

@@ -25,16 +25,6 @@ export function festivalPrice(slot, value) {
   }).format(value);
 }
 
-export function festivalStatus(slot, now) {
-  const market = slot.market;
-  if (market?.status === 'resolved') return market.outcome === 0 ? 'Subió' : 'Bajó';
-  if (market?.status === 'canceled') return 'Cancelado';
-  if (!market && slot.feedEnabled === false) return 'Datos por confirmar';
-  if (now < Date.parse(slot.startTime)) return 'Próximo';
-  if (now < Date.parse(slot.endTime)) return market?.status === 'active' ? 'Abierto' : 'Esperando apertura';
-  return market?.status === 'active' ? 'Por resolver' : 'Cerrado';
-}
-
 function useFestivalPoll(url, interval, initial) {
   const [snapshot, setSnapshot] = useState({ data: initial, error: false });
   useEffect(() => {
@@ -72,15 +62,6 @@ export function useFestivalSchedule() {
 
 export function useFestivalBars(key) {
   return useFestivalPoll(`${ENDPOINT}?slot=${encodeURIComponent(key)}`, 15_000, initialBars);
-}
-
-const initialMarket = { market: null };
-
-export function useFestivalMarketPrices(id) {
-  const url = id == null ? null : `/api/points/market?id=${encodeURIComponent(id)}`;
-  const { data } = useFestivalPoll(url, 10_000, initialMarket);
-  const market = data.market;
-  return id != null && String(market?.id) === String(id) ? market.prices : null;
 }
 
 export function useFestivalClock() {
