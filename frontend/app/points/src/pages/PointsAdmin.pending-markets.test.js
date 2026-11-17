@@ -175,18 +175,18 @@ test('Points nav surfaces admin work count outside admin', () => {
   assert.match(navSource, /adminTaskTotal > 0/);
 });
 
-test('Points nav exposes a compact mobile menu with identity and hidden routes', () => {
-  assert.match(navSource, /points-mobile-menu/);
-  assert.match(navSource, /points-mobile-menu-user/);
+test('Points nav shares the account dropdown across breakpoints', () => {
+  assert.match(navSource, /points-account-trigger-name[\s\S]*?\{username\}/);
+  assert.match(navSource, /aria-expanded=\{dropdownOpen\}[\s\S]*?aria-controls=\{accountPanelId\}/);
+  assert.match(navSource, /points-account-name[\s\S]*?\{username\}/);
   assert.match(navSource, /user\?\.username/);
-  assert.match(navSource, /formatBalance/);
   assert.match(navSource, /minimumFractionDigits: 2/);
-  assert.match(navSource, /balanceLabel/);
+  assert.match(navSource, /points-account-balance[\s\S]*?\{balanceLabel\} <span>MXNP<\/span>/);
   assert.match(navSource, /points\.nav\.howItWorks/);
-  assert.match(navSource, /points-lang-toggle/);
-  assert.match(navSource, /points-theme-toggle/);
+  assert.match(navSource, /points-account-preferences[\s\S]*?points\.nav\.lang[\s\S]*?points\.nav\.appearance[\s\S]*?points\.nav\.signOut/);
+  assert.match(navSource, /<PointsNotifications[\s\S]*?<div className="points-account"/);
+  assert.match(navSource, /event\.key !== 'Escape'/);
   assert.doesNotMatch(navSource, /🇺🇸|🇲🇽|btn-theme-toggle|☀|☾/);
-  assert.match(navSource, /setMobileMenuOpen/);
 });
 
 test('Points admin can pause public cycles and restart them later', () => {

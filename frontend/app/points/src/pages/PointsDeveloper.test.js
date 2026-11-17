@@ -28,7 +28,7 @@ test('Perfil page links users to API key creation while account menu stays on Pe
   assert.match(earnSource, /to="\/developer"/);
   assert.match(earnSource, /user\?\.phoneRequired/);
   assert.match(earnSource, /user\?\.apiBlockedAt/);
-  assert.match(navSource, /nav-dropdown-points[\s\S]*?to="\/earn"[\s\S]*?points\.nav\.earn/);
+  assert.match(navSource, /points-account-panel[\s\S]*?to="\/earn"[\s\S]*?points\.nav\.earn/);
   assert.doesNotMatch(navSource, /to="\/developer"[\s\S]*?points\.nav\.developer/);
 });
 

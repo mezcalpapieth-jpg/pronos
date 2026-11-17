@@ -1,0 +1,239 @@
+.points-nav-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--points-space-2);
+  margin-inline-start: auto;
+}
+
+.points-account {
+  position: relative;
+}
+
+.points-account-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--points-space-2);
+  max-width: 15rem;
+  min-height: 36px;
+  padding: 0 var(--points-space-3);
+  border: 1px solid transparent;
+  border-radius: var(--points-radius-pill);
+  background: var(--points-control);
+  color: var(--text-primary);
+  font: 700 var(--text-sm)/1.2 var(--font-body);
+  cursor: pointer;
+}
+
+.points-account-trigger:hover,
+.points-account-trigger[aria-expanded="true"] {
+  background: var(--points-control-hover);
+}
+
+.points-account-trigger:focus-visible,
+.points-account-panel :focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: -2px;
+}
+
+.points-account-trigger-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.points-account-trigger svg {
+  flex: none;
+}
+
+.points-account-trigger[aria-expanded="true"] .points-account-trigger-name + svg {
+  transform: rotate(180deg);
+}
+
+.points-account-trigger-guest {
+  width: 36px;
+  padding: 0;
+  color: var(--points-caption);
+}
+
+.points-account-trigger .points-account-menu-icon,
+.points-account-compact-link,
+.points-account-mobile-signup {
+  display: none;
+}
+
+.points-account-panel {
+  position: absolute;
+  z-index: 200;
+  inset-block-start: calc(100% + var(--points-space-2));
+  inset-inline-end: 0;
+  width: min(288px, calc(100vw - var(--points-space-6)));
+  max-height: calc(100dvh - 86px - var(--points-bottom-nav-height, 0px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--points-space-1);
+  border: 1px solid var(--border);
+  border-radius: var(--points-radius-md);
+  background: var(--points-panel);
+  color: var(--text-primary);
+  box-shadow: 0 12px 36px rgb(0 0 0 / 24%);
+  font: 500 var(--text-sm)/1.35 var(--font-body);
+}
+
+.points-account-summary {
+  display: grid;
+  gap: var(--points-space-2);
+  padding: var(--points-space-3);
+}
+
+.points-account-name {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.points-account-summary p {
+  margin: 0;
+  color: var(--points-caption);
+  font-size: var(--text-xs);
+}
+
+.points-account-balance {
+  display: grid;
+  gap: var(--points-space-1);
+  padding: var(--points-space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--points-radius-sm);
+  background: var(--points-control);
+  color: var(--points-caption);
+  font-size: var(--text-xs);
+}
+
+.points-account-balance strong {
+  color: var(--text-primary);
+  font: 700 var(--text-lg)/1.2 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.points-account-balance strong span {
+  color: var(--points-caption);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.points-account-panel > a,
+.points-account-panel > button {
+  width: 100%;
+  min-height: 40px;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--points-space-2);
+  padding: var(--points-space-2) var(--points-space-3);
+  border: 0;
+  border-radius: var(--points-radius-sm);
+  background: none;
+  color: var(--points-caption);
+  font: inherit;
+  text-align: start;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.points-account-panel > :is(a, button):not(.points-account-compact-link, .points-account-mobile-signup) {
+  display: flex;
+}
+
+.points-account-panel > :is(a, button):hover {
+  background: var(--points-control);
+  color: var(--text-primary);
+}
+
+.points-account-panel .points-account-admin-badge {
+  border-color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 16%, transparent);
+  color: var(--warning);
+}
+
+.points-account-preferences {
+  display: grid;
+  gap: var(--points-space-2);
+  margin-block: var(--points-space-1);
+  padding: var(--points-space-2) var(--points-space-3);
+  border-block: 1px solid var(--border);
+}
+
+.points-account-preference {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--points-space-2);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.points-account-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  inline-size: 124px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--points-radius-pill);
+  background: var(--points-control);
+}
+
+.points-account-options button {
+  min-height: 28px;
+  padding: var(--points-space-1) var(--points-space-2);
+  border: 0;
+  border-radius: var(--points-radius-pill);
+  background: transparent;
+  color: var(--points-caption);
+  font: inherit;
+  cursor: pointer;
+}
+
+.points-account-options button:hover {
+  color: var(--text-primary);
+}
+
+.points-account-options button[aria-pressed="true"] {
+  background: var(--points-selected);
+  color: var(--points-on-selected);
+}
+
+@media (max-width: 1180px) {
+  .points-account-trigger .points-account-settings-icon {
+    display: none;
+  }
+
+  .points-account-trigger .points-account-menu-icon {
+    display: block;
+  }
+
+  .points-account-panel > .points-account-compact-link {
+    display: flex;
+  }
+}
+
+@media (max-width: 768px) {
+  .points-nav-actions > .nav-signup-cta {
+    display: none;
+  }
+
+  .points-account-trigger {
+    max-width: 28vw;
+    padding-inline: var(--points-space-2);
+    font-size: var(--text-xs);
+  }
+
+  .points-account-panel > .points-account-mobile-signup {
+    display: flex;
+  }
+}
+
+@media (width < 720px) {
+  .points-account-panel.points-menu-with-bottom-nav > .points-menu-primary {
+    display: none;
+  }
+}
