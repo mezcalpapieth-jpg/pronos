@@ -17,7 +17,7 @@ test('unavailable connections explain availability without exposing internal pro
   assert.match(source, /locked &&/);
   assert.match(source, /t\('points\.earn\.socialLinks\.comingSoon', \{ network: p.label \}\)/);
   assert.doesNotMatch(source, /Esperando aprobación|OAuth pausado/);
-  assert.match(source, /lang === 'en' \? 'Soon' : 'Próximamente'/);
+  assert.match(source, /points\.earn\.socialLinks\.soon/);
 });
 
 test('social connection reward cards show 100 MXNP', () => {
@@ -31,12 +31,12 @@ test('social connection reward cards show 100 MXNP', () => {
 
 test('X follow social task stays manual while OAuth verification is paused', () => {
   assert.match(source, /const isAutoVerify = !!task\.autoVerify/);
-  assert.match(source, /isAutoVerify \? 'Verificar' : 'Enviar revisión'/);
+  assert.match(source, /'verifyAgain' : 'verify'/);
+  assert.match(source, /'retry' : 'submit'/);
   assert.match(source, /x_account_required/);
   assert.match(source, /x_reconnect_required/);
   assert.match(source, /socialLinkStartUrl\('x', '\/earn'\)/);
-  assert.match(source, /X, Instagram, TikTok y campañas temporales siguen en revisión manual/);
-  assert.match(source, /guarda arriba tus usuarios de cada red antes de enviar revisión/);
+  assert.match(source, /points\.earn\.socialTask\.description/);
   assert.doesNotMatch(source, /X se verifica automáticamente con tu cuenta conectada/);
 });
 
@@ -67,5 +67,5 @@ test('public social tasks card shows all catalog tasks without network filter ta
   assert.doesNotMatch(socialTasksSource, /const \[networkFilter,\s*setNetworkFilter\]/);
   assert.doesNotMatch(socialTasksSource, /aria-label="Filtrar tareas sociales"/);
   assert.match(socialTasksSource, /tasks\.map\(t =>/);
-  assert.match(socialTasksSource, /No hay tareas sociales disponibles/);
+  assert.match(socialTasksSource, /points\.earn\.socialTask\.empty/);
 });
