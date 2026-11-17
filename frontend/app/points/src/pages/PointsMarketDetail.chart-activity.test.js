@@ -257,7 +257,8 @@ test('points market cards display seed liquidity plus traded volume', () => {
 test('parallel market cards hide eliminated outcomes from the preview list', () => {
   assert.match(marketCardSource, /const legStatuses = market\.ammMode === 'parallel'/);
   assert.match(marketCardSource, /const legOutcomes = market\.ammMode === 'parallel'/);
-  assert.match(marketCardSource, /const visibleOutcomeRows = \(\(\) => \{/);
+  assert.match(marketCardSource, /const candidateRows = activeParallelRows.length \? activeParallelRows : outcomeRows/);
+  assert.match(marketCardSource, /const visibleOutcomeRows = rankedRows.slice\(0, 3\)/);
   assert.match(marketCardSource, /String\(row\.legStatus \|\| ''\)\.toLowerCase\(\) === 'active'/);
   assert.match(marketCardSource, /Number\(row\.price\) > 0/);
   assert.match(marketCardSource, /visibleOutcomeRows\.map\(\(row\) => \{/);

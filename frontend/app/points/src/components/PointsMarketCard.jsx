@@ -20,7 +20,7 @@
  */
 import React, { useState } from 'react';
 import { Check } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { localizedOutcomeLabels, localizedTitle, useLang, useT } from '@app/lib/i18n.js';
 import { findTeamByName, teamProfilePath } from '@app/lib/teamProfiles.js';
 import { marketInterestPayload, teamInterestPayload, trackInterest } from '@app/lib/interest.js';
@@ -31,6 +31,7 @@ import { marketArtworkHidden, marketImageSrc, marketPlaceholderImageSrc } from '
 import { isClosingSoonNonSportsMarket, isLiveSportsMarket } from '../lib/marketStatus.js';
 import PointsBuyModal from './PointsBuyModal.jsx';
 import CardLiveScore from './CardLiveScore.jsx';
+import './points-browse.css';
 import { useCardLiveScore } from '../lib/useCardLiveScore.js';
 
 const STAKE_PREVIEW = 100; // MXNP reference stake for the card payout preview
@@ -266,19 +267,25 @@ export default function PointsMarketCard({ market, userPosition }) {
     legStatus: legStatuses?.[i] || null,
     legOutcome: legOutcomes?.[i] ?? null,
   }));
-  const visibleOutcomeRows = (() => {
-    if (market.ammMode !== 'parallel' || isResolved) return outcomeRows;
+  const displayPrice = (row) => {
+    if (!isResolved) return Number(row.price) || 0;
+    if (market.ammMode === 'parallel' && row.legOutcome != null) {
+      return Number(row.legOutcome) === 0 ? 1 : 0;
+    }
+    return Number(market.outcome) === row.index ? 1 : 0;
+  };
 
-    const activeRows = outcomeRows.filter(row => (
-      legStatuses
-        ? String(row.legStatus || '').toLowerCase() === 'active'
-        : Number(row.price) > 0
-    ));
-    const rows = activeRows.length > 0 ? activeRows : outcomeRows;
-    return [...rows].sort((a, b) =>
-      (Number(b.price) || 0) - (Number(a.price) || 0) || a.index - b.index
-    );
-  })();
+  const activeParallelRows = market.ammMode === 'parallel' && !isResolved
+    ? outcomeRows.filter(row => legStatuses
+      ? String(row.legStatus || '').toLowerCase() === 'active'
+      : Number(row.price) > 0)
+    : [];
+  const candidateRows = activeParallelRows.length ? activeParallelRows : outcomeRows;
+  const rankedRows = outcomeRows.length > 3 || (market.ammMode === 'parallel' && !isResolved)
+    ? [...candidateRows].sort((a, b) => displayPrice(b) - displayPrice(a) || a.index - b.index)
+    : candidateRows;
+  const visibleOutcomeRows = rankedRows.slice(0, 3);
+  const moreOutcomes = outcomeRows.length > 3 ? outcomeRows.length - visibleOutcomeRows.length : 0;
 
   return (
     <div
@@ -288,7 +295,9 @@ export default function PointsMarketCard({ market, userPosition }) {
       role="button"
       tabIndex={0}
       onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') navigateToCardTarget();
+        if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return;
+        e.preventDefault();
+        navigateToCardTarget();
       }}
     >
       <div className="mock-card-header">
@@ -359,44 +368,10 @@ export default function PointsMarketCard({ market, userPosition }) {
           {cardScore && <CardLiveScore score={cardScore} />}
         </div>
 
-        {/* Single-column list of wide rows — logo + label on the left,
-            a clickable +gain/% pill on the right. When the market has
-            more than 4 outcomes (F1 with 21 drivers, election with 5
-            candidates, …) we cap the list height and let the user
-            scroll through every option inside the card instead of
-            overflowing into a 2×2 grid with a "+N more" hint. */}
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 6,
-            margin: '10px 0 4px',
-            ...(visibleOutcomeRows.length > 4 ? {
-              maxHeight: 200,
-              overflowY: 'auto',
-              paddingRight: 4,
-              WebkitMaskImage: 'linear-gradient(to bottom, black calc(100% - 18px), transparent 100%)',
-              maskImage: 'linear-gradient(to bottom, black calc(100% - 18px), transparent 100%)',
-            } : null),
-          }}
-          // Stop clicks inside the scroll area from bubbling up to
-          // the outer card's navigate handler so the user can scroll
-          // without accidentally opening the detail page.
-          onClick={(e) => {
-            if (visibleOutcomeRows.length > 4) e.stopPropagation();
-          }}
-        >
+        <div className="points-card-outcomes">
           {visibleOutcomeRows.map((row) => {
             const { index: i, label, rawLabel, price: livePrice, logo, countryLabel } = row;
-            // Resolved markets collapse to a binary 100 / 0 display so
-            // the card matches what the detail page already does — no
-            // more stale "Bad Bunny 67%" showing after Bad Bunny won.
-            const resolvedPrice = isResolved
-              ? (market.ammMode === 'parallel' && row.legOutcome != null
-                  ? (Number(row.legOutcome) === 0 ? 1 : 0)
-                  : (Number(market.outcome) === i ? 1 : 0))
-              : null;
-            const pct = Math.round((resolvedPrice ?? livePrice) * 100);
+            const pct = Math.round(displayPrice(row) * 100);
             const tone = isResolved
               ? (pct === 100 ? 'win' : '')
               : isYesNo ? (i === yesIndex ? 'yes' : 'no') : '';
@@ -453,6 +428,15 @@ export default function PointsMarketCard({ market, userPosition }) {
               </div>
             );
           })}
+          {moreOutcomes > 0 && (
+            <Link
+              className="points-card-more"
+              to={marketDetailPath}
+              onClick={event => event.stopPropagation()}
+            >
+              {t('points.card.moreOptions', { n: moreOutcomes })}
+            </Link>
+          )}
         </div>
       </div>
 
