@@ -112,7 +112,8 @@ export default function PointsNav({ onOpenLogin, isAdmin, isAdminWorkspace }) {
   function handleSearchChange(e) {
     const value = e.target.value;
     setSearchOpen(true);
-    if (location.pathname !== '/') {
+    const categoryGrid = /^\/c\/(?!noticias(?:\/|$)|tradingfestival(?:\/|$))[^/]+\/?$/.test(location.pathname);
+    if (location.pathname !== '/' && !categoryGrid) {
       navigate(value ? `/?q=${encodeURIComponent(value)}` : '/');
       return;
     }
