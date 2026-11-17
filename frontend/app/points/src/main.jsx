@@ -15,6 +15,7 @@ import App from './App.jsx';
 import { PointsExecutionProvider } from './lib/PointsExecution.jsx';
 import '@app/styles/mvp.css';
 import './points.css';
+import './design/tokens.css';
 import './design/cleanup.css';
 import './stocks.css';
 
