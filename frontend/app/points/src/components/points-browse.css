@@ -163,10 +163,6 @@
     position: absolute;
     inset: -6px auto auto 16px;
   }
-
-  .points-menu-with-bottom-nav > .points-menu-primary {
-    display: none;
-  }
 }
 
 .points-search-shortcut {

@@ -4,13 +4,13 @@
  * Visual parity with the main pronos.io landing:
  *   - `.nav-logo` wordmark with pulsing `.green-dot` next to it
  *   - `.nav-links` row with Markets, Portfolio (if signed-in), Cómo funciona
- *   - circular light/dark switcher
- *   - Green entry CTA or balance pill + dropdown when signed-in
+ *   - account disclosure with balance and preferences
+ *   - notification bell beside the signed-in account
  *
  * No wallet-chain UI, no RPC, no Privy — this is an off-chain points app.
  */
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, Moon, Search, Sun } from 'lucide-react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { ChevronDown, Menu, Search, Settings2 } from 'lucide-react';
 import { Input } from '../ui/index.jsx';
 import PointsBottomNav from './PointsBottomNav.jsx';
 import { matchesMarketSearch, normalizeSearchText } from '../lib/marketSearch.js';
@@ -25,6 +25,7 @@ import {
 } from '../lib/pointsApi.js';
 import { onPointsRefresh } from '../lib/pointsLiveRefresh.js';
 import PointsNotifications from './PointsNotifications.jsx';
+import './PointsNav.css';
 import {
   isTournamentSocialTaskSeen,
   onTournamentSocialTaskSeen,
@@ -35,16 +36,6 @@ const HOW_IT_WORKS_URLS = {
   es: 'https://pronos.io/que-son-los-mercados-de-predicciones',
   en: 'https://pronos.io/what-are-prediction-markets',
 };
-
-function languageToggleLabel(lang) {
-  return lang === 'es' ? 'English' : 'Español';
-}
-
-function themeToggleLabel(lang, theme) {
-  const targetIsLight = theme === 'dark';
-  if (lang === 'en') return targetIsLight ? 'Light mode' : 'Dark mode';
-  return targetIsLight ? 'Modo claro' : 'Modo oscuro';
-}
 
 function formatBalance(value) {
   const numeric = Number(value || 0);
@@ -72,14 +63,14 @@ export default function PointsNav({ onOpenLogin, isAdmin, isAdminWorkspace, show
   const { authenticated, user, logout, refresh } = usePointsAuth();
   const [scrolled, setScrolled] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [theme, setTheme] = useState(getInitialTheme);
   const [adminTaskTotal, setAdminTaskTotal] = useState(0);
   const [claimableCount, setClaimableCount] = useState(0);
   const [tournamentTaskCount, setTournamentTaskCount] = useState(0);
   const [tournamentTaskNoticeVersion, setTournamentTaskNoticeVersion] = useState(0);
   const dropdownRef = useRef(null);
-  const mobileMenuRef = useRef(null);
+  const dropdownTrigger = useRef(null);
+  const accountPanelId = useId();
   const t = useT();
   const lang = useLang();
   const howItWorksUrl = HOW_IT_WORKS_URLS[lang] || HOW_IT_WORKS_URLS.es;
@@ -289,39 +280,46 @@ export default function PointsNav({ onOpenLogin, isAdmin, isAdminWorkspace, show
 
   useEffect(() => {
     if (!dropdownOpen) return undefined;
-    const handler = (e) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
-        setDropdownOpen(false);
-      }
+
+    function dismissOutside(event) {
+      if (!dropdownRef.current?.contains(event.target)) setDropdownOpen(false);
+    }
+
+    function dismissWithEscape(event) {
+      if (event.key !== 'Escape') return;
+      setDropdownOpen(false);
+      if (dropdownRef.current?.contains(document.activeElement)) dropdownTrigger.current?.focus();
+    }
+
+    document.addEventListener('pointerdown', dismissOutside);
+    document.addEventListener('focusin', dismissOutside);
+    document.addEventListener('keydown', dismissWithEscape);
+    return () => {
+      document.removeEventListener('pointerdown', dismissOutside);
+      document.removeEventListener('focusin', dismissOutside);
+      document.removeEventListener('keydown', dismissWithEscape);
     };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
   }, [dropdownOpen]);
 
-  useEffect(() => {
-    if (!mobileMenuOpen) return undefined;
-    const handler = (e) => {
-      if (mobileMenuRef.current && !mobileMenuRef.current.contains(e.target)) {
-        setMobileMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [mobileMenuOpen]);
+  function closeDropdown() {
+    setDropdownOpen(false);
+  }
 
   async function handleLogout() {
-    setDropdownOpen(false);
-    setMobileMenuOpen(false);
+    closeDropdown();
     await logout();
     navigate('/');
   }
 
-  function closeMobileMenu() {
-    setMobileMenuOpen(false);
+  function handleOpenLogin() {
+    closeDropdown();
+    onOpenLogin?.();
   }
 
-  const balance = Number(user?.balance || 0);
-  const balanceLabel = formatBalance(balance);
+  const username = user?.username ? `@${user.username}` : t('points.nav.account');
+  const balanceLabel = formatBalance(user?.balance);
+  const languageLabelId = `${accountPanelId}-language`;
+  const appearanceLabelId = `${accountPanelId}-appearance`;
 
   return (
     <>
@@ -453,114 +451,6 @@ export default function PointsNav({ onOpenLogin, isAdmin, isAdminWorkspace, show
         )}
       </div>}
 
-      {authenticated && !isAdminWorkspace && <PointsNotifications key={user?.suborgId} />}
-
-      <div className="points-mobile-menu" ref={mobileMenuRef}>
-        <button
-          type="button"
-          className="points-mobile-menu-button"
-          aria-label={lang === 'en' ? 'Open menu' : 'Abrir menú'}
-          aria-expanded={mobileMenuOpen}
-          onClick={() => setMobileMenuOpen(o => !o)}
-        >
-          <span />
-          <span />
-          <span />
-        </button>
-
-        {mobileMenuOpen && (
-          <div className={`points-mobile-menu-panel${showBottomNav ? ' points-menu-with-bottom-nav' : ''}`}>
-            {authenticated && (
-              <div className="points-mobile-menu-user">
-                <span>{user?.username ? `@${user.username}` : (lang === 'en' ? 'Signed in' : 'Sesión iniciada')}</span>
-                <strong>{balanceLabel} MXNP</strong>
-              </div>
-            )}
-            <Link to="/" onClick={closeMobileMenu} className="points-menu-primary">{t('points.nav.markets')}</Link>
-            {authenticated && (
-              <>
-                <Link to="/portfolio" onClick={closeMobileMenu} className="points-mobile-menu-row points-menu-primary">
-                  <span>{t('points.nav.portfolio')}</span>
-                  {claimableCount > 0 && (
-                    <span className="points-mobile-menu-badge">
-                      {claimableCount > 99 ? '99+' : claimableCount}
-                    </span>
-                  )}
-                </Link>
-                <Link to="/earn" onClick={closeMobileMenu} className="points-menu-primary">{t('points.nav.earn')}</Link>
-              </>
-            )}
-            {/* Public — see the desktop nav for why this one isn't gated. */}
-            <Link to="/torneo" onClick={closeMobileMenu} className="points-mobile-menu-row points-menu-primary">
-              <span>{t('points.nav.tournament')}</span>
-              {tournamentTaskCount > 0 && (
-                <span className="points-mobile-menu-badge">
-                  {tournamentTaskCount > 99 ? '99+' : tournamentTaskCount}
-                </span>
-              )}
-            </Link>
-            <Link to="/support" onClick={closeMobileMenu}>
-              {lang === 'en' ? 'Support' : 'Soporte'}
-            </Link>
-            <a
-              href={howItWorksUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={closeMobileMenu}
-            >
-              {t('points.nav.howItWorks')}
-            </a>
-            {isAdmin && (
-              <Link
-                to="/admin"
-                onClick={closeMobileMenu}
-                className="points-mobile-menu-row"
-              >
-                <span>{t('points.nav.admin')}</span>
-                {adminTaskTotal > 0 && (
-                  <span className="points-mobile-menu-badge">
-                    {adminTaskTotal > 99 ? '99+' : adminTaskTotal}
-                  </span>
-                )}
-              </Link>
-            )}
-            <button
-              type="button"
-              onClick={() => {
-                setLang(lang === 'es' ? 'en' : 'es');
-                closeMobileMenu();
-              }}
-            >
-              {languageToggleLabel(lang)}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setTheme(th => (th === 'dark' ? 'light' : 'dark'));
-                closeMobileMenu();
-              }}
-            >
-              {themeToggleLabel(lang, theme)}
-            </button>
-            {!authenticated ? (
-              <button
-                type="button"
-                onClick={() => {
-                  closeMobileMenu();
-                  onOpenLogin?.();
-                }}
-              >
-                {t('points.nav.signUp')}
-              </button>
-            ) : (
-              <button type="button" onClick={handleLogout}>
-                {t('points.nav.signOut')}
-              </button>
-            )}
-          </div>
-        )}
-      </div>
-
       <div className="nav-links">
         <Link to="/" style={navLinkStyle}>{t('points.nav.markets')}</Link>
         {authenticated && (
@@ -599,111 +489,119 @@ export default function PointsNav({ onOpenLogin, isAdmin, isAdminWorkspace, show
         >
           {t('points.nav.howItWorks')}
         </a>
+      </div>
 
-        <button
-          className="points-lang-toggle"
-          onClick={() => setLang(lang === 'es' ? 'en' : 'es')}
-          title={lang === 'es' ? 'Switch to English' : 'Cambiar a español'}
-          aria-label={t('points.nav.lang')}
-        >
-          {lang === 'es' ? 'EN' : 'ES'}
-        </button>
-
-        <button
-          className={`points-theme-toggle ${theme === 'light' ? 'is-on' : ''}`}
-          onClick={() => setTheme(th => (th === 'dark' ? 'light' : 'dark'))}
-          title={t('points.nav.theme')}
-          aria-label={t('points.nav.theme')}
-        >
-          {theme === 'light'
-            ? <Moon aria-hidden="true" size={16} />
-            : <Sun aria-hidden="true" size={16} />}
-        </button>
-
-        {!authenticated ? (
-          <button className="nav-signup-cta" onClick={onOpenLogin}>
+      <div className="points-nav-actions">
+        {authenticated && !isAdminWorkspace && <PointsNotifications key={user?.suborgId} />}
+        {!authenticated && (
+          <button type="button" className="nav-signup-cta" onClick={handleOpenLogin}>
             {t('points.nav.signUp')}
           </button>
-        ) : (
-          <div style={{ position: 'relative' }} ref={dropdownRef}>
-            <button
-              className="nav-user-pill-points"
-              onClick={() => setDropdownOpen(o => !o)}
-              aria-expanded={dropdownOpen}
-            >
-              <span className="dot" />
-              <span className="balance">{balanceLabel}</span>
-              <span style={{ opacity: 0.7 }}>MXNP</span>
-              <ChevronDown aria-hidden="true" size={14} />
-            </button>
+        )}
+        <div className="points-account" ref={dropdownRef}>
+          <button
+            ref={dropdownTrigger}
+            type="button"
+            className={`points-account-trigger${authenticated ? '' : ' points-account-trigger-guest'}`}
+            aria-label={authenticated ? undefined : t('points.nav.menu')}
+            aria-expanded={dropdownOpen}
+            aria-controls={accountPanelId}
+            onClick={() => setDropdownOpen(open => !open)}
+          >
+            {authenticated ? (
+              <>
+                <span className="points-account-trigger-name">{username}</span>
+                <ChevronDown aria-hidden="true" size={14} />
+              </>
+            ) : (
+              <>
+                <Settings2 aria-hidden="true" className="points-account-settings-icon" size={18} />
+                <Menu aria-hidden="true" className="points-account-menu-icon" size={18} />
+              </>
+            )}
+          </button>
 
-            {dropdownOpen && (
-              <div className="nav-dropdown-points">
-                <div className="info-row">
-                  {user?.username ? (
-                    lang === 'en'
-                      ? <>Signed in as <strong>@{user.username}</strong></>
-                      : <>Sesión iniciada como <strong>@{user.username}</strong></>
-                  ) : (
-                    lang === 'en'
-                      ? <>Pick a username to finish setup.</>
-                      : <>Elige un usuario para completar tu cuenta.</>
-                  )}
+          <div
+            className={`points-account-panel${showBottomNav ? ' points-menu-with-bottom-nav' : ''}`}
+            id={accountPanelId}
+            hidden={!dropdownOpen}
+          >
+            {authenticated && (
+              <div className="points-account-summary">
+                <div className="points-account-name">{username}</div>
+                {!user?.username && <p>{t('points.nav.chooseUsername')}</p>}
+                <div className="points-account-balance">
+                  <span>{t('points.nav.balance')}</span>
+                  <strong>{balanceLabel} <span>MXNP</span></strong>
                 </div>
-                <Link
-                  to="/portfolio"
-                  onClick={() => setDropdownOpen(false)}
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}
-                >
-                  <span>{t('points.nav.portfolio')}</span>
-                  {claimableCount > 0 && (
-                    <span className="points-nav-alert-badge">
-                      {claimableCount > 99 ? '99+' : claimableCount}
-                    </span>
-                  )}
-                </Link>
-                <Link to="/support" onClick={() => setDropdownOpen(false)}>
-                  {lang === 'en' ? 'Support' : 'Soporte'}
-                </Link>
-                <Link to="/earn" onClick={() => setDropdownOpen(false)}>
-                  {t('points.nav.earn')}
-                </Link>
-                {isAdmin && (
-                  <Link
-                    to="/admin"
-                    onClick={() => setDropdownOpen(false)}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}
-                  >
-                    <span>{t('points.nav.admin')}</span>
-                    {adminTaskTotal > 0 && (
-                      <span style={{
-                        minWidth: 20,
-                        height: 20,
-                        padding: '0 6px',
-                        borderRadius: 999,
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        background: 'rgba(245,158,11,0.16)',
-                        border: '1px solid rgba(245,158,11,0.5)',
-                        color: 'var(--warning)',
-                        fontFamily: 'var(--font-mono)',
-                        fontSize: 11,
-                        lineHeight: 1,
-                        letterSpacing: 0,
-                      }}>
-                        {adminTaskTotal > 99 ? '99+' : adminTaskTotal}
-                      </span>
-                    )}
-                  </Link>
-                )}
-                <button onClick={handleLogout}>
-                  {t('points.nav.signOut')}
-                </button>
               </div>
             )}
+            <Link to="/" onClick={closeDropdown} className="points-account-compact-link points-menu-primary">
+              {t('points.nav.markets')}
+            </Link>
+            {authenticated && (
+              <Link to="/portfolio" onClick={closeDropdown} className="points-menu-primary">
+                <span>{t('points.nav.portfolio')}</span>
+                {claimableCount > 0 && (
+                  <span className="points-nav-alert-badge">{claimableCount > 99 ? '99+' : claimableCount}</span>
+                )}
+              </Link>
+            )}
+            <Link to="/torneo" onClick={closeDropdown} className="points-account-compact-link points-menu-primary">
+              <span>{t('points.nav.tournament')}</span>
+              {tournamentTaskCount > 0 && (
+                <span className="points-nav-alert-badge">{tournamentTaskCount > 99 ? '99+' : tournamentTaskCount}</span>
+              )}
+            </Link>
+            <Link to="/support" onClick={closeDropdown}>{lang === 'en' ? 'Support' : 'Soporte'}</Link>
+            {authenticated && (
+              <Link to="/earn" onClick={closeDropdown} className="points-menu-primary">{t('points.nav.earn')}</Link>
+            )}
+            <a
+              className="points-account-compact-link"
+              href={howItWorksUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={closeDropdown}
+            >
+              {t('points.nav.howItWorks')}
+            </a>
+            {isAdmin && (
+              <Link to="/admin" onClick={closeDropdown}>
+                <span>{t('points.nav.admin')}</span>
+                {adminTaskTotal > 0 && (
+                  <span className="points-nav-alert-badge points-account-admin-badge">
+                    {adminTaskTotal > 99 ? '99+' : adminTaskTotal}
+                  </span>
+                )}
+              </Link>
+            )}
+
+            <div className="points-account-preferences">
+              <div className="points-account-preference" role="group" aria-labelledby={languageLabelId}>
+                <span id={languageLabelId}>{t('points.nav.lang')}</span>
+                <div className="points-account-options">
+                  <button type="button" aria-label="Español" lang="es" aria-pressed={lang === 'es'} onClick={() => setLang('es')}>ES</button>
+                  <button type="button" aria-label="English" lang="en" aria-pressed={lang === 'en'} onClick={() => setLang('en')}>EN</button>
+                </div>
+              </div>
+              <div className="points-account-preference" role="group" aria-labelledby={appearanceLabelId}>
+                <span id={appearanceLabelId}>{t('points.nav.appearance')}</span>
+                <div className="points-account-options">
+                  <button type="button" aria-pressed={theme === 'light'} onClick={() => setTheme('light')}>{t('points.nav.light')}</button>
+                  <button type="button" aria-pressed={theme === 'dark'} onClick={() => setTheme('dark')}>{t('points.nav.dark')}</button>
+                </div>
+              </div>
+            </div>
+            {authenticated ? (
+              <button type="button" onClick={handleLogout}>{t('points.nav.signOut')}</button>
+            ) : (
+              <button type="button" className="points-account-mobile-signup" onClick={handleOpenLogin}>
+                {t('points.nav.signUp')}
+              </button>
+            )}
           </div>
-        )}
+        </div>
       </div>
     </nav>
     {showBottomNav && (

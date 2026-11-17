@@ -4,7 +4,7 @@ import test from 'node:test';
 
 const source = await readFile(new URL('./PointsCategoryBar.jsx', import.meta.url), 'utf8');
 const componentsCss = await readFile(new URL('../../../../css/components.css', import.meta.url), 'utf8');
-const sectionsCss = await readFile(new URL('../../../../css/sections.css', import.meta.url), 'utf8');
+const marketCss = await readFile(new URL('../design/market.css', import.meta.url), 'utf8');
 
 test('points category bar shows Infrastructure while preserving the main category order', () => {
   const newMarketsIndex = source.indexOf("slug: 'nuevos-mercados'");
@@ -43,11 +43,11 @@ test('points categories share a pill and selected-page state with small feature 
   assert.doesNotMatch(source, /regional:|linear-gradient|RegionalCategoryLabel/);
 });
 
-test('points category bar spans the viewport and gives the last chip scroll room', () => {
+test('points category bar fades only overflowing edges and keeps the end pill reachable', () => {
   assert.match(componentsCss, /\.category-bar-inner\s*\{[\s\S]*?width:\s*100%/);
   assert.match(componentsCss, /\.category-bar-inner\s*\{[\s\S]*?max-width:\s*none/);
   assert.match(componentsCss, /\.category-bar \.market-filters\s*\{[\s\S]*?width:\s*100%/);
-  assert.match(componentsCss, /scroll-padding-inline:\s*48px/);
-  assert.match(componentsCss, /\.category-bar \.market-filters::after\s*\{[\s\S]*?flex:\s*0 0 48px/);
-  assert.match(sectionsCss, /\.category-bar \.market-filters::after\s*\{[\s\S]*?flex-basis:\s*8px/);
+  assert.match(source, /observer\.observe\(first\);\s*observer\.observe\(last\);/);
+  assert.match(marketCss, /\.points-category-bar \.market-filters::after\s*\{\s*content: none;/);
+  assert.match(marketCss, /\[data-overflow-start\], \[data-overflow-end\][\s\S]*?\:focus-visible[\s\S]*?mask-image: linear-gradient/);
 });
