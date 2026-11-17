@@ -808,6 +808,11 @@ const STRINGS = {
   'points.card.live':         { es: 'EN VIVO',               en: 'LIVE' },
   'points.card.closingSoon':  { es: 'CIERRA PRONTO',         en: 'CLOSING SOON' },
   'points.card.yourPos':      { es: 'Tu posición',           en: 'Your position' },
+  'points.sort.label':    { es: 'Ordenar mercados', en: 'Sort markets' },
+  'points.sort.trending': { es: 'Tendencia', en: 'Trending' },
+  'points.sort.volume':   { es: 'Más volumen', en: 'Highest volume' },
+  'points.sort.new':      { es: 'Nuevos', en: 'Newest' },
+  'points.sort.closing':  { es: 'Cierran pronto', en: 'Closing soon' },
   'points.card.moreOptions':  { es: '+ {n} opciones más',    en: '+ {n} more options' },
   'points.card.ifYouWin':     { es: 'si ganas',              en: 'if you win' },
 
