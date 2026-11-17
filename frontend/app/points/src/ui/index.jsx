@@ -1,4 +1,4 @@
-import React, { forwardRef, useEffect, useRef } from 'react';
+import React, { forwardRef, useLayoutEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 
 export function Button({ as: Element = 'button', variant = 'secondary', className = '', type = 'button', ...props }) {
@@ -26,13 +26,16 @@ export const Card = forwardRef(function Card({ as: Element = 'section', classNam
   return <Element ref={ref} className={`points-ui-card ${className}`} {...props} />;
 });
 
-export function Modal({ onDismiss, className = '', ...props }) {
+export function Modal({ onDismiss, returnFocusTo, className = '', ...props }) {
   const ref = useRef(null);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const dialog = ref.current;
     dialog.showModal();
-    return () => dialog.close();
-  }, []);
+    return () => {
+      dialog.close();
+      if (returnFocusTo?.isConnected) returnFocusTo.focus({ preventScroll: true });
+    };
+  }, [returnFocusTo]);
 
   return createPortal(
     <dialog

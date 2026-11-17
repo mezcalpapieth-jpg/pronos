@@ -567,11 +567,11 @@ function SocialTaskRow({ task, onSubmit }) {
       ? (status === 'rejected' ? 'verifyAgain' : 'verify')
       : (status === 'rejected' ? 'retry' : 'submit');
 
-  async function handle() {
+  async function handle(event) {
     if (disabled) return;
     setSubmitting(true);
     try {
-      await onSubmit(task);
+      await onSubmit(task, event.currentTarget);
     } finally {
       setSubmitting(false);
     }
@@ -1087,11 +1087,11 @@ function SocialTasksCard() {
     return () => window.removeEventListener(SOCIAL_LINKS_CHANGED_EVENT, load);
   }, [taskKey]);
 
-  async function handleSubmit(task) {
+  async function handleSubmit(task, trigger) {
     setErr(null);
     setOk(null);
     if (!hasSocialTaskAccount(task)) {
-      setAccountTask(task);
+      setAccountTask({ task, trigger });
       return;
     }
     try {
@@ -1104,7 +1104,7 @@ function SocialTasksCard() {
       }
     } catch (e) {
       if (e?.code === 'social_account_required') {
-        setAccountTask(task);
+        setAccountTask({ task, trigger });
         return;
       }
       if ((e?.code === 'x_account_required' || e?.code === 'x_reconnect_required')
@@ -1118,11 +1118,12 @@ function SocialTasksCard() {
 
   return (
     <Card className="points-profile-panel">
-      {accountTask && <SocialTaskAccountPrompt key={accountTask.key} task={accountTask}
+      {accountTask && <SocialTaskAccountPrompt key={accountTask.task.key} task={accountTask.task}
+        returnFocusTo={accountTask.trigger}
         onCancel={() => setAccountTask(null)} onSaved={async link => {
-          const task = { ...accountTask, socialAccount: link.handle };
+          const task = { ...accountTask.task, socialAccount: link.handle };
           setAccountTask(null);
-          await handleSubmit(task);
+          await handleSubmit(task, accountTask.trigger);
         }} />}
       <div className="points-profile-eyebrow">{translate('points.earn.socialTask.eyebrow')}</div>
       <h3 className="points-profile-title">{translate('points.earn.socialTask.title')}</h3>
