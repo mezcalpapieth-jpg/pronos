@@ -48,3 +48,31 @@
 @media (width < 720px) {
   .points-search-shortcut { display: none; }
 }
+
+.points-card-outcomes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-block: 10px 4px;
+}
+
+.points-card-more {
+  color: var(--orange);
+  align-self: flex-start;
+  padding: 4px 8px;
+  font-size: var(--text-xs, 12px);
+  font-weight: 600;
+}
+
+.points-card-more:hover {
+  text-decoration: underline;
+}
+
+.mock-card.points-market-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.points-market-card .mock-card-footer {
+  margin-top: auto;
+}

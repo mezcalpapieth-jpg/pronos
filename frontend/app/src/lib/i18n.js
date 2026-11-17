@@ -873,7 +873,7 @@ const STRINGS = {
   'points.sort.volume':   { es: 'Más volumen', en: 'Highest volume' },
   'points.sort.new':      { es: 'Nuevos', en: 'Newest' },
   'points.sort.closing':  { es: 'Cierran pronto', en: 'Closing soon' },
-  'points.card.moreOptions':  { es: '+ {n} opciones más',    en: '+ {n} more options' },
+  'points.card.moreOptions':  { es: '+{n} resultados más',     en: '+{n} more outcomes' },
   'points.card.ifYouWin':     { es: 'si ganas',              en: 'if you win' },
 
   'points.activity.eyebrow':  { es: 'Mercados calientes',    en: 'Hot markets' },
