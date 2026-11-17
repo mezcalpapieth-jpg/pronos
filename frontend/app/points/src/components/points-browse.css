@@ -168,3 +168,23 @@
     display: none;
   }
 }
+
+.points-search-shortcut {
+  position: absolute;
+  inset: 50% 8px auto auto;
+  transform: translateY(-50%);
+  pointer-events: none;
+  display: grid;
+  place-items: center;
+  inline-size: 24px;
+  block-size: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--text-xs, 12px);
+}
+
+@media (width < 720px) {
+  .points-search-shortcut { display: none; }
+}
