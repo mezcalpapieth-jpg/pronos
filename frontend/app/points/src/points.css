@@ -43,6 +43,70 @@
   font-weight: 600;
 }
 
+/* Market rules */
+.points-market-rules {
+  margin: 0 0 var(--points-space-5);
+  padding: var(--points-space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--points-radius-md);
+  background: var(--surface1);
+}
+
+.points-market-rules h2 {
+  margin: 0 0 var(--points-space-4);
+  color: var(--text-primary);
+  font-size: var(--text-base);
+}
+
+.points-market-rules-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 116px), 1fr));
+  gap: var(--points-space-3);
+  margin: 0;
+}
+
+.points-market-rules-facts dt {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.points-market-rules-facts dd {
+  margin: var(--points-space-1) 0 0;
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+
+.points-market-rules-criteria {
+  margin: var(--points-space-4) 0 0;
+  padding-top: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.points-market-rules-criteria[data-expanded="false"] {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+
+.points-market-rules a,
+.points-market-rules-expand {
+  color: var(--green);
+}
+
+.points-market-rules-expand {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 6px 0 0;
+}
+
 /* Compact competition table for sports market detail sidebars */
 .points-league-table-card {
   border: 1px solid var(--border);
