@@ -156,6 +156,7 @@ test('only resolved winning points positions belonging to the key owner can be c
     [5,0,'no_shares_to_redeem'],[6,0,'market_mode_not_supported'],[7,0,'position_outside_current_cycle'],[999,0,'market_not_found']]) {
     const response=await request('/api/v1/redeem',{body:{marketId,outcomeIndex}});
     assert.equal(response.body.error.code,code);
+    if(code==='market_mode_not_supported')assert.equal(response.status,400);
   }
   assert.equal(await balance('alice'),100);
   assert.equal((await db.query('SELECT COUNT(*)::int AS n FROM points_api_idempotency_keys')).rows[0].n,0);

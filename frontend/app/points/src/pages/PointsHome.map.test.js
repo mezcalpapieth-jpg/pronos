@@ -50,7 +50,7 @@ test('points home trending cards sort by closest deadline', () => {
   assert.match(source, /sortMarketsByLiveThenEndDate/);
   assert.match(mapMarketsBlock, /sortMarketsByLiveThenEndDate\(out\)/);
   assert.match(filteredBlock, /sortMarketsByLiveThenEndDate\(out\)/);
-  assert.match(carouselBlock, /sortMarketsByLiveThenEndDate\(mapMarkets\.filter\(m => shouldShowOnHome\(m, featuredTeamKeys\)\)\)/);
+  assert.match(carouselBlock, /sortMarketsByLiveThenEndDate\(mapMarkets\.filter\(m => onchain \? m\.executionReady : shouldShowOnHome\(m, featuredTeamKeys\)\)\)/);
 });
 
 test('points home map loads the same shared news and market feed as the news globe', () => {

@@ -50,8 +50,12 @@ export function createApiRedemptionHandler(action, {
         metadata: { replay: executed.replay === true } });
       return res.status(200).json(executed.body);
     } catch (error) {
-      const status = error.status || 500;
-      const code = status === 500 ? (write ? 'redeem_failed' : 'claimable_failed') : error.code || error.message;
+      const executionCode = error.code || error.message;
+      // Keep the public API response stable while sharing the Sepolia ledger guard.
+      const wrongMode = ['onchain_market_requires_protocol', 'unsupported_market_mode'].includes(executionCode);
+      const status = wrongMode ? 400 : error.status || 500;
+      const code = status === 500 ? (write ? 'redeem_failed' : 'claimable_failed')
+        : wrongMode ? 'market_mode_not_supported' : executionCode;
       await recordApiRequest(db, { requestId, apiKeyId: auth?.apiKeyId, username: auth?.username,
         method, endpoint, result: 'error', statusCode: status, errorCode: code, req });
       if (status === 500) console.error('[public-api/redemption] failed', { requestId, message: error.message, code: error.code });

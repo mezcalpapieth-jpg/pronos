@@ -355,7 +355,9 @@ test('Sepolia precheck drafts ESPN criteria and approval persists them with the 
 
   const points = await api.request(null, 'GET', { check_id: String(row.id), previewApprovalMode: 'points' });
   assert.equal(points.body.resolutionRules, undefined);
-  assert.ok(points.body.checks.some(check => check.code === 'missing_criteria' && check.severity === 'warning'));
+  assert.equal(points.body.oneClickApprovalKey, undefined);
+  assert.equal(points.body.checks.some(check => check.code === 'missing_criteria'), false,
+    'Points approval can generate its own criteria, without using the Sepolia rules or approval key');
 
   const pointsList = await api.request(null, 'GET', { previewApprovalMode: 'points' });
   assert.equal(pointsList.body.pending[0].generatedResolutionRules, undefined);
