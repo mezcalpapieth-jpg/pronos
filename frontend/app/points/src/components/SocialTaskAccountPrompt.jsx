@@ -4,7 +4,7 @@ import { useLang } from '@app/lib/i18n.js';
 import { saveSocialLink, publicErrorMessage } from '../lib/pointsApi.js';
 import { socialTaskProvider } from '../lib/socialTaskAccount.js';
 
-export default function SocialTaskAccountPrompt({ task, onSaved, onCancel }) {
+export default function SocialTaskAccountPrompt({ task, onSaved, onCancel, returnFocusTo }) {
   const lang = useLang();
   const [handle, setHandle] = useState('');
   const [saving, setSaving] = useState(false);
@@ -34,6 +34,7 @@ export default function SocialTaskAccountPrompt({ task, onSaved, onCancel }) {
       aria-labelledby="social-account-title"
       aria-describedby="social-account-description"
       onDismiss={() => { if (!saving) onCancel(); }}
+      returnFocusTo={returnFocusTo}
     >
       <form onSubmit={save}>
         <h2 id="social-account-title" className="points-profile-title">
