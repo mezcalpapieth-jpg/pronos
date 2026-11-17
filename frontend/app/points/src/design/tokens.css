@@ -26,6 +26,7 @@
   --points-selected: var(--text-primary);
   --points-on-selected: var(--bg);
   --points-on-brand: #15100d;
+  --points-on-brand-muted: #272727;
   --points-yes-ink: #166534;
   --points-no-ink: #b91c1c;
 }
