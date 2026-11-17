@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import test from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
 import { neonConfig } from '@neondatabase/serverless';
 import { FESTIVAL_JAR_EVENT, RIS26_JAR_EVENT } from '../../shared/jar-events.js';
 import handler from '../ris26.js';
 
-test('festival guesses and visitor state are isolated from the RIS round', async t => {
+test('festival guesses stay readable after the round closes while RIS still accepts votes', async t => {
   const db = new PGlite();
   const originalFetch = neonConfig.fetchFunction;
   const originalEnv = { DATABASE_URL: process.env.DATABASE_URL, DATABASE_READ_URL: process.env.DATABASE_READ_URL };
@@ -48,25 +49,29 @@ test('festival guesses and visitor state are isolated from the RIS round', async
   assert.ok(original.cookie.startsWith(RIS26_JAR_EVENT.cookieName + '='));
 
   const event = FESTIVAL_JAR_EVENT.key;
-  const emptyFestival = await request('GET', { event, cookie: original.cookie });
-  assert.equal(emptyFestival.status, 200);
-  assert.equal(emptyFestival.body.event.key, event);
-  assert.equal(emptyFestival.body.stats.total, 0);
-  assert.equal(emptyFestival.body.ownGuess, null);
+  const festivalVisitor = '96bedb52-8c05-47cf-966d-ddda1ff13e51';
+  const salt = process.env.RIS26_HASH_SALT || process.env.POINTS_SESSION_SECRET || 'ris26';
+  const key = createHash('sha256').update(`${salt}:${festivalVisitor}`).digest('hex');
+  await db.query('INSERT INTO ris26_guesses (event_key, visitor_key, guess) VALUES ($1, $2, $3)', [event, key, 152]);
+  const bothCookies = `${original.cookie}; ${FESTIVAL_JAR_EVENT.cookieName}=${festivalVisitor}`;
+  const newFestivalVote = await request('POST', { event, guess: 166 });
+  assert.equal(newFestivalVote.status, 410);
+  assert.equal(newFestivalVote.body.error, 'event_closed');
+  assert.equal(newFestivalVote.cookie, undefined);
+  assert.equal((await request('POST', { event, cookie: bothCookies, guess: 154 })).status, 410);
 
-  const festival = await request('POST', { event, cookie: original.cookie, guess: 152 });
-  assert.equal(festival.status, 200);
-  assert.ok(festival.cookie.startsWith(FESTIVAL_JAR_EVENT.cookieName + '='));
-
-  const bothCookies = [original.cookie, festival.cookie].join('; ');
-  const update = await request('POST', { event, cookie: bothCookies, guess: 154 });
+  const update = await request('POST', { cookie: bothCookies, guess: 129 });
   assert.equal(update.status, 200);
 
   const oldRound = await request('GET', { cookie: bothCookies });
   assert.equal(oldRound.body.stats.total, 1);
-  assert.equal(oldRound.body.ownGuess.guess, 127);
-  const newRound = await request('GET', { event, cookie: bothCookies });
-  assert.equal(newRound.body.stats.total, 1);
-  assert.equal(newRound.body.ownGuess.guess, 154);
+  assert.equal(oldRound.body.ownGuess.guess, 129);
+  const festivalStats = await request('GET', { event, cookie: bothCookies });
+  assert.equal(festivalStats.status, 200);
+  assert.equal(festivalStats.body.event.key, event);
+  assert.equal(festivalStats.body.stats.total, 1);
+  assert.equal(festivalStats.body.ownGuess.guess, 152);
+  const festivalWithOnlyRisCookie = await request('GET', { event, cookie: original.cookie });
+  assert.equal(festivalWithOnlyRisCookie.body.ownGuess, null);
   assert.equal((await request('GET', { event: 'unknown' })).status, 400);
 });

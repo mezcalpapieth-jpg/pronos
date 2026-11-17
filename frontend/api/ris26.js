@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import { neon } from '@neondatabase/serverless';
 import { applyCors } from './_lib/cors.js';
 import { clientIp, rateLimit } from './_lib/rate-limit.js';
-import { FESTIVAL_JAR_EVENT, getJarEvent } from '../shared/jar-events.js';
+import { getJarEvent } from '../shared/jar-events.js';
 
 const COOKIE_TTL_SECONDS = 60 * 60 * 24 * 30;
 const MIN_GUESS = 1;
@@ -213,8 +213,7 @@ async function submitGuess(req, res, event) {
   const { key, cookieName } = event;
   const limited = rateLimit(req, res, {
     key: `${key}:post:${clientIp(req)}`,
-    // Festival attendees may share the venue's public IP.
-    limit: event === FESTIVAL_JAR_EVENT ? 120 : 20,
+    limit: 20,
     windowMs: 60_000,
   });
   if (limited) return;
@@ -268,6 +267,7 @@ export default async function handler(req, res) {
 
   const event = getJarEvent(req.query?.event);
   if (!event) return res.status(400).json({ error: 'invalid_event' });
+  if (req.method === 'POST' && event.closed) return res.status(410).json({ error: 'event_closed' });
 
   if (req.method === 'GET') {
     const limited = rateLimit(req, res, {
