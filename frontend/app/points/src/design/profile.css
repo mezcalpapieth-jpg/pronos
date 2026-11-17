@@ -159,3 +159,13 @@
   font-size: var(--text-xs);
   line-height: 1.45;
 }
+.points-profile-settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--points-space-2);
+  margin-top: var(--points-space-4);
+}
+
+.points-profile-settings-actions a {
+  text-decoration: none;
+}
