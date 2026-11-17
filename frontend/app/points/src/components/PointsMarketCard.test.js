@@ -14,3 +14,12 @@ test('points market card routes open AICM delay children back into the hub but r
   assert.match(source, /isAicmDelayCard && !isResolved[\s\S]*\? AICM_HUB_PATH/);
   assert.match(source, /: marketDetailPath/);
 });
+
+test('large cards rank three outcomes without changing the trade index and link to detail', () => {
+  assert.match(source, /displayPrice\(b\) - displayPrice\(a\) \|\| a\.index - b\.index/);
+  assert.match(source, /visibleOutcomeRows = rankedRows\.slice\(0, 3\)/);
+  assert.match(source, /const \{ index: i,[^}]*\} = row/);
+  assert.match(source, /setDrawerIndex\(i\)/);
+  assert.match(source, /className="points-card-more"\s+to=\{marketDetailPath\}/);
+  assert.doesNotMatch(source, /overflowY: 'auto'/);
+});
