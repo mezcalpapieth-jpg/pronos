@@ -77,11 +77,25 @@
 }
 
 .points-market-card .mock-card-header {
-  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: flex-start;
   gap: var(--points-space-2);
   padding-bottom: var(--points-space-2);
   border: 0;
   background: transparent;
+}
+
+.points-card-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-self: center;
+  align-items: center;
+  gap: var(--points-space-2);
+  min-width: 0;
+}
+
+.points-market-card .points-bookmark {
+  flex-shrink: 0;
 }
 
 .points-market-card .mock-card-body {
@@ -93,7 +107,6 @@
   font-size: var(--text-base);
 }
 
-.points-market-card .mock-card-cat,
 .points-market-card .mock-card-deadline,
 .points-market-card .mock-card-vol,
 .points-card-subtitle,
@@ -105,6 +118,7 @@
   text-transform: none;
 }
 
+.points-card-category,
 .points-card-status,
 .points-market-card .test-market-badge {
   padding: var(--points-space-1) var(--points-space-2);

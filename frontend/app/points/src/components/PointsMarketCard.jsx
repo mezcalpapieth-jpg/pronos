@@ -50,6 +50,13 @@ function formatVolume(n) {
   return v.toFixed(0);
 }
 
+function marketCategoryLabel(category, t) {
+  const slug = String(category ?? '').trim().toLowerCase();
+  const key = `points.cat.${slug === 'world-cup' || slug === 'nuevos-mercados' ? 'worldCup' : slug}`;
+  const label = t(key);
+  return label === key ? t('points.topic.general') : label;
+}
+
 function displayedMarketVolume(market) {
   const seed = Number(market?.volume || 0);
   const traded = Number(market?.tradeVolume || 0);
@@ -302,52 +309,54 @@ export default function PointsMarketCard({ market, userPosition }) {
       }}
     >
       <div className="mock-card-header">
-        <span className="mock-card-cat">
-          {market.category || 'General'}
-        </span>
-        {market.isTestMarket && !isAicmDelayCard && (
-          <span
-            className="mock-card-badge test-market-badge"
-            title={t('points.testMarket.tooltip')}
-          >
-            {t('points.testMarket.badge')}
+        <div className="points-card-badges">
+          <span className="points-card-category">
+            {marketCategoryLabel(market.category, t)}
           </span>
-        )}
-        {matchTypeLabel && (
-          <span className="mock-card-badge points-card-status is-accent">
-            {matchTypeLabel}
-          </span>
-        )}
-        {isResolved && (
-          <span className="mock-card-badge points-card-status is-accent">
-            {t('points.card.resolved')}
-          </span>
-        )}
-        {showLive && (
-          <span className="mock-card-badge points-card-status is-live">
-            {t('points.card.live')}
-          </span>
-        )}
-        {isClosingSoon && !isResolved && (
-          <span className="mock-card-badge points-card-status is-warning">
-            {t('points.card.closingSoon')}
-          </span>
-        )}
-        {isPending && !isResolved && !showLive && !isClosingSoon && (
-          <span className="mock-card-badge points-card-status is-warning">
-            {t('points.card.pending')}
-          </span>
-        )}
-        {isSeriesPending && !isResolved && !showLive && (
-          <span className="mock-card-badge points-card-status is-warning">
-            {t('points.series.pending')}
-          </span>
-        )}
-        {userPosition && userPosition.shares > 0 && (
-          <span className="mock-card-badge points-card-status is-accent">
-            {t('points.card.yourPos')}
-          </span>
-        )}
+          {market.isTestMarket && !isAicmDelayCard && (
+            <span
+              className="mock-card-badge test-market-badge"
+              title={t('points.testMarket.tooltip')}
+            >
+              {t('points.testMarket.badge')}
+            </span>
+          )}
+          {matchTypeLabel && (
+            <span className="mock-card-badge points-card-status is-accent">
+              {matchTypeLabel}
+            </span>
+          )}
+          {isResolved && (
+            <span className="mock-card-badge points-card-status is-accent">
+              {t('points.card.resolved')}
+            </span>
+          )}
+          {showLive && (
+            <span className="mock-card-badge points-card-status is-live">
+              {t('points.card.live')}
+            </span>
+          )}
+          {isClosingSoon && !isResolved && (
+            <span className="mock-card-badge points-card-status is-warning">
+              {t('points.card.closingSoon')}
+            </span>
+          )}
+          {isPending && !isResolved && !showLive && !isClosingSoon && (
+            <span className="mock-card-badge points-card-status is-warning">
+              {t('points.card.pending')}
+            </span>
+          )}
+          {isSeriesPending && !isResolved && !showLive && (
+            <span className="mock-card-badge points-card-status is-warning">
+              {t('points.series.pending')}
+            </span>
+          )}
+          {userPosition && userPosition.shares > 0 && (
+            <span className="mock-card-badge points-card-status is-accent">
+              {t('points.card.yourPos')}
+            </span>
+          )}
+        </div>
         <PointsBookmark market={market} />
       </div>
 
