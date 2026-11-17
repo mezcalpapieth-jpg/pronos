@@ -96,7 +96,7 @@ export default function PointsCategoryBar() {
           data-overflow-start={clippedStart || undefined}
           data-overflow-end={clippedEnd || undefined}
         >
-          {CATEGORY_TABS.filter(cat => mode !== 'onchain' || !cat.stocks).map(cat => (
+          {CATEGORY_TABS.filter(cat => mode !== 'onchain' || cat.slug !== 'stocks').map(cat => (
             <Pill
               as="button"
               type="button"

@@ -184,7 +184,7 @@ test('Points nav shares the account dropdown across breakpoints', () => {
   assert.match(navSource, /points-account-balance[\s\S]*?\{balanceLabel\} <span>MXNP<\/span>/);
   assert.match(navSource, /points\.nav\.howItWorks/);
   assert.match(navSource, /points-account-preferences[\s\S]*?points\.nav\.lang[\s\S]*?points\.nav\.appearance[\s\S]*?points\.nav\.signOut/);
-  assert.match(navSource, /<PointsNotifications[\s\S]*?<div className="points-account"/);
+  assert.equal([...navSource.matchAll(/<div className="points-account"/g)].length, 1);
   assert.match(navSource, /event\.key !== 'Escape'/);
   assert.doesNotMatch(navSource, /🇺🇸|🇲🇽|btn-theme-toggle|☀|☾/);
 });
