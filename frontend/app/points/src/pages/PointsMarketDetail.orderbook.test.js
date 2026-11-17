@@ -85,7 +85,7 @@ test('points market detail supports local parlay slip actions', () => {
   assert.match(detailSource, /handleAddParlayLeg/);
   assert.match(detailSource, /quoteParlay/);
   assert.match(detailSource, /createParlay/);
-  assert.match(detailSource, /selectionMode=\{tradeMode\}/);
+  assert.match(detailSource, /renderTradeOutcomes\(handleBuyClick, tradeMode\)/);
   assert.doesNotMatch(detailSource, /\+ Combo/);
   assert.match(detailSource, /Combinada/);
 });
