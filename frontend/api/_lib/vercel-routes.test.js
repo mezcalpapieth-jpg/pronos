@@ -81,6 +81,13 @@ test('AICM flight-board oracle cron runs at the evidence collection cadence', ()
   );
 });
 
+test('resolution email delivery runs every five minutes in both Vercel configs', () => {
+  const path = '/api/cron/points-notification-email';
+  const schedule = '*/5 * * * *';
+  assert.ok(hasCron(path, schedule));
+  assert.ok(rootVercelConfig.crons.some(cron => cron.path === path && cron.schedule === schedule));
+});
+
 test('public user profile route hard-refreshes through the points SPA', () => {
   assert.ok(
     hasRule(vercelConfig.rewrites, '/points/u/:username', '/points/'),

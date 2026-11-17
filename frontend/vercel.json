@@ -30,6 +30,10 @@
       "schedule": "*/20 * * * *"
     },
     {
+      "path": "/api/cron/points-notification-email",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/points-tournament-snapshot",
       "schedule": "0 6 * * *"
     }
