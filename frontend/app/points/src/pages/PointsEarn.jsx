@@ -11,11 +11,12 @@
  * Portfolio page and gives users a clear "here's how to farm MXNP" hub.
  */
 import React, { useEffect, useState } from 'react';
-import { Camera, Music2, X } from 'lucide-react';
+import { Check, Instagram, Music2, X } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
 import { useLang, useT } from '@app/lib/i18n.js';
 import { useIsMobile } from '@app/lib/useIsMobile.js';
+import { Button, Card, Checkbox, Input } from '../ui/index.jsx';
 import SocialTaskAccountPrompt from '../components/SocialTaskAccountPrompt.jsx';
 import { hasSocialTaskAccount, SOCIAL_LINKS_CHANGED_EVENT } from '../lib/socialTaskAccount.js';
 import {
@@ -166,10 +167,10 @@ function DailyClaimCard({ onClaimed, alreadyClaimedToday: initialClaimed, nextCl
     : 'Reclamar';
 
   return (
-    <section style={panelStyle}>
-      <div style={eyebrowStyle}>Reclamo diario</div>
-      <h3 style={panelTitleStyle}>100 MXNP hoy, +20 MXNP por cada día consecutivo</h3>
-      <p style={panelBodyStyle}>
+    <Card className="points-profile-panel">
+      <div className="points-profile-eyebrow">Reclamo diario</div>
+      <h3 className="points-profile-title">100 MXNP hoy, +20 MXNP por cada día consecutivo</h3>
+      <p className="points-profile-description">
         Día 1 = 100 MXNP. Día 2 = 120. Día 3 = 140. El reclamo llega hasta 200 MXNP.
         Entra todos los días para mantener la racha; si te saltas un día, vuelves al día 1.
       </p>
@@ -204,7 +205,7 @@ function DailyClaimCard({ onClaimed, alreadyClaimedToday: initialClaimed, nextCl
       {locked && (
         <p style={{
           fontFamily: 'var(--font-mono)',
-          fontSize: 10,
+          fontSize: 'var(--text-xs)',
           color: 'var(--text-muted)',
           textAlign: 'center',
           marginTop: 8,
@@ -213,7 +214,7 @@ function DailyClaimCard({ onClaimed, alreadyClaimedToday: initialClaimed, nextCl
           Se reinicia a medianoche de Ciudad de México.
         </p>
       )}
-    </section>
+    </Card>
   );
 }
 
@@ -282,10 +283,10 @@ function ReferralCard() {
   if (!data?.authenticated) return null;
 
   return (
-    <section style={panelStyle}>
-      <div style={eyebrowStyle}>Programa de referidos</div>
-      <h3 style={panelTitleStyle}>+100 MXNP por cada amigo que se registre</h3>
-      <p style={panelBodyStyle}>
+    <Card className="points-profile-panel">
+      <div className="points-profile-eyebrow">Programa de referidos</div>
+      <h3 className="points-profile-title">+100 MXNP por cada amigo que se registre</h3>
+      <p className="points-profile-description">
         Comparte tu link único. Cuando alguien crea su cuenta usándolo, tú recibes
         <strong style={{ color: 'var(--green)' }}> 100 MXNP</strong> y ellos reciben
         <strong style={{ color: 'var(--green)' }}> 250 MXNP</strong>. El bono de invitador
@@ -298,14 +299,14 @@ function ReferralCard() {
         gap: 8,
         background: 'var(--surface2)',
         border: '1px solid var(--border)',
-        borderRadius: 10,
+        borderRadius: 'var(--points-radius-md)',
         padding: '10px 12px',
         marginBottom: 12,
       }}>
         <span style={{
           flex: 1, minWidth: 0,
           fontFamily: 'var(--font-mono)',
-          fontSize: 12,
+          fontSize: 'var(--text-xs)',
           color: 'var(--text-secondary)',
           overflow: 'hidden',
           textOverflow: 'ellipsis',
@@ -318,9 +319,9 @@ function ReferralCard() {
           style={{
             background: 'rgba(0,232,122,0.1)',
             border: '1px solid rgba(0,232,122,0.3)',
-            borderRadius: 6,
+            borderRadius: 'var(--points-radius-sm)',
             padding: '6px 12px',
-            fontSize: 10,
+            fontSize: 'var(--text-xs)',
             fontFamily: 'var(--font-mono)',
             color: 'var(--green)',
             cursor: 'pointer',
@@ -346,9 +347,9 @@ function ReferralCard() {
               padding: '10px 8px',
               background: `${s.color}15`,
               border: `1px solid ${s.color}40`,
-              borderRadius: 8,
+              borderRadius: 'var(--points-radius-sm)',
               fontFamily: 'var(--font-mono)',
-              fontSize: 11,
+              fontSize: 'var(--text-xs)',
               color: s.color,
               cursor: 'pointer',
               letterSpacing: '0.06em',
@@ -375,7 +376,7 @@ function ReferralCard() {
           <div style={{ ...statValStyle, color: 'var(--green)' }}>+{fmt(data.totalEarned)}</div>
         </div>
       </div>
-    </section>
+    </Card>
   );
 }
 
@@ -480,11 +481,11 @@ function InstallAppBonusCard({ onClaimed }) {
   }
 
   return (
-    <section style={panelStyle}>
-      <div style={eyebrowStyle}>{t('points.earn.install.eyebrow')}</div>
-      <h3 style={panelTitleStyle}>{t('points.earn.install.title')}</h3>
-      <p style={panelBodyStyle}>{t('points.earn.install.body')}</p>
-      <p style={{ ...panelBodyStyle, marginTop: 10, color: 'var(--text-muted)' }}>
+    <Card className="points-profile-panel">
+      <div className="points-profile-eyebrow">{t('points.earn.install.eyebrow')}</div>
+      <h3 className="points-profile-title">{t('points.earn.install.title')}</h3>
+      <p className="points-profile-description">{t('points.earn.install.body')}</p>
+      <p className="points-profile-description points-profile-provider-note">
         {detail}
       </p>
 
@@ -524,7 +525,7 @@ function InstallAppBonusCard({ onClaimed }) {
           background: 'var(--surface3)',
           color: 'var(--text-muted)',
           border: '1px solid var(--border)',
-          borderRadius: 10,
+          borderRadius: 'var(--points-radius-md)',
           fontFamily: 'var(--font-body)',
           fontWeight: 700,
           textAlign: 'center',
@@ -532,7 +533,7 @@ function InstallAppBonusCard({ onClaimed }) {
           {t('points.earn.install.claimed')}
         </div>
       )}
-    </section>
+    </Card>
   );
 }
 
@@ -557,98 +558,52 @@ function SocialTaskRow({ task, onSubmit }) {
   const network = socialTaskNetworkLabel(task);
   const account = socialTaskAccountText(task);
 
-  const STATUS_COPY = {
-    not_submitted: { label: isAutoVerify ? 'Verificar' : 'Enviar revisión', primary: true,  disabled: false },
-    pending:       { label: 'En revisión',      primary: false, disabled: true  },
-    approved:      { label: 'Aprobado',         primary: false, disabled: true  },
-    rejected:      { label: isAutoVerify ? 'Verificar otra vez' : 'Rechazado · reintentar', primary: true, disabled: false },
-  };
-  const ui = STATUS_COPY[task.status] || STATUS_COPY.not_submitted;
+  const status = task.status || 'not_submitted';
+  const approved = status === 'approved';
+  const disabled = approved || status === 'pending';
+  const action = disabled
+    ? status
+    : isAutoVerify
+      ? (status === 'rejected' ? 'verifyAgain' : 'verify')
+      : (status === 'rejected' ? 'retry' : 'submit');
 
-  async function handle() {
-    if (ui.disabled) return;
+  async function handle(event) {
+    if (disabled) return;
     setSubmitting(true);
     try {
-      await onSubmit(task);
+      await onSubmit(task, event.currentTarget);
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      gap: 12,
-      padding: '14px 16px',
-      background: 'var(--surface2)',
-      border: '1px solid var(--border)',
-      borderRadius: 10,
-    }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--text-primary)', marginBottom: 4 }}>
-          {task.label}
-        </div>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)' }}>
-          {task.description}
-        </div>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-secondary)', marginTop: 4 }}>
-          {account
-            ? t('points.earn.socialTask.savedAccount', { account })
-            : network && t('points.earn.socialTask.missingAccount', { network })}
-        </div>
-        {task.status === 'rejected' && task.rejectionNote && (
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--danger)', marginTop: 4 }}>
-            Motivo: {task.rejectionNote}
-          </div>
+    <div className="points-profile-task-row">
+      <div className="points-profile-task-copy">
+        <strong>{task.label}</strong>
+        <p>{task.description}</p>
+        {(account || network) && (
+          <p>
+            {account
+              ? t('points.earn.socialTask.savedAccount', { account })
+              : t('points.earn.socialTask.missingAccount', { network })}
+          </p>
+        )}
+        {status === 'rejected' && task.rejectionNote && (
+          <p className="points-profile-error">{t('points.earn.socialTask.rejectionNote', { note: task.rejectionNote })}</p>
         )}
       </div>
-      <div style={{ textAlign: 'right', flexShrink: 0 }}>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: 'var(--green)' }}>
-          +{task.reward}
-        </div>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)' }}>MXNP</div>
-      </div>
-      <div style={{ display: 'flex', gap: 8, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+      <div className="points-profile-task-actions">
+        <span className="points-profile-reward"><span className="points-ui-number">+{task.reward}</span> MXNP</span>
         {task.url && (
-          <a
-            href={task.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn-ghost"
-            style={{
-              padding: '8px 12px',
-              fontSize: 11,
-              textDecoration: 'none',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            Abrir
-          </a>
+          <Button as="a" href={task.url} target="_blank" rel="noopener noreferrer">
+            {t('points.earn.socialTask.open')}
+          </Button>
         )}
-        <button
-          onClick={handle}
-          disabled={ui.disabled || submitting}
-          style={{
-            padding: '8px 14px',
-            background: ui.primary ? 'var(--green)' : 'var(--surface3)',
-            color: ui.primary ? '#000' : 'var(--text-muted)',
-            border: ui.primary ? 'none' : '1px solid var(--border)',
-            borderRadius: 8,
-            fontFamily: 'var(--font-mono)',
-            fontSize: 11,
-            fontWeight: 700,
-            letterSpacing: '0.06em',
-            cursor: ui.disabled || submitting ? 'not-allowed' : 'pointer',
-            minWidth: 128,
-            opacity: ui.disabled || submitting ? 0.6 : 1,
-            textTransform: 'uppercase',
-          }}
-        >
-          {submitting ? '…' : ui.label}
-        </button>
+        <Button onClick={handle} disabled={disabled || submitting} variant={disabled ? 'quiet' : 'primary'}>
+          {approved && <Check size={16} aria-hidden="true" />}
+          {submitting ? t('points.earn.socialTask.sending') : t(`points.earn.socialTask.${action}`)}
+        </Button>
       </div>
     </div>
   );
@@ -671,7 +626,7 @@ const SOCIAL_PROVIDERS = [
   {
     key: 'instagram',
     label: 'Instagram',
-    icon: Camera,
+    icon: Instagram,
     reward: 100,
     available: false,
     manualAllowed: true,
@@ -794,25 +749,13 @@ function SocialLinksCard() {
   }
 
   return (
-    <section style={panelStyle}>
-      <div style={eyebrowStyle}>
-        {lang === 'en' ? 'Verified accounts' : 'Cuentas verificadas'}
-      </div>
-      <h3 style={panelTitleStyle}>
-        {lang === 'en' ? 'Connect your social accounts' : 'Conecta tus redes sociales'}
-      </h3>
-      <p style={panelBodyStyle}>
-        {lang === 'en'
-          ? 'Save your social usernames so admins can review tasks and you can show them on your profile whenever you want to promote them. Every network starts private.'
-          : 'Guarda tus usuarios sociales para que admins puedan revisar tareas y para mostrarlos en tu perfil cuando quieras promoverlos. Cada red empieza privada.'}
-      </p>
-      {err && (
-        <div style={{ ...noticeStyle, color: 'var(--danger)' }}>{err}</div>
-      )}
-      {ok && (
-        <div style={{ ...noticeStyle, color: 'var(--green)' }}>{ok}</div>
-      )}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
+    <Card className="points-profile-panel">
+      <div className="points-profile-eyebrow">{t('points.earn.socialLinks.eyebrow')}</div>
+      <h3 className="points-profile-title">{t('points.earn.socialLinks.title')}</h3>
+      <p className="points-profile-description">{t('points.earn.socialLinks.description')}</p>
+      {err && <p role="alert" className="points-profile-notice points-profile-error">{err}</p>}
+      {ok && <p role="status" className="points-profile-notice">{ok}</p>}
+      <div className="points-profile-social-list">
         {SOCIAL_PROVIDERS.map(p => {
           const link = links?.[p.key] || null;
           const isLinked = !!link;
@@ -822,177 +765,75 @@ function SocialLinksCard() {
           const canSave = isLinked || p.manualAllowed;
           const handleValue = canEditHandle ? draft.handle : (link?.handle || '');
           const saving = saveBusy === p.key;
+          const actionPending = saving || busy === p.key;
           const ProviderIcon = p.icon;
+          const method = isLinked
+            ? (link.verified ? 'verified' : 'manual')
+            : (p.available ? 'automatic' : 'manual');
           return (
-            <div
-              key={p.key}
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '28px minmax(0, 1fr)',
-                gap: 12,
-                padding: '14px 16px',
-                background: 'var(--surface2)',
-                border: '1px solid var(--border)',
-                borderRadius: 10,
-              }}
-            >
-              <div style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: 12, fontWeight: 700, width: 28, textAlign: 'center',
-                letterSpacing: '0.04em',
-                filter: locked ? 'grayscale(1)' : 'none',
-                opacity: locked ? 0.5 : 1,
-              }}>
-                <ProviderIcon aria-hidden="true" size={18} />
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  justifyContent: 'space-between',
-                  flexWrap: 'wrap',
-                  marginBottom: 5,
-                }}>
-                  <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--text-primary)' }}>
-                    {p.label}
-                  </div>
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                    {isLinked
-                      ? (link.verified ? (lang === 'en' ? 'Verified' : 'Verificado') : 'Manual')
-                      : (p.available ? t('points.earn.socialLinks.automatic') : 'Manual')}
-                  </div>
+            <div key={p.key} className="points-profile-provider">
+              <ProviderIcon aria-hidden="true" size={18} />
+              <div>
+                <div className="points-profile-provider-name">
+                  <strong>{p.label}</strong>
+                  <span>{t(`points.earn.socialLinks.${method}`)}</span>
                 </div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', marginBottom: 10 }}>
+                <p className="points-profile-provider-help">
                   {isLinked
-                    ? (lang === 'en' ? `Saved as @${link.handle || '-'}` : `Guardado como @${link.handle || '-'}`)
-                    : (p.manualAllowed
-                      ? (lang === 'en' ? 'Add your username manually.' : 'Agrega tu usuario manualmente.')
-                      : t('points.earn.socialLinks.automaticHelp'))}
-                </div>
+                    ? t('points.earn.socialLinks.savedAs', { handle: link.handle || '–' })
+                    : t(p.manualAllowed ? 'points.earn.socialLinks.manualHelp' : 'points.earn.socialLinks.automaticHelp')}
+                </p>
                 {canSave && (
-                  <input
+                  <Input
                     value={handleValue}
-                    onChange={(e) => updateDraft(p.key, { handle: e.target.value })}
-                    disabled={!canEditHandle || saving || busy === p.key}
-                    placeholder="@usuario"
-                    style={{
-                      width: '100%',
-                      boxSizing: 'border-box',
-                      background: 'rgba(0,0,0,0.18)',
-                      border: '1px solid var(--border)',
-                      borderRadius: 8,
-                      color: canEditHandle ? 'var(--text-primary)' : 'var(--text-muted)',
-                      padding: '9px 10px',
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: 11,
-                      outline: 'none',
-                    }}
+                    onChange={e => updateDraft(p.key, { handle: e.target.value })}
+                    disabled={!canEditHandle || actionPending}
+                    placeholder={t('points.earn.socialLinks.placeholder')}
+                    aria-label={t('points.earn.socialLinks.username', { network: p.label })}
                   />
                 )}
-                <div style={{
-                  display: 'flex',
-                  gap: 8,
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  flexWrap: 'wrap',
-                  marginTop: 10,
-                }}>
-                  <label style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    color: 'var(--text-muted)',
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: 10,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.06em',
-                    cursor: canSave ? 'pointer' : 'not-allowed',
-                  }}>
-                    <input
-                      type="checkbox"
-                      checked={!!draft.isPublic}
-                      disabled={!canSave || saving || busy === p.key}
-                      onChange={(e) => updateDraft(p.key, { isPublic: e.target.checked })}
-                    />
-                    {draft.isPublic
-                      ? (lang === 'en' ? 'Public' : 'Pública')
-                      : (lang === 'en' ? 'Private' : 'Privada')}
-                  </label>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                <div className="points-profile-provider-actions">
+                  <Checkbox
+                    checked={!!draft.isPublic}
+                    disabled={!canSave || actionPending}
+                    onChange={e => updateDraft(p.key, { isPublic: e.target.checked })}
+                  >
+                    {t(draft.isPublic ? 'points.earn.socialLinks.public' : 'points.earn.socialLinks.private')}
+                  </Checkbox>
+                  <div>
                     {!isLinked && p.available && (
-                      <button
-                        onClick={() => handleConnect(p.key)}
-                        style={socialActionButtonStyle({ primary: true })}
-                      >
-                        {lang === 'en' ? 'Connect' : 'Conectar'}
-                      </button>
+                      <Button variant="primary" onClick={() => handleConnect(p.key)}>
+                        {t('points.earn.socialLinks.connect')}
+                      </Button>
                     )}
                     {canSave && (
-                      <button
+                      <Button
                         onClick={() => handleSave(p.key)}
-                        disabled={saving || busy === p.key || !String(draft.handle || '').trim()}
-                        style={socialActionButtonStyle({ primary: false, disabled: saving || busy === p.key || !String(draft.handle || '').trim() })}
+                        disabled={actionPending || !String(draft.handle || '').trim()}
                       >
-                        {saving ? '...' : (lang === 'en' ? 'Save' : 'Guardar')}
-                      </button>
+                        {saving ? '…' : t('points.earn.socialLinks.save')}
+                      </Button>
                     )}
                     {isLinked && (
-                      <button
-                        onClick={() => handleDisconnect(p.key)}
-                        disabled={busy === p.key}
-                        style={socialActionButtonStyle({ primary: false, disabled: busy === p.key })}
-                      >
-                        {busy === p.key ? '...' : (lang === 'en' ? 'Remove' : 'Quitar')}
-                      </button>
+                      <Button onClick={() => handleDisconnect(p.key)} disabled={busy === p.key}>
+                        {busy === p.key ? '…' : t('points.earn.socialLinks.remove')}
+                      </Button>
                     )}
-                    {locked && (
-                      <button
-                        disabled
-                        style={socialActionButtonStyle({ primary: false, disabled: true })}
-                      >
-                        {lang === 'en' ? 'Soon' : 'Próximamente'}
-                      </button>
-                    )}
+                    {locked && <Button disabled>{t('points.earn.socialLinks.soon')}</Button>}
                   </div>
                 </div>
                 {!p.available && (
-                  <div style={{
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: 9,
-                    color: 'var(--text-muted)',
-                    marginTop: 8,
-                    letterSpacing: '0.04em',
-                  }}
-                  >
+                  <p className="points-profile-provider-note">
                     {t('points.earn.socialLinks.comingSoon', { network: p.label })}
-                  </div>
+                  </p>
                 )}
               </div>
             </div>
           );
         })}
       </div>
-    </section>
+    </Card>
   );
-}
-
-function socialActionButtonStyle({ primary, disabled = false } = {}) {
-  return {
-    padding: '8px 12px',
-    background: primary ? 'var(--green)' : 'transparent',
-    color: primary ? '#000' : 'var(--text-muted)',
-    border: primary ? 'none' : '1px solid var(--border)',
-    borderRadius: 8,
-    fontFamily: 'var(--font-mono)',
-    fontSize: 10,
-    fontWeight: 700,
-    letterSpacing: '0.06em',
-    cursor: disabled ? 'not-allowed' : 'pointer',
-    minWidth: 88,
-    opacity: disabled ? 0.55 : 1,
-    textTransform: 'uppercase',
-  };
 }
 
 function ProfileSettingsCard({ user, onSaved }) {
@@ -1030,12 +871,12 @@ function ProfileSettingsCard({ user, onSaved }) {
   }
 
   return (
-    <section style={panelStyle}>
-      <div style={eyebrowStyle}>{lang === 'en' ? 'Public profile' : 'Perfil público'}</div>
-      <h3 style={panelTitleStyle}>
+    <Card className="points-profile-panel">
+      <div className="points-profile-eyebrow">{lang === 'en' ? 'Public profile' : 'Perfil público'}</div>
+      <h3 className="points-profile-title">
         {lang === 'en' ? 'Personalize how others see you' : 'Personaliza cómo te ven'}
       </h3>
-      <p style={panelBodyStyle}>
+      <p className="points-profile-description">
         {lang === 'en'
           ? 'Add a name and profile picture for your public profile. Your email and phone stay private and are only visible to admins.'
           : 'Agrega tu nombre y foto para tu perfil público. Tu email y teléfono se mantienen privados y solo los ven admins.'}
@@ -1089,7 +930,7 @@ function ProfileSettingsCard({ user, onSaved }) {
           justifyContent: 'center',
           color: 'var(--text-primary)',
           fontFamily: 'var(--font-display)',
-          fontSize: 26,
+          fontSize: 'var(--text-xl)',
           lineHeight: 1,
         }}>
           {previewUrl ? (
@@ -1105,7 +946,7 @@ function ProfileSettingsCard({ user, onSaved }) {
         <div style={{ minWidth: 0 }}>
           <div style={{
             fontFamily: 'var(--font-body)',
-            fontSize: 15,
+            fontSize: 'var(--text-sm)',
             fontWeight: 800,
             color: 'var(--text-primary)',
             overflow: 'hidden',
@@ -1116,7 +957,7 @@ function ProfileSettingsCard({ user, onSaved }) {
           </div>
           <div style={{
             fontFamily: 'var(--font-mono)',
-            fontSize: 10,
+            fontSize: 'var(--text-xs)',
             color: 'var(--text-muted)',
             marginTop: 3,
           }}>
@@ -1125,9 +966,9 @@ function ProfileSettingsCard({ user, onSaved }) {
         </div>
       </div>
       <div style={{ display: 'grid', gap: 10, marginTop: 16 }}>
-        <label style={profileFieldLabelStyle}>
+        <label className="points-profile-field">
           {lang === 'en' ? 'Name' : 'Nombre'}
-          <input
+          <Input
             value={displayName}
             onChange={(e) => {
               setDisplayName(e.target.value);
@@ -1136,12 +977,11 @@ function ProfileSettingsCard({ user, onSaved }) {
             }}
             maxLength={60}
             placeholder={lang === 'en' ? 'Your public name' : 'Tu nombre público'}
-            style={profileInputStyle}
           />
         </label>
-        <label style={profileFieldLabelStyle}>
+        <label className="points-profile-field">
           {lang === 'en' ? 'Profile picture URL' : 'URL de foto de perfil'}
-          <input
+          <Input
             value={profileImageUrl}
             onChange={(e) => {
               setProfileImageUrl(e.target.value);
@@ -1149,31 +989,30 @@ function ProfileSettingsCard({ user, onSaved }) {
               setOk(null);
             }}
             placeholder="https://..."
-            style={profileInputStyle}
           />
         </label>
-        <div style={profilePhoneBoxStyle}>
-          <button
-            type="button"
+        <div className="points-profile-phone">
+          <Button
+            variant={user?.phoneRequired && !phoneOpen ? 'primary' : 'secondary'}
             onClick={() => setPhoneOpen(open => !open)}
             aria-describedby="profile-phone-privacy"
-            style={socialActionButtonStyle({ primary: user?.phoneRequired && !phoneOpen })}
+            aria-expanded={phoneOpen}
           >
             {phoneOpen
               ? (lang === 'en' ? 'Hide phone' : 'Ocultar teléfono')
               : phoneNumber?.trim()
                 ? (lang === 'en' ? 'Edit phone' : 'Editar teléfono')
                 : (lang === 'en' ? 'Add your phone' : 'Añade tu teléfono')}
-          </button>
-          <p id="profile-phone-privacy" style={{ ...profileFieldHintStyle, margin: '10px 0 0' }}>
+          </Button>
+          <p id="profile-phone-privacy" className="points-profile-hint points-profile-provider-note">
             {lang === 'en'
               ? 'Your phone number is private: only admins can see it. It will not appear on your public profile or be shared with other users.'
               : 'Tu teléfono es privado: solo los administradores pueden verlo. No se mostrará en tu perfil público ni se compartirá con otros usuarios.'}
           </p>
           {phoneOpen && (
-            <label style={{ ...profileFieldLabelStyle, marginTop: 10 }}>
+            <label className="points-profile-field points-profile-provider-note">
               {lang === 'en' ? 'Private phone' : 'Teléfono privado'}
-              <input
+              <Input
                 type="tel"
                 aria-describedby="profile-phone-privacy"
                 autoComplete="tel"
@@ -1185,10 +1024,9 @@ function ProfileSettingsCard({ user, onSaved }) {
                   setOk(null);
                 }}
                 maxLength={32}
-                placeholder={lang === 'en' ? '+52 55 0000 0000' : '+52 55 0000 0000'}
-                style={profileInputStyle}
+                placeholder="+52 55 0000 0000"
               />
-              <span style={profileFieldHintStyle}>
+              <span className="points-profile-hint">
                 {lang === 'en'
                   ? 'We will only use it to coordinate prizes or account review.'
                   : 'Lo usaremos solo para coordinar premios o revisión de cuenta.'}
@@ -1197,30 +1035,17 @@ function ProfileSettingsCard({ user, onSaved }) {
           )}
         </div>
       </div>
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 16 }}>
-        <button
-          onClick={handleSave}
-          disabled={busy}
-          style={socialActionButtonStyle({ primary: true, disabled: busy })}
-        >
+      <div className="points-profile-settings-actions">
+        <Button variant="primary" onClick={handleSave} disabled={busy}>
           {busy ? '...' : (lang === 'en' ? 'Save profile' : 'Guardar perfil')}
-        </button>
+        </Button>
         {publicProfilePath && (
-          <Link
-            to={publicProfilePath}
-            style={{
-              ...socialActionButtonStyle({ primary: false }),
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              textDecoration: 'none',
-            }}
-          >
+          <Button as={Link} to={publicProfilePath}>
             {lang === 'en' ? 'View public profile' : 'Ver perfil público'}
-          </Link>
+          </Button>
         )}
       </div>
-    </section>
+    </Card>
   );
 }
 
@@ -1240,6 +1065,7 @@ function ProfileSettingsCard({ user, onSaved }) {
 
 function SocialTasksCard() {
   const lang = useLang();
+  const translate = useT();
   const location = useLocation();
   const taskKey = new URLSearchParams(location.search).get('task');
   const [tasks, setTasks] = useState(null);
@@ -1261,11 +1087,11 @@ function SocialTasksCard() {
     return () => window.removeEventListener(SOCIAL_LINKS_CHANGED_EVENT, load);
   }, [taskKey]);
 
-  async function handleSubmit(task) {
+  async function handleSubmit(task, trigger) {
     setErr(null);
     setOk(null);
     if (!hasSocialTaskAccount(task)) {
-      setAccountTask(task);
+      setAccountTask({ task, trigger });
       return;
     }
     try {
@@ -1278,7 +1104,7 @@ function SocialTasksCard() {
       }
     } catch (e) {
       if (e?.code === 'social_account_required') {
-        setAccountTask(task);
+        setAccountTask({ task, trigger });
         return;
       }
       if ((e?.code === 'x_account_required' || e?.code === 'x_reconnect_required')
@@ -1291,52 +1117,31 @@ function SocialTasksCard() {
   }
 
   return (
-    <section style={panelStyle}>
-      {accountTask && <SocialTaskAccountPrompt key={accountTask.key} task={accountTask}
+    <Card className="points-profile-panel">
+      {accountTask && <SocialTaskAccountPrompt key={accountTask.task.key} task={accountTask.task}
+        returnFocusTo={accountTask.trigger}
         onCancel={() => setAccountTask(null)} onSaved={async link => {
-          const task = { ...accountTask, socialAccount: link.handle };
+          const task = { ...accountTask.task, socialAccount: link.handle };
           setAccountTask(null);
-          await handleSubmit(task);
+          await handleSubmit(task, accountTask.trigger);
         }} />}
-      <div style={eyebrowStyle}>Tareas sociales</div>
-      <h3 style={panelTitleStyle}>Tareas verificadas de Pronos</h3>
-      <p style={panelBodyStyle}>
-        X, Instagram, TikTok y campañas temporales siguen en revisión manual.
-        Para que sea más fácil verificar, guarda arriba tus usuarios de cada red antes de enviar revisión.
-        Algunas tareas solo aparecen desde enlaces temporales del equipo.
-      </p>
-      {err && (
-        <div style={{ ...noticeStyle, color: 'var(--danger)' }}>{err}</div>
-      )}
-      {ok && (
-        <div style={{ ...noticeStyle, color: 'var(--green)' }}>{ok}</div>
-      )}
+      <div className="points-profile-eyebrow">{translate('points.earn.socialTask.eyebrow')}</div>
+      <h3 className="points-profile-title">{translate('points.earn.socialTask.title')}</h3>
+      <p className="points-profile-description">{translate('points.earn.socialTask.description')}</p>
+      {err && <p role="alert" className="points-profile-notice points-profile-error">{err}</p>}
+      {ok && <p role="status" className="points-profile-notice">{ok}</p>}
       {!tasks && !err && (
-        <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', padding: 20 }}>
-          Cargando…
-        </div>
+        <p className="points-profile-provider-note">{translate('points.earn.socialTask.loading')}</p>
       )}
       {tasks && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 14 }}>
-          {tasks.map(t => (
-            <SocialTaskRow key={t.key} task={t} onSubmit={handleSubmit} />
-          ))}
+        <div className="points-profile-task-list">
+          {tasks.map(t => <SocialTaskRow key={t.key} task={t} onSubmit={handleSubmit} />)}
           {tasks.length === 0 && (
-            <div style={{
-              padding: '16px',
-              border: '1px solid var(--border)',
-              borderRadius: 10,
-              background: 'var(--surface2)',
-              color: 'var(--text-muted)',
-              fontFamily: 'var(--font-mono)',
-              fontSize: 11,
-            }}>
-              No hay tareas sociales disponibles.
-            </div>
+            <p className="points-profile-provider-note">{translate('points.earn.socialTask.empty')}</p>
           )}
         </div>
       )}
-    </section>
+    </Card>
   );
 }
 
@@ -1359,11 +1164,11 @@ function DeveloperApiCard() {
       };
 
   return (
-    <section style={panelStyle}>
-      <div style={eyebrowStyle}>{copy.eyebrow}</div>
-      <h3 style={panelTitleStyle}>{copy.title}</h3>
-      <p style={panelBodyStyle}>{copy.body}</p>
-      <p style={{ ...panelBodyStyle, marginTop: 10, color: 'var(--text-muted)' }}>
+    <Card className="points-profile-panel">
+      <div className="points-profile-eyebrow">{copy.eyebrow}</div>
+      <h3 className="points-profile-title">{copy.title}</h3>
+      <p className="points-profile-description">{copy.body}</p>
+      <p className="points-profile-description points-profile-provider-note">
         {copy.meta}
       </p>
       <Link
@@ -1376,12 +1181,12 @@ function DeveloperApiCard() {
           width: '100%',
           marginTop: 18,
           padding: '12px 18px',
-          borderRadius: 8,
+          borderRadius: 'var(--points-radius-sm)',
           background: 'transparent',
           border: '1px solid rgba(255, 85, 0, 0.5)',
           color: 'var(--orange)',
           fontFamily: 'var(--font-mono)',
-          fontSize: 11,
+          fontSize: 'var(--text-xs)',
           fontWeight: 900,
           letterSpacing: '0.08em',
           textTransform: 'uppercase',
@@ -1390,7 +1195,7 @@ function DeveloperApiCard() {
       >
         {copy.cta}
       </Link>
-    </section>
+    </Card>
   );
 }
 
@@ -1420,7 +1225,7 @@ export default function PointsEarn({ onOpenLogin }) {
   if (!authenticated) {
     return (
       <main style={{ padding: '80px 48px', maxWidth: 720, margin: '0 auto', textAlign: 'center' }}>
-        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 40, marginBottom: 16 }}>
+        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-3xl)', marginBottom: 16 }}>
           {t('points.earn.title')}
         </h1>
         <p style={{ color: 'var(--text-muted)', marginBottom: 24 }}>
@@ -1452,7 +1257,7 @@ export default function PointsEarn({ onOpenLogin }) {
         }}>
           {t('points.earn.title')}
         </h1>
-        <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 13 }}>
+        <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)' }}>
           Balance actual:&nbsp;
           <strong style={{ color: 'var(--green)', fontWeight: 700 }}>
             {fmt(balance)} MXNP
@@ -1489,9 +1294,9 @@ export default function PointsEarn({ onOpenLogin }) {
         padding: '12px 16px',
         background: 'var(--surface1)',
         border: '1px solid var(--border)',
-        borderRadius: 10,
+        borderRadius: 'var(--points-radius-md)',
         fontFamily: 'var(--font-mono)',
-        fontSize: 10,
+        fontSize: 'var(--text-xs)',
         color: 'var(--text-muted)',
         lineHeight: 1.7,
       }}>
@@ -1504,83 +1309,11 @@ export default function PointsEarn({ onOpenLogin }) {
 }
 
 // ─── Shared styles ──────────────────────────────────────────────────────────
-const panelStyle = {
-  background: 'var(--surface1)',
-  border: '1px solid var(--border)',
-  borderRadius: 14,
-  padding: '24px 26px',
-};
-
-const eyebrowStyle = {
-  fontFamily: 'var(--font-mono)',
-  fontSize: 10,
-  letterSpacing: '0.14em',
-  color: 'var(--green)',
-  textTransform: 'uppercase',
-  marginBottom: 8,
-};
-
-const panelTitleStyle = {
-  fontFamily: 'var(--font-body)',
-  fontSize: 18,
-  color: 'var(--text-primary)',
-  lineHeight: 1.3,
-  margin: '0 0 8px',
-  fontWeight: 600,
-};
-
-const panelBodyStyle = {
-  fontFamily: 'var(--font-body)',
-  fontSize: 13,
-  color: 'var(--text-secondary)',
-  lineHeight: 1.6,
-  margin: 0,
-};
-
-const profileFieldLabelStyle = {
-  display: 'grid',
-  gap: 6,
-  color: 'var(--text-muted)',
-  fontFamily: 'var(--font-mono)',
-  fontSize: 10,
-  letterSpacing: '0.08em',
-  textTransform: 'uppercase',
-};
-
-const profileInputStyle = {
-  width: '100%',
-  boxSizing: 'border-box',
-  background: 'rgba(0,0,0,0.18)',
-  border: '1px solid var(--border)',
-  borderRadius: 8,
-  color: 'var(--text-primary)',
-  padding: '10px 11px',
-  fontFamily: 'var(--font-body)',
-  fontSize: 14,
-  outline: 'none',
-};
-
-const profilePhoneBoxStyle = {
-  border: '1px solid rgba(255,255,255,0.08)',
-  borderRadius: 8,
-  padding: 10,
-  background: 'rgba(255,255,255,0.025)',
-};
-
-const profileFieldHintStyle = {
-  color: 'var(--text-muted)',
-  fontFamily: 'var(--font-body)',
-  fontSize: 12,
-  letterSpacing: 0,
-  lineHeight: 1.45,
-  textTransform: 'none',
-};
-
 const noticeStyle = {
   fontFamily: 'var(--font-mono)',
-  fontSize: 11,
+  fontSize: 'var(--text-xs)',
   padding: '10px 12px',
-  borderRadius: 8,
+  borderRadius: 'var(--points-radius-sm)',
   marginTop: 12,
   background: 'var(--surface2)',
   border: '1px solid var(--border)',
@@ -1590,13 +1323,13 @@ const statBoxStyle = {
   padding: '12px 14px',
   background: 'var(--surface2)',
   border: '1px solid var(--border)',
-  borderRadius: 10,
+  borderRadius: 'var(--points-radius-md)',
   textAlign: 'center',
 };
 
 const statLabelStyle = {
   fontFamily: 'var(--font-mono)',
-  fontSize: 9,
+  fontSize: 'var(--text-xs)',
   letterSpacing: '0.1em',
   color: 'var(--text-muted)',
   textTransform: 'uppercase',
@@ -1605,6 +1338,6 @@ const statLabelStyle = {
 
 const statValStyle = {
   fontFamily: 'var(--font-display)',
-  fontSize: 22,
+  fontSize: 'var(--text-lg)',
   letterSpacing: '0.02em',
 };

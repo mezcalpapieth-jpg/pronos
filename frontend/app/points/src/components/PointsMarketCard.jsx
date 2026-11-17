@@ -19,6 +19,7 @@
  *                  badge renders at the top of the card.
  */
 import React, { useState } from 'react';
+import { Check } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { localizedOutcomeLabels, localizedTitle, useLang, useT } from '@app/lib/i18n.js';
 import { findTeamByName, teamProfilePath } from '@app/lib/teamProfiles.js';
@@ -87,7 +88,7 @@ function OutcomeLogo({ src, label }) {
           border: '1px solid var(--border)',
           color: 'var(--text-secondary)',
           fontFamily: 'var(--font-mono)',
-          fontSize: 9,
+          fontSize: 'var(--text-xs)',
           fontWeight: 700,
           flexShrink: 0,
         }}
@@ -125,7 +126,7 @@ function MarketThumbnail({ market }) {
       style={{
         width: 46,
         height: 46,
-        borderRadius: 8,
+        borderRadius: 'var(--points-radius-sm)',
         objectFit: 'cover',
         background: 'var(--surface2)',
         border: '1px solid var(--border)',
@@ -250,35 +251,9 @@ export default function PointsMarketCard({ market, userPosition }) {
     navigate(teamProfilePath(team));
   }
 
-  // Card palette is restricted to three hue families — green, yellow,
-  // red — with three shades each. Ordered so adjacent indices always
-  // land on a different hue (med-G, med-Y, med-R, light-G, light-Y,
-  // light-R, dark-G, dark-Y, dark-R). Detail-page buy buttons keep
-  // their wider 8-color palette; this is card-only per product
-  // feedback (traffic-light feel, no blues/purples bleeding in).
-  const ACCENTS = [
-    // Medium row — also the W/D/L default for 3-outcome markets.
-    { bg: 'var(--yes-dim)', border: 'rgba(22,163,74,0.25)', fg: 'var(--yes)' },            // green-medium
-    { bg: 'rgba(245,158,11,0.1)',                border: 'rgba(245,158,11,0.3)',  fg: 'var(--gold)' }, // gold (yellow-medium)
-    { bg: 'rgba(255,59,59,0.08)',                border: 'rgba(255,59,59,0.3)',   fg: '#ff3b3b' },              // red-medium
-    // Light row
-    { bg: 'rgba(74,222,128,0.1)',                border: 'rgba(74,222,128,0.3)',  fg: '#4ade80' },              // green-light
-    { bg: 'rgba(253,224,71,0.1)',                border: 'rgba(253,224,71,0.35)', fg: '#fde047' },              // yellow-light
-    { bg: 'rgba(248,113,113,0.1)',               border: 'rgba(248,113,113,0.3)', fg: '#f87171' },              // red-light (salmon)
-    // Dark row
-    { bg: 'rgba(21,128,61,0.12)',                border: 'rgba(21,128,61,0.4)',   fg: '#16a34a' },              // green-dark
-    { bg: 'rgba(161,98,7,0.12)',                 border: 'rgba(161,98,7,0.4)',    fg: '#b45309' },              // yellow-dark (amber)
-    { bg: 'rgba(185,28,28,0.12)',                border: 'rgba(185,28,28,0.4)',   fg: '#dc2626' },              // red-dark (burgundy)
-  ];
-  const accentFor = (i) => {
-    // Binary: canonical green / red pair.
-    if (outcomes.length === 2) return i === 0 ? ACCENTS[0] : ACCENTS[2];
-    // 3-outcome W/D/L: green / gold / red (traffic light).
-    if (outcomes.length === 3) return ACCENTS[i];
-    // N > 3: cycle the 9 shades modulo. Each "row" of 3 is one hue family;
-    // cycling keeps adjacent outcomes on different hues.
-    return ACCENTS[i % ACCENTS.length];
-  };
+  const normalizedSides = outcomes.map(label => String(label).normalize('NFD').replace(/\p{Diacritic}/gu, '').trim().toLowerCase());
+  const yesIndex = normalizedSides.findIndex(side => side === 'si' || side === 'yes');
+  const isYesNo = normalizedSides.length === 2 && yesIndex >= 0 && normalizedSides.includes('no');
   const outcomeRows = outcomes.map((label, i) => ({
     index: i,
     label,
@@ -305,7 +280,7 @@ export default function PointsMarketCard({ market, userPosition }) {
 
   return (
     <div
-      className="mock-card"
+      className="mock-card points-market-card points-ui-card"
       ref={cardRef}
       onClick={navigateToCardTarget}
       role="button"
@@ -327,75 +302,37 @@ export default function PointsMarketCard({ market, userPosition }) {
           </span>
         )}
         {matchTypeLabel && (
-          <span className="mock-card-badge" style={{
-            background: 'rgba(255,85,0,0.08)',
-            border: '1px solid rgba(255,85,0,0.22)',
-            color: 'var(--orange)',
-            padding: '2px 6px',
-            borderRadius: 4,
-            fontFamily: 'var(--font-mono)',
-            fontSize: 9,
-            fontWeight: 700,
-            letterSpacing: '0.08em',
-          }}>
+          <span className="mock-card-badge points-card-status is-accent">
             {matchTypeLabel}
           </span>
         )}
         {isResolved && (
-          <span className="mock-card-badge live" style={{ background: 'rgba(0,232,122,0.12)', color: 'var(--green)', padding: '2px 6px', borderRadius: 4, fontFamily: 'var(--font-mono)', fontSize: 9 }}>
+          <span className="mock-card-badge points-card-status is-accent">
             {t('points.card.resolved')}
           </span>
         )}
         {showLive && (
-          <span className="mock-card-badge" style={{
-            background: 'rgba(220,38,38,0.18)',
-            color: 'var(--danger)',
-            padding: '2px 6px',
-            borderRadius: 4,
-            fontFamily: 'var(--font-mono)',
-            fontSize: 9,
-            fontWeight: 700,
-            letterSpacing: '0.08em',
-            animation: 'pronos-live-pulse 1.4s ease-in-out infinite',
-          }}>
+          <span className="mock-card-badge points-card-status is-live">
             {t('points.card.live')}
           </span>
         )}
         {isClosingSoon && !isResolved && (
-          <span className="mock-card-badge" style={{
-            background: 'rgba(245,158,11,0.14)',
-            color: 'var(--warning)',
-            padding: '2px 6px',
-            borderRadius: 4,
-            fontFamily: 'var(--font-mono)',
-            fontSize: 9,
-            fontWeight: 700,
-            letterSpacing: '0.08em',
-          }}>
+          <span className="mock-card-badge points-card-status is-warning">
             {t('points.card.closingSoon')}
           </span>
         )}
         {isPending && !isResolved && !showLive && !isClosingSoon && (
-          <span className="mock-card-badge" style={{ background: 'rgba(245,158,11,0.12)', color: 'var(--warning)', padding: '2px 6px', borderRadius: 4, fontFamily: 'var(--font-mono)', fontSize: 9 }}>
+          <span className="mock-card-badge points-card-status is-warning">
             {t('points.card.pending')}
           </span>
         )}
         {isSeriesPending && !isResolved && !showLive && (
-          <span className="mock-card-badge" style={{ background: 'rgba(245,158,11,0.12)', color: 'var(--warning)', padding: '2px 6px', borderRadius: 4, fontFamily: 'var(--font-mono)', fontSize: 9 }}>
+          <span className="mock-card-badge points-card-status is-warning">
             {t('points.series.pending')}
           </span>
         )}
         {userPosition && userPosition.shares > 0 && (
-          <span style={{
-            background: 'rgba(0,232,122,0.12)',
-            color: 'var(--green)',
-            padding: '2px 8px',
-            borderRadius: 10,
-            fontFamily: 'var(--font-mono)',
-            fontSize: 9,
-            letterSpacing: '0.06em',
-            textTransform: 'uppercase',
-          }}>
+          <span className="mock-card-badge points-card-status is-accent">
             {t('points.card.yourPos')}
           </span>
         )}
@@ -412,17 +349,7 @@ export default function PointsMarketCard({ market, userPosition }) {
           <div style={{ minWidth: 0, flex: 1 }}>
             <p className="mock-card-title" style={{ margin: 0 }}>{marketTitle}</p>
             {market.seriesMeta?.subtitle && (
-              <div style={{
-                marginTop: 6,
-                fontFamily: 'var(--font-mono)',
-                fontSize: 10,
-                letterSpacing: '0.06em',
-                color: 'var(--text-secondary)',
-                textTransform: 'uppercase',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}>
+              <div className="points-card-subtitle">
                 {market.seriesMeta.subtitle}
               </div>
             )}
@@ -468,9 +395,9 @@ export default function PointsMarketCard({ market, userPosition }) {
                   : (Number(market.outcome) === i ? 1 : 0))
               : null;
             const pct = Math.round((resolvedPrice ?? livePrice) * 100);
-            const accent = isResolved
-              ? (pct === 100 ? ACCENTS[0] : { bg: 'var(--surface2)', border: 'var(--border)', fg: 'var(--text-muted)' })
-              : accentFor(i);
+            const tone = isResolved
+              ? (pct === 100 ? 'win' : '')
+              : isYesNo ? (i === yesIndex ? 'yes' : 'no') : '';
             const gain = previewGain(livePrice);
             const teamProfile = findTeamByName(market.sport, rawLabel);
             const rowOnClick = (e) => {
@@ -489,17 +416,7 @@ export default function PointsMarketCard({ market, userPosition }) {
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); rowOnClick(e); }
                 }}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 10,
-                  padding: '6px 6px 6px 8px',
-                  borderRadius: 8,
-                  cursor: 'pointer',
-                  transition: 'background 0.12s',
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface2)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                className="points-card-outcome"
               >
                 {/* Logo column. Reserve a 26px slot even when this
                     outcome has no image (e.g. 'Empate' on a 3-way
@@ -521,70 +438,15 @@ export default function PointsMarketCard({ market, userPosition }) {
                       navigateToTeam(e, teamProfile);
                     }
                   }}
-                  style={{
-                  flex: 1,
-                  minWidth: 0,
-                  fontFamily: 'var(--font-body)',
-                  fontSize: 13,
-                  color: 'var(--text-primary)',
-                  fontWeight: 600,
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  cursor: teamProfile ? 'pointer' : 'inherit',
-                }}>
+                  className={`points-card-outcome-label${teamProfile ? ' is-team' : ''}`}>
                   {label}
                 </span>
-                {countryLabel && (
-                  <span style={{
-                    maxWidth: 90,
-                    padding: '3px 7px',
-                    borderRadius: 999,
-                    background: 'var(--surface2)',
-                    border: '1px solid var(--border)',
-                    color: 'var(--text-secondary)',
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: 9,
-                    letterSpacing: '0.06em',
-                    textTransform: 'uppercase',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    flexShrink: 0,
-                  }}>
-                    {countryLabel}
-                  </span>
-                )}
-                {/* Accent pill — visual cue that this row is the buy
-                    target. The whole row is clickable; the pill just
-                    gives users something to aim at. */}
-                <span style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '6px 10px',
-                  background: accent.bg,
-                  border: `1px solid ${accent.border}`,
-                  borderRadius: 100,
-                  flexShrink: 0,
-                }}>
-                  {isResolved ? (pct === 100 && <span title={t('detail.winner')} style={{ color: accent.fg }}>✓</span>) : <span style={{
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: 10,
-                    color: 'var(--text-muted)',
-                    whiteSpace: 'nowrap',
-                  }}>
-                    +{gain}
-                  </span>}
-                  <span style={{
-                    fontFamily: 'var(--font-display)',
-                    fontSize: 14,
-                    color: accent.fg,
-                    minWidth: 32,
-                    textAlign: 'right',
-                  }}>
-                    {pct}%
-                  </span>
+                {countryLabel && <span className="points-card-country" title={countryLabel}>{countryLabel}</span>}
+                <span className={`points-card-odds points-ui-number${tone ? ` is-${tone}` : ''}`}>
+                  {isResolved
+                    ? pct === 100 && <Check size={16} aria-label={t('detail.winner')} />
+                    : <span className="points-card-gain">+{gain}</span>}
+                  <span>{pct}%</span>
                 </span>
               </div>
             );
@@ -600,11 +462,11 @@ export default function PointsMarketCard({ market, userPosition }) {
         <div style={{
           margin: '2px 0 8px',
           padding: '6px 10px',
-          borderRadius: 8,
+          borderRadius: 'var(--points-radius-sm)',
           background: 'var(--surface2)',
           border: '1px solid var(--border)',
           fontFamily: 'var(--font-mono)',
-          fontSize: 11,
+          fontSize: 'var(--text-xs)',
           letterSpacing: '0.04em',
           color: 'var(--text-secondary)',
           display: 'flex',
@@ -618,7 +480,7 @@ export default function PointsMarketCard({ market, userPosition }) {
 
       <div className="mock-card-footer">
         <span className="mock-card-vol">
-          VOL <span>{formatVolume(volume)} MXNP</span>
+          {t('points.card.volumeShort')} <span className="points-ui-number">{formatVolume(volume)}</span> MXNP
         </span>
         <span className="mock-card-deadline">
           {formatDeadline(market.endTime)}
