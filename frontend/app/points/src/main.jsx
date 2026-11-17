@@ -15,6 +15,7 @@ import App from './App.jsx';
 import { isRetiredFestivalUrl } from '../../../shared/trading-festival.js';
 import '@app/styles/mvp.css';
 import './points.css';
+import './design/cleanup.css';
 import './stocks.css';
 
 initSentry();

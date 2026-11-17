@@ -91,9 +91,8 @@ function PositionCard({ position, username, onSell, onRedeem, onDismiss, selling
     currentValue, pnl, canRedeem, status,
   } = position;
   const pnlPos = pnl >= 0;
-  // Losing resolved position: the market is settled, this outcome
-  // didn't win, so there's nothing to redeem or sell. Offer an OK
-  // button to acknowledge the loss and clear it from the Active tab.
+  const t = useT();
+  // Move an acknowledged loss from Active to History.
   const isLostBet = status === 'resolved' && !canRedeem;
   const marketHref = portfolioMarketHref(position);
 
@@ -198,7 +197,7 @@ function PositionCard({ position, username, onSell, onRedeem, onDismiss, selling
           <button
             onClick={() => onDismiss?.(position)}
             disabled={dismissing}
-            title="Reconocer la pérdida y mover a Historial"
+            title={t('points.portfolio.moveToHistory.title')}
             style={{
               padding: '8px 14px',
               borderRadius: 8,
@@ -214,7 +213,7 @@ function PositionCard({ position, username, onSell, onRedeem, onDismiss, selling
               opacity: dismissing ? 0.6 : 1,
             }}
           >
-            {dismissing ? 'Cerrando…' : 'OK'}
+            {t(dismissing ? 'points.portfolio.moveToHistory.pending' : 'points.portfolio.moveToHistory.action')}
           </button>
         ) : null}
       </div>
