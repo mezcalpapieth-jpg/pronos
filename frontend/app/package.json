@@ -7,7 +7,8 @@
     "build:mvp": "vite build",
     "build:points": "BUILD_TARGET=points vite build",
     "build": "npm run build:mvp && npm run build:points",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "lint:points-design": "node scripts/lint-points-design.mjs"
   },
   "dependencies": {
     "@react-three/fiber": "^8.18.0",
@@ -27,7 +28,10 @@
     "world-atlas": "^2.0.2"
   },
   "devDependencies": {
+    "@babel/parser": "^7.29.14",
     "@vitejs/plugin-react": "^4.3.1",
+    "stylelint": "^16.26.1",
+    "stylelint-declaration-strict-value": "^1.13.0",
     "vite": "7.3.8"
   },
   "overrides": {
