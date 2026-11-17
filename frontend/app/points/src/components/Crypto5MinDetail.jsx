@@ -35,6 +35,8 @@ import { useLang, useT } from '@app/lib/i18n.js';
 import { pointsPublicAssetSrc } from '@app/lib/publicAssets.js';
 import { marketImageSrc, marketPlaceholderImageSrc } from '../lib/marketImages.js';
 import PointsBuyModal from './PointsBuyModal.jsx';
+import MarketExportActions from './MarketExportActions.jsx';
+import { marketCryptoPriceCsv } from '../lib/marketExports.js';
 import TopHolders from './TopHolders.jsx';
 import PointsActivityTape from './PointsActivityTape.jsx';
 import { fetchTradeTape, publicErrorMessage, redeemWinnings } from '../lib/pointsApi.js';
@@ -550,6 +552,10 @@ export default function Crypto5MinDetail({ market, userPositions = [], onTradeSu
   const alternateAccent = alternateIsEth ? '#627eea' : '#f7931a';
   const alternateSoftBg = alternateIsEth ? 'rgba(98,126,234,0.14)' : 'rgba(247,147,26,0.14)';
   const alternateLabel = alternateIsEth ? 'ETH' : 'BTC';
+  const chartCsv = useMemo(() => marketCryptoPriceCsv(chartHistory, {
+    start: graphFrame.xStart,
+    end: graphFrame.xEnd,
+  }), [chartHistory, graphFrame.xStart, graphFrame.xEnd]);
   const alternateIcon = alternateIsEth ? 'Ξ' : '₿';
 
   return (
@@ -574,6 +580,12 @@ export default function Crypto5MinDetail({ market, userPositions = [], onTradeSu
           }}>
             {meta.symbol || '—'} · {windowDurationLabel} · Chainlink
           </div>
+          <MarketExportActions
+            marketId={selectedMarket.id}
+            title={selectedMarket.question}
+            endTime={closesAt}
+            csv={chartCsv}
+          />
         </div>
         <div style={{
           display: 'flex',
