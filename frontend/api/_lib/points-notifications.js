@@ -12,9 +12,11 @@ export async function readNotificationFeed(sql, { userId, beforeId, countOnly })
   if (countOnly) return { unread };
 
   const rows = await sql`
-    SELECT n.id, n.kind, n.market_id, m.question, n.amount, n.created_at, n.read_at
+    SELECT n.id, n.kind, n.market_id, m.question, n.amount, n.created_at, n.read_at, COALESCE(NULLIF(leg.leg_label, ''), leg.question) AS leg_label
     FROM points_notifications n
     LEFT JOIN points_markets m ON m.id = n.market_id
+    LEFT JOIN points_markets leg ON n.kind = 'market_resolved'
+      AND n.source_id <> n.market_id AND leg.id = n.source_id
     WHERE n.user_id = ${userId} AND (${beforeId}::bigint IS NULL OR n.id < ${beforeId})
     ORDER BY n.id DESC LIMIT ${limit + 1}
   `;
@@ -26,6 +28,7 @@ export async function readNotificationFeed(sql, { userId, beforeId, countOnly })
       kind: row.kind,
       marketId: row.market_id,
       question: row.question,
+      legLabel: row.leg_label,
       amount: row.amount == null ? null : Number(row.amount),
       createdAt: row.created_at,
       readAt: row.read_at,

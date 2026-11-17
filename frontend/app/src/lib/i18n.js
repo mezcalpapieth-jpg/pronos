@@ -836,6 +836,7 @@ const STRINGS = {
   'points.notifications.resolutionEmail': { es: 'Avisos por correo de resolución', en: 'Market resolution emails' },
   'points.notifications.resolutionEmailHelp': { es: 'Recibe un correo cuando se resuelva un mercado en el que tienes una posición.', en: 'Get an email when a market you hold a position in resolves.' },
   'points.notifications.noEmail': { es: 'Tu cuenta necesita un correo electrónico para activar estos avisos.', en: 'Your account needs an email address to enable these alerts.' },
+  'points.notifications.legResolved': { es: 'Se resolvió la opción {leg}', en: 'The {leg} outcome resolved' },
   'points.notifications.market_resolved': { es: 'Se resolvió un mercado donde tenías una posición', en: 'A market you held a position in resolved' },
   'points.notifications.winnings_credited': { es: 'Se acreditaron {amount} Points en ganancias', en: '{amount} Points in winnings were credited' },
   'points.notifications.limit_order_filled': { es: 'Se ejecutó tu orden límite', en: 'Your limit order filled' },

@@ -215,7 +215,9 @@ export default function PointsNotifications() {
                         <li key={item.id} className={item.readAt ? undefined : 'points-notification-unread'}>
                           <Link to={destination(item)} onClick={() => { markRead(item); close(); }}>
                             {!item.readAt && <span className="sr-only">{t('points.notifications.unreadFlag')} </span>}
-                            <strong>{t(`points.notifications.${item.kind}`, { amount: formatAmount.format(item.amount || 0) })}</strong>
+                            <strong>{t(item.legLabel ? 'points.notifications.legResolved' : `points.notifications.${item.kind}`, {
+                              amount: formatAmount.format(item.amount || 0), leg: item.legLabel,
+                            })}</strong>
                             {item.question && <span>{item.question}</span>}
                             <time dateTime={item.createdAt}>{formatDate.format(new Date(item.createdAt))}</time>
                           </Link>
