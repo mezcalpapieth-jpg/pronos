@@ -901,7 +901,7 @@ const STRINGS = {
   'points.card.live':         { es: 'En vivo',               en: 'Live' },
   'points.card.closingSoon':  { es: 'Cierra pronto',         en: 'Closing soon' },
   'points.card.yourPos':      { es: 'Tu posición',           en: 'Your position' },
-  'points.card.moreOptions':  { es: '+ {n} opciones más',    en: '+ {n} more options' },
+  'points.card.moreOptions':  { es: '+{n} resultados más',     en: '+{n} more outcomes' },
   'points.card.ifYouWin':     { es: 'si ganas',              en: 'if you win' },
 
   'points.activity.eyebrow':  { es: 'Mercados calientes',    en: 'Hot markets' },
