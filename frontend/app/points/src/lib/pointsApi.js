@@ -868,6 +868,21 @@ export async function deleteComment(commentId) {
 }
 
 // ─── Top holders ────────────────────────────────────────────────────────────
+export function fetchNotifications({ beforeId, countOnly = false, signal } = {}) {
+  const params = new URLSearchParams();
+  if (beforeId) params.set('beforeId', beforeId);
+  if (countOnly) params.set('count', '1');
+  return getJson(`/api/points/notifications?${params}`, { signal });
+}
+
+export function markNotificationsRead({ id, throughId }) {
+  return postJson('/api/points/notifications', { action: 'read', id, throughId });
+}
+
+export function saveNotificationSettings({ resolutionEmail, language }) {
+  return postJson('/api/points/notifications', { action: 'settings', resolutionEmail, language });
+}
+
 export async function fetchTopHolders(marketId, { limit = 10 } = {}) {
   return getJson(
     `/api/points/top-holders?marketId=${encodeURIComponent(marketId)}&limit=${limit}`,

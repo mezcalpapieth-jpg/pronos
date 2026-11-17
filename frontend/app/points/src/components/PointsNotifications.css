@@ -1,0 +1,196 @@
+.points-notifications {
+  flex: 0 0 auto;
+  position: relative;
+}
+
+.points-notifications-bell,
+.points-notifications-close,
+.points-notifications-read {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-width: 36px;
+  min-height: 36px;
+  border: 1px solid var(--border);
+  border-radius: var(--points-radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.points-notifications-bell:focus-visible,
+.points-notifications-panel :focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+.points-notifications-count {
+  position: absolute;
+  inset-block-start: -5px;
+  inset-inline-end: -5px;
+  min-width: 18px;
+  padding: 1px 3px;
+  border-radius: var(--points-radius-pill);
+  background: var(--orange-bright);
+  color: var(--points-on-brand);
+  font: 700 var(--text-xs)/1.3 var(--font-body);
+  text-align: center;
+}
+
+.points-notifications-panel {
+  position: absolute;
+  z-index: 210;
+  inset-block-start: calc(100% + 12px);
+  inset-inline-end: 0;
+  display: flex;
+  flex-direction: column;
+  width: min(376px, calc(100vw - 24px));
+  max-height: calc(100dvh - 92px);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--points-radius-md);
+  background: var(--points-panel, var(--surface1));
+  color: var(--text-primary);
+  box-shadow: 0 16px 44px rgb(0 0 0 / 24%);
+  font: 400 var(--text-sm)/1.45 var(--font-body);
+}
+
+.points-notifications-panel header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.points-notifications-panel h2 {
+  margin: 0;
+  font: 700 var(--text-base)/1.3 var(--font-body);
+}
+
+.points-notifications-close {
+  font-size: var(--text-lg);
+}
+
+.points-notifications-content {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.points-notifications-panel button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.points-notifications-mark-all,
+.points-notifications-more,
+.points-notifications-status button {
+  padding: 8px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.points-notifications-mark-all {
+  display: block;
+  margin: 4px 4px 4px auto;
+}
+
+.points-notifications-more,
+.points-notifications-status {
+  margin: 6px 4px 6px 16px;
+}
+
+.points-notifications-status {
+  padding: 12px 0;
+  color: var(--points-caption, var(--text-secondary));
+}
+
+.points-notifications-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.points-notifications-list li {
+  display: flex;
+  align-items: center;
+  padding-inline-end: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.points-notifications-list li.points-notification-unread {
+  border-inline-start: 3px solid var(--green);
+  background: color-mix(in srgb, var(--green), transparent 92%);
+}
+
+.points-notifications-list a {
+  flex: 1;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px 16px;
+  color: inherit;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.points-notifications-list a:hover strong {
+  text-decoration: underline;
+}
+
+.points-notifications-list time,
+.points-notifications-panel details p {
+  color: var(--points-caption, var(--text-secondary));
+  font-size: var(--text-xs);
+}
+
+.points-notifications-panel details {
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.points-notifications-panel summary {
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.points-notifications-panel details label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  margin-top: 8px;
+  cursor: pointer;
+}
+
+.points-notifications-panel details input {
+  accent-color: var(--green);
+}
+
+.points-notifications-panel details p {
+  margin: 4px 0;
+}
+
+.points-notifications .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .points-notifications {
+    position: static;
+  }
+
+  .points-notifications-panel {
+    inset-block-start: calc(100% + 8px);
+    inset-inline-end: 12px;
+  }
+}
