@@ -1,0 +1,148 @@
+html {
+  scrollbar-color: var(--text-muted) var(--surface1);
+  scrollbar-width: thin;
+}
+
+input[type="checkbox"] {
+  accent-color: var(--orange);
+}
+
+.points-nav-search-icon {
+  position: absolute;
+  top: 50%;
+  left: var(--sp-3);
+  transform: translateY(-50%);
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+.points-activity-viewport {
+  touch-action: pan-y pinch-zoom;
+}
+
+.points-activity-stack {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.points-activity-slide {
+  grid-area: 1 / 1;
+  min-width: 0;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 240ms ease, visibility 0s linear 240ms;
+}
+
+.points-activity-slide[aria-hidden="false"] {
+  position: relative;
+  z-index: 1;
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition-delay: 0s;
+}
+
+.points-activity-slide > article {
+  height: 100%;
+}
+
+.points-activity-slide h3 {
+  overflow-wrap: anywhere;
+}
+
+.points-activity-open {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+
+.points-home-info {
+  max-width: 1280px;
+  margin-inline: auto;
+  padding: var(--sp-12);
+  border-top: 1px solid var(--border);
+}
+
+.points-home-info .section-header {
+  margin-bottom: var(--sp-8);
+  text-align: center;
+}
+
+.points-home-info .steps-grid {
+  gap: var(--sp-6);
+  margin-block: 0;
+}
+
+.points-home-info .step {
+  gap: var(--sp-2);
+}
+
+.points-home-info .step-num {
+  font-family: var(--font-mono);
+  font-size: var(--fs-lg);
+  letter-spacing: normal;
+  color: var(--text-secondary);
+}
+
+.points-home-info .step-title {
+  font-family: var(--font-body);
+  font-size: var(--fs-xl);
+  font-weight: 600;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.points-partners-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+  gap: var(--sp-4);
+  max-width: 960px;
+  margin-inline: auto;
+}
+
+.points-partner {
+  display: block;
+  padding: var(--sp-5);
+  border-radius: 12px;
+  background: var(--surface1);
+  text-decoration: none;
+}
+
+.points-partner:hover,
+.points-partner:focus-visible {
+  background: var(--surface2);
+}
+
+.points-partner-name {
+  margin-bottom: var(--sp-1);
+  color: var(--text-primary);
+  font-size: var(--fs-xl);
+  font-weight: 600;
+}
+
+.points-partner-role {
+  margin-bottom: var(--sp-2);
+  color: var(--text-primary);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.points-partner-desc {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--fs-md);
+  line-height: 1.55;
+}
+
+@media (max-width: 767px) {
+  .points-home-info {
+    padding: var(--sp-8) var(--sp-4);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .points-activity-slide {
+    transition: none;
+  }
+}

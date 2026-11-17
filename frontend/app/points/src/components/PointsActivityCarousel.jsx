@@ -28,6 +28,7 @@
  *   count   — how many slides to build (default 6)
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Sparkline from '@app/components/Sparkline.jsx';
 import MultiSparkline from '@app/components/MultiSparkline.jsx';
@@ -929,8 +930,6 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
     border: '1px solid var(--border)',
     background: 'var(--surface1)',
     color: 'var(--text-secondary)',
-    fontFamily: 'var(--font-mono)',
-    fontSize: 'var(--fs-sm)',
     cursor: 'pointer',
     display: 'inline-flex',
     alignItems: 'center',
@@ -995,7 +994,7 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
             onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--orange)'; e.currentTarget.style.color = 'var(--orange)'; }}
             onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
           >
-            ←
+            <ChevronLeft aria-hidden="true" size={18} />
           </button>
           <button
             type="button"
@@ -1005,15 +1004,13 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
             onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--orange)'; e.currentTarget.style.color = 'var(--orange)'; }}
             onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
           >
-            →
+            <ChevronRight aria-hidden="true" size={18} />
           </button>
         </div>
       </div>
 
-      {/* Viewport. Slides live in a translated flex track so the browser
-          animates one transform instead of six repaints. */}
       <div
-        style={{ overflow: 'hidden', borderRadius: 16 }}
+        className="points-activity-viewport"
         onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX; setPaused(true); }}
         onTouchEnd={(e) => {
           const start = touchStartX.current;
@@ -1023,12 +1020,12 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
           const dx = e.changedTouches[0].clientX - start;
           if (Math.abs(dx) > 45) go(index + (dx < 0 ? 1 : -1));
         }}
+        onTouchCancel={() => {
+          touchStartX.current = null;
+          setPaused(false);
+        }}
       >
-        <div style={{
-          display: 'flex',
-          transform: `translateX(-${index * 100}%)`,
-          transition: prefersReducedMotion() ? 'none' : 'transform 0.5s cubic-bezier(0.22,0.8,0.3,1)',
-        }}>
+        <div className="points-activity-stack">
           {slides.map((m, i) => {
             const isActive = i === index;
             const rawOutcomes = Array.isArray(m.outcomes) ? m.outcomes : ['Sí', 'No'];
@@ -1076,17 +1073,8 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                 aria-roledescription="slide"
                 aria-label={`${i + 1} / ${slides.length}`}
                 aria-hidden={!isActive}
-                style={{
-                  flex: '0 0 100%',
-                  minWidth: 0,
-                  padding: 1,
-                  opacity: isActive ? 1 : 0.35,
-                  transition: 'opacity 0.4s',
-                  // Off-screen slides are aria-hidden, so their controls
-                  // must leave the tab order too — a focusable node inside
-                  // aria-hidden is a screen-reader trap.
-                  pointerEvents: isActive ? 'auto' : 'none',
-                }}
+                inert={isActive ? undefined : ''}
+                className="points-activity-slide"
               >
                 <article style={{
                   display: 'grid',
@@ -1409,8 +1397,9 @@ export default function PointsActivityCarousel({ markets = [], count = 6 }) {
                           textTransform: 'uppercase',
                           color: 'var(--orange)',
                         }}
+                        className="points-activity-open"
                       >
-                        {t('points.activity.open')} →
+                        {t('points.activity.open')} <ArrowRight aria-hidden="true" size={14} />
                       </button>
                     </div>
                   </div>
