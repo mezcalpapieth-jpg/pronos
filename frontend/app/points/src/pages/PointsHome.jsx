@@ -603,14 +603,8 @@ export default function PointsHome({ onOpenLogin }) {
       </section>
 
       {/* ── How it works ──────────────────────────────────── */}
-      {!onchain && <section id="how-it-works" style={{
-        padding: isMobile ? '40px 16px 56px' : '60px 48px 80px',
-        maxWidth: 1280,
-        margin: '0 auto',
-        borderTop: '1px solid var(--border)',
-      }}>
-        <div className="section-header" style={{ textAlign: 'center', marginBottom: 48 }}>
-          <div className="section-eyebrow">{t('points.how.eyebrow')}</div>
+      {!onchain && <section id="how-it-works" className="points-home-info">
+        <div className="section-header">
           <div className="section-title">{t('points.how.title')}</div>
         </div>
 
@@ -636,80 +630,32 @@ export default function PointsHome({ onOpenLogin }) {
           MXNB is the peso-pegged stablecoin we'll eventually use for
           on-chain settlement. Logos are text badges for now to keep
           the build self-contained — can swap in SVG art later. */}
-      {!onchain && <section id="partners" style={{
-        padding: isMobile ? '32px 16px 48px' : '48px 48px 72px',
-        maxWidth: 1280,
-        margin: '0 auto',
-        borderTop: '1px solid var(--border)',
-      }}>
-        <div className="section-header" style={{ textAlign: 'center', marginBottom: 32 }}>
-          <div className="section-eyebrow">{t('points.partners.eyebrow')}</div>
-          <div className="section-title">{t('points.partners.title')}</div>
+      {!onchain && <section id="partners" className="points-home-info">
+        <div className="section-header">
+          <div className="section-title">{t('points.home.partners.title')}</div>
         </div>
 
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-          gap: 16,
-          maxWidth: 960,
-          margin: '0 auto',
-        }}>
+        <div className="points-partners-grid">
           {[
-            { name: 'Turnkey',   href: 'https://turnkey.com', role: t('points.partners.turnkey.role'),   description: t('points.partners.turnkey.desc') },
-            { name: 'Bitso',     href: 'https://bitso.com',   role: t('points.partners.bitso.role'),     description: t('points.partners.bitso.desc') },
-            { name: 'MXNB',      href: 'https://mxnb.mx',     role: t('points.partners.mxnb.role'),      description: t('points.partners.mxnb.desc') },
-            { name: 'Chainlink', href: 'https://chain.link',  role: t('points.partners.chainlink.role'), description: t('points.partners.chainlink.desc') },
+            { name: 'Turnkey',   href: 'https://turnkey.com', role: t('points.home.partners.turnkey.role'),   description: t('points.home.partners.turnkey.desc') },
+            { name: 'Bitso',     href: 'https://bitso.com',   role: t('points.home.partners.bitso.role'),     description: t('points.home.partners.bitso.desc') },
+            { name: 'MXNB',      href: 'https://mxnb.mx',     role: t('points.home.partners.mxnb.role'),      description: t('points.home.partners.mxnb.desc') },
+            { name: 'Chainlink', href: 'https://chain.link',  role: t('points.home.partners.chainlink.role'), description: t('points.home.partners.chainlink.desc') },
           ].map(p => (
             <a
               key={p.name}
               href={p.href}
               target="_blank"
               rel="noopener noreferrer"
-              style={{
-                display: 'block',
-                padding: '20px 22px',
-                background: 'var(--surface1)',
-                border: '1px solid var(--border)',
-                borderRadius: 14,
-                textDecoration: 'none',
-                transition: 'border-color 0.18s, transform 0.18s',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = 'var(--green)';
-                e.currentTarget.style.transform = 'translateY(-2px)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = 'var(--border)';
-                e.currentTarget.style.transform = 'translateY(0)';
-              }}
+              className="points-partner"
             >
-              <div style={{
-                fontFamily: 'var(--font-display)',
-                fontSize: 22,
-                letterSpacing: '0.04em',
-                color: 'var(--text-primary)',
-                marginBottom: 6,
-                textTransform: 'uppercase',
-              }}>
+              <div className="points-partner-name">
                 {p.name}
               </div>
-              <div style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: 10,
-                letterSpacing: '0.12em',
-                color: 'var(--green)',
-                textTransform: 'uppercase',
-                marginBottom: 10,
-              }}>
+              <div className="points-partner-role">
                 {p.role}
               </div>
-              <p style={{
-                fontFamily: 'var(--font-body)',
-                fontSize: 13,
-                color: 'var(--text-secondary)',
-                lineHeight: 1.55,
-                margin: 0,
-              }}>
+              <p className="points-partner-desc">
                 {p.description}
               </p>
             </a>

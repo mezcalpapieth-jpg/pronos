@@ -11,10 +11,12 @@ import { readFile } from 'node:fs/promises';
 
 const source = await readFile(new URL('./PointsEarn.jsx', import.meta.url), 'utf8');
 
-test('TikTok and Instagram OAuth connection cards stay in proximamente until provider approval', () => {
-  assert.match(source, /key:\s*'instagram'[\s\S]*?available:\s*false[\s\S]*?Esperando aprobación de Meta/);
-  assert.match(source, /key:\s*'tiktok'[\s\S]*?available:\s*false[\s\S]*?Esperando aprobación de TikTok/);
+test('unavailable connections explain availability without exposing internal provider status', () => {
+  assert.match(source, /key:\s*'instagram'[\s\S]*?available:\s*false/);
+  assert.match(source, /key:\s*'tiktok'[\s\S]*?available:\s*false/);
   assert.match(source, /locked &&/);
+  assert.match(source, /t\('points\.earn\.socialLinks\.comingSoon', \{ network: p.label \}\)/);
+  assert.doesNotMatch(source, /Esperando aprobación|OAuth pausado/);
   assert.match(source, /lang === 'en' \? 'Soon' : 'Próximamente'/);
 });
 
@@ -41,7 +43,9 @@ test('X follow social task stays manual while OAuth verification is paused', () 
 test('public social tasks show the saved account used for manual review', () => {
   assert.match(source, /function socialTaskNetworkLabel\(task\)/);
   assert.match(source, /function socialTaskAccountText\(task\)/);
-  assert.match(source, /Cuenta \{socialTaskNetworkLabel\(task\)\} guardada: \{socialTaskAccountText\(task\)\}/);
+  assert.match(source, /t\('points\.earn\.socialTask\.savedAccount', \{ account \}\)/);
+  assert.match(source, /t\('points\.earn\.socialTask\.missingAccount', \{ network \}\)/);
+  assert.doesNotMatch(source, /Sin cuenta guardada/);
 });
 
 test('usuario page lets users personalize a public profile', () => {

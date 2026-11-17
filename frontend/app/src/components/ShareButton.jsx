@@ -30,6 +30,8 @@
  *   compact   — if true, render a tiny icon-only button (for tight rows)
  */
 import React, { useState, useEffect, useRef } from 'react';
+import { Link2, Share2 } from 'lucide-react';
+import { useT } from '../lib/i18n.js';
 
 const PLATFORMS = [
   {
@@ -72,6 +74,7 @@ const PLATFORMS = [
 ];
 
 export default function ShareButton({ marketId, app = 'points', question, compact = false }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [toast, setToast] = useState(null);
   const popoverRef = useRef(null);
@@ -161,8 +164,8 @@ export default function ShareButton({ marketId, app = 'points', question, compac
   const hasNativeShare = typeof navigator !== 'undefined' && !!navigator.share;
 
   const triggerLabel = compact
-    ? 'LINK'
-    : (toast || 'Compartir');
+    ? null
+    : (toast || t('points.share.action'));
 
   const triggerStyle = {
     display: 'inline-flex',
@@ -188,10 +191,10 @@ export default function ShareButton({ marketId, app = 'points', question, compac
         style={triggerStyle}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label="Compartir mercado"
+        aria-label={t('points.share.market')}
         title={shareUrl}
       >
-        {!compact && <span aria-hidden="true">LINK</span>}
+        <Share2 aria-hidden="true" size={15} />
         {triggerLabel}
       </button>
 
@@ -217,7 +220,7 @@ export default function ShareButton({ marketId, app = 'points', question, compac
           }}
         >
           {hasNativeShare && (
-            <ShareMenuItem icon="SHARE" label="Compartir…" onClick={handleNative} />
+            <ShareMenuItem icon={<Share2 size={16} />} label={t('points.share.native')} onClick={handleNative} />
           )}
           {PLATFORMS.map(p => (
             <ShareMenuItem
@@ -228,7 +231,7 @@ export default function ShareButton({ marketId, app = 'points', question, compac
             />
           ))}
           <div style={{ height: 1, background: 'var(--border)', margin: '4px 8px' }} />
-          <ShareMenuItem icon="LINK" label="Copiar link" onClick={handleCopy} />
+          <ShareMenuItem icon={<Link2 size={16} />} label={t('points.share.copy')} onClick={handleCopy} />
         </div>
       )}
     </div>

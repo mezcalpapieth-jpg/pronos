@@ -592,6 +592,27 @@ const STRINGS = {
   'points.partners.chainlink.role':   { es: 'Oráculos & precios',   en: 'Oracles & pricing' },
   'points.partners.chainlink.desc':   { es: 'Feeds de precios y datos verificados para resolución de mercados.', en: 'Verified price feeds and data for market resolution.' },
 
+  'points.home.partners.title':    { es: 'Socios',              en: 'Partners' },
+  'points.home.partners.turnkey.role':     { es: 'Cuentas y carteras', en: 'Accounts and wallets' },
+  'points.home.partners.turnkey.desc':     { es: 'Protege el acceso a tu cuenta con tu correo.', en: 'Protects access to your account with email sign-in.' },
+  'points.home.partners.bitso.role':       { es: 'Plataforma de intercambio', en: 'Exchange platform' },
+  'points.home.partners.bitso.desc':       { es: 'Permite depositar y retirar pesos mexicanos.', en: 'Supports deposits and withdrawals in Mexican pesos.' },
+  'points.home.partners.mxnb.role':        { es: 'Peso digital', en: 'Digital peso' },
+  'points.home.partners.mxnb.desc':        { es: 'Moneda digital vinculada al valor del peso mexicano.', en: 'A digital currency tied to the value of the Mexican peso.' },
+  'points.home.partners.chainlink.role':   { es: 'Precios y datos', en: 'Prices and data' },
+  'points.home.partners.chainlink.desc':   { es: 'Proporciona datos verificados para resolver mercados.', en: 'Provides verified data for market resolution.' },
+
+  'points.share.action': { es: 'Compartir', en: 'Share' },
+  'points.share.market': { es: 'Compartir mercado', en: 'Share market' },
+  'points.share.native': { es: 'Compartir…', en: 'Share…' },
+  'points.share.copy': { es: 'Copiar enlace', en: 'Copy link' },
+
+  'points.earn.socialLinks.automatic': { es: 'Automática', en: 'Automatic' },
+  'points.earn.socialLinks.automaticHelp': { es: 'Conecta tu cuenta para verificarla automáticamente.', en: 'Connect your account to verify it automatically.' },
+  'points.earn.socialLinks.comingSoon': { es: 'La conexión automática con {network} estará disponible pronto. Guardar tu usuario manualmente no da un bono de verificación.', en: 'Automatic connection for {network} will be available soon. Saving your username manually does not earn a verification bonus.' },
+  'points.earn.socialTask.savedAccount': { es: 'Revisaremos la tarea con {account}.', en: 'We’ll review the task using {account}.' },
+  'points.earn.socialTask.missingAccount': { es: 'Guarda tu usuario de {network} arriba antes de enviar la tarea.', en: 'Save your {network} username above before submitting the task.' },
+
   // Market detail
   'points.detail.resolvedBadge':   { es: '· RESUELTO',        en: '· RESOLVED' },
   'points.detail.pendingBadge':    { es: '· PENDIENTE',      en: '· PENDING' },
@@ -963,6 +984,9 @@ const STRINGS = {
   'points.buy.errorPrefix':   { es: 'No pudimos completar la operación. Intenta otra vez.', en: 'Could not complete the action. Try again.' },
 
   'points.portfolio.title':   { es: 'Portafolio',            en: 'Portfolio' },
+  'points.portfolio.moveToHistory.action': { es: 'Mover a historial', en: 'Move to history' },
+  'points.portfolio.moveToHistory.pending': { es: 'Moviendo…', en: 'Moving…' },
+  'points.portfolio.moveToHistory.title': { es: 'Reconocer la pérdida y mover la posición a historial', en: 'Acknowledge the loss and move the position to history' },
   'points.portfolio.tab.open': { es: 'Activo',               en: 'Active' },
   'points.portfolio.tab.parlays': { es: 'Combinadas',        en: 'Combo slips' },
   'points.portfolio.tab.history': { es: 'Historial',         en: 'History' },
