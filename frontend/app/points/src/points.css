@@ -2475,3 +2475,66 @@
   color: var(--text-muted);
   cursor: default;
 }
+
+/* Detail buy controls sit above the mobile navigation when it is present. */
+.points-mobile-buy-bar,
+.points-mobile-buy-clearance {
+  --points-mobile-buy-height: calc(44px + 2 * var(--points-space-2) + 1px);
+  --points-mobile-buy-safe-area: max(0px, calc(env(safe-area-inset-bottom, 0px) - var(--points-bottom-nav-height, 0px)));
+  --points-mobile-buy-clearance: calc(var(--points-mobile-buy-height) + var(--points-mobile-buy-safe-area) + var(--points-space-4));
+}
+
+.points-mobile-buy-bar {
+  position: fixed;
+  z-index: 61;
+  inset-inline: 0;
+  bottom: var(--points-bottom-nav-height, 0px);
+  display: flex;
+  gap: var(--points-space-2);
+  padding: var(--points-space-2) max(var(--points-space-4), env(safe-area-inset-right, 0px))
+    calc(var(--points-space-2) + var(--points-mobile-buy-safe-area)) max(var(--points-space-4), env(safe-area-inset-left, 0px));
+  border-top: 1px solid var(--border);
+  background: var(--points-panel);
+}
+
+.points-mobile-buy-bar button {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  gap: var(--points-space-2);
+  min-inline-size: 0;
+  min-block-size: 44px;
+  padding: 0 var(--points-space-2);
+  border: 1px solid currentColor;
+  border-radius: var(--points-radius-sm);
+  font: 700 var(--text-sm) var(--font-body);
+  cursor: pointer;
+}
+
+.points-mobile-buy-bar button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.points-mobile-buy-bar button strong {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.points-mobile-buy-bar__outcome--yes {
+  color: var(--points-yes-ink);
+  background: var(--points-control);
+}
+
+.points-mobile-buy-bar__outcome--no {
+  color: var(--points-no-ink);
+  background: var(--points-control);
+}
+
+.points-mobile-buy-bar__choose {
+  border-color: var(--orange);
+  color: var(--text-primary);
+  background: var(--points-control);
+}

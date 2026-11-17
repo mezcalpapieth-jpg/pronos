@@ -37,6 +37,7 @@ import { marketImageSrc, marketPlaceholderImageSrc } from '../lib/marketImages.j
 import PointsBuyModal from './PointsBuyModal.jsx';
 import MarketExportActions from './MarketExportActions.jsx';
 import { marketCryptoPriceCsv } from '../lib/marketExports.js';
+import MobileMarketBuyBar from './MobileMarketBuyBar.jsx';
 import TopHolders from './TopHolders.jsx';
 import PointsActivityTape from './PointsActivityTape.jsx';
 import { fetchTradeTape, publicErrorMessage, redeemWinnings } from '../lib/pointsApi.js';
@@ -240,7 +241,7 @@ function pointsForMarketWindow(points, market) {
   });
 }
 
-export default function Crypto5MinDetail({ market, userPositions = [], onTradeSuccess, isMobile = false }) {
+export default function Crypto5MinDetail({ market, userPositions = [], onTradeSuccess, isMobile = false, authenticated, onOpenLogin }) {
   const navigate = useNavigate();
   const t = useT();
   const lang = useLang();
@@ -267,6 +268,7 @@ export default function Crypto5MinDetail({ market, userPositions = [], onTradeSu
 
   // Buy modal state — same shape as other binary markets so PointsBuyModal
   // works without modification.
+  const inlineTradePanelRef = useRef(null);
   const [buyState, setBuyState] = useState(null);
   const [redeemState, setRedeemState] = useState({ key: null, message: null, error: null });
   const [tradeTape, setTradeTape] = useState([]);
@@ -507,12 +509,17 @@ export default function Crypto5MinDetail({ market, userPositions = [], onTradeSu
   // Buy handler — opens the existing PointsBuyModal pre-targeted on the
   // chosen outcome. We pass the same shape it expects from non-crypto
   // markets so its internals stay unchanged.
-  function openBuy(outcomeIndex) {
+  function openBuy(outcomeIndex, variant) {
     if (!canTrade) return;
+    if (variant === 'drawer' && !authenticated) {
+      onOpenLogin?.();
+      return;
+    }
     setBuyState({
       market: selectedMarket,
       outcomeIndex,
       outcomeLabel: cryptoOutcomeLabel(outcomeIndex, t),
+      variant,
     });
   }
 
@@ -559,9 +566,10 @@ export default function Crypto5MinDetail({ market, userPositions = [], onTradeSu
   const alternateIcon = alternateIsEth ? 'Ξ' : '₿';
 
   return (
-    <div style={{
+    <div className={isMobile && canTrade ? 'points-mobile-buy-clearance' : undefined} style={{
       maxWidth: 980, margin: '0 auto',
       padding: 'clamp(16px, 4vw, 32px)',
+      paddingBottom: isMobile && canTrade ? 'var(--points-mobile-buy-clearance)' : undefined,
     }}>
       {/* Header — back button is provided by the page-level nav above. */}
       <div style={{ marginBottom: 20 }}>
@@ -865,7 +873,7 @@ export default function Crypto5MinDetail({ market, userPositions = [], onTradeSu
       )}
 
       {canTrade && (
-        <div style={{
+        <div ref={inlineTradePanelRef} style={{
           display: 'grid',
           gridTemplateColumns: '1fr 1fr',
           gap: 12,
@@ -1059,12 +1067,25 @@ export default function Crypto5MinDetail({ market, userPositions = [], onTradeSu
         <TopHolders marketId={selectedMarket.id} refreshKey={sequenceSig} />
       </div>
 
+      {isMobile && canTrade && (
+        <MobileMarketBuyBar
+          key={selectedMarket.id}
+          tradePanelRef={inlineTradePanelRef}
+          outcomes={[subePrice, bajaPrice].map((price, index) => ({
+            label: cryptoOutcomeLabel(index, t),
+            percent: Math.round(price * 100),
+            onBuy: () => openBuy(index, 'drawer'),
+          }))}
+        />
+      )}
+
       {buyState && (
         <PointsBuyModal
           open
           market={buyState.market}
           outcomeIndex={buyState.outcomeIndex}
           outcomeLabel={buyState.outcomeLabel}
+          variant={buyState.variant}
           onClose={() => setBuyState(null)}
           onSuccess={async () => {
             setBuyState(null);

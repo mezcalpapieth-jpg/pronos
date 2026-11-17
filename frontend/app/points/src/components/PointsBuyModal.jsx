@@ -33,6 +33,7 @@ export default function PointsBuyModal({
   onClose,
   onSuccess,
   variant = 'modal',
+  outcomePicker = null,
   minimumEntrySatisfied = false,
 }) {
   const { user, refresh } = usePointsAuth();
@@ -73,7 +74,7 @@ export default function PointsBuyModal({
 
   // Debounced quote — re-request when the amount changes
   useEffect(() => {
-    if (!open || numAmount <= 0 || belowMinimum || !market?.id) {
+    if (!open || numAmount <= 0 || belowMinimum || !market?.id || outcomeIndex == null) {
       setQuote(null);
       setQuoteState('idle');
       return;
@@ -171,7 +172,7 @@ export default function PointsBuyModal({
     >
       <div style={{
         width: isDrawer ? 'min(440px, 92vw)' : 'min(440px, 92vw)',
-        height: isDrawer ? '100vh' : 'auto',
+        height: isDrawer ? '100%' : 'auto',
         overflowY: isDrawer ? 'auto' : 'visible',
         background: 'var(--surface1)',
         border: '1px solid var(--border)',
@@ -180,7 +181,7 @@ export default function PointsBuyModal({
         borderBottomLeftRadius: isDrawer ? 0 : 16,
         borderTopRightRadius: isDrawer ? 0 : 16,
         borderBottomRightRadius: isDrawer ? 0 : 16,
-        padding: '28px 26px',
+        padding: isDrawer ? '28px 26px calc(28px + env(safe-area-inset-bottom, 0px))' : '28px 26px',
         fontFamily: 'var(--font-body)',
         // Slide in from the right — pairs with a keyframe in points.css.
         animation: isDrawer ? 'points-drawer-slide-in 0.22s ease-out' : undefined,
@@ -194,11 +195,13 @@ export default function PointsBuyModal({
             }}>
               {t('points.buy.title')}
             </div>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: accent, letterSpacing: '0.02em' }}>
-              {displayOutcomeLabel.toUpperCase()}
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: outcomePicker ? 'var(--text-primary)' : accent, letterSpacing: '0.02em' }}>
+              {outcomePicker ? t('points.detail.chooseOutcomeCta') : displayOutcomeLabel.toUpperCase()}
             </div>
           </div>
           <button
+            type="button"
+            aria-label={t('points.buy.close')}
             onClick={onClose}
             disabled={submitting}
             style={{
@@ -217,191 +220,195 @@ export default function PointsBuyModal({
           {marketTitle}
         </p>
 
-        {/* Balance + amount */}
-        <div style={{
-          background: 'var(--surface2)',
-          border: '1px solid var(--border)',
-          borderRadius: 10,
-          padding: '12px 14px',
-          marginBottom: 12,
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          fontFamily: 'var(--font-mono)',
-          fontSize: 12,
-        }}>
-          <span style={{ color: 'var(--text-muted)' }}>{t('points.buy.balance')}</span>
-          <span style={{ color: 'var(--green)', fontWeight: 700 }}>
-            {balanceLabel} MXNP
-          </span>
-        </div>
+        {outcomePicker || (
+          <>
+            {/* Balance + amount */}
+            <div style={{
+              background: 'var(--surface2)',
+              border: '1px solid var(--border)',
+              borderRadius: 10,
+              padding: '12px 14px',
+              marginBottom: 12,
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 12,
+            }}>
+              <span style={{ color: 'var(--text-muted)' }}>{t('points.buy.balance')}</span>
+              <span style={{ color: 'var(--green)', fontWeight: 700 }}>
+                {balanceLabel} MXNP
+              </span>
+            </div>
 
-        <label style={{
-          display: 'block',
-          fontFamily: 'var(--font-mono)',
-          fontSize: 10,
-          letterSpacing: '0.1em',
-          textTransform: 'uppercase',
-          color: 'var(--text-muted)',
-          marginBottom: 6,
-        }}>
-          {t('points.buy.amountLabel')}
-        </label>
-        <input
-          type="number"
-          min={String(inputMin)}
-          step="1"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          disabled={submitting}
-          style={{
-            width: '100%',
-            background: 'var(--surface2)',
-            border: `1px solid ${insufficientBalance || belowMinimum ? 'rgba(255,59,59,0.5)' : 'var(--border)'}`,
-            borderRadius: 10,
-            padding: '12px 14px',
-            fontFamily: 'var(--font-mono)',
-            fontSize: 18,
-            color: 'var(--text-primary)',
-            outline: 'none',
-            marginBottom: 10,
-          }}
-        />
-        <div style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: 10,
-          color: belowMinimum ? 'var(--danger)' : 'var(--text-muted)',
-          letterSpacing: '0.04em',
-          lineHeight: 1.45,
-          margin: '-2px 0 10px',
-        }}>
-          {market.mode === 'onchain'
-            ? openingGrant > 0
-              ? (lang === 'en'
-                ? `Your first buy activates your ${formatMxnp(openingGrant, numberLocale)} MXNP starting grant.`
-                : `Tu primera compra activa tu saldo inicial de ${formatMxnp(openingGrant, numberLocale)} MXNP.`)
-              : (lang === 'en' ? 'This trade uses your test balance.' : 'Esta operación usa tu saldo de prueba.')
-            : requiresMinimumEntry
-              ? t('points.buy.minimumEntryHint', { amount: TOURNAMENT_MIN_BUY_MXNP })
-              : t('points.buy.topUpHint')}
-        </div>
-
-        <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
-          {QUICK_AMOUNTS.map(v => (
-            <button
-              key={v}
-              onClick={() => setAmount(String(v))}
-              disabled={submitting || v > purchaseLimit}
+            <label style={{
+              display: 'block',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 10,
+              letterSpacing: '0.1em',
+              textTransform: 'uppercase',
+              color: 'var(--text-muted)',
+              marginBottom: 6,
+            }}>
+              {t('points.buy.amountLabel')}
+            </label>
+            <input
+              type="number"
+              min={String(inputMin)}
+              step="1"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              disabled={submitting}
               style={{
-                flex: 1,
-                padding: '8px 0',
-                background: 'transparent',
-                border: '1px solid var(--border)',
-                borderRadius: 8,
+                width: '100%',
+                background: 'var(--surface2)',
+                border: `1px solid ${insufficientBalance || belowMinimum ? 'rgba(255,59,59,0.5)' : 'var(--border)'}`,
+                borderRadius: 10,
+                padding: '12px 14px',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 18,
+                color: 'var(--text-primary)',
+                outline: 'none',
+                marginBottom: 10,
+              }}
+            />
+            <div style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 10,
+              color: belowMinimum ? 'var(--danger)' : 'var(--text-muted)',
+              letterSpacing: '0.04em',
+              lineHeight: 1.45,
+              margin: '-2px 0 10px',
+            }}>
+              {market.mode === 'onchain'
+                   ? openingGrant > 0
+                     ? (lang === 'en'
+                       ? `Your first buy activates your ${formatMxnp(openingGrant, numberLocale)} MXNP starting grant.`
+                       : `Tu primera compra activa tu saldo inicial de ${formatMxnp(openingGrant, numberLocale)} MXNP.`)
+                     : (lang === 'en' ? 'This trade uses your test balance.' : 'Esta operación usa tu saldo de prueba.')
+                   : requiresMinimumEntry
+                     ? t('points.buy.minimumEntryHint', { amount: TOURNAMENT_MIN_BUY_MXNP })
+                     : t('points.buy.topUpHint')}
+            </div>
+
+            <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
+              {QUICK_AMOUNTS.map(v => (
+                <button
+                  key={v}
+                  onClick={() => setAmount(String(v))}
+                  disabled={submitting || v > purchaseLimit}
+                  style={{
+                    flex: 1,
+                    padding: '8px 0',
+                    background: 'transparent',
+                    border: '1px solid var(--border)',
+                    borderRadius: 8,
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 11,
+                    color: v > purchaseLimit ? 'var(--text-muted)' : 'var(--text-secondary)',
+                    cursor: v > purchaseLimit ? 'not-allowed' : 'pointer',
+                    opacity: v > purchaseLimit ? 0.4 : 1,
+                  }}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+
+            {/* Quote card */}
+            <div style={{
+              background: 'var(--surface2)',
+              border: '1px solid var(--border)',
+              borderRadius: 10,
+              padding: '14px 16px',
+              marginBottom: 14,
+              fontFamily: 'var(--font-mono)',
+              fontSize: 12,
+            }}>
+              <QuoteRow label={t('points.buy.fee')} value={
+                quoteState === 'ready' ? `${quote.fee.toFixed(2)} MXNP (${quote.feePct.toFixed(2)}%)` :
+                quoteState === 'loading' ? t('points.buy.calculating') :
+                '—'
+              } />
+              <QuoteRow label={t('points.buy.receivedShares')} value={
+                quoteState === 'ready' ? `${quote.sharesOut.toFixed(2)}` :
+                quoteState === 'loading' ? t('points.buy.calculating') :
+                '—'
+              } bold accent={accent} />
+              <QuoteRow label={t('points.buy.winProfit')} value={
+                quoteState === 'ready' ? `+${Math.max(0, quote.sharesOut - numAmount).toFixed(2)} MXNP` :
+                '—'
+              } good />
+              <QuoteRow label={t('points.buy.priceAfter')} value={
+                quoteState === 'ready' && quote.priceBefore != null && quote.priceAfter != null ? `${Math.round(quote.priceBefore * 100)}% → ${Math.round(quote.priceAfter * 100)}%` :
+                '—'
+              } />
+              {quoteState === 'error' && (
+                <div style={{ color: 'var(--danger)', fontSize: 11, marginTop: 8 }}>
+                  {quoteError || t('points.buy.quoteError')}
+                </div>
+              )}
+            </div>
+
+            {executionBalance.error && <p role="alert" style={{ color: 'var(--danger)', fontSize: 12 }}>{executionBalance.error}</p>}
+            {insufficientBalance && (
+              <div style={{
+                background: 'rgba(255,59,59,0.08)',
+                border: '1px solid rgba(255,59,59,0.3)',
+                color: 'var(--danger)',
                 fontFamily: 'var(--font-mono)',
                 fontSize: 11,
-                color: v > purchaseLimit ? 'var(--text-muted)' : 'var(--text-secondary)',
-                cursor: v > purchaseLimit ? 'not-allowed' : 'pointer',
-                opacity: v > purchaseLimit ? 0.4 : 1,
+                padding: '10px 12px',
+                borderRadius: 8,
+                marginBottom: 12,
+              }}>
+                {t('points.buy.insufficientBalanceDetail', { amount: balanceLabel })}
+              </div>
+            )}
+
+            {submitError && (
+              <div style={{
+                background: 'rgba(255,59,59,0.08)',
+                border: '1px solid rgba(255,59,59,0.3)',
+                color: 'var(--danger)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                padding: '10px 12px',
+                borderRadius: 8,
+                marginBottom: 12,
+              }}>
+                {submitError}
+              </div>
+            )}
+
+            <button
+              onClick={handleConfirm}
+              disabled={submitting || balanceUnavailable || insufficientBalance || belowMinimum || quoteState !== 'ready' || numAmount <= 0}
+              style={{
+                width: '100%',
+                padding: '14px 16px',
+                background: success ? 'var(--green)' : accent,
+                color: '#000',
+                border: 'none',
+                borderRadius: 10,
+                fontFamily: 'var(--font-mono)',
+                fontSize: 13,
+                fontWeight: 700,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                cursor: submitting || insufficientBalance || belowMinimum || quoteState !== 'ready' ? 'not-allowed' : 'pointer',
+                opacity: submitting || insufficientBalance || belowMinimum || quoteState !== 'ready' ? 0.6 : 1,
+                transition: 'opacity 0.15s',
               }}
             >
-              {v}
+              {success ? t('points.buy.success') :
+               submitting ? t('points.buy.submitting') :
+               insufficientBalance ? t('points.buy.insufficientBalance') :
+               belowMinimum ? t('points.buy.minimumEntryButton', { amount: TOURNAMENT_MIN_BUY_MXNP }) :
+               `${t('points.buy.title')} ${numAmount || '—'} MXNP`}
             </button>
-          ))}
-        </div>
-
-        {/* Quote card */}
-        <div style={{
-          background: 'var(--surface2)',
-          border: '1px solid var(--border)',
-          borderRadius: 10,
-          padding: '14px 16px',
-          marginBottom: 14,
-          fontFamily: 'var(--font-mono)',
-          fontSize: 12,
-        }}>
-          <QuoteRow label={t('points.buy.fee')} value={
-            quoteState === 'ready' ? `${quote.fee.toFixed(2)} MXNP (${quote.feePct.toFixed(2)}%)` :
-            quoteState === 'loading' ? t('points.buy.calculating') :
-            '—'
-          } />
-          <QuoteRow label={t('points.buy.receivedShares')} value={
-            quoteState === 'ready' ? `${quote.sharesOut.toFixed(2)}` :
-            quoteState === 'loading' ? t('points.buy.calculating') :
-            '—'
-          } bold accent={accent} />
-          <QuoteRow label={t('points.buy.winProfit')} value={
-            quoteState === 'ready' ? `+${Math.max(0, quote.sharesOut - numAmount).toFixed(2)} MXNP` :
-            '—'
-          } good />
-          <QuoteRow label={t('points.buy.priceAfter')} value={
-            quoteState === 'ready' && quote.priceBefore != null && quote.priceAfter != null ? `${Math.round(quote.priceBefore * 100)}% → ${Math.round(quote.priceAfter * 100)}%` :
-            '—'
-          } />
-          {quoteState === 'error' && (
-            <div style={{ color: 'var(--danger)', fontSize: 11, marginTop: 8 }}>
-              {quoteError || t('points.buy.quoteError')}
-            </div>
-          )}
-        </div>
-
-        {executionBalance.error && <p role="alert" style={{ color: 'var(--danger)', fontSize: 12 }}>{executionBalance.error}</p>}
-        {insufficientBalance && (
-          <div style={{
-            background: 'rgba(255,59,59,0.08)',
-            border: '1px solid rgba(255,59,59,0.3)',
-            color: 'var(--danger)',
-            fontFamily: 'var(--font-mono)',
-            fontSize: 11,
-            padding: '10px 12px',
-            borderRadius: 8,
-            marginBottom: 12,
-          }}>
-            {t('points.buy.insufficientBalanceDetail', { amount: balanceLabel })}
-          </div>
+          </>
         )}
-
-        {submitError && (
-          <div style={{
-            background: 'rgba(255,59,59,0.08)',
-            border: '1px solid rgba(255,59,59,0.3)',
-            color: 'var(--danger)',
-            fontFamily: 'var(--font-mono)',
-            fontSize: 11,
-            padding: '10px 12px',
-            borderRadius: 8,
-            marginBottom: 12,
-          }}>
-            {submitError}
-          </div>
-        )}
-
-        <button
-          onClick={handleConfirm}
-          disabled={submitting || balanceUnavailable || insufficientBalance || belowMinimum || quoteState !== 'ready' || numAmount <= 0}
-          style={{
-            width: '100%',
-            padding: '14px 16px',
-            background: success ? 'var(--green)' : accent,
-            color: '#000',
-            border: 'none',
-            borderRadius: 10,
-            fontFamily: 'var(--font-mono)',
-            fontSize: 13,
-            fontWeight: 700,
-            letterSpacing: '0.08em',
-            textTransform: 'uppercase',
-            cursor: submitting || insufficientBalance || belowMinimum || quoteState !== 'ready' ? 'not-allowed' : 'pointer',
-            opacity: submitting || insufficientBalance || belowMinimum || quoteState !== 'ready' ? 0.6 : 1,
-            transition: 'opacity 0.15s',
-          }}
-        >
-          {success ? t('points.buy.success') :
-           submitting ? t('points.buy.submitting') :
-           insufficientBalance ? t('points.buy.insufficientBalance') :
-           belowMinimum ? t('points.buy.minimumEntryButton', { amount: TOURNAMENT_MIN_BUY_MXNP }) :
-           `${t('points.buy.title')} ${numAmount || '—'} MXNP`}
-        </button>
       </div>
     </div>
   );

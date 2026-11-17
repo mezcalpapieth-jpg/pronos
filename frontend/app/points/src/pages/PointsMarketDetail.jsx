@@ -51,6 +51,7 @@ import { useIsMobile } from '@app/lib/useIsMobile.js';
 import PointsBuyModal from '../components/PointsBuyModal.jsx';
 import MarketExportActions from '../components/MarketExportActions.jsx';
 import { marketProbabilityCsv } from '../lib/marketExports.js';
+import MobileMarketBuyBar from '../components/MobileMarketBuyBar.jsx';
 import PointsSellPreviewModal from '../components/PointsSellPreviewModal.jsx';
 import PointsActivityTape from '../components/PointsActivityTape.jsx';
 import { ResolutionReview, useResolutionReview } from '../components/ResolutionReview.jsx';
@@ -2763,6 +2764,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
   //   unified → the parent market itself
   //   parallel → the individual leg market (so the buy endpoint hits the
   //              leg's binary CPMM, not the aggregated parent)
+  const inlineTradePanelRef = useRef(null);
   const [buyState, setBuyState] = useState(null);
   const [tradeMode, setTradeMode] = useState('single');
   const [comboPickerOpen, setComboPickerOpen] = useState(false);
@@ -3102,6 +3104,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
       outcomeIndex,
       outcomeLabel,
       minimumEntrySatisfied: Boolean(options.minimumEntrySatisfied),
+      variant: options.variant,
     });
   }
 
@@ -3367,6 +3370,8 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
           userPositions={userPositions}
           onTradeSuccess={handleTradeSuccess}
           isMobile={isMobile}
+          authenticated={authenticated}
+          onOpenLogin={onOpenLogin}
         />
       </main>
     );
@@ -3549,8 +3554,49 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
     : { individual: 'Individual', combinada: 'Combinada', otherMarkets: 'Otros mercados' };
   const displayMarket = { ...market, question: marketTitle, title: marketTitle };
 
+  const showMobileBuyBar = isMobile && canTrade;
+  const mobileBuyOutcomes = !parallelDisplayLegs && displayOutcomes.length === 2
+    ? displayOutcomes.map((label, index) => ({
+        label,
+        percent: pctFor(index),
+        onBuy: () => handleBuyClick(displayMarket, displayOutcomeIndices[index], label, { variant: 'drawer' }),
+      }))
+    : null;
+
+  function openOutcomeChooser() {
+    if (!authenticated) {
+      onOpenLogin?.();
+      return;
+    }
+    setBuyState({ market: displayMarket, variant: 'drawer', chooseOutcome: true });
+  }
+
+  function renderTradeOutcomes(onBuyClick, selectionMode = 'single') {
+    return market.ammMode === 'parallel' && Array.isArray(market.legs)
+      ? <ParallelLegList
+          market={displayMarket}
+          legs={parallelDisplayLegs || market.legs}
+          outcomeImages={displayOutcomeImages}
+          outcomeCountryLabels={displayOutcomeCountryLabels}
+          onBuyClick={onBuyClick}
+          onParlayAdd={handleAddParlayLeg}
+          selectionMode={selectionMode}
+        />
+      : <UnifiedOutcomeList
+          outcomes={displayOutcomes}
+          prices={displayPrices}
+          outcomeImages={displayOutcomeImages}
+          outcomeCountryLabels={displayOutcomeCountryLabels}
+          outcomeIndices={displayOutcomeIndices}
+          market={displayMarket}
+          onBuyClick={onBuyClick}
+          onParlayAdd={handleAddParlayLeg}
+          selectionMode={selectionMode}
+        />;
+  }
+
   const tradePanel = (
-    <div style={{
+    <div ref={inlineTradePanelRef} style={{
       background: 'var(--surface1)',
       border: '1px solid var(--border)',
       borderRadius: 14,
@@ -3643,27 +3689,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
               {modeCopy.otherMarkets}
             </button>
           )}
-          {market.ammMode === 'parallel' && Array.isArray(market.legs)
-            ? <ParallelLegList
-                market={displayMarket}
-                legs={parallelDisplayLegs || market.legs}
-                outcomeImages={displayOutcomeImages}
-                outcomeCountryLabels={displayOutcomeCountryLabels}
-                onBuyClick={handleBuyClick}
-                onParlayAdd={handleAddParlayLeg}
-                selectionMode={tradeMode}
-              />
-            : <UnifiedOutcomeList
-                outcomes={displayOutcomes}
-                prices={displayPrices}
-                outcomeImages={displayOutcomeImages}
-                outcomeCountryLabels={displayOutcomeCountryLabels}
-                outcomeIndices={displayOutcomeIndices}
-                market={displayMarket}
-                onBuyClick={handleBuyClick}
-                onParlayAdd={handleAddParlayLeg}
-                selectionMode={tradeMode}
-              />}
+          {renderTradeOutcomes(handleBuyClick, tradeMode)}
         </>
       )}
 
@@ -3748,8 +3774,9 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
 
   return (
     <>
-      <main style={{
+      <main className={showMobileBuyBar ? 'points-mobile-buy-clearance' : undefined} style={{
         padding: isMobile ? '20px 16px 60px' : '40px 48px',
+        paddingBottom: showMobileBuyBar ? 'var(--points-mobile-buy-clearance)' : undefined,
         maxWidth: 1160,
         margin: '0 auto',
       }}>
@@ -4427,6 +4454,15 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
         onAddLeg={handleAddParlayLeg}
       />
 
+      {showMobileBuyBar && (
+        <MobileMarketBuyBar
+          key={market.id}
+          tradePanelRef={inlineTradePanelRef}
+          outcomes={mobileBuyOutcomes}
+          onChooseOutcome={openOutcomeChooser}
+        />
+      )}
+
       {buyState && !gameFinished && (
         <PointsBuyModal
           open
@@ -4436,6 +4472,10 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
           market={buyState.market || market}
           outcomeIndex={buyState.outcomeIndex}
           outcomeLabel={buyState.outcomeLabel}
+          variant={buyState.variant}
+          outcomePicker={buyState.chooseOutcome ? renderTradeOutcomes((target, index, label, options) => (
+            handleBuyClick(target, index, label, { ...options, variant: 'drawer' })
+          )) : null}
           minimumEntrySatisfied={buyState.minimumEntrySatisfied}
           onClose={() => setBuyState(null)}
           onSuccess={async () => {

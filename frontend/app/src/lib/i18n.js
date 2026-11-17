@@ -948,6 +948,7 @@ const STRINGS = {
 
   'points.detail.loading':    { es: 'Cargando mercado…',     en: 'Loading market…' },
   'points.detail.backToMarkets': { es: '← MERCADOS',          en: '← MARKETS' },
+  'points.detail.chooseOutcomeCta': { es: 'Elegir resultado', en: 'Choose outcome' },
   'points.detail.chooseOutcome': { es: 'Elige un resultado',  en: 'Pick an outcome' },
   'points.detail.oddsNow':    { es: 'Odds actuales',         en: 'Current odds' },
   'points.detail.marketClosed': { es: 'Mercado cerrado',      en: 'Market closed' },
@@ -991,6 +992,7 @@ const STRINGS = {
   'points.crypto.ws.connecting': { es: 'conectando…',         en: 'connecting…' },
   'points.crypto.ws.offline': { es: 'sin conexión',           en: 'offline' },
 
+  'points.buy.close': { es: 'Cerrar', en: 'Close' },
   'points.buy.title':         { es: 'Comprar',                en: 'Buy' },
   'points.buy.balance':       { es: 'Balance',                en: 'Balance' },
   'points.buy.amountLabel':   { es: 'Monto (MXNP)',           en: 'Amount (MXNP)' },
