@@ -76,3 +76,62 @@
 .points-market-card .mock-card-footer {
   margin-top: auto;
 }
+
+.points-bottom-nav {
+  display: none;
+}
+
+@media (width < 720px) {
+  .points-app-with-bottom-nav {
+    --points-bottom-nav-height: calc(64px + env(safe-area-inset-bottom, 0px));
+    padding-block-end: var(--points-bottom-nav-height);
+  }
+
+  .points-bottom-nav {
+    position: fixed;
+    z-index: 41;
+    inset: auto 0 0;
+    block-size: var(--points-bottom-nav-height);
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    padding-block-end: env(safe-area-inset-bottom, 0px);
+    background: var(--surface1);
+    border-block-start: 1px solid var(--border);
+  }
+
+  .points-bottom-nav > :is(a, button) {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 4px;
+    border: 0;
+    padding: 4px;
+    background: none;
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: var(--text-xs, 12px);
+    line-height: 1.2;
+    text-align: center;
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  .points-bottom-nav > [aria-current="page"] {
+    color: var(--orange);
+  }
+
+  .points-bottom-nav-icon {
+    position: relative;
+    display: flex;
+  }
+
+  .points-bottom-nav-icon .points-mobile-menu-badge {
+    position: absolute;
+    inset: -6px auto auto 16px;
+  }
+
+  .points-menu-with-bottom-nav > .points-menu-primary {
+    display: none;
+  }
+}

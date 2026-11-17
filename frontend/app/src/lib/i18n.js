@@ -513,6 +513,9 @@ const STRINGS = {
   // nav.* / cat.* where the copy is identical (EN/ES toggle, search, category
   // emoji pills). First-pass coverage: nav + home categories + market card +
   // portfolio/admin/earn tab names. Longer prose stays Spanish-only for now.
+  'points.nav.mobileNavigation': { es: 'Navegación principal', en: 'Primary navigation' },
+  'points.nav.mobileMarkets': { es: 'Mercados', en: 'Markets' },
+  'points.nav.mobileTournament': { es: 'Torneo', en: 'Tournament' },
   'points.nav.markets':       { es: 'El mercado',            en: 'Markets' },
   'points.nav.home':          { es: 'Inicio',                en: 'Home' },
   'points.nav.portfolio':     { es: 'Portafolio',            en: 'Portfolio' },
