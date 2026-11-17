@@ -739,27 +739,27 @@ function liveScoreGraphAnnotations({ score, market, displayOutcomes = [], chartW
   return out;
 }
 
-// Map (resolver_type, resolver_config.source) → human-readable source
-// name. Brand names stay untranslated — "Chainlink" is "Chainlink" in
-// every language.
-const RESOLVER_LABELS = {
-  'chainlink_price':               'Chainlink',
-  'weather_api':                   'Open-Meteo',
-  'api_price:finnhub':             'Finnhub',
-  'api_price:banxico-fix':         'Banxico',
-  'api_price:cre-gasolina':        'CRE',
-  'api_chart:apple-mx-songs':      'Apple Music',
-  'api_chart:youtube-trending-mx': 'YouTube',
-  'api_transcript:gob-mx-presidencia-transcript': 'gob.mx / YouTube oficial',
-  'sports_api:espn':               'ESPN',
-  'sports_api:football-data':      'football-data.org',
-  'sports_api:jolpica-f1':         'Jolpica F1',
-};
+const RESOLVER_DETAILS = new Map([
+  ['chainlink_price', ['Chainlink', 'https://docs.chain.link/data-feeds/price-feeds/addresses']],
+  ['weather_api', ['Open-Meteo', 'https://open-meteo.com/en/docs']],
+  ['api_price:finnhub', ['Finnhub', 'https://finnhub.io']],
+  ['api_price:banxico-fix', ['Banxico', 'https://www.banxico.org.mx/tipcamb/main.do?page=tip&idioma=sp']],
+  ['api_price:cre-gasolina', ['CRE']],
+  ['api_chart:apple-mx-songs', ['Apple Music', 'https://music.apple.com/mx']],
+  ['api_chart:youtube-trending-mx', ['YouTube', 'https://www.youtube.com']],
+  ['api_transcript:gob-mx-presidencia-transcript', ['Gobierno de México', 'https://www.gob.mx/presidencia']],
+  ['sports_api:espn', ['ESPN', 'https://www.espn.com']],
+  ['sports_api:football-data', ['football-data.org', 'https://www.football-data.org']],
+  ['sports_api:jolpica-f1', ['Jolpica F1', 'https://api.jolpi.ca/ergast/f1']],
+  ['trading_festival:coinbase', ['Coinbase', 'https://www.coinbase.com']],
+  ['trading_festival:vunelix', ['Vunelix', 'https://vunelix.com']],
+]);
 
-function resolverLabel(type, source) {
-  if (!type) return null; // null = admin-manual; surface as 'Admin' via fallback text
-  const composite = source ? `${type}:${source}` : type;
-  return RESOLVER_LABELS[composite] || RESOLVER_LABELS[type] || type;
+function resolverLabel(type, source, t) {
+  if (type === 'manual_review') return [t('points.detail.resolverManualReview')];
+  return RESOLVER_DETAILS.get(`${type}:${source}`)
+    ?? RESOLVER_DETAILS.get(type)
+    ?? [t('points.detail.resolverAdmin')];
 }
 
 function timestampReasonLabel(reason) {
@@ -1453,16 +1453,80 @@ const legPriceStyle = {
   opacity: 0.9,
 };
 
-function formatDeadline(endTime) {
-  if (!endTime) return '';
+function formatDeadline(endTime, locale) {
+  if (!endTime) return '—';
   const d = new Date(endTime);
-  return d.toLocaleString('es-MX', {
+  if (!Number.isFinite(d.getTime())) return '—';
+  return d.toLocaleString(locale, {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+function MarketRules({ market, status, locale, t }) {
+  const [expanded, setExpanded] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const criteriaRef = useRef(null);
+  const criteria = market.resolutionCriteria;
+  const [resolver, sourceUrl] = resolverLabel(market.resolverType, market.resolverSource, t);
+  const closed = ['resolved', 'canceled'].includes(market.status);
+
+  useEffect(() => {
+    const element = criteriaRef.current;
+    if (!element) return;
+    function measure() {
+      const lineHeight = parseFloat(window.getComputedStyle(element).lineHeight);
+      setHasMore(element.scrollHeight > 3 * lineHeight + 1);
+    }
+    measure();
+    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(measure) : null;
+    observer?.observe(element);
+    window.addEventListener('resize', measure);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [criteria, expanded]);
+
+  return (
+    <section className="points-market-rules" aria-labelledby="points-market-rules-title">
+      <h2 id="points-market-rules-title">{t('points.detail.marketRules')}</h2>
+      <dl className="points-market-rules-facts">
+        <div>
+          <dt>{t(closed ? 'points.detail.closedLabel' : 'points.detail.closesLabel')}</dt>
+          <dd>{formatDeadline(market.endTime, locale)}</dd>
+        </div>
+        <div>
+          <dt>{t('points.detail.volumeLabel')}</dt>
+          <dd>{Number(market.tradeVolume || market.volume || 0).toLocaleString(locale)} MXNP</dd>
+        </div>
+        <div>
+          <dt>{t('points.detail.stateLabel')}</dt>
+          <dd>{status}</dd>
+        </div>
+        <div>
+          <dt>{t('points.detail.resolverLabel')}</dt>
+          <dd>{sourceUrl ? <a href={sourceUrl} target="_blank" rel="noopener noreferrer">{resolver}</a> : resolver}</dd>
+        </div>
+      </dl>
+      {criteria && (
+        <div>
+          <p id="points-market-rule-criteria" ref={criteriaRef} className="points-market-rules-criteria" data-expanded={expanded}>
+            {criteria}
+          </p>
+          {hasMore && (
+            <button type="button" className="points-market-rules-expand" aria-controls="points-market-rule-criteria"
+              aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>
+              {t(expanded ? 'points.detail.rulesShowLess' : 'points.detail.rulesShowMore')}
+            </button>
+          )}
+        </div>
+      )}
+    </section>
+  );
 }
 
 function shortGameDate(iso) {
@@ -3456,6 +3520,12 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
     && (gameFinished || (market.endTime && new Date(market.endTime) < _now));
   const showTemperatureResolutionNote = isTemperatureMarket(market);
   const canTrade = !isResolved && !isPendingResolution && !isTradingLocked && market.executionReady !== false;
+  const rulesStatus = isCanceled ? t('points.detail.stateCanceled')
+    : isResolved ? t('points.detail.stateResolved')
+    : showLive ? t('points.card.live')
+    : isClosingSoon ? t('points.card.closingSoon')
+    : isPendingResolution || isTradingLocked ? t('points.detail.statePending')
+    : t('points.detail.stateActive');
   const modeCopy = lang === 'en'
     ? { individual: 'Individual', combinada: 'Combo slip', otherMarkets: 'Other markets' }
     : { individual: 'Individual', combinada: 'Combinada', otherMarkets: 'Otros mercados' };
@@ -4057,6 +4127,8 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
               </div>
             </div>}
 
+            <MarketRules key={market.id} market={market} status={rulesStatus} locale={numberLocale} t={t} />
+
             <SeriesGameStrip
               seriesMeta={market.seriesMeta}
               currentMarketId={market.id}
@@ -4192,9 +4264,6 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
               </div>
             )}
 
-            {/* Comments — sits between the trade area and the meta strip
-                so the discussion stays adjacent to the market but below
-                the actionable UI. */}
             <MarketComments
               marketId={market.id}
               authenticated={authenticated}
@@ -4202,80 +4271,6 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
               onOpenLogin={onOpenLogin}
             />
 
-            {/* Meta */}
-            <div style={{
-              display: 'flex',
-              gap: 32,
-              padding: '16px 0',
-              borderTop: '1px solid var(--border)',
-              borderBottom: '1px solid var(--border)',
-              flexWrap: 'wrap',
-            }}>
-              <div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.1em', marginBottom: 4 }}>
-                  {isResolved ? t('points.detail.closedLabel') : t('points.detail.closesLabel')}
-                </div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-primary)' }}>
-                  {formatDeadline(market.endTime)}
-                </div>
-              </div>
-              <div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.1em', marginBottom: 4 }}>
-                  {t('points.detail.volumeLabel')}
-                </div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-primary)' }}>
-                  {Number(market.tradeVolume || market.volume || 0).toLocaleString('es-MX')} MXNP
-                </div>
-              </div>
-              <div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.1em', marginBottom: 4 }}>
-                  {t('points.detail.stateLabel')}
-                </div>
-                <div style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 13,
-                  fontWeight: showLive || isClosingSoon ? 700 : 400,
-                  color: isResolved ? 'var(--green)'
-                       : showLive ? 'var(--danger)'
-                       : isClosingSoon ? 'var(--warning)'
-                       : isPendingResolution ? 'var(--warning)'
-                       : 'var(--text-primary)',
-                }}>
-                  {isResolved ? t('points.detail.stateResolved')
-                   : showLive ? t('points.card.live')
-                   : isClosingSoon ? t('points.card.closingSoon')
-                   : isPendingResolution ? t('points.detail.statePending')
-                   : t('points.detail.stateActive')}
-                </div>
-              </div>
-              <div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.1em', marginBottom: 4 }}>
-                  {t('points.detail.resolverLabel')}
-                </div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-primary)' }}>
-                  {resolverLabel(market.resolverType, market.resolverSource) || t('points.detail.resolverAdmin')}
-                </div>
-              </div>
-            </div>
-            {market.resolutionCriteria && (
-              <div style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: 13,
-                lineHeight: 1.6,
-                color: 'var(--text-muted)',
-                paddingBottom: 4,
-              }}>
-                <div style={{
-                  fontSize: 10,
-                  letterSpacing: 0,
-                  textTransform: 'uppercase',
-                  marginBottom: 6,
-                }}>
-                  {t('points.detail.criteriaLabel')}
-                </div>
-                <div>{market.resolutionCriteria}</div>
-              </div>
-            )}
           </div>
 
           {/* Right column: buy panel + user-position panel + holders */}
