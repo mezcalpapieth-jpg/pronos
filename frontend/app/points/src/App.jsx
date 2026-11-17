@@ -391,6 +391,8 @@ function Shell({ onOpenLogin, isAdmin, authLoading }) {
   const path = location.pathname;
   const isHome = path === '/';
   const isAdminWorkspace = isAdmin && path.replace(/\/+$/, '') === '/admin';
+  const showBottomNav = !/^\/(admin|deck|investors|c\/tradingfestival)(\/|$)/.test(path)
+    && !isVideoDemoActive();
 
   // CategoryBar is the universal browsing affordance — show it on home,
   // category pages, AND market detail so users can always jump to
@@ -404,10 +406,10 @@ function Shell({ onOpenLogin, isAdmin, authLoading }) {
     || path.startsWith('/teams/');
 
   return (
-    <>
+    <div className={showBottomNav ? 'points-app-with-bottom-nav' : undefined}>
       {isHome && <PointsTicker />}
       {path.startsWith('/stocks') && <Suspense fallback={null}><StockLiveTicker /></Suspense>}
-      <PointsNav onOpenLogin={onOpenLogin} isAdmin={isAdmin} isAdminWorkspace={isAdminWorkspace} />
+      <PointsNav onOpenLogin={onOpenLogin} isAdmin={isAdmin} isAdminWorkspace={isAdminWorkspace} showBottomNav={showBottomNav} />
       {showCategoryBar && <PointsCategoryBar />}
       {!isAdminWorkspace && <TournamentExtensionBanner />}
       <Suspense fallback={<RouteFallback />}>
@@ -451,6 +453,6 @@ function Shell({ onOpenLogin, isAdmin, authLoading }) {
         </Routes>
       </Suspense>
       {!isAdminWorkspace && <Footer />}
-    </>
+    </div>
   );
 }
