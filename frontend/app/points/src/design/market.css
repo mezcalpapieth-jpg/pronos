@@ -1,6 +1,43 @@
 .points-category-bar .market-filters {
+  --category-fade-size: clamp(var(--points-space-4), 4vw, var(--points-space-6));
+  --category-fade-start: 0px;
+  --category-fade-end: 0px;
+  --category-fade-direction: to right;
+  box-sizing: border-box;
   gap: var(--points-space-2);
-  padding-block: var(--points-space-1);
+  padding: var(--points-space-1);
+}
+
+.points-category-bar .market-filters::after {
+  content: none;
+}
+
+.points-category-bar .market-filters:dir(rtl) {
+  --category-fade-direction: to left;
+}
+
+.points-category-bar .market-filters[data-overflow-start] {
+  --category-fade-start: var(--category-fade-size);
+}
+
+.points-category-bar .market-filters[data-overflow-end] {
+  --category-fade-end: var(--category-fade-size);
+}
+
+.points-category-bar .market-filters:is([data-overflow-start], [data-overflow-end]):not(:has(.points-category-pill:focus-visible)) {
+  mask-image: linear-gradient(
+    var(--category-fade-direction),
+    transparent,
+    black var(--category-fade-start),
+    black calc(100% - var(--category-fade-end)),
+    transparent
+  );
+}
+
+@media (forced-colors: active) {
+  .points-category-bar .market-filters {
+    mask-image: none !important;
+  }
 }
 
 .points-category-pill {
@@ -29,17 +66,6 @@
   .points-nav .nav-links > a {
     font-size: var(--text-xs) !important;
   }
-}
-
-.points-nav .nav-user-pill-points {
-  border: 0;
-  background: var(--points-control);
-  font-family: var(--font-body);
-}
-
-.points-nav .nav-user-pill-points .balance {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
 }
 
 .points-market-card.mock-card {

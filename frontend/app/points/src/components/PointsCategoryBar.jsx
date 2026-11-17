@@ -13,7 +13,7 @@
  * Horizontally scrollable on narrow viewports via CSS rules in
  * frontend/css/components.css (`.category-bar .market-filters`).
  */
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { useT } from '@app/lib/i18n.js';
@@ -59,6 +59,27 @@ export default function PointsCategoryBar() {
   const params = useParams();
   const t = useT();
   const active = activeSlugFromLocation(location.pathname, params);
+  const filtersRef = useRef(null);
+  const [clippedStart, setClippedStart] = useState(false);
+  const [clippedEnd, setClippedEnd] = useState(false);
+
+  useEffect(() => {
+    const filters = filtersRef.current;
+    const first = filters?.firstElementChild;
+    const last = filters?.lastElementChild;
+    if (!first || !last || typeof IntersectionObserver !== 'function') return undefined;
+
+    const observer = new IntersectionObserver(entries => {
+      for (const { target, intersectionRatio } of entries) {
+        const clipped = intersectionRatio < 0.999;
+        if (target === first) setClippedStart(clipped);
+        if (target === last) setClippedEnd(clipped);
+      }
+    }, { root: filters, threshold: 0.999 });
+    observer.observe(first);
+    observer.observe(last);
+    return () => observer.disconnect();
+  }, [mode]);
 
   function handleClick(slug) {
     if (slug === 'stocks') navigate('/stocks');
@@ -69,7 +90,12 @@ export default function PointsCategoryBar() {
   return (
     <nav className="category-bar points-category-bar" aria-label={t('points.cat.navigation')}>
       <div className="category-bar-inner">
-        <div className="market-filters">
+        <div
+          className="market-filters"
+          ref={filtersRef}
+          data-overflow-start={clippedStart || undefined}
+          data-overflow-end={clippedEnd || undefined}
+        >
           {CATEGORY_TABS.filter(cat => mode !== 'onchain' || !cat.stocks).map(cat => (
             <Pill
               as="button"
