@@ -689,6 +689,7 @@ const STRINGS = {
   'points.detail.priceResolved': { es: 'Resultado final · 100% / 0%', en: 'Final result · 100% / 0%' },
   'points.detail.priceRealtime':   { es: 'Precio en tiempo real', en: 'Real-time price' },
   'points.detail.last30d':         { es: 'ÚLT. 30 DÍAS',       en: 'LAST 30 DAYS' },
+  'points.detail.relatedMarkets': { es: 'Relacionados', en: 'Related markets' },
   'points.detail.chartRange':      { es: 'Rango del gráfico',   en: 'Chart range' },
   'points.detail.range4h':         { es: '4H',                  en: '4H' },
   'points.detail.range24h':        { es: '24H',                 en: '24H' },

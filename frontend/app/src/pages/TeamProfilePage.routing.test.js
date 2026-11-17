@@ -87,9 +87,9 @@ test('team profile league table exposes grouped standings as a local toggle', ()
   assert.match(teamProfile, /Conferencias/);
 });
 
-test('binary detail gauges use logo-based gauge rows instead of outcome text inside rings', () => {
-  for (const source of [mvpDetail, pointsDetail]) {
-    assert.match(source, /ProbabilityGaugeRow/);
-    assert.doesNotMatch(source, /<text[\s\S]*>\{label\}<\/text>/);
-  }
+test('Points detail shows related markets while MVP keeps its logo-based outcome gauges', () => {
+  assert.match(pointsDetail, /<RelatedMarkets marketId=\{market\.id\}/);
+  assert.doesNotMatch(pointsDetail, /ProbabilityGaugeRow/);
+  assert.match(mvpDetail, /ProbabilityGaugeRow/);
+  assert.doesNotMatch(mvpDetail, /<text[\s\S]*>\{label\}<\/text>/);
 });

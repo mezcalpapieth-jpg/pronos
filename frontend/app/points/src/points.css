@@ -2511,3 +2511,53 @@
   color: var(--text-primary);
   background: var(--points-control);
 }
+
+.points-related-markets {
+  padding: var(--points-space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--points-radius-md);
+  background: var(--points-panel);
+}
+
+@media (max-width: 767px) {
+  .points-related-markets {
+    margin-block-end: var(--points-space-4);
+  }
+}
+
+.points-related-markets h2 {
+  margin: 0 0 var(--points-space-2);
+  font-size: var(--text-base);
+  color: var(--text-primary);
+}
+
+.points-related-markets ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.points-related-markets li + li {
+  border-block-start: 1px solid var(--border);
+}
+
+.points-related-markets a {
+  min-block-size: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--points-space-3);
+  padding: var(--points-space-2) 0;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  text-decoration: none;
+}
+
+.points-related-markets a:is(:hover, :focus-visible) span {
+  text-decoration: underline;
+}
+
+.points-related-markets strong {
+  color: var(--points-caption);
+  font-variant-numeric: tabular-nums;
+}
