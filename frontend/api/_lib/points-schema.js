@@ -22,6 +22,8 @@
  * user-schema.js). The boolean flag is per-instance.
  */
 
+import { POINTS_COMMENT_MIGRATIONS } from './points-comments.js';
+
 let pointsSchemaReady = false;
 let pointsSchemaProbeReady = false;
 
@@ -66,6 +68,12 @@ const POINTS_SCHEMA_READY_PROBE = `
     to_regclass('public.points_risk_flags') IS NOT NULL AS points_risk_flags,
     to_regclass('public.points_parlay_tickets') IS NOT NULL AS points_parlay_tickets,
     to_regclass('public.points_parlay_legs') IS NOT NULL AS points_parlay_legs,
+    to_regclass('public.points_comment_likes') IS NOT NULL AS points_comment_likes,
+    to_regclass('public.idx_points_comments_live_replies') IS NOT NULL AS points_comment_reply_index,
+    EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'points_comments' AND column_name = 'parent_id'
+    ) AS points_comments_parent_id,
     EXISTS (
       SELECT 1 FROM information_schema.columns
       WHERE table_schema = 'public'
@@ -1354,6 +1362,7 @@ const POINTS_SCHEMA_MIGRATIONS = [
     ON points_comments(market_id, created_at DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_points_comments_user
     ON points_comments(username, created_at DESC)`,
+  ...POINTS_COMMENT_MIGRATIONS,
 
   // ── Resolver metadata on points_markets ───────────────────────────────────
   // resolver_type  = 'manual' (default, admin resolves) | 'chainlink_price'
