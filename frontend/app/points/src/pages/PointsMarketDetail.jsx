@@ -46,6 +46,7 @@ import LiveScorePanel from '@app/components/LiveScorePanel.jsx';
 import ShareButton from '@app/components/ShareButton.jsx';
 import TeamMarketStrip from '@app/components/TeamMarketStrip.jsx';
 import TokenMarketStrip from '../components/TokenMarketStrip.jsx';
+import { Card, Tabs } from '../ui/index.jsx';
 import { useIsMobile } from '@app/lib/useIsMobile.js';
 import PointsBuyModal from '../components/PointsBuyModal.jsx';
 import PointsSellPreviewModal from '../components/PointsSellPreviewModal.jsx';
@@ -3870,67 +3871,18 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
                 plus real trade activity. If there are no snapshots yet,
                 Sparkline renders an explicit flat/empty state instead
                 of inventing movement. */}
-            {market.executionReady !== false && <div style={{
-              background: 'var(--surface1)',
-              border: '1px solid var(--border)',
-              borderRadius: 14,
-              marginBottom: 24,
-            }}>
-              <div style={{
-                padding: '14px 20px',
-                borderBottom: '1px solid var(--border)',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                flexWrap: 'wrap',
-                gap: 12,
-                fontFamily: 'var(--font-mono)',
-                fontSize: 10,
-                letterSpacing: '0.1em',
-                color: 'var(--text-muted)',
-              }}>
+            {market.executionReady !== false && <Card as="div" className="points-market-chart">
+              <div className="points-market-chart-header">
                 <span>{isResolved ? t('points.detail.priceResolved') : chartFrozen ? t('points.detail.priceBeforeClose') : t('points.detail.priceRealtime')}</span>
-                <div
-                  role="group"
-                  aria-label={t('points.detail.chartRange')}
-                  style={{
-                    display: 'inline-flex',
-                    gap: 4,
-                    padding: 3,
-                    border: '1px solid var(--border)',
-                    borderRadius: 999,
-                    background: 'rgba(255,255,255,0.02)',
+                <Tabs
+                  label={t('points.detail.chartRange')}
+                  options={DETAIL_CHART_RANGES.map(range => ({ value: range.key, label: t(range.labelKey) }))}
+                  value={activeChartRange.key}
+                  onChange={key => {
+                    chartRangeTouchedRef.current = true;
+                    setChartRange(key);
                   }}
-                >
-                  {DETAIL_CHART_RANGES.map((range) => {
-                    const active = range.key === activeChartRange.key;
-                    return (
-                      <button
-                        key={range.key}
-                        type="button"
-                        onClick={() => {
-                          chartRangeTouchedRef.current = true;
-                          setChartRange(range.key);
-                        }}
-                        style={{
-                          border: 0,
-                          borderRadius: 999,
-                          padding: '5px 9px',
-                          background: active ? 'rgba(255,85,0,0.16)' : 'transparent',
-                          color: active ? 'var(--orange)' : 'var(--text-muted)',
-                          fontFamily: 'var(--font-mono)',
-                          fontSize: 9,
-                          fontWeight: 700,
-                          letterSpacing: '0.08em',
-                          textTransform: 'uppercase',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        {t(range.labelKey)}
-                      </button>
-                    );
-                  })}
-                </div>
+                />
               </div>
               <div style={{ padding: '20px 20px 18px', position: 'relative' }}>
                 <ChartWatermark />
@@ -4066,7 +4018,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
                   t={t}
                 />
               </div>
-            </div>}
+            </Card>}
 
             <SeriesGameStrip
               seriesMeta={market.seriesMeta}

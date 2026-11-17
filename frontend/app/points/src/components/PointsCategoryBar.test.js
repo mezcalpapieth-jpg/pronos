@@ -35,16 +35,12 @@ test('points category bar shows Infrastructure while preserving the main categor
   assert.ok(aiIndex < cryptoIndex, 'AI should appear before Crypto');
 });
 
-test('points category bar gives Mexico and Latam a subtle text-only treatment', () => {
-  assert.match(source, /slug:\s*'mexico'[\s\S]*?regional:\s*true/);
-  assert.match(source, /if \(cat\.regional\)/);
-  assert.match(source, /aria-label=\{`\$\{t\(cat\.tKey\)\} destacado`\}/);
-  const regionalBlock = source.slice(
-    source.indexOf('if (cat.regional)'),
-    source.indexOf('if (cat.news)'),
-  );
-  assert.doesNotMatch(regionalBlock, /pronos-news-pulse/);
-  assert.doesNotMatch(regionalBlock, /✦/);
+test('points categories share a pill and selected-page state with small feature indicators', () => {
+  assert.match(source, /className="points-category-pill"/);
+  assert.match(source, /aria-current=\{active === cat.slug \? 'page' : undefined\}/);
+  assert.match(source, /cat.news && <span className="points-category-news-dot"/);
+  assert.match(source, /cat.highlight && <Sparkles/);
+  assert.doesNotMatch(source, /regional:|linear-gradient|RegionalCategoryLabel/);
 });
 
 test('points category bar spans the viewport and gives the last chip scroll room', () => {
