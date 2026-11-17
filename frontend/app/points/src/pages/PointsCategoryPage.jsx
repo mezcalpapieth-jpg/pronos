@@ -34,6 +34,8 @@ import {
 } from '../lib/pointsCategoryFilters.js';
 import { AICM_HUB_PATH, isAicmDelayMarket } from '../lib/aicmMarkets.js';
 import PointsMarketCard from '../components/PointsMarketCard.jsx';
+import PointsMarketSort from '../components/PointsMarketSort.jsx';
+import { orderPointsMarkets } from '@app/lib/pointsMarketOrdering.js';
 import { MarketGridSkeleton } from '../components/PointsSkeleton.jsx';
 
 // Slug → i18n key for the page header. Falls back to the category
@@ -240,6 +242,7 @@ export default function PointsCategoryPage() {
   const featuredTeamKeys = useFeaturedTeamKeys();
 
   const searchQuery = (searchParams.get('q') || '').trim();
+  const sort = searchParams.get('sort');
   const sport  = searchParams.get('sport')  || 'all';
   const league = searchParams.get('league') || 'all';
   // Category narrower for /c/resueltos: 'all' shows every resolved
@@ -386,8 +389,8 @@ export default function PointsCategoryPage() {
       out = out.filter(m => matchesMarketSearch(m, q));
     }
 
-    return prioritizeFeaturedMarkets(out, featuredTeamKeys);
-  }, [markets, slug, categoryFilter, isNewMarketsShelf, nowMs, sport, league, resueltosCat, cryptoType, geo, topic, supportsGeoFilters, supportsTopicFilters, searchQuery, featuredTeamKeys]);
+    return orderPointsMarkets(prioritizeFeaturedMarkets(out, featuredTeamKeys), sort, now);
+  }, [markets, slug, categoryFilter, isNewMarketsShelf, nowMs, sport, league, resueltosCat, cryptoType, geo, topic, supportsGeoFilters, supportsTopicFilters, searchQuery, featuredTeamKeys, sort]);
 
   function setSport(next) {
     const params = new URLSearchParams(searchParams);
@@ -780,6 +783,15 @@ function AicmInfrastructureHubCard() {
 }
 
 function MarketsGrid({ loading, error, filtered, positionByMarket, emptyKey, searchQuery, t, before = null }) {
+  return (
+    <>
+      <PointsMarketSort />
+      <MarketGridResults {...{ loading, error, filtered, positionByMarket, emptyKey, searchQuery, t, before }} />
+    </>
+  );
+}
+
+function MarketGridResults({ loading, error, filtered, positionByMarket, emptyKey, searchQuery, t, before }) {
   if (loading) {
     return <MarketGridSkeleton count={before ? 5 : 6} before={before} />;
   }

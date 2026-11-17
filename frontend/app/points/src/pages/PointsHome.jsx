@@ -42,6 +42,8 @@ import { fetchNews, fetchPublicMapMarkets } from '@app/lib/newsApi.js';
 import { enrichNewsItemsWithGeo } from '@app/lib/newsGeo.js';
 import NewsMapView from '@app/components/NewsMapView.jsx';
 import PointsMarketCard from '../components/PointsMarketCard.jsx';
+import PointsMarketSort from '../components/PointsMarketSort.jsx';
+import { orderPointsMarkets } from '@app/lib/pointsMarketOrdering.js';
 import PointsActivityCarousel from '../components/PointsActivityCarousel.jsx';
 import { ActivityCarouselSkeleton, MarketGridSkeleton } from '../components/PointsSkeleton.jsx';
 import CombinadaMarketPickerDrawer from '../components/CombinadaMarketPickerDrawer.jsx';
@@ -158,6 +160,7 @@ export default function PointsHome({ onOpenLogin }) {
   // in the URL keeps deep-links work and lets the nav share state without
   // a React context.
   const searchQuery = searchParams.get('q') || '';
+  const sort = searchParams.get('sort');
 
   useEffect(() => {
     let cancelled = false;
@@ -286,8 +289,8 @@ export default function PointsHome({ onOpenLogin }) {
   // /c/porresolver). Search narrows the visible list through mapMarkets.
   const filtered = useMemo(() => {
     const out = mapMarkets.filter(m => shouldShowOnHome(m, featuredTeamKeys));
-    return sortMarketsByLiveThenEndDate(out);
-  }, [mapMarkets, featuredTeamKeys]);
+    return orderPointsMarkets(sortMarketsByLiveThenEndDate(out), sort);
+  }, [mapMarkets, featuredTeamKeys, sort]);
 
   const carouselMarkets = useMemo(() => (
     sortMarketsByLiveThenEndDate(mapMarkets.filter(m => shouldShowOnHome(m, featuredTeamKeys)))
@@ -581,6 +584,7 @@ export default function PointsHome({ onOpenLogin }) {
             {t('points.home.loadError')}
           </div>
         )}
+        {trendingView === 'markets' && <PointsMarketSort />}
         {!loading && !error && (trendingView === 'map' ? (homeMapMarkets.length + mapNewsItems.length) : filtered.length) === 0 && (
           <div style={{
             textAlign: 'center',
