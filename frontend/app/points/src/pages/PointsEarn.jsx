@@ -992,18 +992,18 @@ function ProfileSettingsCard({ user, onSaved }) {
           />
         </label>
         <div className="points-profile-phone">
-          <button
-            type="button"
+          <Button
+            variant={user?.phoneRequired && !phoneOpen ? 'primary' : 'secondary'}
             onClick={() => setPhoneOpen(open => !open)}
             aria-describedby="profile-phone-privacy"
-            style={socialActionButtonStyle({ primary: user?.phoneRequired && !phoneOpen })}
+            aria-expanded={phoneOpen}
           >
             {phoneOpen
               ? (lang === 'en' ? 'Hide phone' : 'Ocultar teléfono')
               : phoneNumber?.trim()
                 ? (lang === 'en' ? 'Edit phone' : 'Editar teléfono')
                 : (lang === 'en' ? 'Add your phone' : 'Añade tu teléfono')}
-          </button>
+          </Button>
           <p id="profile-phone-privacy" className="points-profile-hint points-profile-provider-note">
             {lang === 'en'
               ? 'Your phone number is private: only admins can see it. It will not appear on your public profile or be shared with other users.'
@@ -1035,27 +1035,14 @@ function ProfileSettingsCard({ user, onSaved }) {
           )}
         </div>
       </div>
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 16 }}>
-        <button
-          onClick={handleSave}
-          disabled={busy}
-          style={socialActionButtonStyle({ primary: true, disabled: busy })}
-        >
+      <div className="points-profile-settings-actions">
+        <Button variant="primary" onClick={handleSave} disabled={busy}>
           {busy ? '...' : (lang === 'en' ? 'Save profile' : 'Guardar perfil')}
-        </button>
+        </Button>
         {publicProfilePath && (
-          <Link
-            to={publicProfilePath}
-            style={{
-              ...socialActionButtonStyle({ primary: false }),
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              textDecoration: 'none',
-            }}
-          >
+          <Button as={Link} to={publicProfilePath}>
             {lang === 'en' ? 'View public profile' : 'Ver perfil público'}
-          </Link>
+          </Button>
         )}
       </div>
     </Card>
