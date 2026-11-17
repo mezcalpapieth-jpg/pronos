@@ -12,6 +12,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Moon, Search, Sun } from 'lucide-react';
 import { Input } from '../ui/index.jsx';
+import PointsBottomNav from './PointsBottomNav.jsx';
 import { matchesMarketSearch, normalizeSearchText } from '../lib/marketSearch.js';
 import { Link, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
@@ -63,7 +64,7 @@ function getInitialTheme() {
   return 'light';
 }
 
-export default function PointsNav({ onOpenLogin, isAdmin, isAdminWorkspace }) {
+export default function PointsNav({ onOpenLogin, isAdmin, isAdminWorkspace, showBottomNav }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -303,6 +304,7 @@ export default function PointsNav({ onOpenLogin, isAdmin, isAdminWorkspace }) {
   const balanceLabel = formatBalance(balance);
 
   return (
+    <>
     <nav id="nav" className={`points-nav${scrolled ? ' scrolled' : ''}`}>
       {/* Logo with pulsing green dot — matches .nav-logo .green-dot in
           frontend/css/components.css */}
@@ -443,17 +445,17 @@ export default function PointsNav({ onOpenLogin, isAdmin, isAdminWorkspace }) {
         </button>
 
         {mobileMenuOpen && (
-          <div className="points-mobile-menu-panel">
+          <div className={`points-mobile-menu-panel${showBottomNav ? ' points-menu-with-bottom-nav' : ''}`}>
             {authenticated && (
               <div className="points-mobile-menu-user">
                 <span>{user?.username ? `@${user.username}` : (lang === 'en' ? 'Signed in' : 'Sesión iniciada')}</span>
                 <strong>{balanceLabel} MXNP</strong>
               </div>
             )}
-            <Link to="/" onClick={closeMobileMenu}>{t('points.nav.markets')}</Link>
+            <Link to="/" onClick={closeMobileMenu} className="points-menu-primary">{t('points.nav.markets')}</Link>
             {authenticated && (
               <>
-                <Link to="/portfolio" onClick={closeMobileMenu} className="points-mobile-menu-row">
+                <Link to="/portfolio" onClick={closeMobileMenu} className="points-mobile-menu-row points-menu-primary">
                   <span>{t('points.nav.portfolio')}</span>
                   {claimableCount > 0 && (
                     <span className="points-mobile-menu-badge">
@@ -461,11 +463,11 @@ export default function PointsNav({ onOpenLogin, isAdmin, isAdminWorkspace }) {
                     </span>
                   )}
                 </Link>
-                <Link to="/earn" onClick={closeMobileMenu}>{t('points.nav.earn')}</Link>
+                <Link to="/earn" onClick={closeMobileMenu} className="points-menu-primary">{t('points.nav.earn')}</Link>
               </>
             )}
             {/* Public — see the desktop nav for why this one isn't gated. */}
-            <Link to="/torneo" onClick={closeMobileMenu} className="points-mobile-menu-row">
+            <Link to="/torneo" onClick={closeMobileMenu} className="points-mobile-menu-row points-menu-primary">
               <span>{t('points.nav.tournament')}</span>
               {tournamentTaskCount > 0 && (
                 <span className="points-mobile-menu-badge">
@@ -680,6 +682,15 @@ export default function PointsNav({ onOpenLogin, isAdmin, isAdminWorkspace }) {
         )}
       </div>
     </nav>
+    {showBottomNav && (
+      <PointsBottomNav
+        authenticated={authenticated}
+        onOpenLogin={onOpenLogin}
+        claimableCount={claimableCount}
+        tournamentTaskCount={tournamentTaskCount}
+      />
+    )}
+    </>
   );
 }
 
