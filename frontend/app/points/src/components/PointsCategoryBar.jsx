@@ -14,24 +14,21 @@
  * frontend/css/components.css (`.category-bar .market-filters`).
  */
 import React from 'react';
+import { Sparkles } from 'lucide-react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
-import { useLang, useT } from '@app/lib/i18n.js';
+import { useT } from '@app/lib/i18n.js';
+import { Pill } from '../ui/index.jsx';
 import { stocksEnabled } from '../lib/stockApi.js';
 import { usePointsExecution } from '../lib/PointsExecution.jsx';
 
 // Order here = visual order in the bar. Each entry maps a URL slug
 // (used in /c/<slug>) to the i18n key that produces the label.
-// `highlight: true` applies the attention-grabbing Pronos treatment
-// for the daily tournament-market bucket.
-// `regional: true` applies a softer green/gold treatment for Mexico & Latam.
-// `news: true` applies a red-gradient + live-dot treatment for the
-// Noticias tab, distinctive but calmer than the highlighted bucket.
 export const CATEGORY_TABS = [
   { slug: 'noticias',    tKey: 'points.cat.noticias',   news: true },
   { slug: 'all',         tKey: 'points.cat.trending'    },
-  ...(stocksEnabled ? [{ slug: 'stocks', stocks: true }] : []),
+  ...(stocksEnabled ? [{ slug: 'stocks', tKey: 'points.cat.stocks' }] : []),
   { slug: 'nuevos-mercados', tKey: 'points.cat.worldCup', highlight: true },
-  { slug: 'mexico',      tKey: 'points.cat.mexico',      regional: true },
+  { slug: 'mexico',      tKey: 'points.cat.mexico'      },
   { slug: 'deportes',    tKey: 'points.cat.deportes'    },
   { slug: 'musica',      tKey: 'points.cat.musica'      },
   { slug: 'politica',    tKey: 'points.cat.politica'    },
@@ -55,33 +52,12 @@ export function activeSlugFromLocation(pathname, params) {
   return m ? m[1] : null; // null on unrelated pages (market detail, portfolio)
 }
 
-function RegionalCategoryLabel() {
-  return (
-    <span
-      aria-hidden="true"
-      style={{
-        display: 'inline-flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 2,
-        lineHeight: 1.08,
-        whiteSpace: 'nowrap',
-      }}
-    >
-      <span>Mexico &amp;</span>
-      <span>Latam</span>
-    </span>
-  );
-}
-
 export default function PointsCategoryBar() {
   const { mode } = usePointsExecution();
   const navigate = useNavigate();
   const location = useLocation();
   const params = useParams();
   const t = useT();
-  const lang = useLang();
   const active = activeSlugFromLocation(location.pathname, params);
 
   function handleClick(slug) {
@@ -91,117 +67,25 @@ export default function PointsCategoryBar() {
   }
 
   return (
-    <div className="category-bar">
+    <nav className="category-bar points-category-bar" aria-label={t('points.cat.navigation')}>
       <div className="category-bar-inner">
         <div className="market-filters">
-          {CATEGORY_TABS.filter(cat => mode !== 'onchain' || !cat.stocks).map(cat => {
-            const isActive = active === cat.slug;
-            if (cat.stocks) return <button type="button" key={cat.slug} onClick={() => handleClick(cat.slug)}
-              className="filter-btn" aria-current={isActive ? 'page' : undefined}
-              style={{ color: 'var(--orange)', borderColor: isActive ? 'var(--orange)' : 'var(--border)', background: isActive ? 'rgba(255,85,0,.12)' : undefined }}>
-              {lang === 'en' ? 'Stocks' : 'Acciones'}
-            </button>;
-            if (cat.highlight) {
-              // Special treatment for the tournament drop bucket: a
-              // Pronos orange/green treatment so it catches the eye
-              // without reading as the archived tournament tab.
-              return (
-                <button
-                  key={cat.slug}
-                  onClick={() => handleClick(cat.slug)}
-                  className="filter-btn"
-                  style={{
-                    background: isActive
-                      ? 'linear-gradient(130deg, rgba(255,85,0,0.28), rgba(0,232,122,0.20))'
-                      : 'linear-gradient(130deg, rgba(255,85,0,0.15), rgba(0,232,122,0.09))',
-                    borderColor: isActive ? 'var(--border-active)' : 'var(--border)',
-                    color: 'var(--text-primary)',
-                    fontWeight: 700,
-                    letterSpacing: '0.08em',
-                  }}
-                >
-                  {t(cat.tKey)}
-                </button>
-              );
-            }
-            if (cat.regional) {
-              // Mexico & Latam should invite exploration without
-              // competing with the highlighted tournament bucket.
-              return (
-                <button
-                  key={cat.slug}
-                  onClick={() => handleClick(cat.slug)}
-                  className="filter-btn"
-                  aria-label={`${t(cat.tKey)} destacado`}
-                  style={{
-                    background: isActive
-                      ? 'linear-gradient(130deg, rgba(22,163,74,0.24), rgba(245,158,11,0.20))'
-                      : 'linear-gradient(130deg, rgba(22,163,74,0.11), rgba(245,158,11,0.08))',
-                    borderColor: isActive ? 'rgba(245,158,11,0.55)' : 'rgba(245,158,11,0.32)',
-                    color: 'var(--text-primary)',
-                    fontWeight: 700,
-                    letterSpacing: '0.08em',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    minWidth: 104,
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  <RegionalCategoryLabel />
-                </button>
-              );
-            }
-            if (cat.news) {
-              // Noticias tab — single-hue red gradient + a pulsing
-              // live-dot. Distinctive but less loud than the
-              // highlighted tournament bucket.
-              return (
-                <button
-                  key={cat.slug}
-                  onClick={() => handleClick(cat.slug)}
-                  className="filter-btn"
-                  style={{
-                    background: isActive
-                      ? 'linear-gradient(130deg, rgba(220,38,38,0.35), rgba(255,69,69,0.20))'
-                      : 'linear-gradient(130deg, rgba(220,38,38,0.16), rgba(255,69,69,0.08))',
-                    borderColor: isActive ? 'var(--danger)' : 'rgba(255,69,69,0.35)',
-                    color: 'var(--text-primary)',
-                    fontWeight: 700,
-                    letterSpacing: '0.08em',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 7,
-                  }}
-                >
-                  <span
-                    aria-hidden="true"
-                    style={{
-                      display: 'inline-block',
-                      width: 7,
-                      height: 7,
-                      borderRadius: '50%',
-                      background: 'var(--danger)',
-                      boxShadow: '0 0 0 3px rgba(255,69,69,0.18)',
-                      animation: 'pronos-news-pulse 1.6s ease-in-out infinite',
-                    }}
-                  />
-                  {t(cat.tKey)}
-                </button>
-              );
-            }
-            return (
-              <button
-                key={cat.slug}
-                className={`filter-btn${isActive ? ' active' : ''}`}
-                onClick={() => handleClick(cat.slug)}
-              >
-                {t(cat.tKey)}
-              </button>
-            );
-          })}
+          {CATEGORY_TABS.filter(cat => mode !== 'onchain' || !cat.stocks).map(cat => (
+            <Pill
+              as="button"
+              type="button"
+              key={cat.slug}
+              className="points-category-pill"
+              aria-current={active === cat.slug ? 'page' : undefined}
+              onClick={() => handleClick(cat.slug)}
+            >
+              {cat.news && <span className="points-category-news-dot" aria-hidden="true" />}
+              {cat.highlight && <Sparkles size={14} aria-hidden="true" />}
+              {cat.label || t(cat.tKey)}
+            </Pill>
+          ))}
         </div>
       </div>
-    </div>
+    </nav>
   );
 }

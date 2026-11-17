@@ -11,6 +11,7 @@
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Moon, Search, Sun } from 'lucide-react';
+import { Input } from '../ui/index.jsx';
 import { matchesMarketSearch, normalizeSearchText } from '../lib/marketSearch.js';
 import { Link, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { usePointsAuth } from '@app/lib/pointsAuth.js';
@@ -357,7 +358,8 @@ export default function PointsNav({ onOpenLogin, isAdmin, isAdminWorkspace }) {
         }}
       >
         <Search aria-hidden="true" className="points-nav-search-icon" size={16} />
-        <input
+        <Input
+          className="points-nav-search-field"
           type="search"
           aria-keyshortcuts="/"
           value={searchValue}
@@ -373,17 +375,6 @@ export default function PointsNav({ onOpenLogin, isAdmin, isAdminWorkspace }) {
           }}
           placeholder={t('points.nav.search')}
           aria-label={t('points.nav.search')}
-          style={{
-            width: '100%',
-            padding: `8px ${searchValue ? 12 : 36}px 8px 30px`,
-            background: 'var(--surface1)',
-            border: '1px solid var(--border)',
-            borderRadius: 8,
-            fontFamily: 'var(--font-body)',
-            fontSize: 12,
-            color: 'var(--text-primary)',
-            outline: 'none',
-          }}
         />
 
         {!searchValue && <kbd className="points-search-shortcut" aria-hidden="true">/</kbd>}
@@ -729,10 +720,8 @@ export default function PointsNav({ onOpenLogin, isAdmin, isAdminWorkspace }) {
 }
 
 const navLinkStyle = {
-  fontFamily: 'var(--font-mono)',
-  fontSize: 12,
-  letterSpacing: '0.06em',
-  color: 'var(--text-secondary)',
+  fontFamily: 'var(--font-body)',
+  fontSize: 'var(--text-sm)',
+  color: 'var(--points-caption)',
   textDecoration: 'none',
-  textTransform: 'uppercase',
 };
