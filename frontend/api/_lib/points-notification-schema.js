@@ -34,16 +34,27 @@ export const POINTS_NOTIFICATION_MIGRATIONS = [
   `CREATE OR REPLACE FUNCTION points_notify_market_resolution() RETURNS TRIGGER
      LANGUAGE plpgsql AS $$
      BEGIN
+       -- Full parallel resolution writes the parent first, then its active
+       -- legs. An independently resolved leg still alerts its own holders.
+       IF NEW.parent_id IS NOT NULL AND NOT EXISTS (
+         SELECT 1 FROM points_markets parent WHERE parent.id = NEW.parent_id
+           AND parent.status = 'active' AND parent.mode = 'points' AND parent.is_test_market IS NOT TRUE
+       ) THEN
+         RETURN NEW;
+       END IF;
+
        WITH affected AS (
          SELECT DISTINCT u.id
          FROM points_markets m
          JOIN points_positions p ON p.market_id = m.id AND p.shares > 0.000001
          JOIN points_users u ON u.username = p.username
-         WHERE m.id = NEW.id OR m.parent_id = NEW.id
+         WHERE m.id = NEW.id OR (
+           m.parent_id = NEW.id AND m.status = 'active' AND m.mode = 'points' AND m.is_test_market IS NOT TRUE
+         )
        ),
        created AS (
          INSERT INTO points_notifications (user_id, kind, source_id, market_id, created_at)
-         SELECT id, 'market_resolved', NEW.id, NEW.id, clock_timestamp() FROM affected
+         SELECT id, 'market_resolved', NEW.id, COALESCE(NEW.parent_id, NEW.id), clock_timestamp() FROM affected
          ON CONFLICT (user_id, kind, source_id) DO NOTHING
          RETURNING id, user_id
        )
@@ -59,7 +70,7 @@ export const POINTS_NOTIFICATION_MIGRATIONS = [
      AFTER UPDATE OF status ON points_markets
      FOR EACH ROW
      WHEN (OLD.status IS DISTINCT FROM 'resolved' AND NEW.status = 'resolved'
-       AND NEW.parent_id IS NULL AND NEW.mode = 'points' AND NEW.is_test_market IS NOT TRUE)
+       AND NEW.mode = 'points' AND NEW.is_test_market IS NOT TRUE)
      EXECUTE FUNCTION points_notify_market_resolution()`,
   `CREATE OR REPLACE FUNCTION points_notify_winnings_credit() RETURNS TRIGGER
      LANGUAGE plpgsql AS $$

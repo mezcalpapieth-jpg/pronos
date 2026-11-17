@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
+import { redeemWinningPosition } from './points-redemption.js';
+import { ensurePointsSchema } from './points-schema.js';
 import { POINTS_NOTIFICATION_MIGRATIONS } from './points-notification-schema.js';
 import { dispatchResolutionEmails } from './points-notification-email.js';
 import { markNotificationsRead, notificationId, readNotificationFeed, saveNotificationSettings } from './points-notifications.js';
@@ -16,7 +18,7 @@ test('Points notifications commit with their source, respect ownership, and only
     CREATE TABLE points_users (id INTEGER PRIMARY KEY, username TEXT NOT NULL, email TEXT);
     CREATE TABLE points_markets (
       id INTEGER PRIMARY KEY, parent_id INTEGER REFERENCES points_markets(id), status TEXT, mode TEXT,
-      is_test_market BOOLEAN, question TEXT
+      is_test_market BOOLEAN, question TEXT, leg_label TEXT
     );
     CREATE TABLE points_positions (market_id INTEGER, username TEXT, shares NUMERIC);
     CREATE TABLE points_comments (id INTEGER PRIMARY KEY, market_id INTEGER, parent_id INTEGER, username TEXT, deleted_at TIMESTAMPTZ);
@@ -24,9 +26,9 @@ test('Points notifications commit with their source, respect ownership, and only
     CREATE TABLE points_limit_orders (id INTEGER PRIMARY KEY, market_id INTEGER, username TEXT, status TEXT, filled_shares NUMERIC);
     INSERT INTO points_users VALUES (1,'ana','ana@example.test'), (2,'ben','ben@example.test'), (3,'cam','');
     INSERT INTO points_markets VALUES
-      (1,NULL,'active','points',false,'Market A'), (2,1,'active','points',false,'Runner B'),
-      (3,NULL,'active','points',true,'Test market'), (4,NULL,'active','points',false,'Market D'),
-      (5,NULL,'active','points',false,'Market E');
+      (1,NULL,'active','points',false,'Market A',NULL), (2,1,'active','points',false,'Runner B','Runner B'),
+      (3,NULL,'active','points',true,'Test market',NULL), (4,NULL,'active','points',false,'Market D',NULL),
+      (5,NULL,'active','points',false,'Market E',NULL);
     INSERT INTO points_positions VALUES
       (1,'ana',50), (2,'ana',2), (2,'ben',80), (1,'cam',0), (3,'ana',12), (4,'ana',8), (5,'ana',15);
     INSERT INTO points_comments VALUES (1,1,NULL,'ana',NULL), (2,1,NULL,'ana',NOW());
@@ -48,7 +50,8 @@ test('Points notifications commit with their source, respect ownership, and only
     BEGIN;
     UPDATE points_markets SET status = 'resolved' WHERE id = 1;
     ROLLBACK;
-    UPDATE points_markets SET status = 'resolved' WHERE id IN (1,2,3);
+    UPDATE points_markets SET status = 'resolved' WHERE id = 1;
+    UPDATE points_markets SET status = 'resolved' WHERE id IN (2,3);
     UPDATE points_markets SET status = 'active' WHERE id = 1;
     UPDATE points_markets SET status = 'resolved' WHERE id = 1;
     UPDATE points_limit_orders SET filled_shares = 2 WHERE id = 2;
@@ -121,4 +124,81 @@ test('Points notifications commit with their source, respect ownership, and only
   assert.equal(secondPage.items.length, 13);
   assert.ok(BigInt(secondPage.items[0].id) < BigInt(firstPage.nextBeforeId));
   assert.equal(secondPage.nextBeforeId, null);
+});
+
+test('early parallel resolution and later parent settlement alert who holds each position, even after redemption', async t => {
+  const db = new PGlite();
+  t.after(() => db.close());
+  const sql = async (parts, ...values) => (await db.query(
+    parts.reduce((query, part, i) => query + (i ? `$${i}` : '') + part, ''), values,
+  )).rows;
+  await ensurePointsSchema({
+    query: async (statement) => (await db.query(statement)).rows,
+  });
+  await db.exec(`
+    INSERT INTO points_users (id, username, turnkey_sub_org_id, email) VALUES
+      (1, 'ana', 'token-a', 'ana@example.test'),
+      (2, 'ben', 'token-b', 'ben@example.test'),
+      (3, 'cam', 'token-c', 'cam@example.test');
+    INSERT INTO points_cycles (label, started_at, ends_at, status)
+      VALUES ('Notification test', NOW() - INTERVAL '7 days', NOW() + INTERVAL '7 days', 'active');
+    INSERT INTO points_markets (id, question, outcomes, reserves, end_time, amm_mode, parent_id, leg_label) VALUES
+      (100, 'Who will win?', '["Alpha","Beta","Gamma"]', '[500,500,500]', NOW(), 'parallel', NULL, NULL),
+      (101, 'Will Alpha win?', '["Sí","No"]', '[100,100]', NOW(), 'unified', 100, 'Alpha'),
+      (102, 'Will Beta win?', '["Sí","No"]', '[100,100]', NOW(), 'unified', 100, 'Beta'),
+      (103, 'Will Gamma win?', '["Sí","No"]', '[100,100]', NOW(), 'unified', 100, 'Gamma');
+    INSERT INTO points_positions (market_id, username, outcome_index, shares, cost_basis) VALUES
+      (101, 'ana', 1, 10.000001, 2),
+      (101, 'cam', 0, 2.25, 1),
+      (102, 'ben', 0, 45.125125, 20),
+      (103, 'ben', 1, 9.234567, 4);
+    INSERT INTO points_trades (market_id, username, side, outcome_index, shares, collateral, price_at_trade)
+      SELECT market_id, username, 'buy', outcome_index, shares, cost_basis, 0.5 FROM points_positions;
+  `);
+
+  assert.equal(await saveNotificationSettings(sql, { userId: 1, language: 'es', resolutionEmail: true }), true);
+  await db.exec(`
+    UPDATE points_markets SET status = 'resolved', outcome = 1, resolved_at = NOW(), resolved_by = 'admin'
+      WHERE id = 101 AND status = 'active';
+  `);
+  const claim = (username, marketId, outcomeIndex, opts = {}) => db.transaction(client =>
+    redeemWinningPosition(client, { username, marketId, outcomeIndex, ...opts }));
+  assert.deepEqual(await claim('ana', 101, 1, { source: 'api' }), {
+    balance: 10.000001, payout: 10.000001, shares: 10.000001,
+  });
+  const anaShares = await sql`SELECT shares FROM points_positions WHERE market_id = 101 AND username = 'ana'`;
+  assert.equal(Number(anaShares[0].shares), 0);
+  assert.equal(await saveNotificationSettings(sql, { userId: 2, language: 'en', resolutionEmail: true }), true);
+
+  await db.transaction(async client => {
+    await client.query(`UPDATE points_markets SET status = 'resolved', outcome = 1, resolved_at = NOW(),
+      resolved_by = 'resolver' WHERE id = 100 AND status = 'active'`);
+    await client.query(`UPDATE points_markets SET status = 'resolved', outcome = 0, resolved_at = NOW(),
+      resolved_by = 'resolver' WHERE id = 102 AND status = 'active'`);
+    await client.query(`UPDATE points_markets SET status = 'resolved', outcome = 1, resolved_at = NOW(),
+      resolved_by = 'resolver' WHERE id = 103 AND status = 'active'`);
+  });
+
+  assert.deepEqual(await claim('ben', 102, 0), { balance: 45.125125, payout: 45.125125, shares: 45.125125 });
+  await assert.rejects(claim('ben', 102, 0), /no_shares_to_redeem/);
+  assert.deepEqual(await claim('ben', 103, 1), { balance: 54.359692, payout: 9.234567, shares: 9.234567 });
+  const read = async userId => (await readNotificationFeed(sql, { userId, beforeId: null })).items
+    .map(item => [item.kind, item.marketId, item.legLabel, item.amount]);
+  assert.deepEqual(await read(1), [['winnings_credited', 100, null, 10.000001], ['market_resolved', 100, 'Alpha', null]]);
+  assert.deepEqual(await read(2), [
+    ['winnings_credited', 100, null, 9.234567],
+    ['winnings_credited', 100, null, 45.125125],
+    ['market_resolved', 100, null, null],
+  ]);
+  assert.deepEqual(await read(3), [['market_resolved', 100, 'Alpha', null]]);
+
+  const sent = [];
+  assert.deepEqual(await dispatchResolutionEmails(sql, {
+    key: 'test-only',
+    send: async (_url, request) => { sent.push(JSON.parse(request.body)); return { ok: true }; },
+  }), { claimed: 2, sent: 2, failed: 0 });
+  assert.deepEqual(sent.map(email => [email.to[0], email.subject]).sort(), [
+    ['ana@example.test', 'Se resolvió una opción en la que tenías una posición'],
+    ['ben@example.test', 'Your Pronos market has resolved'],
+  ]);
 });

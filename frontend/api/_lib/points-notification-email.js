@@ -7,7 +7,7 @@ export async function dispatchResolutionEmails(sql, { key, send = fetch } = {}) 
   // shorter interval so losing a success response cannot cause two emails.
   const jobs = await sql`
     WITH next AS (
-      SELECT e.notification_id, n.market_id
+      SELECT e.notification_id, n.market_id, n.source_id <> n.market_id AS leg_resolved
       FROM points_notification_emails e
       JOIN points_notifications n ON n.id = e.notification_id
       JOIN points_notification_settings p ON p.user_id = n.user_id
@@ -21,7 +21,7 @@ export async function dispatchResolutionEmails(sql, { key, send = fetch } = {}) 
     )
     UPDATE points_notification_emails e SET available_at = NOW() + INTERVAL '5 minutes'
     FROM next WHERE e.notification_id = next.notification_id
-    RETURNING e.notification_id, e.email, e.consent, e.language, next.market_id
+    RETURNING e.notification_id, e.email, e.consent, e.language, next.market_id, next.leg_resolved
   `;
 
   let sent = 0;
@@ -38,10 +38,12 @@ export async function dispatchResolutionEmails(sql, { key, send = fetch } = {}) 
     const en = job.language === 'en';
     const market = `https://pronos.io/points/market?id=${job.market_id}`;
     const settings = 'https://pronos.io/points/?notifications=1';
-    const subject = en ? 'Your Pronos market has resolved' : 'Tu mercado de Pronos se resolvió';
+    const subject = job.leg_resolved
+      ? (en ? 'An outcome you held on Pronos has resolved' : 'Se resolvió una opción en la que tenías una posición')
+      : (en ? 'Your Pronos market has resolved' : 'Tu mercado de Pronos se resolvió');
     const text = en
-      ? `A Points market where you held a position has resolved. View the result: ${market}\n\nManage resolution emails: ${settings}`
-      : `Un mercado de Puntos donde tenías una posición se resolvió. Ver el resultado: ${market}\n\nConfigura los correos de resolución: ${settings}`;
+      ? `${subject}. View the result: ${market}\n\nManage resolution emails: ${settings}`
+      : `${subject}. Ver el resultado: ${market}\n\nConfigura los correos de resolución: ${settings}`;
     let response;
     try {
       response = await send(RESEND_ENDPOINT, {

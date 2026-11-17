@@ -12,7 +12,7 @@
   min-width: 36px;
   min-height: 36px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm, 8px);
+  border-radius: var(--points-radius-sm);
   background: transparent;
   color: var(--text-primary);
   cursor: pointer;
@@ -30,10 +30,10 @@
   inset-inline-end: -5px;
   min-width: 18px;
   padding: 1px 3px;
-  border-radius: 20px;
-  background: #b74516;
-  color: #fff;
-  font: 700 10px/1.5 var(--font-body);
+  border-radius: var(--points-radius-pill);
+  background: var(--orange-bright);
+  color: var(--points-on-brand);
+  font: 700 var(--text-xs)/1.3 var(--font-body);
   text-align: center;
 }
 
@@ -48,11 +48,11 @@
   max-height: calc(100dvh - 92px);
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: var(--radius-md, 12px);
-  background: var(--surface1);
+  border-radius: var(--points-radius-md);
+  background: var(--points-panel, var(--surface1));
   color: var(--text-primary);
   box-shadow: 0 16px 44px rgb(0 0 0 / 24%);
-  font: 400 14px/1.45 var(--font-body);
+  font: 400 var(--text-sm)/1.45 var(--font-body);
 }
 
 .points-notifications-panel header {
@@ -65,11 +65,11 @@
 
 .points-notifications-panel h2 {
   margin: 0;
-  font: 700 16px/1.3 var(--font-body);
+  font: 700 var(--text-base)/1.3 var(--font-body);
 }
 
 .points-notifications-close {
-  font-size: 21px;
+  font-size: var(--text-lg);
 }
 
 .points-notifications-content {
@@ -106,7 +106,7 @@
 
 .points-notifications-status {
   padding: 12px 0;
-  color: var(--text-secondary);
+  color: var(--points-caption, var(--text-secondary));
 }
 
 .points-notifications-list {
@@ -144,8 +144,8 @@
 
 .points-notifications-list time,
 .points-notifications-panel details p {
-  color: var(--text-secondary);
-  font-size: 12px;
+  color: var(--points-caption, var(--text-secondary));
+  font-size: var(--text-xs);
 }
 
 .points-notifications-panel details {
