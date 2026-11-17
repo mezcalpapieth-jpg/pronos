@@ -468,6 +468,12 @@ export async function fetchMarkets({ status = 'active', category, limit, feature
   return markets;
 }
 
+export async function fetchRelatedMarkets(marketId, { signal } = {}) {
+  const q = new URLSearchParams({ relatedTo: String(marketId), limit: '5' });
+  const { markets = [] } = await getJson(`/api/points/markets?${q}`, { signal });
+  return markets;
+}
+
 export async function fetchAicmOverview() {
   return getJson('/api/points/aicm/overview');
 }

@@ -11,13 +11,13 @@ import { readFile } from 'node:fs/promises';
 
 const source = await readFile(new URL('./PointsMarketDetail.jsx', import.meta.url), 'utf8');
 
-test('points resolved binary ring follows the winning outcome', () => {
+test('points resolved chart follows the winning outcome', () => {
   assert.match(source, /const displayWinnerIndex = isResolved \? displayOutcomeIndices\.indexOf\(winnerIndex\) : null;/);
   assert.match(source, /const displayWinnerIndexes = isResolved && market\.ammMode === 'parallel'/);
   assert.match(source, /Number\(leg\?\.outcome\) === 0 \? index : null/);
   assert.match(source, /if \(isResolved\) \{[\s\S]*?return displayWinnerIndex === i \? 100 : 0;[\s\S]*?\}/);
   assert.match(source, /market\.ammMode === 'parallel' && Array\.isArray\(parallelDisplayLegs\)/);
-  assert.match(source, /winnerIndex=\{displayWinnerIndexes\}/);
+  assert.doesNotMatch(source, /ProbabilityGaugeRow|ProbabilityRing/);
   assert.match(source, /displayWinnerIndexSet\.has\(i\)/);
 });
 
@@ -39,7 +39,7 @@ test('points series navigation sits immediately after the chart, before trading 
 });
 
 test('points series navigation wraps all seven games instead of hiding them off-screen', () => {
-  const strip = source.slice(source.indexOf('function SeriesGameStrip'), source.indexOf('function ProbabilityRing'));
+  const strip = source.slice(source.indexOf('function SeriesGameStrip'), source.indexOf('function formatDepthCents'));
   assert.match(strip, /role="navigation" aria-label=\{t\('points\.series\.label'\)\}/);
   assert.match(strip, /gridTemplateColumns: 'repeat\(auto-fit, minmax\(84px, 1fr\)\)'/);
   assert.doesNotMatch(strip, /overflowX|minWidth: 122|WebkitOverflowScrolling/);

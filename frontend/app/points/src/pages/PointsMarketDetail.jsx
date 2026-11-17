@@ -51,6 +51,7 @@ import { Card, Tabs } from '../ui/index.jsx';
 import { useIsMobile } from '@app/lib/useIsMobile.js';
 import PointsBuyModal from '../components/PointsBuyModal.jsx';
 import MobileMarketBuyBar from '../components/MobileMarketBuyBar.jsx';
+import RelatedMarkets from '../components/RelatedMarkets.jsx';
 import PointsSellPreviewModal from '../components/PointsSellPreviewModal.jsx';
 import PointsActivityTape from '../components/PointsActivityTape.jsx';
 import PriceHistoryNotice from '../components/PriceHistoryNotice.jsx';
@@ -1648,141 +1649,6 @@ function SeriesGameStrip({ seriesMeta, currentMarketId, navigate, t }) {
           );
         })}
       </div>
-    </div>
-  );
-}
-
-/* Ring chart — same shape as MVP's ProbabilityChart, minus on-chain state */
-function ProbabilityRing({ pct, resolved, winner, label, logo, color = 'var(--yes)' }) {
-  const radius = 54;
-  const circ = 2 * Math.PI * radius;
-  const safePct = Math.max(0, Math.min(100, Number(pct) || 0));
-  const dash = (safePct / 100) * circ;
-  const ringColor = resolved ? (winner ? 'var(--yes)' : 'var(--danger)') : color;
-
-  return (
-    <div
-      aria-label={`${label} ${safePct}%`}
-      style={{
-        position: 'relative',
-        width: 140,
-        height: 140,
-        flexShrink: 0,
-      }}
-    >
-      <svg width={140} height={140} viewBox="0 0 140 140" aria-hidden="true">
-        <circle cx="70" cy="70" r={radius} fill="none" stroke="var(--surface2)" strokeWidth="12" />
-        <circle
-          cx="70" cy="70" r={radius}
-          fill="none"
-          stroke={ringColor}
-          strokeWidth="12"
-          strokeLinecap="round"
-          strokeDasharray={`${dash} ${circ - dash}`}
-          transform="rotate(-90 70 70)"
-          style={{ transition: 'stroke-dasharray 0.5s' }}
-        />
-      </svg>
-      <div style={{
-        position: 'absolute',
-        inset: 24,
-        display: 'grid',
-        placeItems: 'center',
-        alignContent: 'center',
-        gap: 5,
-      }}>
-        {logo ? (
-          <OutcomeLogo src={logo} label={label} size={44} />
-        ) : (
-          <span style={{
-            width: 44,
-            height: 44,
-            display: 'grid',
-            placeItems: 'center',
-            borderRadius: 8,
-            border: '1px solid var(--border)',
-            background: 'var(--surface2)',
-            color: 'var(--text-primary)',
-            fontFamily: 'var(--font-display)',
-            fontSize: 17,
-          }}>
-            {outcomeInitials(label)}
-          </span>
-        )}
-        <span style={{
-          color: winner ? 'var(--green)' : 'var(--text-primary)',
-          fontFamily: 'var(--font-display)',
-          fontSize: 24,
-          lineHeight: 1,
-        }}>
-          {safePct}%
-        </span>
-        {resolved && winner && (
-          <span style={{
-            color: 'var(--green)',
-            fontFamily: 'var(--font-mono)',
-            fontSize: 9,
-            letterSpacing: '0.08em',
-            textTransform: 'uppercase',
-          }}>
-            Ganador
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function ProbabilityGaugeRow({ outcomes, outcomeImages, pctFor, isResolved, winnerIndex }) {
-  const winnerIndexes = Array.isArray(winnerIndex) ? new Set(winnerIndex) : new Set([winnerIndex]);
-  return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-      gap: 12,
-      marginBottom: 32,
-    }}>
-      {outcomes.map((label, i) => {
-        const isWinner = isResolved && winnerIndexes.has(i);
-        const accent = accentFor(i, outcomes.length);
-        return (
-          <div
-            key={label}
-            style={{
-              display: 'grid',
-              justifyItems: 'center',
-              gap: 8,
-              padding: '16px 12px',
-              border: `1px solid ${isWinner ? 'rgba(0,232,122,0.4)' : 'var(--border)'}`,
-              borderRadius: 12,
-              background: isWinner ? 'rgba(0,232,122,0.08)' : 'var(--surface1)',
-              opacity: isResolved && !isWinner ? 0.58 : 1,
-            }}
-          >
-            <ProbabilityRing
-              pct={pctFor(i)}
-              resolved={isResolved}
-              winner={isWinner}
-              label={label}
-              logo={outcomeImages?.[i] || null}
-              color={accent.fg}
-            />
-            <div style={{
-              maxWidth: '100%',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              color: isWinner ? 'var(--green)' : 'var(--text-secondary)',
-              fontFamily: 'var(--font-mono)',
-              fontSize: 11,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-            }}>
-              {label}
-            </div>
-          </div>
-        );
-      })}
     </div>
   );
 }
@@ -4133,16 +3999,6 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
               }}
             />
 
-            {displayOutcomes.length === 2 && (
-              <ProbabilityGaugeRow
-                outcomes={displayOutcomes}
-                outcomeImages={displayOutcomeImages}
-                pctFor={pctFor}
-                isResolved={isResolved}
-                winnerIndex={displayWinnerIndexes}
-              />
-            )}
-
             {/* Parallel markets keep a read-only odds snapshot below
                 the trade/orderbook area. The actual Sí/No buy controls
                 stay immediately after the graph on phones and in the
@@ -4234,6 +4090,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
               </div>
             )}
 
+            {isMobile && <RelatedMarkets marketId={market.id} />}
             <MarketComments
               marketId={market.id}
               authenticated={authenticated}
@@ -4253,6 +4110,7 @@ export default function PointsMarketDetail({ onOpenLogin, isAdmin = false }) {
           }}>
 
           {!isMobile && tradePanel}
+          {!isMobile && <RelatedMarkets marketId={market.id} />}
 
             {/* ── Tu posición ───────────────────────────────────────
                 Shows shares held per outcome when the user is signed in.

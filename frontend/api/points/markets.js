@@ -19,6 +19,7 @@ import { resolvedMarketPrices } from '../_lib/points-resolution-display.js';
 import { binaryPricesWithBookTrade, pricesWithBookTrades } from '../_lib/points-display-prices.js';
 import { buildEspnLiveScoreConfig } from '../_lib/espn-live-score.js';
 import { FESTIVAL_SOURCE } from '../../shared/trading-festival.js';
+import { findRelatedMarketIds } from '../_lib/related-points-markets.js';
 
 // Lazy neon client init — defer until the first request so a missing
 // DATABASE_URL at module-load time surfaces as a structured JSON error
@@ -125,14 +126,24 @@ export default async function handler(req, res) {
     });
     if (limited) return;
 
-    const status = req.query.status === 'resolved' ? 'resolved' : 'active';
-    const category = typeof req.query.category === 'string' ? publicCategoryAlias(req.query.category) : null;
+    const relatedRequested = req.query.relatedTo != null;
+    const relatedTo = typeof req.query.relatedTo === 'string' && /^\d+$/.test(req.query.relatedTo)
+      ? Number(req.query.relatedTo)
+      : null;
+    if (relatedRequested && (!Number.isInteger(relatedTo) || relatedTo < 1 || relatedTo > 2_147_483_647)) {
+      return res.status(400).json({ error: 'invalid_market_id' });
+    }
+
+    const status = !relatedRequested && req.query.status === 'resolved' ? 'resolved' : 'active';
+    const category = !relatedRequested && typeof req.query.category === 'string'
+      ? publicCategoryAlias(req.query.category)
+      : null;
     // `mode` segregates off-chain Points markets from on-chain MVP markets
     // so the two apps render isolated universes even though they share the
     // same table. Omitted → Points default ('points'). MVP passes
     // `?mode=onchain` on every list call. `?mode=all` skips the filter
     // (used by the shared internal indexer + admin tools).
-    const modeParam = typeof req.query.mode === 'string' ? req.query.mode.toLowerCase() : '';
+    const modeParam = !relatedRequested && typeof req.query.mode === 'string' ? req.query.mode.toLowerCase() : '';
     const modeFilter = modeParam === 'onchain' ? 'onchain'
                       : modeParam === 'all'    ? null
                       : 'points';
@@ -141,7 +152,7 @@ export default async function handler(req, res) {
     // testnet and mainnet is a one-variable change — each chain sees only
     // its own on-chain markets. Mode='points' markets have chain_id=NULL
     // so this filter should only be sent with mode='onchain'.
-    const chainIdRaw = req.query.chain_id;
+    const chainIdRaw = relatedRequested ? null : req.query.chain_id;
     const chainIdFilter = Number.isFinite(Number(chainIdRaw)) && Number(chainIdRaw) > 0
       ? Number(chainIdRaw)
       : null;
@@ -150,21 +161,22 @@ export default async function handler(req, res) {
     // category pages request a higher cap so nothing is hidden. Clamped
     // at 2000 so we never return a multi-megabyte response by accident.
     const reqLimit = Number.parseInt(req.query.limit, 10);
-    const limit = Number.isFinite(reqLimit) && reqLimit > 0
-      ? Math.min(reqLimit, 2000)
-      : 100;
+    const limit = relatedRequested
+      ? Math.min(reqLimit > 0 ? reqLimit : 5, 5)
+      : (reqLimit > 0 ? Math.min(reqLimit, 2000) : 100);
     // featured filter: the home "Trending" grid only shows curated
     // (featured=true) markets. Category pages pass featured=all to see
     // every public-visible market. Default without a category = trending,
     // so featured=true. Explicit ?featured=all bypasses the curation filter,
     // but still respects hidden_from_home for active non-trophy markets.
-    const featuredParam = typeof req.query.featured === 'string'
+    const featuredParam = relatedRequested ? 'all' : typeof req.query.featured === 'string'
       ? req.query.featured.toLowerCase()
       : req.query.featured;
     const tournamentOnly = !category && featuredParam === 'tournament';
     const featuredOnly = !category && !tournamentOnly && featuredParam !== 'all';
     const cacheKey = [
       'points:markets:v17',
+      relatedRequested ? `related-${relatedTo}` : 'list',
       status,
       category || 'all',
       modeFilter || 'all-modes',
@@ -179,6 +191,10 @@ export default async function handler(req, res) {
         const schemaSql = getSchemaSql();
         const sql = getSql();
         await timer.time('schema', () => ensurePointsSchema(schemaSql));
+        const relatedIds = relatedRequested
+          ? await timer.time('related_markets', () => findRelatedMarketIds(sql, relatedTo, limit))
+          : null;
+        if (relatedIds?.length === 0) return { markets: [] };
 
         // Only fetch parents / unified markets. Legs (parent_id IS NOT NULL)
         // are rolled up below and never surface as standalone rows.
@@ -257,6 +273,7 @@ export default async function handler(req, res) {
             ), '[]'::jsonb) AS per_outcome
         ) dt ON true
         WHERE m.status = ${status}
+          AND (${relatedIds}::int[] IS NULL OR m.id = ANY(${relatedIds}::int[]))
           AND m.parent_id IS NULL
           AND (${category}::text IS NULL OR m.category = ${category}::text OR COALESCE(m.category_tags, '[]'::jsonb) ? ${category}::text)
           AND (${modeFilter}::text IS NULL OR COALESCE(m.mode, 'points') = ${modeFilter}::text)
@@ -280,6 +297,7 @@ export default async function handler(req, res) {
             OR m.tournament_featured = true
           )
         ORDER BY
+          array_position(${relatedIds}::int[], m.id) ASC NULLS LAST,
           CASE WHEN ${status}::text = 'resolved' THEN m.resolved_at END DESC NULLS LAST,
           CASE WHEN ${status}::text = 'active' AND m.end_time > NOW() THEN 1 END,
           CASE WHEN m.end_time > NOW() THEN m.end_time END ASC NULLS LAST,
@@ -565,7 +583,7 @@ export default async function handler(req, res) {
           });
         });
 
-        return { markets };
+        return { markets: relatedRequested ? markets.filter(market => market.status === 'active') : markets };
     });
     res.setHeader('X-Pronos-Cache', hit ? 'hit' : 'miss');
     timer.end({ cache: hit ? 'hit' : 'miss', markets: payload.markets?.length || 0 });
