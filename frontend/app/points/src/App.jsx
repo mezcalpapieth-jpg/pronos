@@ -29,6 +29,9 @@ import { usePointsExecution } from './lib/PointsExecution.jsx';
 
 const PointsHome = lazy(() => import('./pages/PointsHome.jsx'));
 const PointsMarketDetail = lazy(() => import('./pages/PointsMarketDetail.jsx'));
+const PointsExternalMarkets = import.meta.env.DEV || import.meta.env.VITE_VERCEL_ENV === 'preview'
+  ? lazy(() => import('./pages/PointsExternalMarkets.jsx'))
+  : null;
 const PointsCategoryPage = lazy(() => import('./pages/PointsCategoryPage.jsx'));
 const PointsAicmPage = lazy(() => import('./pages/PointsAicmPage.jsx'));
 // Shared news page — same component used by the MVP build, with the
@@ -433,6 +436,9 @@ function Shell({ onOpenLogin, isAdmin }) {
           <Route path="/c/noticias" element={<NewsPage isAdmin={isAdmin} adminPath="/admin" />} />
           <Route path="/c/:slug" element={<PointsCategoryPage />} />
           <Route path="/market" element={<PointsMarketDetail onOpenLogin={onOpenLogin} isAdmin={isAdmin} />} />
+          {PointsExternalMarkets && (
+            <Route path="/external-markets/:id?" element={<PointsExternalMarkets />} />
+          )}
           <Route path="/portfolio" element={<PointsPortfolio />} />
           <Route path="/stocks" element={<PointsStocks />} />
           <Route path="/stocks/:ticker" element={<PointsStockDetail onOpenLogin={onOpenLogin} />} />

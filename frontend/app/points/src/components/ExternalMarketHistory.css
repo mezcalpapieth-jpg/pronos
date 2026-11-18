@@ -1,0 +1,23 @@
+.external-market-history .external-history-outcomes {
+  margin-block: 14px;
+}
+
+.external-history-plot {
+  margin-block-start: 12px;
+}
+
+.external-history-plot time {
+  display: inline-block;
+  max-width: 100%;
+}
+
+.external-market-history .points-market-exports button:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: 3px;
+}
+
+@media (width < 720px) {
+  .external-market-history .points-market-exports button {
+    min-height: 44px;
+  }
+}

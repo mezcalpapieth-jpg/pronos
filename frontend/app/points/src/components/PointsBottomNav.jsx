@@ -4,12 +4,16 @@ import { Link, useLocation } from 'react-router-dom';
 import { useT } from '@app/lib/i18n.js';
 import './points-browse.css';
 
-export default function PointsBottomNav({ authenticated, onOpenLogin, claimableCount, tournamentTaskCount, showTournament = true, showEarn = true }) {
+export default function PointsBottomNav({
+  authenticated, onOpenLogin, claimableCount, tournamentTaskCount,
+  showTournament = true, showEarn = true, marketsPath = '/',
+}) {
   const { pathname } = useLocation();
   const t = useT();
-  const marketsActive = pathname === '/' || /^\/(c|market|stocks|teams)(\/|$)/.test(pathname);
+  const marketsActive = pathname === marketsPath || pathname.startsWith(`${marketsPath}/`)
+    || /^\/(c|market|stocks|teams)(\/|$)/.test(pathname);
   const links = [
-    { to: '/', icon: ChartNoAxesColumn, label: 'points.nav.mobileMarkets', active: marketsActive },
+    { to: marketsPath, icon: ChartNoAxesColumn, label: 'points.nav.mobileMarkets', active: marketsActive },
     { to: '/portfolio', icon: BriefcaseBusiness, label: 'points.nav.portfolio', restricted: true, badge: claimableCount },
     showTournament && { to: '/torneo', icon: Trophy, label: 'points.nav.mobileTournament', badge: tournamentTaskCount },
     showEarn && { to: '/earn', icon: UserRound, label: 'points.nav.earn', restricted: true },

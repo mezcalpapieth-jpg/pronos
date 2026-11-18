@@ -59,6 +59,8 @@ function getInitialTheme() {
 export default function PointsNav({ onOpenLogin, isAdmin, isAdminWorkspace, showBottomNav }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const externalPreview = /^\/external-markets(?:\/|$)/.test(location.pathname);
+  const marketsPath = externalPreview ? '/external-markets' : '/';
   const [searchParams, setSearchParams] = useSearchParams();
   const { authenticated, user, logout, refresh } = usePointsAuth();
   const execution = usePointsExecution();
@@ -88,7 +90,7 @@ export default function PointsNav({ onOpenLogin, isAdmin, isAdminWorkspace, show
   const searchRef = useRef(null);
 
   async function ensureSearchCache() {
-    if (searchCacheLoaded) return;
+    if (externalPreview || searchCacheLoaded) return;
     try {
       // "Active" covers public-visible Trending + category tabs + Por
       // resolver; we intentionally don't pull resolved markets since users
@@ -103,25 +105,29 @@ export default function PointsNav({ onOpenLogin, isAdmin, isAdminWorkspace, show
 
   function handleSearchChange(e) {
     const value = e.target.value;
+    const next = new URLSearchParams(searchParams);
+    if (value) next.set('q', value);
+    else next.delete('q');
+    if (externalPreview) {
+      navigate({ pathname: marketsPath, search: next.toString() }, { replace: true });
+      return;
+    }
     setSearchOpen(true);
     const categoryGrid = /^\/c\/(?!noticias(?:\/|$)|tradingfestival(?:\/|$))[^/]+\/?$/.test(location.pathname);
     if (location.pathname !== '/' && !categoryGrid) {
       navigate(value ? `/?q=${encodeURIComponent(value)}` : '/');
       return;
     }
-    const next = new URLSearchParams(searchParams);
-    if (value) next.set('q', value);
-    else next.delete('q');
     setSearchParams(next, { replace: true });
   }
 
   const searchResults = useMemo(() => {
     const q = normalizeSearchText(searchValue);
-    if (!q) return [];
+    if (externalPreview || !q) return [];
     return searchCache
       .filter(m => matchesMarketSearch(m, q))
       .slice(0, 8);
-  }, [searchCache, searchValue]);
+  }, [externalPreview, searchCache, searchValue]);
 
   function handleSearchSelect(market) {
     setSearchOpen(false);
@@ -328,7 +334,7 @@ export default function PointsNav({ onOpenLogin, isAdmin, isAdminWorkspace, show
     <nav id="nav" className={`points-nav${scrolled ? ' scrolled' : ''}`}>
       {/* Logo with pulsing green dot — matches .nav-logo .green-dot in
           frontend/css/components.css */}
-      <Link to="/" className="nav-logo" style={{ textDecoration: 'none' }}>
+      <Link to={marketsPath} className="nav-logo" style={{ textDecoration: 'none' }}>
         PRONOS<span className="green-dot" />
       </Link>
       {execution.enabled && <select
@@ -378,7 +384,7 @@ export default function PointsNav({ onOpenLogin, isAdmin, isAdminWorkspace, show
         />
 
         {!searchValue && <kbd className="points-search-shortcut" aria-hidden="true">/</kbd>}
-        {searchOpen && searchValue.trim() && (
+        {!externalPreview && searchOpen && searchValue.trim() && (
           <div style={{
             position: 'absolute',
             top: 'calc(100% + 6px)',
@@ -463,7 +469,7 @@ export default function PointsNav({ onOpenLogin, isAdmin, isAdminWorkspace, show
       </div>}
 
       <div className="nav-links">
-        <Link to="/" style={navLinkStyle}>{t('points.nav.markets')}</Link>
+        <Link to={marketsPath} style={navLinkStyle}>{t('points.nav.markets')}</Link>
         {authenticated && (
           <>
             <Link to="/portfolio" style={navLinkStyle} className="points-nav-link-alert">
@@ -546,7 +552,7 @@ export default function PointsNav({ onOpenLogin, isAdmin, isAdminWorkspace, show
                 </div>
               </div>
             )}
-            <Link to="/" onClick={closeDropdown} className="points-account-compact-link points-menu-primary">
+            <Link to={marketsPath} onClick={closeDropdown} className="points-account-compact-link points-menu-primary">
               {t('points.nav.markets')}
             </Link>
             {authenticated && (
@@ -619,6 +625,7 @@ export default function PointsNav({ onOpenLogin, isAdmin, isAdminWorkspace, show
     </nav>
     {showBottomNav && (
       <PointsBottomNav
+        marketsPath={marketsPath}
         authenticated={authenticated}
         onOpenLogin={onOpenLogin}
         claimableCount={claimableCount}

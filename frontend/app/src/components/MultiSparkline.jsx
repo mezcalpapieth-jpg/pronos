@@ -24,24 +24,30 @@ import { priceDomain } from './Sparkline.jsx';
 
 const MONTHS_SHORT = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
-function formatTimestamp(unixSeconds) {
-  if (!unixSeconds) return '';
-  const d = new Date(unixSeconds * 1000);
-  const day = d.getDate();
-  const mon = MONTHS_SHORT[d.getMonth()];
-  const hour = d.getHours().toString().padStart(2, '0');
-  const min = d.getMinutes().toString().padStart(2, '0');
-  return `${day} ${mon}, ${hour}:${min}`;
+function timestampParts(unixSeconds, formatter) {
+  const date = new Date(unixSeconds * 1000);
+  if (formatter) return Object.fromEntries(formatter.formatToParts(date).map(({ type, value }) => [type, value]));
+  return {
+    day: date.getDate(),
+    month: date.getMonth() + 1,
+    hour: String(date.getHours()).padStart(2, '0'),
+    minute: String(date.getMinutes()).padStart(2, '0'),
+    second: String(date.getSeconds()).padStart(2, '0'),
+  };
 }
 
-function formatAxisTick(unixSeconds, mode) {
-  const d = new Date(unixSeconds * 1000);
-  const hh = d.getHours().toString().padStart(2, '0');
-  const mm = d.getMinutes().toString().padStart(2, '0');
-  if (mode === 'clock') return `${hh}:${mm}`;
-  if (mode === 'clockSec') return `${hh}:${mm}:${d.getSeconds().toString().padStart(2, '0')}`;
-  const date = `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]}`;
-  return mode === 'datetime' ? `${date} ${hh}h` : date;
+function formatTimestamp(unixSeconds, formatter) {
+  if (!unixSeconds) return '';
+  const { day, month, hour, minute } = timestampParts(unixSeconds, formatter);
+  return `${day} ${MONTHS_SHORT[month - 1]}, ${hour}:${minute}`;
+}
+
+function formatAxisTick(unixSeconds, mode, formatter) {
+  const { day, month, hour, minute, second } = timestampParts(unixSeconds, formatter);
+  if (mode === 'clock') return `${hour}:${minute}`;
+  if (mode === 'clockSec') return `${hour}:${minute}:${second}`;
+  const date = `${day} ${MONTHS_SHORT[month - 1]}`;
+  return mode === 'datetime' ? `${date} ${hour}h` : date;
 }
 
 const TICK_STEPS = [1, 2, 5, 10, 20, 25, 50];
@@ -86,14 +92,19 @@ export default function MultiSparkline({
   domainMax,
   timeMin,
   timeMax,
+  timeZone,
   xMode = 'time',
   jumpShape = 'step',
+  maxGapSeconds,
   style = {},
 }) {
   const uid = useId().replace(/:/g, '');
   const [hoveredTime, setHoveredTime] = useState(null);
   const plotRef = useRef(null);
   const [measuredWidth, setMeasuredWidth] = useState(0);
+  const timeFormatter = useMemo(() => timeZone ? new Intl.DateTimeFormat('es-MX', {
+    timeZone, day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+  }) : null, [timeZone]);
 
   useLayoutEffect(() => {
     const el = plotRef.current;
@@ -230,14 +241,14 @@ export default function MultiSparkline({
     const count = chartWidth < 420 ? 3 : 5;
     const times = [];
     for (let i = 0; i < count; i++) times.push(timeBounds.min + (span * i) / (count - 1));
-    const build = (mode) => times.map(t => ({ t, labelText: formatAxisTick(t, mode) }));
+    const build = (mode) => times.map(t => ({ t, labelText: formatAxisTick(t, mode, timeFormatter) }));
     const modes = span <= 48 * 3600 ? ['clock', 'clockSec'] : ['date', 'datetime'];
     for (const mode of modes) {
       const built = build(mode);
       if (!built.some((tick, i) => i > 0 && tick.labelText === built[i - 1].labelText)) return built;
     }
     return build(modes[modes.length - 1]);
-  }, [timeBounds, chartWidth, useMovementAxis]);
+  }, [timeBounds, chartWidth, useMovementAxis, timeFormatter]);
 
   // Step-after, then held flat to the right edge: the last trade's price
   // is still the price now, so every line ends in the same column.
@@ -272,6 +283,18 @@ export default function MultiSparkline({
       : [{ t: timeBounds.min, p: line.target }, { t: timeBounds.max, p: line.target }];
     const coords = pts.map(pt => ({ x: xForTime(pt.t), y: yForValue(pt.p) }));
     const last = coords[coords.length - 1];
+    if (line.hasHistory && Number.isFinite(maxGapSeconds)) {
+      const segments = [[coords[0]]];
+      for (let i = 1; i < coords.length; i++) {
+        if (pts[i].t - pts[i - 1].t > maxGapSeconds) segments.push([]);
+        segments.at(-1).push(coords[i]);
+      }
+      return {
+        d: segments.map(linePath).filter(Boolean).join(' '),
+        end: last,
+        markers: segments.filter(segment => segment.length === 1).map(([point]) => point),
+      };
+    }
     const edgeX = padX + w;
     if (last.x < edgeX - 0.5) coords.push({ x: edgeX, y: last.y });
     if (coords.length < 2) return { d: '', end: last };
@@ -519,6 +542,10 @@ export default function MultiSparkline({
             />
           ))}
 
+          {drawn.flatMap(({ line, markers = [] }) => markers.map(({ x, y }, index) => (
+            <circle key={`sample-${line.key}-${index}`} cx={x} cy={y} r={2.5} fill={line.color} />
+          )))}
+
           {eventAnnotations.map((event) => (
             <g key={`event-${event.key}`} pointerEvents="none">
               <line
@@ -749,7 +776,7 @@ export default function MultiSparkline({
               zIndex: 10,
             }}
           >
-            {formatTimestamp(hoveredTime)}
+            {formatTimestamp(hoveredTime, timeFormatter)}
           </div>
         )}
       </div>
