@@ -1,0 +1,82 @@
+.external-book-layer {
+  display: grid;
+  gap: 8px;
+}
+
+.external-book-layer + .external-book-layer {
+  margin-top: 16px;
+  border-top: 1px solid var(--border, #e3e7ec);
+  padding-top: 16px;
+}
+
+.external-book-layer h3,
+.external-book-phase {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 650;
+}
+
+.external-book .external-book-outcomes {
+  margin-bottom: 12px;
+}
+
+.external-book .external-book-stamp,
+.external-book .external-book-status,
+.external-book-layer .external-panel-note {
+  margin: 0;
+}
+
+.external-book-phase {
+  margin-top: 12px;
+}
+
+.external-book .external-book-stamp {
+  margin-bottom: 8px;
+}
+
+.external-book-sides {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.external-book-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.external-book-table caption {
+  padding-bottom: 6px;
+  text-align: left;
+  font-weight: 650;
+}
+
+.external-book-table th,
+.external-book-table td {
+  padding: 6px 0;
+  border-top: 1px solid var(--border, #e3e7ec);
+  text-align: left;
+}
+
+.external-book-table th:last-child,
+.external-book-table td:last-child {
+  padding-left: 6px;
+  text-align: right;
+}
+
+.external-book-table th,
+.external-book-table td[colspan] {
+  color: var(--text-muted);
+}
+
+.external-book-table td[colspan] {
+  text-align: left;
+}
+
+@media (max-width: 360px) {
+  .external-book-sides {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

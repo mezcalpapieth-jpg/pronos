@@ -30,6 +30,15 @@ function fill(overrides = {}) {
   });
 }
 
+function settlement(overrides = {}) {
+  return event({
+    source: 'hyperliquid', kind: 'settlement',
+    reference: 'settlement:user-1:102:receipt-1', eventId: 'settlement:user-1:102:receipt-1',
+    status: 'confirmed', amount: '2.123456789123456789', mxnAmount: null, quoteId: null,
+    marketId: 'outcome:102', ...overrides,
+  });
+}
+
 test('normalization accepts exact decimal strings and rejects malformed or mismatched evidence', () => {
   const normalized = normalizeMxnCheckoutLedgerEvent(event({ amount: '5.1000' }));
   assert.equal(normalized.amount, '5.1');
@@ -45,7 +54,20 @@ test('normalization accepts exact decimal strings and rejects malformed or misma
   ]) assert.throws(() => normalizeMxnCheckoutLedgerEvent(input), /^Error: invalid_ledger_/);
 });
 
-test('Postgres ledger reconciles confirmed transfers, actual fill fees, and credited builder payouts', async t => {
+test('settlement requires a confirmed HIP-4 credit and its market identity', () => {
+  assert.equal(normalizeMxnCheckoutLedgerEvent(settlement({ amount: '0.000000' })).amount, '0');
+  for (const input of [
+    settlement({ status: 'pending' }), settlement({ status: 'failed' }),
+    settlement({ venue: 'polymarket', asset: 'pUSD' }), settlement({ marketId: null }),
+    settlement({ amount: null }), settlement({ amount: '-0.1' }), settlement({ amount: 1 }),
+    settlement({ mxnAmount: '1' }), settlement({ quoteId: 'quote-100' }),
+    settlement({ orderId: 'order-1' }), settlement({ side: 'sell' }), settlement({ shares: '1' }),
+    settlement({ venueFeeAmount: '0' }), settlement({ builderFeeAmount: '0' }),
+    fill({ amount: '0' }), event({ status: 'confirmed', amount: '0' }),
+  ]) assert.throws(() => normalizeMxnCheckoutLedgerEvent(input), /^Error: invalid_ledger_/);
+});
+
+test('Postgres ledger accounts for settlements separately from transfers, fills, and builder payouts', async t => {
   const db = new PGlite();
   t.after(() => db.close());
   for (const ddl of MXN_CHECKOUT_LEDGER_SCHEMA) await db.exec(ddl);
@@ -86,6 +108,18 @@ test('Postgres ledger reconciles confirmed transfers, actual fill fees, and cred
   await ledger.record(payout);
   assert.equal((await ledger.record(payout)).recorded, false);
 
+  const receipt = settlement();
+  const replay = await Promise.all([ledger.record(receipt), ledger.record(receipt)]);
+  assert.equal(replay.filter(result => result.recorded).length, 1);
+  await assert.rejects(ledger.record({ ...receipt, amount: '2.123456789123456788' }), { code: 'ledger_event_conflict' });
+  await assert.rejects(ledger.record({ ...receipt, eventId: 'other-observation' }), { code: 'ledger_status_conflict' });
+  await assert.rejects(ledger.record({ ...receipt, accountId: 'user-2' }), { code: 'ledger_entry_conflict' });
+
+  const zeroCredit = settlement({ marketId: 'outcome:103',
+    reference: 'settlement:user-1:103:receipt-2', eventId: 'settlement:user-1:103:receipt-2', amount: '0' });
+  await ledger.record(zeroCredit);
+  await ledger.record(settlement({ environment: 'mainnet', amount: '8' }));
+
   await ledger.record(event({ accountId: 'user-2', reference: 'other-account', eventId: 'other-account',
     amount: '30', status: 'confirmed' }));
   await ledger.record(event({ venue: 'polymarket', asset: 'pUSD', reference: 'other-venue', eventId: 'other-venue',
@@ -97,13 +131,14 @@ test('Postgres ledger reconciles confirmed transfers, actual fill fees, and cred
   assert.deepEqual(await ledger.totals(user), [{
     venue: 'hip4', asset: 'USDC', deposits: '3.370370367370370367', withdrawals: '3.6',
     mxnDeposits: '1400', mxnWithdrawals: '1400', depositsWithUnknownMxn: '0', withdrawalsWithUnknownMxn: '0',
-    fillNotional: '6.000000000000000001',
+    fillNotional: '6.000000000000000001', settlementPayoutsCredited: '2.123456789123456789',
     venueFeesReported: '0.004', builderFeesReported: '0.01', builderPayoutsCredited: '0',
     fillsWithUnknownVenueFee: '0', fillsWithUnknownBuilderFee: '1',
   }]);
   const [builderTotals] = await ledger.totals(builder);
   assert.equal(builderTotals.builderPayoutsCredited, '0.009');
   assert.equal(builderTotals.builderFeesReported, '0');
+  assert.equal(builderTotals.settlementPayoutsCredited, '0');
   const [polyTotals] = await ledger.totals({ ...user, venue: 'polymarket' });
   assert.equal(polyTotals.asset, 'pUSD');
   assert.equal(polyTotals.deposits, '43.370370367370370367');
@@ -112,15 +147,48 @@ test('Postgres ledger reconciles confirmed transfers, actual fill fees, and cred
   assert.equal(polyTotals.mxnWithdrawals, '1400');
   assert.equal(polyTotals.depositsWithUnknownMxn, '1');
   assert.equal(polyTotals.withdrawalsWithUnknownMxn, '1');
-  assert.equal((await ledger.totals({ ...user, environment: 'mainnet' }))[0].deposits, '50');
+  assert.equal(polyTotals.settlementPayoutsCredited, '0');
+  const [mainnetTotals] = await ledger.totals({ ...user, environment: 'mainnet' });
+  assert.equal(mainnetTotals.deposits, '50');
+  assert.equal(mainnetTotals.settlementPayoutsCredited, '8');
   assert.equal((await ledger.totals({ ...user, accountId: 'absent' })).length, 0);
 
   const history = await ledger.list(user);
-  assert.equal(history.length, 16);
+  assert.equal(history.length, 18);
   assert(history.every(row => row.venue === 'hip4' && row.accountId === user.accountId && row.kind !== 'builder_payout'));
   assert.equal(history.find(row => row.eventId === 'fill-1').amount, '4.000000000000000001');
+  assert.deepEqual(history.find(row => row.eventId === zeroCredit.eventId), normalizeMxnCheckoutLedgerEvent(zeroCredit));
   assert.equal((await ledger.list({ ...user, limit: 2 })).length, 2);
   assert.deepEqual(await ledger.list(builder), [normalizeMxnCheckoutLedgerEvent(payout)]);
+});
+
+test('schema upgrade preserves original receipts and can be reapplied after a zero settlement', async t => {
+  const db = new PGlite();
+  t.after(() => db.close());
+  const originalSchema = MXN_CHECKOUT_LEDGER_SCHEMA.filter(ddl => ddl.startsWith('CREATE'));
+  for (const ddl of originalSchema) await db.exec(ddl);
+  const ledger = createMxnCheckoutLedger({ withTransaction: fn => db.transaction(fn) });
+  const originalReceipt = fill();
+  await ledger.record(originalReceipt);
+  const receipt = settlement({ amount: '0' });
+  await assert.rejects(ledger.record(receipt), { code: '23514', constraint: 'mxn_checkout_ledger_entries_kind_check' });
+
+  const installSchema = () => db.transaction(async client => {
+    for (const ddl of MXN_CHECKOUT_LEDGER_SCHEMA) await client.exec(ddl);
+  });
+  await installSchema();
+  assert.equal((await ledger.record(receipt)).recorded, true);
+  await installSchema();
+  assert.equal((await ledger.record(receipt)).recorded, false);
+  assert.deepEqual(await ledger.list(user), [
+    normalizeMxnCheckoutLedgerEvent(receipt), normalizeMxnCheckoutLedgerEvent(originalReceipt),
+  ]);
+  await assert.rejects(db.query(`
+    UPDATE mxn_checkout_ledger_events SET market_id = NULL WHERE kind = 'settlement'`),
+  { code: '23514', constraint: 'mxn_checkout_ledger_events_details_check' });
+  await assert.rejects(db.query(`
+    UPDATE mxn_checkout_ledger_events SET amount = 0 WHERE kind = 'fill'`),
+  { code: '23514', constraint: 'mxn_checkout_ledger_events_amount_check' });
 });
 
 test('Postgres ledger deduplicates concurrent writes and rejects conflicting identity or state', async t => {

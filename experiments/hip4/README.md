@@ -220,7 +220,7 @@ Public rates and bridge estimates price the observable legs. A guaranteed minimu
 
 ### Receipt ledger
 
-The Postgres ledger records deposits, withdrawals, individual fills, and builder payouts. Use one canonical source and reference for each movement, with a distinct event ID for each status observation. Link the bank and bridge evidence to that same operation before import. Use provider timestamps and exact decimal strings. Testnet and mainnet, venues, user accounts, and builder accounts have separate totals. Pending or failed transfers stay in the history. Only confirmed amounts count in totals, and only a confirmed builder receipt counts as a payout. Fill-reported builder fees are a separate figure.
+The Postgres ledger records deposits, withdrawals, individual fills, HIP-4 settlements, and builder payouts. Use one canonical source and reference for each movement, with a distinct event ID for each status observation. Link the bank and bridge evidence to that same operation before import. Use provider timestamps and exact decimal strings. Testnet and mainnet, venues, user accounts, and builder accounts have separate totals. Pending or failed transfers stay in the history. Only confirmed amounts count in totals. User settlement proceeds, fill-reported builder fees, and confirmed builder payouts each have separate totals.
 
 The operator import accepts normalized JSON Lines from verified provider records. For a transfer, `amount` is the credited venue collateral on deposit or the debited venue collateral on cash-out. `mxnAmount` is the actual bank debit or credit when known. For a fill, include its `marketId`, `orderId`, `side`, `shares` and gross `amount`, plus any observed fee fields. Use the stable fill ID in `reference`, even if an order has multiple fills. For a builder payout, use the payout transfer or onchain log as the reference and the confirmed amount credited to the builder. A quote or an accrued fee by itself is insufficient evidence of a payout.
 
@@ -236,7 +236,25 @@ node frontend/ops/mxn-checkout-ledger.mjs receipts.jsonl
 node frontend/ops/mxn-checkout-ledger.mjs --schema
 ```
 
-After applying that DDL to an isolated database, the operator can import with `node frontend/ops/mxn-checkout-ledger.mjs --apply receipts.jsonl` and a separately configured `MXN_LEDGER_DATABASE_URL`. Each import is atomic. Identical events replay without duplication and conflicts roll the batch back. The quote endpoint never writes receipts. Provider receipt collection and verification remain operator-driven for this prototype.
+After applying that DDL to an isolated database, the operator can import with `node frontend/ops/mxn-checkout-ledger.mjs --apply receipts.jsonl` and a separately configured `MXN_LEDGER_DATABASE_URL`. Each import is atomic. Identical events replay without duplication and conflicts roll the batch back. The quote endpoint never writes receipts. Reapply the schema to an existing ledger before importing settlement receipts.
+
+The settlement exporter reads wallet-scoped HyperCore `Settlement` fills and produces JSON Lines for the existing importer. Supply the wallet's canonical ledger account ID. Each amount is the exact settled size times payout price less the reported USDC fee. An explicit zero-payout fill is a valid receipt. A public market result by itself gives no evidence of a user payout.
+
+```sh
+node frontend/ops/hip4-settlements.mjs testnet "$PILOT_WALLET" "$LEDGER_ACCOUNT_ID" \
+  2026-11-10T00:00:00Z 2026-11-12T00:00:00Z > settlements.jsonl
+node frontend/ops/mxn-checkout-ledger.mjs settlements.jsonl
+```
+
+Use recent windows. HyperCore only exposes the latest 10,000 fills for a wallet. If a response hits the per-request limit, split the window. If the exporter returns an empty file, there are no settlement receipts to import for that response. [HyperCore fills API](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/info-endpoint#retrieve-a-users-fills-by-time)
+
+### Pilot order history
+
+The testnet pilot saves each signed order's client ID in the browser before submitting. When reopened on that browser, the pilot restores its journal and uses HyperCore order status and fills to reconcile pending orders. No signing agent is needed to read the journal or check order status. History is scoped to the wallet and network on that browser. Keep the client ID for investigation if HyperCore has yet to confirm the order.
+
+### External market preview
+
+Outcome market details display live HyperCore depth for the selected side. Skew market details display the mirrored HyperCore book, held orders and indicative RFQ depth separately. The public Skew socket accepts `http://localhost:5173` for local development. Skew must allowlist the exact Pronos deployment origin before its layers can load there. The preview shows the direct HyperCore book when its Skew mirror is unavailable. [Skew markets feed](https://github.com/skew-trade/skew-sdk#the-markets-feed)
 
 ### Funding and cash-out economics
 

@@ -1,4 +1,5 @@
 // Install explicitly on the isolated database. Public checkout never runs DDL.
+// Keep the original CREATE statements so the same upgrade path applies to all installations.
 export const MXN_CHECKOUT_LEDGER_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS mxn_checkout_ledger_entries (
     environment text NOT NULL CHECK (environment IN ('testnet', 'mainnet')),
@@ -46,4 +47,21 @@ export const MXN_CHECKOUT_LEDGER_SCHEMA = [
   `CREATE UNIQUE INDEX IF NOT EXISTS mxn_checkout_ledger_terminal_event
     ON mxn_checkout_ledger_events (environment, source, kind, reference)
     WHERE status IN ('confirmed', 'failed')`,
+  `ALTER TABLE mxn_checkout_ledger_entries
+    DROP CONSTRAINT IF EXISTS mxn_checkout_ledger_entries_kind_check,
+    ADD CONSTRAINT mxn_checkout_ledger_entries_kind_check
+      CHECK (kind IN ('deposit', 'withdrawal', 'fill', 'builder_payout', 'settlement')
+        AND (kind <> 'settlement' OR (venue = 'hip4' AND asset = 'USDC')))`,
+  // PostgreSQL named the fourth original table-level check `events_check3`.
+  `ALTER TABLE mxn_checkout_ledger_events
+    DROP CONSTRAINT IF EXISTS mxn_checkout_ledger_events_amount_check,
+    ADD CONSTRAINT mxn_checkout_ledger_events_amount_check
+      CHECK (amount > 0 OR (kind = 'settlement' AND amount = 0)),
+    DROP CONSTRAINT IF EXISTS mxn_checkout_ledger_events_check3,
+    DROP CONSTRAINT IF EXISTS mxn_checkout_ledger_events_details_check,
+    ADD CONSTRAINT mxn_checkout_ledger_events_details_check
+      CHECK (kind = 'fill'
+        OR (order_id IS NULL AND side IS NULL AND shares IS NULL
+          AND venue_fee_amount IS NULL AND builder_fee_amount IS NULL
+          AND (kind = 'settlement') = (market_id IS NOT NULL)))`,
 ];

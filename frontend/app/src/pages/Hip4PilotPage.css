@@ -103,3 +103,23 @@
   flex-wrap: wrap;
   gap: 8px;
 }
+
+.hip4-pilot-order-history {
+  margin-top: 16px;
+}
+
+.hip4-pilot-order-history ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hip4-pilot-order-history li {
+  margin: 0;
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+}
+
+.hip4-pilot-order-history button {
+  margin-top: 8px;
+}

@@ -1,5 +1,6 @@
 import { encode } from '@msgpack/msgpack';
 import { Wallet, utils } from 'ethers';
+import { createHip4OrderJournal, hip4SubmissionResult, isPendingHip4Order, readHip4OrderStatus } from './hip4OrderJournal.js';
 
 const API = 'https://api.hyperliquid-testnet.xyz';
 const BUILDER = '0x040fe3673b6bded15d949eefccf3509a2284cd04';
@@ -149,9 +150,10 @@ async function turnkeySign(input) {
 }
 
 export function createHip4Pilot({ address, suborgId }, {
-  request = post, sign = turnkeySign, now = Date.now,
+  request = post, sign = turnkeySign, now = Date.now, orderStorage,
 } = {}) {
   const user = normalizeAddress(address);
+  const journal = createHip4OrderJournal({ owner: user, network: 'testnet', storage: orderStorage });
   let agent;
   let nonce = 0;
   const nextNonce = () => { nonce = Math.max(now(), nonce + 1); return nonce; };
@@ -202,6 +204,15 @@ export function createHip4Pilot({ address, suborgId }, {
 
   return {
     status,
+    listOrders: journal.list,
+    async reconcileOrder(cloid) {
+      const entry = journal.get(cloid);
+      if (!entry) throw new Error('No se encontró esa orden en el historial de este navegador.');
+      if (!isPendingHip4Order(entry)) return entry;
+      const observation = await readHip4OrderStatus((type, fields) => info(type, { ...fields, user }), entry)
+        .catch(() => ({ state: 'unknown' }));
+      return journal.update(cloid, { ...observation, checkedAt: now() });
+    },
     async enableTrading({ onProgress } = {}) {
       const state = await status();
       if (!state.activated) throw new Error('Fund this HyperCore testnet wallet first.');
@@ -269,8 +280,18 @@ export function createHip4Pilot({ address, suborgId }, {
       view.setBigUint64(10, BigInt(expiresAfter));
       const connectionId = utils.keccak256(utils.concat([encode(action), suffix]));
       const signature = await agent.wallet._signTypedData(ORDER_DOMAIN, ORDER_TYPES, { source: 'b', connectionId });
-      const response = await submit({ action, nonce: timestamp, expiresAfter, signature: split(signature) }, cloid);
-      return { ...response, cloid };
+      const payload = { action, nonce: timestamp, expiresAfter, signature: split(signature) };
+      const entry = await journal.begin({ cloid, coin, side, price: p, size: s, nonce: timestamp, expiresAfter });
+      if (now() >= expiresAfter) {
+        return journal.update(cloid, { state: 'rejected', error: 'La orden venció antes del envío.' });
+      }
+      let response;
+      try {
+        response = await request('/exchange', payload);
+      } catch {
+        return journal.get(cloid);
+      }
+      return journal.update(cloid, hip4SubmissionResult(response, entry));
     },
     async withdraw({ amount }) {
       // Native Circle USDC on HyperEVM uses six decimals and is credited to the same wallet.

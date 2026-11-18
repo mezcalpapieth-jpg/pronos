@@ -4,6 +4,7 @@ import Nav from '../components/Nav.jsx';
 import Footer from '../components/Footer.jsx';
 import { usePointsAuth } from '../lib/pointsAuth.js';
 import { createHip4Pilot } from '../lib/hip4Pilot.js';
+import { isPendingHip4Order } from '../lib/hip4OrderJournal.js';
 import './Hip4PilotPage.css';
 
 const BUSY_MESSAGE = {
@@ -24,18 +25,41 @@ function accepted(result) {
   return exchange.response?.data;
 }
 
-function orderNotice(result, requestedSize) {
-  const order = accepted(result)?.statuses?.[0];
-  if (order?.error) throw new Error(order.error);
-  if (order?.filled) {
-    const { totalSz, avgPx, oid } = order.filled;
-    const fill = Number(totalSz) < Number(requestedSize) ? 'Ejecución parcial' : 'Ejecución completa';
-    return {
-      text: `${fill} de ${totalSz} participaciones a ${avgPx} USDC en promedio.`,
-      reference: `Orden ${oid} · ID de cliente ${result.cloid}`,
-    };
-  }
-  return { text: 'HyperCore aceptó la solicitud. Revisa el estado de la orden con su identificador.', reference: result.cloid };
+const ORDER_STATE = {
+  unknown: 'Envío por confirmar',
+  accepted: 'Aceptada · confirmación pendiente',
+  filled: 'Ejecutada',
+  partial: 'Ejecutada en parte',
+  canceled: 'Cancelada',
+  rejected: 'Rechazada',
+};
+
+function PilotOrderHistory({ orders, error, refreshing, onRefresh }) {
+  const visible = orders.filter((order, index) => index < 10 || isPendingHip4Order(order));
+  return (
+    <section className="hip4-pilot-card hip4-pilot-order-history" aria-labelledby="hip4-order-history">
+      <h2 id="hip4-order-history">Historial de órdenes</h2>
+      <p>El historial se guarda en este navegador. Mientras una orden siga pendiente, consulta su estado antes de volver a enviarla.</p>
+      {error && <p role="alert">No se pudo actualizar el historial. {error}</p>}
+      {!visible.length && <p>Aún no hay órdenes registradas en este navegador.</p>}
+      <ul>
+        {visible.map(order => (
+          <li key={order.cloid}>
+            <strong>{ORDER_STATE[order.state]}</strong> · {order.side === 'buy' ? 'Compra' : 'Venta'} de {order.size} · {order.coin}
+            {Number(order.filledSize) > 0 && (
+              <span> · {order.filledSize} ejecutadas{order.averagePrice && ` a ${order.averagePrice} USDC en promedio`}</span>
+            )}
+            {order.error && <p>{order.error}</p>}
+            <div><code>{order.cloid}</code>{order.oid && <> · Orden {order.oid}</>}</div>
+            {isPendingHip4Order(order) && (
+              <button type="button" className="btn-ghost" disabled={refreshing}
+                onClick={() => void onRefresh([order])}>Consultar estado</button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
 }
 
 function PilotAccount({ address, suborgId }) {
@@ -46,8 +70,43 @@ function PilotAccount({ address, suborgId }) {
   const [statusError, setStatusError] = useState('');
   const [notice, setNotice] = useState(null);
   const [withdrawal, setWithdrawal] = useState(null);
+  const [orders, setOrders] = useState([]);
+  const [orderHistoryError, setOrderHistoryError] = useState('');
+  const [refreshingOrders, setRefreshingOrders] = useState(false);
   const withdrawalForm = useRef(null);
   const inFlight = useRef(false);
+  const trackingInFlight = useRef(false);
+
+  const refreshOrders = useCallback(async (requested) => {
+    if (requested?.length === 0) {
+      try {
+        setOrders(pilot.listOrders());
+        setOrderHistoryError('');
+      } catch (err) {
+        setOrderHistoryError(err?.message || 'Intenta nuevamente.');
+      }
+      return;
+    }
+    if (trackingInFlight.current) return;
+    trackingInFlight.current = true;
+    try {
+      const records = pilot.listOrders();
+      setOrders(records);
+      const pending = requested ?? records.filter(isPendingHip4Order)
+        .sort((a, b) => (a.checkedAt ?? a.nonce) - (b.checkedAt ?? b.nonce)).slice(0, 3);
+      if (pending.length) {
+        setRefreshingOrders(true);
+        for (const { cloid } of pending) await pilot.reconcileOrder(cloid);
+        setOrders(pilot.listOrders());
+      }
+      setOrderHistoryError('');
+    } catch (err) {
+      setOrderHistoryError(err?.message || 'Intenta nuevamente.');
+    } finally {
+      trackingInFlight.current = false;
+      setRefreshingOrders(false);
+    }
+  }, [pilot]);
 
   const run = useCallback(async (stage, action) => {
     if (inFlight.current) return;
@@ -75,6 +134,21 @@ function PilotAccount({ address, suborgId }) {
   }, [pilot]);
 
   useEffect(() => { void run('status'); }, [run]);
+  useEffect(() => {
+    const refresh = () => { if (!document.hidden && !inFlight.current) void refreshOrders(); };
+    const readStorage = event => {
+      if (event.key == null || event.key.startsWith('pronos:hip4:orders:')) void refreshOrders([]);
+    };
+    void refreshOrders();
+    const timer = window.setInterval(refresh, 15_000);
+    window.addEventListener('storage', readStorage);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('storage', readStorage);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, [refreshOrders]);
 
   const canTrade = account?.activated && account.agentApproved && account.builderApproved;
   const hasUsdc = Number(account?.usdc) > 0;
@@ -96,7 +170,14 @@ function PilotAccount({ address, suborgId }) {
       price: data.get('price'),
       size: data.get('size'),
     };
-    void run('order', async () => orderNotice(await pilot.order(order), order.size));
+    void run('order', async () => {
+      try {
+        const result = await pilot.order(order);
+        return { text: `${ORDER_STATE[result.state]}.`, reference: result.cloid };
+      } finally {
+        void refreshOrders([]);
+      }
+    });
   }
 
   function reviewWithdrawal(event) {
@@ -197,6 +278,7 @@ function PilotAccount({ address, suborgId }) {
           )}
         </section>
       </div>
+      <PilotOrderHistory orders={orders} error={orderHistoryError} refreshing={refreshingOrders} onRefresh={refreshOrders} />
     </>
   );
 }

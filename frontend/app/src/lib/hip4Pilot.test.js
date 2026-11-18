@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Wallet, utils } from 'ethers';
 import { createHip4Pilot } from './hip4Pilot.js';
+import { createHip4OrderJournal } from './hip4OrderJournal.js';
 
 // Deterministic fixture keys. These accounts never leave the fake transport.
 const owner = new Wallet('0x' + '01'.padStart(64, '0'));
@@ -38,9 +39,20 @@ const templateFixture = {
   ].join(' '),
 };
 
+function memoryStorage() {
+  const values = new Map();
+  return {
+    get length() { return values.size; },
+    key: index => [...values.keys()][index] ?? null,
+    getItem: key => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, value),
+  };
+}
+
 function fixture({
   failBuilderOnce = false,
   loseOrderResponse = false,
+  storage = memoryStorage(),
   signer = owner,
   market = marketFixture,
   templates = [templateFixture],
@@ -57,8 +69,13 @@ function fixture({
   let shares = startingShares;
   let paid = 0;
   let received = 0;
-  const pilot = createHip4Pilot({ address: owner.address, suborgId: 'test-suborg' }, {
-    now: () => time,
+  let orderStatus = { status: 'unknownOid' };
+  let fills = [];
+  let recordedBeforeSubmission;
+  let clock = time;
+  const options = {
+    orderStorage: storage,
+    now: () => clock,
     async sign({ address, suborgId, payload }) {
       assert.equal(address, owner.address.toLowerCase());
       assert.equal(suborgId, 'test-suborg');
@@ -83,6 +100,15 @@ function fixture({
             return templates;
           case 'clearinghouseState': return { marginSummary: { accountValue: '100' } };
           case 'userAbstraction': return 'default';
+          case 'orderStatus':
+            assert.equal(body.user, owner.address.toLowerCase());
+            assert.equal(body.oid, calls.find(({ action }) => action.type === 'order')?.action.orders[0].c);
+            return orderStatus;
+          case 'userFillsByTime':
+            assert.equal(body.user, owner.address.toLowerCase());
+            assert.equal(body.aggregateByTime, false);
+            assert.ok(body.startTime <= time && body.endTime >= time);
+            return fills;
           default: assert.fail(body.type);
         }
       }
@@ -99,13 +125,14 @@ function fixture({
         assert.equal(action.builder.f, 250);
         assert.equal(action.builder.b, '0x040fe3673b6bded15d949eefccf3509a2284cd04');
         assert.equal(body.expiresAfter, nonce + 15000);
+        recordedBeforeSubmission = pilot.listOrders().find(entry => entry.cloid === order.c);
         const notional = Number(order.p) * Number(order.s);
         const fee = notional * 0.0025;
         paid += fee;
         total = Math.round((total + (order.b ? -notional : notional) - fee) * 1e8) / 1e8;
         shares += Number(order.s) * (order.b ? 1 : -1);
         if (loseOrderResponse) throw new Error('connection lost after acceptance');
-        return { status: 'ok', response: { data: { statuses: [{ filled: { totalSz: order.s, avgPx: order.p } }] } } };
+        return { status: 'ok', response: { data: { statuses: [{ filled: { totalSz: order.s, avgPx: order.p, oid: calls.length } }] } } };
       }
       assert.equal(action.hyperliquidChain, 'Testnet');
       assert.equal(action.signatureChainId, '0x66eee');
@@ -133,12 +160,35 @@ function fixture({
       }
       return { status: 'ok', response: { type: 'default' } };
     },
-  });
-  return { pilot, calls, prompts, infoQueries, credit: () => { total = 30; }, ledger: () => ({ paid, shares, received }) };
+  };
+  const create = (address = owner.address) => createHip4Pilot({ address, suborgId: 'test-suborg' }, options);
+  const pilot = create();
+  return {
+    pilot, create, storage, calls, prompts, infoQueries,
+    advance: ms => { clock += ms; },
+    updateReads: (status, userFills) => { orderStatus = status; fills = userFills; },
+    recordedBeforeSubmission: () => recordedBeforeSubmission,
+    credit: () => { total = 30; },
+    ledger: () => ({ paid, shares, received }),
+  };
+}
+
+function orderRead(submission, { status, size, statusTimestamp = time + 1, ...fields }) {
+  return {
+    status: 'order',
+    order: {
+      status,
+      statusTimestamp,
+      order: {
+        cloid: submission.cloid, coin: submission.coin, side: submission.side === 'buy' ? 'B' : 'A',
+        limitPx: submission.price, origSz: submission.size, sz: size, oid: 44, ...fields,
+      },
+    },
+  };
 }
 
 test('fund, authorize in order, trade both sides at 25 bps, and pay out with the owner', async () => {
-  const { pilot, calls, prompts, credit, ledger } = fixture();
+  const { pilot, calls, prompts, credit, ledger, recordedBeforeSubmission } = fixture();
   const stages = [];
   assert.equal((await pilot.status()).activated, false);
   await assert.rejects(pilot.enableTrading(), /Fund this/);
@@ -152,6 +202,13 @@ test('fund, authorize in order, trade both sides at 25 bps, and pay out with the
   const buy = await pilot.order({ ...order, side: 'buy' });
   const sell = await pilot.order({ ...order, side: 'sell' });
   assert.notEqual(buy.cloid, sell.cloid);
+  assert.equal(buy.state, 'filled');
+  assert.equal(sell.state, 'filled');
+  assert.deepEqual(recordedBeforeSubmission(), {
+    cloid: sell.cloid, network: 'testnet', coin: order.coin, side: 'sell', price: '0.9', size: order.size,
+    nonce: calls.at(-1).nonce, expiresAfter: calls.at(-1).expiresAfter, state: 'unknown',
+  });
+  assert.deepEqual(pilot.listOrders(), [sell, buy]);
   assert.deepEqual(prompts, ['HyperliquidTransaction:ApproveAgent', 'HyperliquidTransaction:ApproveBuilderFee']);
   await assert.rejects(pilot.withdraw({ amount: '0.00000001' }), /Invalid USDC amount/);
   await pilot.withdraw({ amount: '10.00' });
@@ -180,14 +237,101 @@ test('rejects an owner signature from a different wallet before exchange submiss
   assert.equal(calls.length, 0);
 });
 
-test('reports the cloid for an ambiguous fill and sends no replacement', async () => {
-  const { pilot, calls, credit, ledger } = fixture({ loseOrderResponse: true });
+test('recovers an ambiguous order after reload without resubmitting, even after signed expiry', async () => {
+  const { pilot, create, storage, calls, credit, ledger, updateReads, advance } = fixture({ loseOrderResponse: true });
   credit();
   await pilot.enableTrading();
-  await assert.rejects(pilot.order({ ...order, side: 'buy' }),
-    /Submission status is unknown \(reference 0x[0-9a-f]{32}\)/);
-  assert.equal(calls.filter(({ action }) => action.type === 'order').length, 1);
+  const pending = await pilot.order({ ...order, side: 'buy' });
+  assert.equal(pending.state, 'unknown');
+  assert.match(pending.cloid, /^0x[0-9a-f]{32}$/);
+  assert.equal(pending.expiresAfter, pending.nonce + 15000);
   assert.equal(ledger().shares, 15);
+
+  const reloaded = create();
+  assert.deepEqual(reloaded.listOrders(), [pending]);
+  const anotherAddress = '0x1000000000000000000000000000000000000000';
+  assert.deepEqual(create(anotherAddress).listOrders(), []);
+  const mainnet = createHip4OrderJournal({ owner: owner.address.toLowerCase(), network: 'mainnet', storage });
+  assert.deepEqual(mainnet.list(), []);
+
+  advance(20000);
+  assert.equal((await reloaded.reconcileOrder(pending.cloid)).state, 'unknown');
+  await reloaded.enableTrading();
+  await assert.rejects(reloaded.order({ ...order, side: 'buy' }), new RegExp(pending.cloid));
+
+  updateReads(orderRead(pending, { status: 'filled', size: '0' }), [
+    { coin: pending.coin, side: 'B', oid: 44, tid: 6, sz: '15.0', px: '0.85', dir: 'Buy' },
+    { coin: pending.coin, side: 'B', oid: 44, tid: 7, sz: '15.0', px: '0.5', dir: 'Settlement' },
+    { coin: pending.coin, side: 'B', oid: 45, tid: 8, sz: '15.0', px: '0.9', dir: 'Buy' },
+  ]);
+  const filled = await reloaded.reconcileOrder(pending.cloid);
+  assert.equal(filled.state, 'filled');
+  assert.equal(filled.filledSize, '15');
+  assert.equal(filled.averagePrice, '0.85');
+  assert.equal(filled.oid, '44');
+  updateReads({ status: 'unknownOid' }, []);
+  assert.deepEqual(await reloaded.reconcileOrder(pending.cloid), filled);
+  assert.equal(calls.filter(({ action }) => action.type === 'order').length, 1);
+});
+
+test('only verified matching trade fills reconcile a partially filled canceled IOC', async () => {
+  const { pilot, calls, credit, updateReads } = fixture({ loseOrderResponse: true, startingShares: 15 });
+  credit();
+  await pilot.enableTrading();
+  const pending = await pilot.order({ ...order, side: 'sell' });
+
+  updateReads(orderRead(pending, { status: 'open', size: '15', side: 'B' }), []);
+  assert.equal((await pilot.reconcileOrder(pending.cloid)).state, 'unknown');
+  updateReads(orderRead(pending, { status: 'open', size: '15' }), []);
+  assert.equal((await pilot.reconcileOrder(pending.cloid)).state, 'accepted');
+  updateReads({ status: 'unknownOid' }, []);
+  assert.equal((await pilot.reconcileOrder(pending.cloid)).state, 'accepted');
+
+  const canceled = orderRead(pending, { status: 'canceled', size: '7' });
+  const fill = { coin: pending.coin, side: 'A', oid: 44, tid: 6, sz: '8.0', px: '0.94', dir: 'Sell' };
+  for (const invalidFill of [
+    { ...fill, coin: '#265400' },
+    { ...fill, side: 'B' },
+    { ...fill, dir: 'Buy' },
+    { ...fill, oid: 45 },
+    { ...fill, px: '0.89' },
+    { ...fill, dir: 'Merge Outcome' },
+  ]) {
+    updateReads(canceled, [invalidFill]);
+    assert.equal((await pilot.reconcileOrder(pending.cloid)).state, 'accepted');
+  }
+
+  updateReads(canceled, [fill, { ...fill, tid: 7, dir: 'Merge Outcome' }]);
+  const result = await pilot.reconcileOrder(pending.cloid);
+  assert.equal(result.state, 'partial');
+  assert.equal(result.filledSize, '8');
+  assert.equal(result.averagePrice, '0.94');
+  assert.equal(calls.filter(({ action }) => action.type === 'order').length, 1);
+});
+
+test('reconciles explicit terminal rejection and confirmed zero fills', async (t) => {
+  for (const [status, expected] of [['iocCancelRejected', 'rejected'], ['canceled', 'canceled']]) {
+    await t.test(status, async () => {
+      const { pilot, credit, updateReads } = fixture({ loseOrderResponse: true });
+      credit();
+      await pilot.enableTrading();
+      const pending = await pilot.order({ ...order, side: 'buy' });
+      updateReads(orderRead(pending, { status, size: pending.size }), []);
+      const result = await pilot.reconcileOrder(pending.cloid);
+      assert.equal(result.state, expected);
+      if (expected === 'canceled') assert.equal(result.filledSize, '0');
+    });
+  }
+});
+
+test('does not submit when the order journal cannot be written', async () => {
+  const storage = memoryStorage();
+  storage.setItem = () => { throw new Error('QuotaExceededError'); };
+  const { pilot, calls, credit } = fixture({ storage });
+  credit();
+  await pilot.enableTrading();
+  await assert.rejects(pilot.order({ ...order, side: 'buy' }), /historial de órdenes/);
+  assert.equal(calls.filter(({ action }) => action.type === 'order').length, 0);
 });
 
 test('blocks buys before exchange submission when cancellation terms cannot be verified', async (t) => {

@@ -6,6 +6,7 @@ import { getExternalMarkets } from '../lib/externalMarkets.js';
 import historyByMarket from '../lib/externalMarketHistory.json';
 import { MARKET_CATEGORY_IMAGE_PLACEHOLDERS } from '../lib/marketImages.js';
 import { normalizeSearchText } from '../lib/marketSearch.js';
+import ExternalMarketBooks from '../components/ExternalMarketBooks.jsx';
 import ExternalMarketHistory from '../components/ExternalMarketHistory.jsx';
 import './PointsExternalMarkets.css';
 
@@ -221,6 +222,7 @@ function MarketDetail({ market, headingRef, lang }) {
             marketId={market.id}
             lang={lang}
           />
+          <ExternalMarketBooks market={market} lang={lang} />
           <section className="external-panel" aria-labelledby="external-rules-title">
             <h2 id="external-rules-title">{en ? 'Market rules' : 'Reglas del mercado'}</h2>
             {market.description && <p>{market.description}</p>}

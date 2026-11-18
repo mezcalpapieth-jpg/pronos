@@ -3,7 +3,7 @@ export { MXN_CHECKOUT_LEDGER_SCHEMA } from './mxn-checkout-ledger-schema.js';
 const ASSETS = Object.freeze({ hip4: 'USDC', polymarket: 'pUSD' });
 const ENVIRONMENTS = ['testnet', 'mainnet'];
 const TRANSFERS = ['deposit', 'withdrawal'];
-const KINDS = [...TRANSFERS, 'fill', 'builder_payout'];
+const KINDS = [...TRANSFERS, 'fill', 'builder_payout', 'settlement'];
 const STATUSES = ['pending', 'confirmed', 'failed'];
 const IDENTIFIER = /^[a-zA-Z0-9._:/#-]{1,200}$/;
 const SOURCE = /^[a-z][a-z0-9_-]{0,39}$/;
@@ -73,11 +73,15 @@ export function normalizeMxnCheckoutLedgerEvent(event) {
 
   const isTransfer = TRANSFERS.includes(kind);
   const isFill = kind === 'fill';
+  const isSettlement = kind === 'settlement';
+  const needsMarket = isFill || isSettlement;
+  if (isSettlement && identity.venue !== 'hip4') throw fieldError('kind');
   if (!isTransfer && (status !== 'confirmed' || event.mxnAmount != null || event.quoteId != null)) {
     throw fieldError('event');
   }
-  if (!isFill && [side, event.marketId, event.orderId, event.shares, event.venueFeeAmount, event.builderFeeAmount]
-    .some(value => value != null)) throw fieldError('fill_fields');
+  if ((!needsMarket && event.marketId != null)
+    || (!isFill && [side, event.orderId, event.shares, event.venueFeeAmount, event.builderFeeAmount]
+      .some(value => value != null))) throw fieldError('fill_fields');
   if (isFill && !['buy', 'sell'].includes(side)) throw fieldError('side');
 
   return {
@@ -85,10 +89,10 @@ export function normalizeMxnCheckoutLedgerEvent(event) {
     reference: identifier(event.reference, 'reference'),
     eventId: identifier(event.eventId, 'event_id'),
     occurredAt: timestamp(event.occurredAt),
-    amount: decimal(event.amount, 'amount', { required: status === 'confirmed' }),
+    amount: decimal(event.amount, 'amount', { required: status === 'confirmed', allowZero: isSettlement }),
     mxnAmount: decimal(event.mxnAmount, 'mxn_amount', { mxn: true }),
     quoteId: identifier(event.quoteId, 'quote_id', true),
-    marketId: identifier(event.marketId, 'market_id', !isFill),
+    marketId: identifier(event.marketId, 'market_id', !needsMarket),
     orderId: identifier(event.orderId, 'order_id', !isFill),
     side: side ?? null,
     shares: decimal(event.shares, 'shares', { required: isFill }),
@@ -217,6 +221,7 @@ export function createMxnCheckoutLedger({ withTransaction = defaultTransaction }
             COUNT(*) FILTER (WHERE r.kind = 'deposit' AND e.mxn_amount IS NULL)::text AS "depositsWithUnknownMxn",
             COUNT(*) FILTER (WHERE r.kind = 'withdrawal' AND e.mxn_amount IS NULL)::text AS "withdrawalsWithUnknownMxn",
             COALESCE(SUM(e.amount) FILTER (WHERE r.kind = 'fill'), 0)::text AS "fillNotional",
+            COALESCE(SUM(e.amount) FILTER (WHERE r.kind = 'settlement'), 0)::text AS "settlementPayoutsCredited",
             COALESCE(SUM(e.venue_fee_amount), 0)::text AS "venueFeesReported",
             COALESCE(SUM(e.builder_fee_amount), 0)::text AS "builderFeesReported",
             COALESCE(SUM(e.amount) FILTER (WHERE r.kind = 'builder_payout'), 0)::text AS "builderPayoutsCredited",
