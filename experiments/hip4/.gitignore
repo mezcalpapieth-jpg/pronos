@@ -1,4 +1,5 @@
 .local-testnet/
+.local-etherfuse/
 .venv/
 __pycache__/
 

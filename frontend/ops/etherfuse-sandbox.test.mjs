@@ -1,0 +1,170 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { createSandboxWorkflow } from './etherfuse-sandbox.mjs';
+
+const org = 'aaaaaaaa-0000-0000-0000-000000000001';
+const bank = 'bbbbbbbb-0000-0000-0000-000000000001';
+const walletId = 'cccccccc-0000-0000-0000-000000000001';
+const walletAddress = '0x0000000000000000000000000000000000000011';
+const token = '0x0000000000000000000000000000000000000022';
+const fundingAddress = '0x0000000000000000000000000000000000000033';
+const now = Date.parse('2026-11-18T18:00:00Z');
+const future = new Date(now + 120_000).toISOString();
+
+function rehearsal() {
+  const accounts = new Map();
+  const quotes = new Map();
+  const orders = new Map();
+  const deposits = [];
+  const api = {
+    async org() { return { id: org }; },
+    async registerAccount(orgId, request) {
+      assert.equal(orgId, org);
+      const isBank = request.kind === 'bank';
+      const id = isBank ? bank : walletId;
+      const rail = isBank ? 'spei' : 'monad';
+      assert.deepEqual(request.accountDetails, isBank ? { kind: 'clabe', clabe: '012180000000000002' }
+        : { kind: 'address', address: walletAddress, chain: rail });
+      const ready = { status: 'ready' };
+      accounts.set(id, { id, kind: request.kind, rails: { [rail]: { source: ready, destination: ready } } });
+      return { id };
+    },
+    async account(_orgId, id) { return accounts.get(id); },
+    async assets(orgId, accountId) {
+      assert.equal(orgId, org);
+      assert.equal(accountId, walletId);
+      return { tokens: [{ chain: 'monad', asset: token, symbol: 'USDC', currency: 'USD' }] };
+    },
+    async quote(_orgId, request) {
+      const deposit = request.sourceRail === 'spei';
+      assert.equal(request.partnerFeeBpsOverride, 0);
+      if (deposit && Number(request.sourceAmount) > 500) {
+        throw Object.assign(new Error('sandbox-limit-exceeded'), { code: 'sandbox-limit-exceeded' });
+      }
+      const quoteId = `abababab-0000-0000-0000-${String(quotes.size + 1).padStart(12, '0')}`;
+      const sourceAmount = Number(request.sourceAmount);
+      const quote = {
+        quoteId, sourceRail: request.sourceRail, destinationRail: request.destinationRail, sourceAsset: request.sourceAsset,
+        destinationAsset: request.destinationAsset, sourceAmount: request.sourceAmount,
+        destinationAmount: (deposit ? sourceAmount * 0.998 / 20 : sourceAmount * 0.998 * 20).toFixed(6),
+        fees: [{ type: 'transactionFee', asset: request.sourceAsset, amount: (sourceAmount * 0.002).toFixed(6), bps: 20 }],
+        expiresAt: future,
+      };
+      quotes.set(quoteId, { quote, request });
+      return structuredClone(quote);
+    },
+    async createOrder(_orgId, id) {
+      const { quote, request } = quotes.get(id);
+      const deposit = request.sourceRail === 'spei';
+      if (!orders.has(id)) {
+        orders.set(id, {
+          id, organizationId: org, status: 'created', fees: quote.fees,
+          source: { asset: quote.sourceAsset, rail: quote.sourceRail, amount: quote.sourceAmount, paymentAccountId: request.source.id },
+          destination: { asset: quote.destinationAsset, rail: quote.destinationRail,
+            amount: quote.destinationAmount, paymentAccountId: request.destination.id },
+          fundingInstructions: { rail: quote.sourceRail, fundingDeadline: future, destination: deposit
+            ? { clabe: '646180000000000009' } : { address: fundingAddress, expiresAt: null } },
+        });
+      }
+      return orders.get(id);
+    },
+    async order(_orgId, id) { return orders.get(id); },
+    async simulateDeposit(_orgId, id, debit) {
+      deposits.push(debit);
+      orders.get(id).status = 'funded';
+    },
+  };
+  const pause = async () => { for (const row of orders.values()) if (row.status === 'funded') row.status = 'completed'; };
+  const flow = createSandboxWorkflow({ api, walletAddress, now: () => now, pause,
+    fx: async () => ({ bid: '20', timeMs: now }) });
+  return { api, flow, orders, quotes, deposits };
+}
+
+for (const ticket of [100, 300]) {
+  test(`MXN ${ticket} deposit registers the Turnkey address, simulates exact SPEI once and reconciles`, async () => {
+    const { flow, deposits } = rehearsal();
+    const accounts = await flow.setup();
+    const quote = await flow.quote(accounts, 'deposit', ticket);
+    const first = await flow.open(quote);
+    assert.equal(first.id, quote.quote.quoteId);
+    assert.equal((await flow.open(quote)).id, first.id);
+    await flow.simulateDeposit(quote, send => send());
+    await flow.simulateDeposit(quote, send => send());
+    assert.deepEqual(deposits, [String(ticket)]);
+    assert.equal((await flow.settle(quote)).status, 'completed');
+    assert.equal(quote.quote.destinationAmount, ticket === 100 ? '4.990000' : '14.970000');
+  });
+
+  test(`MXN ${ticket} equivalent cash-out reconciles only after a wallet-funded mock confirmation`, async () => {
+    const { flow, orders, deposits } = rehearsal();
+    const accounts = await flow.setup();
+    const quote = await flow.quote(accounts, 'withdrawal', ticket);
+    const order = await flow.open(quote);
+    assert.equal(order.status, 'created');
+    assert.equal(Number(order.destination.amount), ticket * 0.998);
+    assert.deepEqual(await flow.cashOutTransfer(quote), {
+      tokenAddress: token, destinationAddress: fundingAddress, amountUnits: String(ticket * 50_000),
+    });
+    await assert.rejects(flow.simulateDeposit(quote, send => send()), { code: 'not_a_deposit' });
+    assert.deepEqual(deposits, []);
+    orders.get(order.id).status = 'funded';
+    assert.equal(await flow.cashOutTransfer(quote), null);
+    assert.equal((await flow.settle(quote)).status, 'completed');
+  });
+}
+
+test('MXN 1,000 test passes the provider deposit cap error through and allows a cash-out quote only', async () => {
+  const { flow, orders } = rehearsal();
+  const accounts = await flow.setup();
+  await assert.rejects(flow.quote(accounts, 'deposit', 1000), { code: 'sandbox-limit-exceeded' });
+  const quote = await flow.quote(accounts, 'withdrawal', 1000);
+  assert.equal(quote.quote.sourceAmount, '50');
+  assert.equal(quote.quote.destinationAmount, '998.000000');
+  await assert.rejects(flow.open(quote), { code: 'quote_only_ticket' });
+  assert.equal(orders.size, 0);
+});
+
+test('no mismatched provider route, expired funding, or sponsored/marked-up quote can be funded', async () => {
+  const { api, flow, orders } = rehearsal();
+  const accounts = await flow.setup();
+  const position = await flow.quote(accounts, 'withdrawal', 100);
+  const { id } = await flow.open(position);
+  const order = orders.get(id);
+  order.source.amount = '5.01';
+  await assert.rejects(flow.cashOutTransfer(position), { code: 'order_does_not_match_quote' });
+  order.source.amount = '5';
+  order.fundingInstructions.fundingDeadline = new Date(now).toISOString();
+  await assert.rejects(flow.cashOutTransfer(position), { code: 'order_not_open_for_funding' });
+  const getQuote = api.quote;
+  for (const fee of [{ type: 'partnerFee', amount: '0.01' }, { type: 'walletSponsor', amount: '0' }]) {
+    api.quote = async (...args) => {
+      const quote = await getQuote(...args);
+      quote.fees.push(fee);
+      return quote;
+    };
+    await assert.rejects(flow.quote(accounts, 'deposit', 100), { code: 'unexpected_fee_or_sponsorship' });
+  }
+});
+
+test('fills only missing sandbox registration fields and reconnects to a same-quote order conflict', async () => {
+  const { api, flow } = rehearsal();
+  const register = api.registerAccount;
+  let requests = 0;
+  api.registerAccount = (id, request) => {
+    if (request.kind === 'bank') {
+      if (requests++ === 0) {
+        assert.equal(request.registrationInfo, undefined);
+        throw Object.assign(new Error('registration-info-required'), {
+          code: 'registration-info-required', missing: ['#/registrationInfo/accountHolderName'],
+        });
+      }
+      assert.deepEqual(request.registrationInfo, { accountHolderName: 'Ejemplo Comercial SA de CV' });
+    }
+    return register(id, request);
+  };
+  const accounts = await flow.setup();
+  const position = await flow.quote(accounts, 'deposit', 100);
+  await flow.open(position);
+  api.createOrder = () => { throw Object.assign(new Error('conflict'), { code: 'conflict' }); };
+  assert.equal((await flow.open(position)).id, position.quote.quoteId);
+});

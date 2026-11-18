@@ -270,6 +270,37 @@ For fiat-funded external trades, the first common rail to price with Bitso Busin
 
 At an **illustrative** 50 bps conversion cost each way plus MXN 2 fixed per round trip, the total costs MXN 3, 5 and 12 for MXN 100, 300 and 1,000. If one deposit funds a buy and an equal-gross sell, that is 150, 83 and 60 bps of filled volume. Four such cycles from the same balance reduce it to 38, 21 and 15 bps. A 50 bps builder rate earns MXN 1, 3 and 10 gross in the first cycle. Pronos would lose MXN 2 at every size before operating costs if it paid those funding costs. Let the user confirm disclosed costs and reuse available collateral. Track collected builder fees less actual Pronos-paid costs to measure contribution.
 
+### Etherfuse sandbox
+
+The local operator tool registers a Pronos Turnkey test wallet as a self-held Monad address, quotes SPEI deposits and cash-outs, and polls the provider order. It uses Etherfuse v2's sandbox exclusively. Keep `VITE_MXN_CHECKOUT_ENABLED=false` and `MXN_CHECKOUT_ENABLED=false`. Pronos applies zero markup and pays zero gas. The Turnkey wallet pays for its Monad testnet cash-out transaction.
+
+Use an approved [Etherfuse sandbox business account](https://docs.etherfuse.com/v2/initial-setup), a `api_sand_` key in `ETHERFUSE_SANDBOX_API_KEY`, and the existing pilot EVM address in `ETHERFUSE_TEST_WALLET_ADDRESS`. By default setup uses the key's sandbox organization. `ETHERFUSE_SANDBOX_ORGANIZATION_ID` can identify an already-approved sandbox customer organization. Setup registers the provider's dummy SPEI account. For cash-outs, use a Turnkey API signer authorized in the test wallet's sub-organization and configure the three `ETHERFUSE_TEST_TURNKEY_*` values in `.env.example` locally. Use [Monad testnet MON](https://faucet.monad.xyz) for gas. The tool discovers sandbox USDC for the registered wallet, checks the testnet chain ID and builds a direct transfer to the order's funding address. [Etherfuse sandbox guide](https://docs.etherfuse.com/v2/test-environment) · [Monad offramps](https://docs.etherfuse.com/v2/guides/chains/monad)
+
+Run from the repo root after installing dependencies with `npm install --prefix frontend --no-package-lock`. Put the sandbox credentials and wallet address in the ignored `.env.local` file. For each of `100` and `300`, open the returned quote before it expires and use its ID for the next command.
+
+```sh
+node --env-file=.env.local frontend/ops/etherfuse-sandbox.mjs setup
+node --env-file=.env.local frontend/ops/etherfuse-sandbox.mjs quote deposit 100
+node --env-file=.env.local frontend/ops/etherfuse-sandbox.mjs open "$QUOTE_ID"
+node --env-file=.env.local frontend/ops/etherfuse-sandbox.mjs simulate-deposit "$QUOTE_ID"
+
+node --env-file=.env.local frontend/ops/etherfuse-sandbox.mjs quote withdrawal 100
+node --env-file=.env.local frontend/ops/etherfuse-sandbox.mjs open "$CASHOUT_QUOTE_ID"
+node --env-file=.env.local frontend/ops/etherfuse-sandbox.mjs fund-cash-out "$CASHOUT_QUOTE_ID"
+node --env-file=.env.local frontend/ops/etherfuse-sandbox.mjs status "$CASHOUT_QUOTE_ID"
+
+node --env-file=.env.local frontend/ops/etherfuse-sandbox.mjs quote deposit 1000
+node --env-file=.env.local frontend/ops/etherfuse-sandbox.mjs quote withdrawal 1000
+```
+
+The MXN 1,000 deposit quote should return `sandbox-limit-exceeded` because the provider caps sandbox deposits at MXN 500. The MXN 1,000 cash-out is quote-only. A cash-out ticket is the **gross MXN equivalent** of the wallet's USDC debit at the current Bitso bid. Etherfuse determines the net MXN received. A wallet that started at zero may need additional testnet USDC to cover a cash-out of the same gross amount it previously deposited, since the deposit was delivered net of fees. [Sandbox limits](https://docs.etherfuse.com/v2/test-environment) · [Quote schema](https://docs.etherfuse.com/v2/api-reference/quotes/create-quote)
+
+Resume with `status` if polling times out. The tool stores quote IDs and signed testnet transaction bytes under `experiments/hip4/.local-etherfuse/` with private file permissions. After an interrupted cash-out use the same order ID so the tool retries the same transaction. If interrupted while a lock exists, check its PID and remove the `.lock` file only after confirming that process exited. For an ambiguous deposit simulation, check the provider order before closing it or starting a new one. Local sandbox orders credit or debit the wallet. The existing venue receipt ledger should record a deposit only after collateral reaches the relevant venue.
+
+**Route comparison.** Etherfuse v2 lists Monad for native USDC and omits Arbitrum from its supported chains. HIP-4 uses **HyperCore spot USDC**. The Arbitrum signing domain for approvals and the conventional Arbitrum bridge are separate. Circle CCTP can forward USDC from either chain to HyperCore and handles the reverse leg. At the November 18 public fee check, deposit forwarding was `0.240370 USDC` from Monad and `0.200000 USDC` from Arbitrum, a difference of roughly MXN 0.76 before source gas. The HyperCore contract returned `0.20 USDC` for withdrawal forwarding to either chain. Other HyperCore charges apply separately, including the `1 USDC` one-time fee on the first outbound action for a new account. The CCTP testnet forward requires a recipient already present on HyperCore mainnet. [Etherfuse supported assets](https://docs.etherfuse.com/v2/api-reference/assets/list-supported-assets) · [Outcome trading guide](https://docs.outcome.xyz/guides/full-trading-integration) · [Circle HyperCore guide](https://developers.circle.com/cctp/concepts/cctp-on-hypercore)
+
+Polymarket's bridge can quote either chain directly to Polygon pUSD without an extra manual swap. Twelve public bridge estimates passed across both routes, directions, and ticket sizes. For MXN 1,000 via Monad, the reference estimate was `53.164516 pUSD` on deposit and **MXN 997.81** on cash-out of MXN 1,000 equivalent in pUSD. The model used a reference rate of 18.76730 MXN/USD, the public bridge estimate, and Etherfuse's published initial platform fee of 20 bps. The platform fee is MXN 0.20, 0.60, or 2.00 per leg on MXN 100, 300, or 1,000 before venue bridging and gas. These are indicative estimates. The bridge's minimum output was about 2% below its point estimate. [Etherfuse FX reference](https://docs.etherfuse.com/v2/price-feeds) · [Etherfuse fees](https://docs.etherfuse.com/v2/fees) · [Polymarket bridge quote](https://docs.polymarket.com/api-reference/bridge/get-a-quote)
+
 ## HIP-4, Polymarket and native-market economics — November 10, 2026
 
 Recommendation: develop direct HIP-4 and Polymarket distribution first, measure repeat trading and actual fee credits, then launch selected native CLOB markets where independent makers commit executable depth. Keep the treasury CPMM behind its separate inventory-risk switch. Kalshi is outside this scope. Worm is a later partnership or unique-market option, pending its distribution terms and the extra Solana integration.
