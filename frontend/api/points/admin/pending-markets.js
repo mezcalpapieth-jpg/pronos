@@ -29,7 +29,7 @@ import { syncMananeraPhraseFromQuestion } from '../../_lib/mananera-market-sync.
 import { syncApiPriceFromQuestion } from '../../_lib/api-price-market-sync.js';
 import { syncWeatherDateFromMarket } from '../../_lib/weather-market-sync.js';
 import { validateBeforeMonthDeadline } from '../../_lib/manual-deadline-sanity.js';
-import { checkPendingProposal, checkPendingProposals } from '../../_lib/points-admin-approval-checks.js';
+import { checkPendingProposal, checkPendingProposals, pendingSoccerTeamsUnconfirmed } from '../../_lib/points-admin-approval-checks.js';
 import { generateProposalCriteria } from '../../_lib/points-proposal-criteria.js';
 import { attachMarketTranslations } from '../../_lib/market-translations.js';
 import { assertPointsAirportApproval } from '../../_lib/points-aicm-policy.js';
@@ -513,7 +513,8 @@ async function list(req, res) {
         LIMIT 2000
       `;
 
-  const filteredRows = filteredPendingRows(rows, req.query || {});
+  const filteredRows = filteredPendingRows(rows, req.query || {})
+    .filter(row => row.status !== 'pending' || !pendingSoccerTeamsUnconfirmed(row));
 
   return res.status(200).json({
     pending: filteredRows.map(row => {

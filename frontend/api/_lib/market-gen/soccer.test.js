@@ -66,6 +66,16 @@ test('UEFA Champions League final also generates goals and MVP side markets', ()
   assert.equal(specs[2].resolver_config, null);
 });
 
+test('soccer fixtures and their side markets wait for both teams to be named', () => {
+  const match = soccerMatch();
+  assert.deepEqual(_internal.matchToMarketSpecs({ ...match, homeTeam: {}, awayTeam: {} }, 'CL'), []);
+  assert.deepEqual(_internal.matchToMarketSpecs({ ...match, awayTeam: {
+    name: 'To be determined', shortName: 'Visitante',
+  } }, 'CL'), []);
+  const confirmed = { ...match, awayTeam: { ...match.awayTeam, shortName: 'TBD' } };
+  assert.equal(_internal.matchToMarketSpec(confirmed, 'CL').question, 'PSG vs Arsenal FC');
+});
+
 test('non-final soccer matches keep the regular three-way draw market', () => {
   const spec = _internal.matchToMarketSpec(soccerMatch({ id: 101, stage: 'SEMI_FINALS' }), 'CL');
 

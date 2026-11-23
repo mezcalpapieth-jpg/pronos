@@ -25,6 +25,7 @@ const diagnosticLabels = {
 
 export const approvalIssueLabels = {
   incomplete_market: 'Faltan la pregunta o las opciones',
+  unconfirmed_soccer_teams: 'La fuente todavía no confirma ambos equipos del partido',
   expired_market: 'La hora de cierre ya pasó',
   missing_fixture_id: 'Falta el ID del partido en la configuración del resolver',
   source_disabled: 'La fuente está suspendida',

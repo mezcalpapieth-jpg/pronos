@@ -25,6 +25,8 @@
  *   while ESPN exposes those scoreboards keylessly.
  */
 
+import { isPlaceholderSoccerTeamName } from '../sports-resolver-policy.js';
+
 // Legacy team TLA set kept for admin/reference tooling. Generation no longer
 // filters by team: every fixture in the fetched competitions enters pending.
 const TEAM_TLA_WHITELIST = new Set([
@@ -307,6 +309,10 @@ async function fetchTeamMatches(apiKey, team, dateFrom, dateTo) {
   }
 }
 
+function confirmedTeamName(team) {
+  return [team?.shortName, team?.name].find(name => !isPlaceholderSoccerTeamName(name))?.trim();
+}
+
 /**
  * Build the primary match-winner market spec from a football-data.org match object.
  * Shape matches points_pending_markets columns so the caller can insert
@@ -314,12 +320,9 @@ async function fetchTeamMatches(apiKey, team, dateFrom, dateTo) {
  */
 function matchToMarketSpec(match, competitionCode) {
   if (isSpanishSecondDivisionCompetition(match)) return null;
-  const homeName = match?.homeTeam?.shortName
-                || match?.homeTeam?.name
-                || 'Local';
-  const awayName = match?.awayTeam?.shortName
-                || match?.awayTeam?.name
-                || 'Visitante';
+  const homeName = confirmedTeamName(match?.homeTeam);
+  const awayName = confirmedTeamName(match?.awayTeam);
+  if (!homeName || !awayName) return null;
   const kickoffUtc = match?.utcDate;
   if (!kickoffUtc) return null;
   // Trading stays open through 90 min + halftime + stoppage + buffer.

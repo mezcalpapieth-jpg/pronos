@@ -33,11 +33,11 @@
 
 import { fetchEspnScoreboardData, formatEspnDateCompact, formatEspnVenue } from './espn-scoreboard.js';
 import { nationalTeamMarketTranslations, spanishNationalTeamName } from '../national-team-labels.js';
+import { isPlaceholderSoccerTeamName as isPlaceholderTeamName } from '../sports-resolver-policy.js';
 
 const BASE = 'https://site.api.espn.com/apis/site/v2/sports/soccer';
 const HORIZON_DAYS = 14;
 const SUMMER_BREAK_MONTHS_UTC = new Set([5, 6, 7]); // June, July, August
-const PLACEHOLDER_TEAM_RE = /^(?:tbd|to be determined)(?:\s|$)/i;
 
 // Legacy whitelists kept for tests/manual reference. Generation no longer
 // filters by team: every event in the fetched ESPN feeds enters pending.
@@ -248,10 +248,6 @@ function shouldFetchLeagueEvents(config, now = new Date()) {
   return isSummerBreakDate(now);
 }
 
-function isPlaceholderTeamName(name) {
-  return PLACEHOLDER_TEAM_RE.test(String(name || '').trim());
-}
-
 function translatedSoccerLabels({ leagueCode, homeName, awayName, winnerOnly }) {
   const translations = nationalTeamMarketTranslations({ leagueCode, homeName, awayName, winnerOnly });
   const questionEs = translations?.es?.question || `${homeName} vs ${awayName}`;
@@ -289,7 +285,6 @@ function eventToSpec(ev, {
   const away = comps.find(c => c.homeAway === 'away');
   const homeName = home?.team?.displayName;
   const awayName = away?.team?.displayName;
-  if (!homeName || !awayName) return null;
   if (isPlaceholderTeamName(homeName) || isPlaceholderTeamName(awayName)) return null;
 
   // Auto-resolver waits for ESPN's `completed=true` anyway, so end_time

@@ -1,10 +1,19 @@
 import { buildMarketTranslations, translateOutcomeLabel } from './market-translations.js';
 import { pointsResolverReadiness } from './points-resolver-readiness.js';
 import { generateProposalCriteria, hasWrittenCriteria } from './points-proposal-criteria.js';
+import { isPlaceholderSoccerTeamName } from './sports-resolver-policy.js';
 
 function json(value, fallback) {
   if (typeof value !== 'string') return value ?? fallback;
   try { return JSON.parse(value) ?? fallback; } catch { return fallback; }
+}
+
+export function pendingSoccerTeamsUnconfirmed(row) {
+  if (row.source !== 'football-data.org') return false;
+  const { home, away } = json(row.source_data, {});
+  const outcomes = json(row.outcomes, []);
+  return [home, away].some(team => team != null && isPlaceholderSoccerTeamName(team.name))
+    || (Array.isArray(outcomes) && outcomes.some(isPlaceholderSoccerTeamName));
 }
 
 export function proposalChecks(row, duplicates = [], now = Date.now()) {
@@ -15,10 +24,12 @@ export function proposalChecks(row, duplicates = [], now = Date.now()) {
   const add = (severity, code, marketId) => checks.push({ severity, code, ...(marketId ? { marketId } : {}) });
   if (!row.question?.trim() || outcomes.length < 2) add('block', 'incomplete_market');
   if (!row.end_time || !(new Date(row.end_time).getTime() > now)) add('block', 'expired_market');
+  if (pendingSoccerTeamsUnconfirmed(row)) add('block', 'unconfirmed_soccer_teams');
   const fixtureResolver = row.resolver_type === 'sports_api'
     && (['espn', 'football-data', 'mlb-stats'].includes(config.source)
       || ['binary', 'draw3', 'total-goals-over'].includes(config.shape));
-  if (fixtureResolver && !/^[1-9]\d*$/.test(String(config.eventId))) {
+  const fixtureId = config.source === 'football-data' ? config.matchId : config.eventId;
+  if (fixtureResolver && !/^[1-9]\d*$/.test(String(fixtureId))) {
     add('block', 'missing_fixture_id');
   }
   const { en } = buildMarketTranslations({ ...row, outcomes, source_data: sourceData });

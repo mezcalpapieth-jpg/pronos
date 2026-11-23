@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
-import { checkPendingProposal, proposalChecks } from './points-admin-approval-checks.js';
+import { checkPendingProposal, checkPendingProposals, pendingSoccerTeamsUnconfirmed, proposalChecks } from './points-admin-approval-checks.js';
 import { cancelPointsMarket } from './points-cancel-market.js';
 import { generateProposalCriteria } from './points-proposal-criteria.js';
 import { assertExpectedResolution, readSettlementPreview } from './points-admin-settlement-preview.js';
@@ -92,6 +92,59 @@ test('approval checks accept generated criteria only for supported resolver conf
   assert.equal(generateProposalCriteria('sports_api', { ...config, criteria: 'Criterio del administrador.' }, {}, outcomes), null);
   assert.equal(generateProposalCriteria('sports_api', config, { resolutionCriteria: 'Criterio original.' }, outcomes), null);
   assert.equal(generateProposalCriteria('sports_api', config, {}, ['Sí', 'No']), null);
+});
+
+test('individual and bulk approval use the football-data match ID', async () => {
+  const row = {
+    id: 45153,
+    source: 'football-data.org',
+    source_event_id: '564757',
+    question: 'Levante vs Elche',
+    sport: 'soccer',
+    end_time: new Date(Date.now() + 86400000),
+    outcomes: ['Levante', 'Empate', 'Elche'],
+    resolver_type: 'sports_api',
+    resolver_config: { source: 'football-data', shape: 'draw3', matchId: 564757 },
+  };
+  const client = { query: async () => ({ rows: [] }) };
+  const noMatchId = { ...row, id: 45154, resolver_config: {
+    source: 'football-data', shape: 'draw3', eventId: 564757,
+  } };
+
+  assert.deepEqual(await checkPendingProposal(client, row, { lock: true }), []);
+  const entries = [row, noMatchId].map(row => ({ row, event: row.source_event_id }));
+  const results = await checkPendingProposals(client, entries);
+  assert.deepEqual(results[0], { id: row.id, checks: [] });
+  assert.deepEqual(results[1].checks.filter(check => check.severity === 'block'), [
+    { severity: 'block', code: 'missing_fixture_id' },
+  ]);
+});
+
+test('existing football-data fixtures with unnamed teams stay out of approval after the match ID fix', async () => {
+  const row = {
+    id: 46191,
+    source: 'football-data.org',
+    sport: 'soccer',
+    question: 'Local vs Visitante',
+    outcomes: '["Local","Visitante"]',
+    end_time: new Date(Date.now() + 86400000),
+    resolver_type: 'sports_api',
+    resolver_config: { source: 'football-data', shape: 'binary', matchId: 557186 },
+  };
+  const sideMarket = {
+    ...row,
+    id: 46192,
+    question: '¿La final tendrá más de 2.5 goles?',
+    outcomes: ['Sí', 'No'],
+    source_data: { home: { name: 'Local' }, away: { name: 'Visitante' } },
+  };
+  for (const pending of [row, sideMarket]) {
+    assert.equal(pendingSoccerTeamsUnconfirmed(pending), true);
+    const checks = await checkPendingProposal(null, pending, { lock: true });
+    assert.deepEqual(checks.filter(check => check.severity === 'block'), [
+      { severity: 'block', code: 'unconfirmed_soccer_teams' },
+    ]);
+  }
 });
 
 test('generated criteria describe the configured soccer, price and chart rules', () => {

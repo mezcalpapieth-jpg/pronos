@@ -1,5 +1,11 @@
 export const NEXT_OPPONENT_RECHECK_INTERVAL_HOURS = 12;
 
+export function isPlaceholderSoccerTeamName(value) {
+  const name = typeof value === 'string' ? value.trim() : '';
+  return !name || /^(?:local|visitante|home|away)$/i.test(name)
+    || /^(?:tbd|to be determined)(?:\s|$)/i.test(name);
+}
+
 export function normalizeResolverLabel(value) {
   return String(value || '')
     .toLowerCase()
