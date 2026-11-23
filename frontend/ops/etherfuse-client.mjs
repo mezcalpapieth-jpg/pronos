@@ -8,6 +8,7 @@ export const ETHERFUSE_SANDBOX_ORIGIN = 'https://api.sand.etherfuse.com';
 export const ETHERFUSE_REQUEST_TIMEOUT_MS = 10_000;
 const PROBLEM_PREFIX = 'https://docs.etherfuse.com/ramp/v2/errors/';
 const MAX_RESPONSE_CHARS = 1_048_576;
+const SANDBOX_KEY = /^api_sand(?:_[a-z0-9_-]+|:[a-z0-9_-]+:[\x21-\x7e]+)$/i;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export class EtherfuseSandboxError extends Error {
@@ -71,7 +72,7 @@ function providerError(status, body, headers) {
 export function createEtherfuseSandboxClient({ apiKey, fetchImpl = fetch,
   timeoutMs = ETHERFUSE_REQUEST_TIMEOUT_MS } = {}) {
   // Never accept a configurable host or production key in this prototype.
-  if (typeof apiKey !== 'string' || !/^api_sand_[A-Za-z0-9_-]+$/.test(apiKey)) {
+  if (typeof apiKey !== 'string' || !SANDBOX_KEY.test(apiKey)) {
     throw new EtherfuseSandboxError('sandbox_api_key_required');
   }
   if (typeof fetchImpl !== 'function') throw new EtherfuseSandboxError('invalid_fetch');

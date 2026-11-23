@@ -6,12 +6,13 @@ const org = 'aaaaaaaa-0000-0000-0000-000000000001';
 const bank = 'bbbbbbbb-0000-0000-0000-000000000001';
 const walletId = 'cccccccc-0000-0000-0000-000000000001';
 const walletAddress = '0x0000000000000000000000000000000000000011';
-const token = '0x0000000000000000000000000000000000000022';
+const token = '0x534b2f3A21130d7a60830c2Df862319e593943A3';
+const otherUsdc = { chain: 'monad', asset: '0x0000000000000000000000000000000000000022', symbol: 'USDC', currency: 'USD' };
 const fundingAddress = '0x0000000000000000000000000000000000000033';
 const now = Date.parse('2026-11-18T18:00:00Z');
 const future = new Date(now + 120_000).toISOString();
 
-function rehearsal() {
+function rehearsal({ inputAddress = walletAddress, registrationAddress = walletAddress } = {}) {
   const accounts = new Map();
   const quotes = new Map();
   const orders = new Map();
@@ -24,7 +25,7 @@ function rehearsal() {
       const id = isBank ? bank : walletId;
       const rail = isBank ? 'spei' : 'monad';
       assert.deepEqual(request.accountDetails, isBank ? { kind: 'clabe', clabe: '012180000000000002' }
-        : { kind: 'address', address: walletAddress, chain: rail });
+        : { kind: 'address', address: registrationAddress, chain: rail });
       const ready = { status: 'ready' };
       accounts.set(id, { id, kind: request.kind, rails: { [rail]: { source: ready, destination: ready } } });
       return { id };
@@ -33,11 +34,12 @@ function rehearsal() {
     async assets(orgId, accountId) {
       assert.equal(orgId, org);
       assert.equal(accountId, walletId);
-      return { tokens: [{ chain: 'monad', asset: token, symbol: 'USDC', currency: 'USD' }] };
+      return { tokens: [otherUsdc, { chain: 'monad', asset: token, symbol: 'USDC', currency: 'USD' }] };
     },
     async quote(_orgId, request) {
       const deposit = request.sourceRail === 'spei';
       assert.equal(request.partnerFeeBpsOverride, 0);
+      assert.equal(deposit ? request.destinationAsset : request.sourceAsset, token);
       if (deposit && Number(request.sourceAmount) > 500) {
         throw Object.assign(new Error('sandbox-limit-exceeded'), { code: 'sandbox-limit-exceeded' });
       }
@@ -75,7 +77,7 @@ function rehearsal() {
     },
   };
   const pause = async () => { for (const row of orders.values()) if (row.status === 'funded') row.status = 'completed'; };
-  const flow = createSandboxWorkflow({ api, walletAddress, now: () => now, pause,
+  const flow = createSandboxWorkflow({ api, walletAddress: inputAddress, now: () => now, pause,
     fx: async () => ({ bid: '20', timeMs: now }) });
   return { api, flow, orders, quotes, deposits };
 }
@@ -167,4 +169,50 @@ test('fills only missing sandbox registration fields and reconnects to a same-qu
   await flow.open(position);
   api.createOrder = () => { throw Object.assign(new Error('conflict'), { code: 'conflict' }); };
   assert.equal((await flow.open(position)).id, position.quote.quoteId);
+});
+
+test('registers the wallet with its EIP-55 checksum and reuses a ready SPEI bank without a bank POST', async () => {
+  const checksum = '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed';
+  const normalized = checksum.toLowerCase();
+  const { api, flow } = rehearsal({ inputAddress: normalized, registrationAddress: checksum });
+  const account = api.account;
+  api.account = async (orgId, id) => {
+    assert.equal(orgId, org);
+    if (id !== bank) return account(orgId, id);
+    return { id, kind: 'bank', status: 'ready', currency: 'MXN',
+      rails: { spei: { source: { status: 'ready' }, destination: { status: 'ready' } } } };
+  };
+  const register = api.registerAccount;
+  api.registerAccount = (orgId, request) => {
+    assert.equal(request.kind, 'wallet');
+    return register(orgId, request);
+  };
+
+  const binding = await flow.setup(org, bank);
+  assert.deepEqual(binding, { orgId: org, bankId: bank, walletId, wallet: normalized });
+  assert.equal((await flow.quote(binding, 'deposit', 100)).request.source.id, bank);
+});
+
+test('rejects an incompatible existing bank before registering a wallet', async () => {
+  const { api, flow } = rehearsal();
+  api.account = async () => ({ id: bank, kind: 'bank', status: 'ready',
+    rails: { spei: { currency: 'MXN', source: { status: 'ready' }, destination: { status: 'pending' } } } });
+  api.registerAccount = () => assert.fail('registration should be skipped');
+
+  await assert.rejects(flow.setup(org, bank), { code: 'invalid_existing_spei_account' });
+  await assert.rejects(flow.setup(org, 'not-a-bank-id'), { code: 'invalid_existing_spei_account' });
+});
+
+test('requires Etherfuse to support the Circle Monad testnet USDC contract for the wallet', async () => {
+  const { api, flow } = rehearsal();
+  const binding = await flow.setup();
+  api.assets = async () => ({ tokens: [otherUsdc] });
+  api.quote = () => assert.fail('quote should be skipped');
+  await assert.rejects(flow.quote(binding, 'deposit', 100), { code: 'monad_testnet_usdc_unavailable' });
+});
+
+test('rejects an invalid mixed-case wallet checksum before using the provider', () => {
+  assert.throws(() => createSandboxWorkflow({
+    api: {}, walletAddress: '0x5AAeb6053F3E94C9b9A09f33669435E7Ef1BeAed',
+  }), { code: 'invalid_turnkey_test_wallet_address' });
 });

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { link, mkdir, open, readFile, unlink } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { ethers } from 'ethers';
 import { checkoutData } from '../api/_lib/mxn-checkout-data.js';
 import { FX_TTL_MS, TICKETS_MXN, units } from '../api/_lib/mxn-checkout-quote.js';
 import { createEtherfuseSandboxClient } from './etherfuse-client.mjs';
@@ -10,6 +11,7 @@ import { createMonadTestnetTransferClient } from './etherfuse-turnkey.mjs';
 const SANDBOX_CAP_MXN = 500;
 const TEST_CLABE = '012180000000000002';
 const TEST_RFC = 'XAXX010101000';
+const CIRCLE_MONAD_TESTNET_USDC = '0x534b2f3A21130d7a60830c2Df862319e593943A3';
 const ONE = 1_000_000n;
 const UUID = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
 const ADDRESS = /^0x[0-9a-f]{40}$/i;
@@ -72,7 +74,13 @@ function ready(account, rail, direction) {
 
 export function createSandboxWorkflow({ api, walletAddress, fx = checkoutData().fx, now = Date.now, pause = defaultPause }) {
   requireValue(typeof walletAddress === 'string' && ADDRESS.test(walletAddress), 'invalid_turnkey_test_wallet_address');
-  const wallet = walletAddress.toLowerCase();
+  let registrationAddress;
+  try {
+    registrationAddress = ethers.utils.getAddress(walletAddress);
+  } catch {
+    requireValue(false, 'invalid_turnkey_test_wallet_address');
+  }
+  const wallet = registrationAddress.toLowerCase();
 
   async function waitFor(poll, accept, code) {
     for (let attempt = 0; attempt < 30; attempt += 1) {
@@ -104,34 +112,50 @@ export function createSandboxWorkflow({ api, walletAddress, fx = checkoutData().
       current.fundingInstructions?.destination != null, 'funding_instructions_pending');
   }
 
+  async function registerSandboxBank(orgId) {
+    const bankRequest = {
+      kind: 'bank', label: 'Pronos sandbox SPEI', country: 'MX', currency: 'MXN',
+      accountDetails: { kind: 'clabe', clabe: TEST_CLABE },
+    };
+    try {
+      return await api.registerAccount(orgId, bankRequest);
+    } catch (error) {
+      if (error.code !== 'registration-info-required') throw error;
+      const sandboxHolder = {
+        '#/registrationInfo/accountHolderName': ['accountHolderName', 'Ejemplo Comercial SA de CV'],
+        '#/registrationInfo/taxId': ['taxId', TEST_RFC],
+      };
+      const missing = error.missing ?? [];
+      if (!missing.length || missing.some(field => !Object.hasOwn(sandboxHolder, field))) throw error;
+      return api.registerAccount(orgId, { ...bankRequest,
+        registrationInfo: Object.fromEntries(missing.map(field => sandboxHolder[field])) });
+    }
+  }
+
   return {
-    async setup(configuredOrgId) {
+    async setup(configuredOrgId, configuredBankId) {
       const orgId = configuredOrgId ?? (await api.org()).id;
       requireValue(UUID.test(orgId ?? ''), 'invalid_etherfuse_organization');
-      const bankRequest = {
-        kind: 'bank', label: 'Pronos sandbox SPEI', country: 'MX', currency: 'MXN',
-        accountDetails: { kind: 'clabe', clabe: TEST_CLABE },
-      };
-      let bank;
-      try {
-        bank = await api.registerAccount(orgId, bankRequest);
-      } catch (error) {
-        if (error.code !== 'registration-info-required') throw error;
-        const sandboxHolder = {
-          '#/registrationInfo/accountHolderName': ['accountHolderName', 'Ejemplo Comercial SA de CV'],
-          '#/registrationInfo/taxId': ['taxId', TEST_RFC],
-        };
-        const missing = error.missing ?? [];
-        if (!missing.length || missing.some(field => !Object.hasOwn(sandboxHolder, field))) throw error;
-        bank = await api.registerAccount(orgId, { ...bankRequest,
-          registrationInfo: Object.fromEntries(missing.map(field => sandboxHolder[field])) });
+      let bankId = configuredBankId;
+      if (bankId === undefined) {
+        bankId = (await registerSandboxBank(orgId))?.id;
+        requireValue(UUID.test(bankId ?? ''), 'invalid_payment_account');
+      } else {
+        requireValue(UUID.test(bankId), 'invalid_existing_spei_account');
+        const bank = await api.account(orgId, bankId);
+        const currency = bank?.rails?.spei?.currency ?? bank?.currency;
+        requireValue(bank?.id === bankId && bank.kind === 'bank' && currency === 'MXN' &&
+          ready(bank, 'spei', 'source') && ready(bank, 'spei', 'destination'), 'invalid_existing_spei_account');
       }
       const account = await api.registerAccount(orgId, {
-        kind: 'wallet', label: 'Pronos Turnkey test wallet', accountDetails: { kind: 'address', address: wallet, chain: 'monad' },
+        kind: 'wallet', label: 'Pronos Turnkey test wallet',
+        accountDetails: { kind: 'address', address: registrationAddress, chain: 'monad' },
       });
-      requireValue(UUID.test(bank?.id ?? '') && UUID.test(account?.id ?? ''), 'invalid_payment_account');
-      await Promise.all([accountReady(orgId, bank.id, 'spei', 'bank'), accountReady(orgId, account.id, 'monad', 'wallet')]);
-      return { orgId, bankId: bank.id, walletId: account.id, wallet };
+      requireValue(UUID.test(account?.id ?? ''), 'invalid_payment_account');
+      const pendingAccounts = [accountReady(orgId, account.id, 'monad', 'wallet')];
+      if (configuredBankId === undefined) pendingAccounts.push(accountReady(orgId, bankId, 'spei', 'bank'));
+      await Promise.all(pendingAccounts);
+      return { orgId, bankId, walletId: account.id, wallet };
     },
 
     async quote(accounts, direction, ticketMxn) {
@@ -139,9 +163,10 @@ export function createSandboxWorkflow({ api, walletAddress, fx = checkoutData().
       requireValue(TICKETS_MXN.includes(ticketMxn) && ['deposit', 'withdrawal'].includes(direction), 'invalid_ticket');
       const deposit = direction === 'deposit';
       const { tokens } = await api.assets(accounts.orgId, accounts.walletId);
-      const usdc = tokens?.filter(token => token.chain === 'monad' && token.symbol === 'USDC' && token.currency === 'USD');
-      requireValue(usdc?.length === 1 && ADDRESS.test(usdc[0].asset), 'monad_testnet_usdc_unavailable');
-      const asset = usdc[0].asset;
+      const usdc = tokens?.find(token => token.chain === 'monad' && token.symbol === 'USDC' && token.currency === 'USD' &&
+        sameAsset(token.asset, CIRCLE_MONAD_TESTNET_USDC));
+      requireValue(usdc, 'monad_testnet_usdc_unavailable');
+      const asset = usdc.asset;
       let sourceAmount = String(ticketMxn);
       let referenceMxnPerUsd = null;
       if (!deposit) {
@@ -251,14 +276,21 @@ export async function main([command, argument, amountMxn, ...extra], env = proce
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const bindingPath = resolve(directory, 'accounts.json');
   const accounts = await maybeRead(bindingPath);
+  const configuredOrgId = env.ETHERFUSE_SANDBOX_ORGANIZATION_ID;
+  const configuredBankId = env.ETHERFUSE_SANDBOX_BANK_ACCOUNT_ID;
+  const matchesConfig = accounts?.wallet === walletAddress.toLowerCase() &&
+    (configuredOrgId === undefined || accounts.orgId === configuredOrgId) &&
+    (configuredBankId === undefined || accounts.bankId === configuredBankId);
   if (simple) {
-    if (accounts) return { ...accounts, reused: true };
-    const binding = await flow.setup(env.ETHERFUSE_SANDBOX_ORGANIZATION_ID);
+    if (accounts) {
+      requireValue(matchesConfig, 'sandbox_account_binding_mismatch');
+      return { ...accounts, reused: true };
+    }
+    const binding = await flow.setup(configuredOrgId, configuredBankId);
     await writeNew(bindingPath, binding);
     return binding;
   }
-  requireValue(accounts?.wallet === walletAddress.toLowerCase() && (!env.ETHERFUSE_SANDBOX_ORGANIZATION_ID ||
-    accounts.orgId === env.ETHERFUSE_SANDBOX_ORGANIZATION_ID), 'run_sandbox_setup');
+  requireValue(matchesConfig, 'run_sandbox_setup');
   if (quote) {
     const position = await flow.quote(accounts, argument, Number(amountMxn));
     await writeNew(resolve(directory, `${position.quote.quoteId}.quote.json`), position);

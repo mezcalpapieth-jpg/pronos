@@ -56,8 +56,22 @@ test('pins sandbox routes, raw auth, request policy and exact decimal strings', 
   assert.equal(Object.isFrozen(client), true);
 });
 
+test('sends the provider-issued colon-delimited key unchanged to sandbox only', async () => {
+  for (const prefix of ['Api_sand', 'API_SAND']) {
+    const issuedKey = `${prefix}:test_key_id:dummy-secret:example+/=`;
+    const client = createEtherfuseSandboxClient({ apiKey: issuedKey, fetchImpl: async (url, init) => {
+      assert.equal(url, ETHERFUSE_SANDBOX_ORIGIN + '/me');
+      assert.equal(init.headers.Authorization, issuedKey);
+      return json({ id: orgId });
+    } });
+    assert.deepEqual(await client.org(), { id: orgId });
+  }
+});
+
 test('rejects production keys, injectable paths and numeric or nonpositive amounts before HTTP', async () => {
-  for (const bad of ['api_prod_fake', 'Bearer api_sand_fake', 'api_sand_', 'api_sand_x\nsecret', undefined]) {
+  for (const bad of ['api_prod_fake', 'Api_prod:test_key_id:dummy-secret', 'Bearer api_sand_fake',
+    'Bearer Api_sand:test_key_id:dummy-secret', 'api_sand_', 'api_sand_x\nsecret',
+    'Api_sand::dummy-secret', 'Api_sand:test_key_id:', 'Api_sand:test_key_id:dummy-secret\r\n', undefined]) {
     assert.throws(() => createEtherfuseSandboxClient({ apiKey: bad }), { code: 'sandbox_api_key_required' });
   }
   let calls = 0;
